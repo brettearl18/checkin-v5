@@ -42,7 +42,8 @@ export default function DevFooter() {
     ],
     'Analytics & Reports': [
       { name: '📈 Analytics Dashboard', url: '/analytics', description: 'Detailed analytics and insights (👑🏋️)', status: 'working' },
-      { name: '⚠️ Risk Analysis', url: '/analytics/risk', description: 'Client risk assessment (👑🏋️)', status: '404' },
+      { name: '⚠️ Risk Analysis', url: '/analytics/risk', description: 'Client risk assessment (👑🏋️)', status: 'working' },
+      { name: '🔍 Project Audit', url: '/audit', description: 'System audit and data analysis (👑🏋️)', status: 'working' },
       { name: '📊 Engagement Metrics', url: '/analytics/engagement', description: 'Client engagement tracking (👑🏋️)', status: '404' },
       { name: '📋 Progress Reports', url: '/analytics/progress', description: 'Client progress reports (👑🏋️)', status: '404' },
       { name: '🤖 Predictive Insights', url: '/analytics/predictions', description: 'AI-powered predictions (👑🏋️)', status: '404' },
@@ -55,6 +56,8 @@ export default function DevFooter() {
     ],
     'API Endpoints': [
       { name: '🔧 Sample Data API', url: '/api/sample-data', description: 'Populate sample data (👑)', status: 'working' },
+      { name: '📊 Sample Data Generator', url: '/api/sample-data-generator', description: 'Generate comprehensive test data (👑)', status: 'working' },
+      { name: '🔍 Project Audit', url: '/api/audit', description: 'Comprehensive system audit (👑)', status: 'working' },
       { name: '👤 Create Client API', url: '/api/create-client-profile', description: 'Create test client (👑)', status: 'working' },
       { name: '📝 Clients API', url: '/api/clients', description: 'Create and manage clients (👑🏋️)', status: 'working' },
       { name: '🔥 Test Firebase API', url: '/api/test-firebase', description: 'Test Firebase connection (👑)', status: 'working' },
@@ -147,7 +150,7 @@ export default function DevFooter() {
               <div className="text-xs text-gray-300">At Risk</div>
             </div>
             <div>
-              <div className="text-2xl font-bold text-purple-300">17</div>
+              <div className="text-2xl font-bold text-purple-300">21</div>
               <div className="text-xs text-gray-300">Working Features</div>
             </div>
           </div>
@@ -161,13 +164,13 @@ export default function DevFooter() {
                   <svg className="w-3 h-3 text-green-400 mr-1" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                   </svg>
-                  18 Working
+                  21 Working
                 </span>
                                                <span className="flex items-center">
                   <svg className="w-3 h-3 text-red-400 mr-1" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
                   </svg>
-                  5 404/Broken
+                  2 404/Broken
                 </span>
             </div>
             <div className="flex items-center space-x-4">
