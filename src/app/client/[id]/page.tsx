@@ -123,7 +123,7 @@ export default function ClientProfilePage({ params }: ClientProfilePageProps) {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-gray-900 mb-4">Client Not Found</h1>
-          <p className="text-gray-600">The client you're looking for doesn't exist.</p>
+          <p className="text-gray-800">The client you're looking for doesn't exist.</p>
         </div>
       </div>
     );
@@ -137,7 +137,7 @@ export default function ClientProfilePage({ params }: ClientProfilePageProps) {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold text-gray-900">{client.name}</h1>
-              <p className="mt-2 text-gray-600">Client Profile Dashboard</p>
+              <p className="mt-2 text-gray-800">Client Profile Dashboard</p>
             </div>
             <div className="flex items-center space-x-4">
               <span className={`px-3 py-1 rounded-full text-sm font-medium ${
@@ -166,19 +166,19 @@ export default function ClientProfilePage({ params }: ClientProfilePageProps) {
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Basic Information</h2>
               <div className="space-y-3">
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Email:</span>
+                  <span className="text-gray-800">Email:</span>
                   <span className="font-medium">{client.email}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Phone:</span>
+                  <span className="text-gray-800">Phone:</span>
                   <span className="font-medium">{client.phone}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Age:</span>
+                  <span className="text-gray-800">Age:</span>
                   <span className="font-medium">{new Date().getFullYear() - new Date(client.dateOfBirth).getFullYear()} years</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Gender:</span>
+                  <span className="text-gray-800">Gender:</span>
                   <span className="font-medium capitalize">{client.gender}</span>
                 </div>
               </div>
@@ -191,34 +191,34 @@ export default function ClientProfilePage({ params }: ClientProfilePageProps) {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="text-center p-3 bg-blue-50 rounded-lg">
                     <div className="text-2xl font-bold text-blue-600">{client.weight}kg</div>
-                    <div className="text-sm text-gray-600">Current Weight</div>
+                    <div className="text-sm text-gray-800">Current Weight</div>
                   </div>
                   <div className="text-center p-3 bg-green-50 rounded-lg">
                     <div className="text-2xl font-bold text-green-600">{client.targetWeight}kg</div>
-                    <div className="text-sm text-gray-600">Target Weight</div>
+                    <div className="text-sm text-gray-800">Target Weight</div>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="text-center p-3 bg-purple-50 rounded-lg">
                     <div className="text-2xl font-bold text-purple-600">{client.bmi}</div>
-                    <div className="text-sm text-gray-600">BMI</div>
+                    <div className="text-sm text-gray-800">BMI</div>
                   </div>
                   <div className="text-center p-3 bg-orange-50 rounded-lg">
                     <div className="text-2xl font-bold text-orange-600">{client.height}cm</div>
-                    <div className="text-sm text-gray-600">Height</div>
+                    <div className="text-sm text-gray-800">Height</div>
                   </div>
                 </div>
                 <div className="border-t pt-4">
                   <div className="flex justify-between mb-2">
-                    <span className="text-sm text-gray-600">Blood Pressure:</span>
+                    <span className="text-sm text-gray-800">Blood Pressure:</span>
                     <span className="font-medium">{client.healthMetrics?.bloodPressure}</span>
                   </div>
                   <div className="flex justify-between mb-2">
-                    <span className="text-sm text-gray-600">Heart Rate:</span>
+                    <span className="text-sm text-gray-800">Heart Rate:</span>
                     <span className="font-medium">{client.healthMetrics?.restingHeartRate} bpm</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-sm text-gray-600">Body Fat:</span>
+                    <span className="text-sm text-gray-800">Body Fat:</span>
                     <span className="font-medium">{client.healthMetrics?.bodyFatPercentage}%</span>
                   </div>
                 </div>
@@ -230,19 +230,19 @@ export default function ClientProfilePage({ params }: ClientProfilePageProps) {
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Lifestyle</h2>
               <div className="space-y-3">
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Activity Level:</span>
+                  <span className="text-gray-800">Activity Level:</span>
                   <span className="font-medium capitalize">{client.lifestyle?.activityLevel}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Exercise:</span>
+                  <span className="text-gray-800">Exercise:</span>
                   <span className="font-medium">{client.lifestyle?.exerciseFrequency}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Sleep:</span>
+                  <span className="text-gray-800">Sleep:</span>
                   <span className="font-medium">{client.lifestyle?.sleepHours} hours</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Stress Level:</span>
+                  <span className="text-gray-800">Stress Level:</span>
                   <span className="font-medium capitalize">{client.lifestyle?.stressLevel}</span>
                 </div>
               </div>
@@ -265,10 +265,10 @@ export default function ClientProfilePage({ params }: ClientProfilePageProps) {
                         {goal.status}
                       </span>
                     </div>
-                    <p className="text-gray-600 text-sm mb-3">{goal.description}</p>
+                    <p className="text-gray-800 text-sm mb-3">{goal.description}</p>
                     <div className="flex justify-between items-center">
                       <div className="flex-1 mr-4">
-                        <div className="flex justify-between text-sm text-gray-600 mb-1">
+                        <div className="flex justify-between text-sm text-gray-800 mb-1">
                           <span>Progress</span>
                           <span>{Math.round(goal.progress * 100)}%</span>
                         </div>
@@ -296,7 +296,7 @@ export default function ClientProfilePage({ params }: ClientProfilePageProps) {
                   <div className="space-y-2">
                     {client.progress?.weightHistory?.map((entry, index) => (
                       <div key={index} className="flex justify-between items-center p-2 bg-gray-50 rounded">
-                        <span className="text-sm text-gray-600">{new Date(entry.date).toLocaleDateString()}</span>
+                        <span className="text-sm text-gray-800">{new Date(entry.date).toLocaleDateString()}</span>
                         <span className="font-medium">{entry.weight}kg</span>
                       </div>
                     ))}
@@ -309,7 +309,7 @@ export default function ClientProfilePage({ params }: ClientProfilePageProps) {
                   <div className="space-y-3">
                     {client.progress?.fitnessScores && Object.entries(client.progress.fitnessScores).map(([key, value]) => (
                       <div key={key} className="flex justify-between items-center">
-                        <span className="text-sm text-gray-600 capitalize">{key}</span>
+                        <span className="text-sm text-gray-800 capitalize">{key}</span>
                         <div className="flex items-center">
                           <div className="w-20 bg-gray-200 rounded-full h-2 mr-2">
                             <div 
@@ -332,37 +332,37 @@ export default function ClientProfilePage({ params }: ClientProfilePageProps) {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-3">
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Coach:</span>
+                    <span className="text-gray-800">Coach:</span>
                     <span className="font-medium">{client.coaching?.coachName}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Program:</span>
+                    <span className="text-gray-800">Program:</span>
                     <span className="font-medium capitalize">{client.coaching?.programType?.replace('-', ' ')}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Frequency:</span>
+                    <span className="text-gray-800">Frequency:</span>
                     <span className="font-medium capitalize">{client.coaching?.sessionFrequency}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Next Session:</span>
+                    <span className="text-gray-800">Next Session:</span>
                     <span className="font-medium">{client.coaching?.nextSession ? new Date(client.coaching.nextSession).toLocaleDateString() : 'Not scheduled'}</span>
                   </div>
                 </div>
                 <div className="space-y-3">
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Start Date:</span>
+                    <span className="text-gray-800">Start Date:</span>
                     <span className="font-medium">{client.coaching?.startDate ? new Date(client.coaching.startDate).toLocaleDateString() : 'N/A'}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Sessions:</span>
+                    <span className="text-gray-800">Sessions:</span>
                     <span className="font-medium">{client.coaching?.completedSessions}/{client.coaching?.totalSessions}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Check-in Rate:</span>
+                    <span className="text-gray-800">Check-in Rate:</span>
                     <span className="font-medium">{Math.round((client.engagement?.checkInRate || 0) * 100)}%</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Satisfaction:</span>
+                    <span className="text-gray-800">Satisfaction:</span>
                     <span className="font-medium">{client.engagement?.satisfactionScore}/10</span>
                   </div>
                 </div>
@@ -386,7 +386,7 @@ export default function ClientProfilePage({ params }: ClientProfilePageProps) {
                     {client.riskFactors?.currentRisks?.map((risk, index) => (
                       <div key={index} className="flex items-center">
                         <div className="w-2 h-2 bg-yellow-400 rounded-full mr-2"></div>
-                        <span className="text-sm text-gray-700 capitalize">{risk}</span>
+                        <span className="text-sm text-gray-900 capitalize">{risk}</span>
                       </div>
                     ))}
                   </div>
@@ -399,15 +399,15 @@ export default function ClientProfilePage({ params }: ClientProfilePageProps) {
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold text-gray-900">Check-in History</h2>
                 <div className="flex items-center space-x-2">
-                  <span className="text-sm text-gray-600">Total: {checkIns.length}</span>
-                  <span className="text-sm text-gray-600">Avg Score: {checkIns.length > 0 ? Math.round(checkIns.reduce((sum, c) => sum + c.score, 0) / checkIns.length) : 0}%</span>
+                  <span className="text-sm text-gray-800">Total: {checkIns.length}</span>
+                  <span className="text-sm text-gray-800">Avg Score: {checkIns.length > 0 ? Math.round(checkIns.reduce((sum, c) => sum + c.score, 0) / checkIns.length) : 0}%</span>
                 </div>
               </div>
 
               {/* Filters */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-gray-900 mb-2">
                     Filter by Form
                   </label>
                   <select
@@ -424,7 +424,7 @@ export default function ClientProfilePage({ params }: ClientProfilePageProps) {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-gray-900 mb-2">
                     Date Range
                   </label>
                   <select
@@ -445,7 +445,7 @@ export default function ClientProfilePage({ params }: ClientProfilePageProps) {
                 {filteredCheckIns.length === 0 ? (
                   <div className="text-center py-8">
                     <div className="text-gray-500 text-lg mb-2">No check-ins found</div>
-                    <p className="text-gray-400">
+                    <p className="text-gray-600">
                       {checkIns.length === 0 
                         ? "This client hasn't submitted any check-ins yet."
                         : "No check-ins match your current filters."
@@ -476,12 +476,12 @@ export default function ClientProfilePage({ params }: ClientProfilePageProps) {
 
                       {/* Response Summary */}
                       <div className="border-t pt-3">
-                        <h4 className="text-sm font-medium text-gray-700 mb-2">Response Summary:</h4>
+                        <h4 className="text-sm font-medium text-gray-900 mb-2">Response Summary:</h4>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div className="space-y-1">
                             {Object.entries(checkIn.responses).slice(0, Math.ceil(Object.keys(checkIn.responses).length / 2)).map(([questionId, answer]) => (
                               <div key={questionId} className="text-sm">
-                                <span className="font-medium text-gray-600">Q{questionId}:</span>
+                                <span className="font-medium text-gray-800">Q{questionId}:</span>
                                 <span className="ml-2 text-gray-900">
                                   {typeof answer === 'boolean' ? (answer ? 'Yes' : 'No') : answer}
                                 </span>
@@ -491,7 +491,7 @@ export default function ClientProfilePage({ params }: ClientProfilePageProps) {
                           <div className="space-y-1">
                             {Object.entries(checkIn.responses).slice(Math.ceil(Object.keys(checkIn.responses).length / 2)).map(([questionId, answer]) => (
                               <div key={questionId} className="text-sm">
-                                <span className="font-medium text-gray-600">Q{questionId}:</span>
+                                <span className="font-medium text-gray-800">Q{questionId}:</span>
                                 <span className="ml-2 text-gray-900">
                                   {typeof answer === 'boolean' ? (answer ? 'Yes' : 'No') : answer}
                                 </span>
@@ -532,7 +532,7 @@ export default function ClientProfilePage({ params }: ClientProfilePageProps) {
                         <span className="text-sm font-medium text-gray-900 capitalize">{note.type}</span>
                         <span className="text-sm text-gray-500">{new Date(note.date).toLocaleDateString()}</span>
                       </div>
-                      <p className="text-gray-700">{note.content}</p>
+                      <p className="text-gray-900">{note.content}</p>
                     </div>
                   ))}
                 </div>

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { RoleProtected } from '@/components/ProtectedRoute';
 
 interface EngagementMetrics {
   totalClients: number;
@@ -77,10 +78,9 @@ interface ClientEngagement {
 
 export default function EngagementMetricsPage() {
   const [isLoading, setIsLoading] = useState(true);
-  const [engagementData, setEngagementData] = useState<EngagementMetrics | null>(null);
-  const [clientEngagement, setClientEngagement] = useState<ClientEngagement[]>([]);
+  const [engagementData, setEngagementData] = useState<ClientEngagement[]>([]); // Changed to ClientEngagement[]
   const [timeRange, setTimeRange] = useState('30d');
-  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [category, setCategory] = useState('all'); // Changed from selectedCategory
   const [sortBy, setSortBy] = useState<'engagement' | 'name' | 'recent'>('engagement');
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -91,161 +91,28 @@ export default function EngagementMetricsPage() {
   const fetchEngagementData = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch(`/api/analytics/engagement?timeRange=${timeRange}`);
+      // Get coach ID from user context or use a default for testing
+      const coachId = 'BYAUh1d6PwanHhIUhISsmZtgt0B2'; // This should come from auth context
+      
+      const response = await fetch(`/api/analytics/engagement?timeRange=${timeRange}&coachId=${coachId}`);
       if (response.ok) {
         const data = await response.json();
-        setEngagementData(data.metrics || null);
-        setClientEngagement(data.clientEngagement || []);
+        if (data.success) {
+          setEngagementData(data.clientEngagement || []); // Changed to setEngagementData
+        } else {
+          console.error('Failed to fetch engagement data:', data.message);
+          setEngagementData([]); // Changed to setEngagementData
+        }
       } else {
         console.error('Failed to fetch engagement data');
-        setMockData();
+        setEngagementData([]); // Changed to setEngagementData
       }
     } catch (error) {
       console.error('Error fetching engagement data:', error);
-      setMockData();
+      setEngagementData([]); // Changed to setEngagementData
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const setMockData = () => {
-    const mockMetrics: EngagementMetrics = {
-      totalClients: 24,
-      activeClients: 18,
-      averageEngagementScore: 72,
-      engagementTrend: 'improving',
-      retentionRate: 85,
-      churnRate: 15,
-      averageSessionDuration: 12.5,
-      responseRate: 78,
-      topEngagedClients: [
-        { clientId: '1', clientName: 'Sarah Johnson', engagementScore: 94, lastActivity: '2024-01-15' },
-        { clientId: '2', clientName: 'Mike Chen', engagementScore: 91, lastActivity: '2024-01-14' },
-        { clientId: '3', clientName: 'Emma Davis', engagementScore: 88, lastActivity: '2024-01-13' }
-      ],
-      lowEngagedClients: [
-        { clientId: '4', clientName: 'Alex Thompson', engagementScore: 35, lastActivity: '2024-01-08' },
-        { clientId: '5', clientName: 'Jordan Lee', engagementScore: 42, lastActivity: '2024-01-10' },
-        { clientId: '6', clientName: 'Lisa Wang', engagementScore: 28, lastActivity: '2024-01-05' }
-      ],
-      engagementByCategory: [
-        { category: 'Fitness', averageScore: 78, clientCount: 8 },
-        { category: 'Nutrition', averageScore: 72, clientCount: 6 },
-        { category: 'Wellness', averageScore: 68, clientCount: 4 },
-        { category: 'Weight Loss', averageScore: 75, clientCount: 6 }
-      ],
-      communicationEffectiveness: {
-        emailOpenRate: 68,
-        checkInResponseRate: 82,
-        messageResponseTime: 4.2,
-        preferredChannels: [
-          { channel: 'Email', usage: 45, effectiveness: 78 },
-          { channel: 'SMS', usage: 30, effectiveness: 85 },
-          { channel: 'Push Notifications', usage: 25, effectiveness: 72 }
-        ]
-      },
-      activityPatterns: [
-        { dayOfWeek: 'Monday', averageActivity: 85, peakHours: ['9:00 AM', '6:00 PM'] },
-        { dayOfWeek: 'Tuesday', averageActivity: 78, peakHours: ['8:00 AM', '5:00 PM'] },
-        { dayOfWeek: 'Wednesday', averageActivity: 82, peakHours: ['10:00 AM', '7:00 PM'] },
-        { dayOfWeek: 'Thursday', averageActivity: 75, peakHours: ['9:00 AM', '6:00 PM'] },
-        { dayOfWeek: 'Friday', averageActivity: 70, peakHours: ['8:00 AM', '5:00 PM'] },
-        { dayOfWeek: 'Saturday', averageActivity: 45, peakHours: ['10:00 AM', '2:00 PM'] },
-        { dayOfWeek: 'Sunday', averageActivity: 35, peakHours: ['11:00 AM', '3:00 PM'] }
-      ],
-      retentionInsights: [
-        {
-          insight: 'Clients who respond within 24 hours have 40% higher retention',
-          impact: 'high',
-          recommendation: 'Implement automated follow-up for non-responders'
-        },
-        {
-          insight: 'Weekly check-ins improve engagement by 25%',
-          impact: 'medium',
-          recommendation: 'Increase check-in frequency for low-engaged clients'
-        },
-        {
-          insight: 'Personalized messages increase response rates by 35%',
-          impact: 'high',
-          recommendation: 'Use client-specific messaging templates'
-        }
-      ]
-    };
-
-    const mockClientEngagement: ClientEngagement[] = [
-      {
-        clientId: '1',
-        clientName: 'Sarah Johnson',
-        engagementScore: 94,
-        lastActivity: '2024-01-15',
-        checkInStreak: 12,
-        totalCheckIns: 45,
-        averageResponseTime: 2.1,
-        preferredChannels: ['Email', 'SMS'],
-        engagementHistory: [
-          { date: '2024-01-15', activity: 'Completed check-in', score: 95 },
-          { date: '2024-01-14', activity: 'Viewed progress report', score: 92 },
-          { date: '2024-01-13', activity: 'Completed check-in', score: 88 }
-        ],
-        communicationPreferences: {
-          email: true,
-          sms: true,
-          pushNotifications: false,
-          preferredTime: '9:00 AM'
-        },
-        retentionRisk: 'low',
-        nextBestAction: 'Continue current engagement strategy'
-      },
-      {
-        clientId: '2',
-        clientName: 'Mike Chen',
-        engagementScore: 91,
-        lastActivity: '2024-01-14',
-        checkInStreak: 8,
-        totalCheckIns: 32,
-        averageResponseTime: 3.5,
-        preferredChannels: ['SMS', 'Push Notifications'],
-        engagementHistory: [
-          { date: '2024-01-14', activity: 'Completed check-in', score: 94 },
-          { date: '2024-01-13', activity: 'Updated goals', score: 89 },
-          { date: '2024-01-12', activity: 'Completed check-in', score: 87 }
-        ],
-        communicationPreferences: {
-          email: false,
-          sms: true,
-          pushNotifications: true,
-          preferredTime: '7:00 AM'
-        },
-        retentionRisk: 'low',
-        nextBestAction: 'Send motivational message'
-      },
-      {
-        clientId: '4',
-        clientName: 'Alex Thompson',
-        engagementScore: 35,
-        lastActivity: '2024-01-08',
-        checkInStreak: 0,
-        totalCheckIns: 8,
-        averageResponseTime: 24.5,
-        preferredChannels: ['Email'],
-        engagementHistory: [
-          { date: '2024-01-08', activity: 'Missed check-in', score: 30 },
-          { date: '2024-01-05', activity: 'Completed check-in', score: 45 },
-          { date: '2024-01-02', activity: 'Missed check-in', score: 25 }
-        ],
-        communicationPreferences: {
-          email: true,
-          sms: false,
-          pushNotifications: false,
-          preferredTime: '6:00 PM'
-        },
-        retentionRisk: 'high',
-        nextBestAction: 'Schedule intervention call'
-      }
-    ];
-
-    setEngagementData(mockMetrics);
-    setClientEngagement(mockClientEngagement);
   };
 
   const getEngagementColor = (score: number) => {
@@ -265,7 +132,7 @@ export default function EngagementMetricsPage() {
       case 'low': return 'text-green-600 bg-green-100';
       case 'medium': return 'text-yellow-600 bg-yellow-100';
       case 'high': return 'text-red-600 bg-red-100';
-      default: return 'text-gray-600 bg-gray-100';
+      default: return 'text-gray-800 bg-gray-100';
     }
   };
 
@@ -278,14 +145,14 @@ export default function EngagementMetricsPage() {
     }
   };
 
-  const filteredData = clientEngagement.filter(client => {
-    const matchesCategory = selectedCategory === 'all' || 
-      client.preferredChannels.includes(selectedCategory);
+  const filteredClients = engagementData.filter(client => { // Changed to filteredClients
+    const matchesCategory = category === 'all' || 
+      client.preferredChannels.includes(category); // Changed to category
     const matchesSearch = client.clientName.toLowerCase().includes(searchTerm.toLowerCase());
     return matchesCategory && matchesSearch;
   });
 
-  const sortedData = [...filteredData].sort((a, b) => {
+  const sortedData = [...filteredClients].sort((a, b) => { // Changed to sortedData
     switch (sortBy) {
       case 'engagement':
         return b.engagementScore - a.engagementScore;
@@ -317,364 +184,309 @@ export default function EngagementMetricsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Engagement Metrics</h1>
-            <p className="text-gray-600">Track client engagement, communication effectiveness, and retention patterns</p>
-          </div>
-          <div className="flex gap-3 mt-4 sm:mt-0">
-            <Link 
-              href="/analytics"
-              className="px-4 py-2 text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-            >
-              ← Back to Analytics
-            </Link>
-            <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-              Export Report
-            </button>
-          </div>
-        </div>
-
-        {/* Engagement Metrics Overview */}
-        {engagementData && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-            <div className="bg-white p-6 rounded-lg shadow-sm border">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Avg Engagement</p>
-                  <p className="text-2xl font-bold text-gray-900">{engagementData.averageEngagementScore}%</p>
-                  <p className="text-xs text-gray-500">Overall engagement score</p>
-                </div>
-                <div className="p-2 bg-blue-100 rounded-lg">
-                  <span className="text-blue-600 text-xl">📊</span>
-                </div>
+    <RoleProtected requiredRole="coach">
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 p-6">
+        <div className="max-w-7xl mx-auto">
+          {/* Modern Header */}
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h1 className="text-4xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
+                  Engagement Analytics
+                </h1>
+                <p className="text-gray-600 mt-2 text-lg">Track client engagement, communication effectiveness, and retention patterns</p>
               </div>
-            </div>
-
-            <div className="bg-white p-6 rounded-lg shadow-sm border">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Retention Rate</p>
-                  <p className="text-2xl font-bold text-green-600">{engagementData.retentionRate}%</p>
-                  <p className="text-xs text-gray-500">Client retention</p>
-                </div>
-                <div className="p-2 bg-green-100 rounded-lg">
-                  <span className="text-green-600 text-xl">📈</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white p-6 rounded-lg shadow-sm border">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Response Rate</p>
-                  <p className="text-2xl font-bold text-purple-600">{engagementData.responseRate}%</p>
-                  <p className="text-xs text-gray-500">Check-in responses</p>
-                </div>
-                <div className="p-2 bg-purple-100 rounded-lg">
-                  <span className="text-purple-600 text-xl">💬</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white p-6 rounded-lg shadow-sm border">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Avg Session</p>
-                  <p className="text-2xl font-bold text-orange-600">{engagementData.averageSessionDuration}m</p>
-                  <p className="text-xs text-gray-500">Session duration</p>
-                </div>
-                <div className="p-2 bg-orange-100 rounded-lg">
-                  <span className="text-orange-600 text-xl">⏱️</span>
-                </div>
+              <div className="flex items-center space-x-3">
+                <Link
+                  href="/analytics"
+                  className="text-gray-700 hover:text-gray-900 font-medium px-6 py-3 rounded-xl border-2 border-gray-200 hover:border-gray-300 transition-all duration-200"
+                >
+                  ← Back to Analytics
+                </Link>
+                <button className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-6 py-3 rounded-xl font-medium transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5">
+                  Export Report
+                </button>
               </div>
             </div>
           </div>
-        )}
 
-        {/* Filters and Controls */}
-        <div className="bg-white p-6 rounded-lg shadow-sm border mb-8">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div className="flex flex-col sm:flex-row gap-4">
-              <select
-                value={timeRange}
-                onChange={(e) => setTimeRange(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="7d">Last 7 Days</option>
-                <option value="30d">Last 30 Days</option>
-                <option value="90d">Last 90 Days</option>
-                <option value="1y">Last Year</option>
-              </select>
-              
-              <select
-                value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="all">All Categories</option>
-                <option value="Email">Email</option>
-                <option value="SMS">SMS</option>
-                <option value="Push Notifications">Push Notifications</option>
-              </select>
-              
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as any)}
-                className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="engagement">Sort by Engagement</option>
-                <option value="name">Sort by Name</option>
-                <option value="recent">Sort by Recent Activity</option>
-              </select>
+          {/* Filters and Search */}
+          <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden mb-8">
+            <div className="bg-gradient-to-r from-purple-50 to-pink-50 px-8 py-6 border-b border-gray-100">
+              <h2 className="text-2xl font-bold text-gray-900">Filters & Search</h2>
             </div>
-            
-            <input
-              type="text"
-              placeholder="Search clients..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+            <div className="p-8">
+              <div className="flex flex-col md:flex-row gap-4 items-center">
+                <select
+                  value={timeRange}
+                  onChange={(e) => setTimeRange(e.target.value)}
+                  className="px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white shadow-sm"
+                >
+                  <option value="7d">Last 7 Days</option>
+                  <option value="30d">Last 30 Days</option>
+                  <option value="90d">Last 90 Days</option>
+                  <option value="1y">Last Year</option>
+                </select>
+                
+                <select
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  className="px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white shadow-sm"
+                >
+                  <option value="all">All Categories</option>
+                  <option value="health">Health</option>
+                  <option value="fitness">Fitness</option>
+                  <option value="nutrition">Nutrition</option>
+                  <option value="wellness">Wellness</option>
+                </select>
+                
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  className="px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white shadow-sm"
+                >
+                  <option value="engagement">Sort by Engagement</option>
+                  <option value="activity">Sort by Activity</option>
+                  <option value="score">Sort by Score</option>
+                </select>
+                
+                <input
+                  type="text"
+                  placeholder="Search clients..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="flex-1 px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white shadow-sm"
+                />
+              </div>
+            </div>
           </div>
-        </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Main Client Engagement */}
-          <div className="lg:col-span-2">
-            <div className="space-y-6">
-              {sortedData.map((client) => (
-                <div key={client.clientId} className="bg-white rounded-lg shadow-sm border">
-                  <div className="p-6 border-b border-gray-200">
-                    <div className="flex items-center justify-between mb-4">
-                      <div>
-                        <h3 className="text-lg font-semibold text-gray-900">{client.clientName}</h3>
-                        <p className="text-sm text-gray-600">Engagement Score: {client.engagementScore}%</p>
-                      </div>
-                      <div className="flex items-center space-x-3">
-                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${getEngagementBgColor(client.engagementScore)} ${getEngagementColor(client.engagementScore)}`}>
-                          {client.engagementScore}% Engaged
-                        </span>
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getRiskColor(client.retentionRisk)}`}>
-                          {client.retentionRisk} risk
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Engagement Metrics */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                      <div className="text-center p-3 bg-blue-50 rounded-lg">
-                        <div className="text-lg font-bold text-blue-600">{client.checkInStreak}</div>
-                        <div className="text-xs text-gray-600">Check-in Streak</div>
-                      </div>
-                      <div className="text-center p-3 bg-green-50 rounded-lg">
-                        <div className="text-lg font-bold text-green-600">{client.totalCheckIns}</div>
-                        <div className="text-xs text-gray-600">Total Check-ins</div>
-                      </div>
-                      <div className="text-center p-3 bg-purple-50 rounded-lg">
-                        <div className="text-lg font-bold text-purple-600">{client.averageResponseTime}h</div>
-                        <div className="text-xs text-gray-600">Avg Response Time</div>
-                      </div>
-                      <div className="text-center p-3 bg-orange-50 rounded-lg">
-                        <div className="text-lg font-bold text-orange-600">{client.lastActivity}</div>
-                        <div className="text-xs text-gray-600">Last Activity</div>
-                      </div>
-                    </div>
-
-                    {/* Communication Preferences */}
-                    <div className="mb-4">
-                      <h4 className="text-sm font-medium text-gray-900 mb-3">Communication Preferences</h4>
-                      <div className="flex flex-wrap gap-2">
-                        {client.preferredChannels.map((channel) => (
-                          <span key={channel} className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
-                            {channel}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* Main Content */}
+            <div className="lg:col-span-2 space-y-8">
+              {/* Client Engagement Cards */}
+              {filteredClients.map((client) => (
+                <div key={client.clientId} className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-8 py-6 border-b border-gray-100">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-4">
+                        <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg">
+                          <span className="text-white font-bold text-2xl">
+                            {client.clientName.charAt(0)}{client.clientName.charAt(1)}
                           </span>
-                        ))}
+                        </div>
+                        <div>
+                          <h3 className="text-2xl font-bold text-gray-900">{client.clientName}</h3>
+                          <p className="text-gray-600">Engagement Score: {client.engagementScore || 0}%</p>
+                        </div>
                       </div>
-                      <div className="mt-2 text-sm text-gray-600">
-                        Preferred time: {client.communicationPreferences.preferredTime}
+                      <div className="flex space-x-2">
+                        <span className={`px-3 py-1 text-sm font-medium rounded-full ${getEngagementColor(client.engagementScore || 0)}`}>
+                          {client.engagementScore || 0}% Engaged
+                        </span>
+                        {client.engagementScore < 30 && (
+                          <span className="px-3 py-1 text-sm font-medium rounded-full bg-red-100 text-red-800">
+                            high risk
+                          </span>
+                        )}
                       </div>
-                    </div>
-
-                    {/* Recent Engagement History */}
-                    <div className="mb-4">
-                      <h4 className="text-sm font-medium text-gray-900 mb-3">Recent Activity</h4>
-                      <div className="space-y-2">
-                        {client.engagementHistory.slice(0, 3).map((activity, index) => (
-                          <div key={index} className="flex items-center justify-between text-sm">
-                            <div className="flex items-center space-x-3">
-                              <span className="text-gray-500">{activity.date}</span>
-                              <span className="text-gray-900">{activity.activity}</span>
-                            </div>
-                            <span className={`font-medium ${getEngagementColor(activity.score)}`}>
-                              {activity.score}%
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Next Best Action */}
-                    <div>
-                      <h4 className="text-sm font-medium text-gray-900 mb-2">Next Best Action</h4>
-                      <p className="text-sm text-gray-700 bg-yellow-50 p-3 rounded-lg">
-                        💡 {client.nextBestAction}
-                      </p>
                     </div>
                   </div>
-
-                  <div className="p-4 bg-gray-50 border-t border-gray-200">
-                    <div className="flex justify-between items-center">
-                      <Link 
+                  
+                  <div className="p-8">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-100">
+                        <div className="text-2xl font-bold text-blue-600 mb-1">{client.checkInStreak || 0}</div>
+                        <div className="text-sm text-gray-600">Check-in Streak</div>
+                      </div>
+                      
+                      <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-4 border border-green-100">
+                        <div className="text-2xl font-bold text-green-600 mb-1">{client.totalCheckIns || 0}</div>
+                        <div className="text-sm text-gray-600">Total Check-ins</div>
+                      </div>
+                      
+                      <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl p-4 border border-purple-100">
+                        <div className="text-2xl font-bold text-purple-600 mb-1">{client.averageResponseTime || '24h'}</div>
+                        <div className="text-sm text-gray-600">Avg Response Time</div>
+                      </div>
+                      
+                      <div className="bg-gradient-to-r from-orange-50 to-red-50 rounded-xl p-4 border border-orange-100">
+                        <div className="text-2xl font-bold text-orange-600 mb-1">
+                          {client.lastActivity ? new Date(client.lastActivity).toLocaleDateString() : 'N/A'}
+                        </div>
+                        <div className="text-sm text-gray-600">Last Activity</div>
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                      {/* Communication Preferences */}
+                      <div className="space-y-4">
+                        <h4 className="text-lg font-semibold text-gray-900">Communication Preferences</h4>
+                        <div className="space-y-3">
+                          <div className="flex items-center space-x-3">
+                            <div className={`w-4 h-4 rounded-full ${client.communicationPreferences?.email ? 'bg-blue-500' : 'bg-gray-300'}`}></div>
+                            <span className="text-gray-700">Email</span>
+                          </div>
+                          <div className="flex items-center space-x-3">
+                            <div className={`w-4 h-4 rounded-full ${client.communicationPreferences?.sms ? 'bg-blue-500' : 'bg-gray-300'}`}></div>
+                            <span className="text-gray-700">SMS</span>
+                          </div>
+                          <div className="text-sm text-gray-600">
+                            Preferred time: {client.communicationPreferences?.preferredTime || '9:00 AM'}
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Recent Activity */}
+                      <div className="space-y-4">
+                        <h4 className="text-lg font-semibold text-gray-900">Recent Activity</h4>
+                        <div className="space-y-2">
+                          {client.engagementHistory && client.engagementHistory.length > 0 ? (
+                            client.engagementHistory.map((activity, index) => (
+                              <div key={index} className="flex items-center space-x-3 text-sm text-gray-600">
+                                <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                                <span>{activity.activity}</span>
+                              </div>
+                            ))
+                          ) : (
+                            <p className="text-gray-500 text-sm">No recent activity</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Next Best Action */}
+                    <div className="mt-8 p-4 bg-gradient-to-r from-yellow-50 to-amber-50 rounded-xl border border-yellow-200">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-8 h-8 bg-yellow-100 rounded-lg flex items-center justify-center">
+                          <svg className="w-4 h-4 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </div>
+                        <div>
+                          <h5 className="font-semibold text-gray-900">Next Best Action</h5>
+                          <p className="text-gray-700 text-sm">
+                            {client.engagementScore < 30 
+                              ? 'Schedule intervention call to re-engage client'
+                              : 'Send personalized check-in message'
+                            }
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Action Buttons */}
+                    <div className="mt-6 flex space-x-4">
+                      <Link
                         href={`/clients/${client.clientId}`}
-                        className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                        className="text-blue-600 hover:text-blue-800 font-medium transition-colors"
                       >
                         View Full Profile →
                       </Link>
-                      <button className="text-green-600 hover:text-green-800 text-sm font-medium">
+                      <button className="text-green-600 hover:text-green-800 font-medium transition-colors">
                         Send Message
                       </button>
                     </div>
                   </div>
                 </div>
               ))}
-
-              {sortedData.length === 0 && (
-                <div className="text-center py-12">
-                  <div className="text-gray-400 text-6xl mb-4">📊</div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No engagement data found</h3>
-                  <p className="text-gray-500">Try adjusting your search or filter criteria</p>
-                </div>
-              )}
             </div>
-          </div>
 
-          {/* Sidebar */}
-          <div className="space-y-6">
-            {/* Communication Effectiveness */}
-            {engagementData && (
-              <div className="bg-white rounded-lg shadow-sm border p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">💬 Communication Effectiveness</h3>
-                <div className="space-y-4">
-                  <div className="text-center p-3 bg-blue-50 rounded-lg">
-                    <div className="text-lg font-bold text-blue-600">{engagementData.communicationEffectiveness.emailOpenRate}%</div>
-                    <div className="text-sm text-gray-600">Email Open Rate</div>
-                  </div>
-                  <div className="text-center p-3 bg-green-50 rounded-lg">
-                    <div className="text-lg font-bold text-green-600">{engagementData.communicationEffectiveness.checkInResponseRate}%</div>
-                    <div className="text-sm text-gray-600">Check-in Response Rate</div>
-                  </div>
-                  <div className="text-center p-3 bg-purple-50 rounded-lg">
-                    <div className="text-lg font-bold text-purple-600">{engagementData.communicationEffectiveness.messageResponseTime}h</div>
-                    <div className="text-sm text-gray-600">Avg Response Time</div>
+            {/* Sidebar */}
+            <div className="space-y-8">
+              {/* Quick Actions */}
+              <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-6 py-4 border-b border-gray-100">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                      <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                    </div>
+                    <h3 className="text-lg font-bold text-gray-900">Quick Actions</h3>
                   </div>
                 </div>
-
-                <div className="mt-4">
-                  <h4 className="text-sm font-medium text-gray-900 mb-3">Preferred Channels</h4>
-                  <div className="space-y-2">
-                    {engagementData.communicationEffectiveness.preferredChannels.map((channel) => (
-                      <div key={channel.channel} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                        <span className="text-sm text-gray-700">{channel.channel}</span>
-                        <div className="text-right">
-                          <div className="text-xs font-medium text-gray-900">{channel.usage}% usage</div>
-                          <div className="text-xs text-gray-500">{channel.effectiveness}% effective</div>
-                        </div>
+                <div className="p-6 space-y-4">
+                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-200 hover:shadow-lg transition-all duration-200 cursor-pointer">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                        <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                        </svg>
                       </div>
-                    ))}
+                      <div>
+                        <h4 className="font-semibold text-gray-900">Send Engagement Campaign</h4>
+                        <p className="text-sm text-gray-600">Re-engage low-activity clients</p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-4 border border-green-200 hover:shadow-lg transition-all duration-200 cursor-pointer">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
+                        <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <h4 className="font-semibold text-gray-900">Schedule Retention Calls</h4>
+                        <p className="text-sm text-gray-600">Reach out to at-risk clients</p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl p-4 border border-purple-200 hover:shadow-lg transition-all duration-200 cursor-pointer">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
+                        <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <h4 className="font-semibold text-gray-900">Generate Engagement Report</h4>
+                        <p className="text-sm text-gray-600">Export detailed analysis</p>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
-            )}
 
-            {/* Activity Patterns */}
-            {engagementData && (
-              <div className="bg-white rounded-lg shadow-sm border p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">📅 Activity Patterns</h3>
-                <div className="space-y-3">
-                  {engagementData.activityPatterns.map((pattern) => (
-                    <div key={pattern.dayOfWeek} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                      <span className="text-sm font-medium text-gray-700">{pattern.dayOfWeek}</span>
-                      <div className="text-right">
-                        <div className="text-xs font-medium text-gray-900">{pattern.averageActivity}% activity</div>
-                        <div className="text-xs text-gray-500">Peak: {pattern.peakHours.join(', ')}</div>
-                      </div>
-                    </div>
-                  ))}
+              {/* Engagement Summary */}
+              <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+                <div className="bg-gradient-to-r from-emerald-50 to-teal-50 px-6 py-4 border-b border-gray-100">
+                  <h3 className="text-lg font-bold text-gray-900">Engagement Summary</h3>
                 </div>
-              </div>
-            )}
-
-            {/* Retention Insights */}
-            {engagementData && (
-              <div className="bg-white rounded-lg shadow-sm border p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">💡 Retention Insights</h3>
-                <div className="space-y-3">
-                  {engagementData.retentionInsights.map((insight, index) => (
-                    <div key={index} className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                      <div className="flex items-start space-x-2">
-                        <span className="text-yellow-600">💡</span>
-                        <div>
-                          <p className="text-sm text-gray-700 mb-1">{insight.insight}</p>
-                          <div className="flex items-center justify-between">
-                            <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                              insight.impact === 'high' ? 'bg-red-100 text-red-800' :
-                              insight.impact === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                              'bg-green-100 text-green-800'
-                            }`}>
-                              {insight.impact} impact
-                            </span>
-                            <span className="text-xs text-gray-500">{insight.recommendation}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                <div className="p-6 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-600">Total Clients</span>
+                    <span className="font-bold text-gray-900">{engagementData.length}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-600">High Engagement</span>
+                    <span className="font-bold text-green-600">
+                      {engagementData.filter(c => (c.engagementScore || 0) >= 70).length}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-600">At Risk</span>
+                    <span className="font-bold text-red-600">
+                      {engagementData.filter(c => (c.engagementScore || 0) < 30).length}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-600">Avg Engagement</span>
+                    <span className="font-bold text-gray-900">
+                      {engagementData.length > 0 
+                        ? Math.round(engagementData.reduce((sum, c) => sum + (c.engagementScore || 0), 0) / engagementData.length)
+                        : 0}%
+                    </span>
+                  </div>
                 </div>
-              </div>
-            )}
-
-            {/* Quick Actions */}
-            <div className="bg-white rounded-lg shadow-sm border p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">⚡ Quick Actions</h3>
-              <div className="space-y-3">
-                <button className="w-full text-left p-3 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors">
-                  <div className="flex items-center">
-                    <span className="text-blue-600 mr-3">📧</span>
-                    <div>
-                      <p className="text-sm font-medium text-blue-900">Send Engagement Campaign</p>
-                      <p className="text-xs text-blue-700">Re-engage low-activity clients</p>
-                    </div>
-                  </div>
-                </button>
-                
-                <button className="w-full text-left p-3 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 transition-colors">
-                  <div className="flex items-center">
-                    <span className="text-green-600 mr-3">📞</span>
-                    <div>
-                      <p className="text-sm font-medium text-green-900">Schedule Retention Calls</p>
-                      <p className="text-xs text-green-700">Reach out to at-risk clients</p>
-                    </div>
-                  </div>
-                </button>
-                
-                <button className="w-full text-left p-3 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 transition-colors">
-                  <div className="flex items-center">
-                    <span className="text-purple-600 mr-3">📊</span>
-                    <div>
-                      <p className="text-sm font-medium text-purple-900">Generate Engagement Report</p>
-                      <p className="text-xs text-purple-700">Export detailed analysis</p>
-                    </div>
-                  </div>
-                </button>
               </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
+    </RoleProtected>
   );
 } 

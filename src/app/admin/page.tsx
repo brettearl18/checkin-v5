@@ -100,7 +100,7 @@ export default function AdminDashboard() {
           {/* Header */}
           <div className="px-4 py-6 sm:px-0">
             <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
-            <p className="mt-2 text-gray-600">System-wide analytics and user management</p>
+            <p className="mt-2 text-gray-800">System-wide analytics and user management</p>
           </div>
 
           {/* Stats Grid */}

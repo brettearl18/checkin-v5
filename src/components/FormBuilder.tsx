@@ -117,7 +117,7 @@ export default function FormBuilder({ onSave, onCancel, initialForm, coachId, qu
         <h2 className="text-2xl font-bold text-gray-900 mb-2">
           {initialForm ? 'Edit Form' : 'Create New Form'}
         </h2>
-        <p className="text-gray-600">
+        <p className="text-gray-800">
           Build custom forms by selecting and ordering questions from your library
         </p>
       </div>
@@ -129,7 +129,7 @@ export default function FormBuilder({ onSave, onCancel, initialForm, coachId, qu
           
           {/* Form Name */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-gray-900 mb-2">
               Form Name *
             </label>
             <input
@@ -143,7 +143,7 @@ export default function FormBuilder({ onSave, onCancel, initialForm, coachId, qu
 
           {/* Form Description */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-gray-900 mb-2">
               Description *
             </label>
             <textarea
@@ -290,7 +290,7 @@ export default function FormBuilder({ onSave, onCancel, initialForm, coachId, qu
                     {index > 0 && (
                       <button
                         onClick={() => moveQuestion(index, index - 1)}
-                        className="text-gray-400 hover:text-gray-600"
+                        className="text-gray-600 hover:text-gray-800"
                       >
                         ↑
                       </button>
@@ -298,7 +298,7 @@ export default function FormBuilder({ onSave, onCancel, initialForm, coachId, qu
                     {index < form.questions!.length - 1 && (
                       <button
                         onClick={() => moveQuestion(index, index + 1)}
-                        className="text-gray-400 hover:text-gray-600"
+                        className="text-gray-600 hover:text-gray-800"
                       >
                         ↓
                       </button>
@@ -322,7 +322,7 @@ export default function FormBuilder({ onSave, onCancel, initialForm, coachId, qu
         <button
           type="button"
           onClick={onCancel}
-          className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+          className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-900 hover:bg-gray-50"
         >
           Cancel
         </button>

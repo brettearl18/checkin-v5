@@ -8,6 +8,15 @@ function initializeFirebaseAdmin() {
     
     if (!serviceAccountString) {
       console.warn('FIREBASE_SERVICE_ACCOUNT environment variable not set. Using default configuration.');
+      // Initialize with default credentials for local development
+      try {
+        initializeApp({
+          projectId: 'checkinv5',
+        });
+      } catch (error) {
+        console.error('Error initializing Firebase Admin with default config:', error);
+        throw new Error('Failed to initialize Firebase Admin SDK');
+      }
       return;
     }
 
@@ -27,6 +36,15 @@ function initializeFirebaseAdmin() {
 
 // Get Firestore instance
 export function getDb() {
-  initializeFirebaseAdmin();
-  return getFirestore();
+  try {
+    initializeFirebaseAdmin();
+    const db = getFirestore();
+    if (!db) {
+      throw new Error('Failed to get Firestore instance');
+    }
+    return db;
+  } catch (error) {
+    console.error('Error getting Firestore instance:', error);
+    throw new Error('Database connection failed');
+  }
 } 

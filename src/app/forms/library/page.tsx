@@ -121,7 +121,7 @@ export default function FormLibraryPage() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold text-gray-900">Form Library</h1>
-              <p className="mt-2 text-gray-600">Manage and organize your check-in forms</p>
+              <p className="mt-2 text-gray-800">Manage and organize your check-in forms</p>
             </div>
             <Link
               href="/forms/create"
@@ -136,7 +136,7 @@ export default function FormLibraryPage() {
         <div className="mb-6 bg-white rounded-lg shadow p-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-900 mb-2">
                 Search Forms
               </label>
               <input
@@ -148,7 +148,7 @@ export default function FormLibraryPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-900 mb-2">
                 Category Filter
               </label>
               <select
@@ -169,7 +169,7 @@ export default function FormLibraryPage() {
         {/* Forms Grid */}
         {filteredForms.length === 0 ? (
           <div className="text-center py-12">
-            <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="mx-auto h-12 w-12 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
             <h3 className="mt-2 text-sm font-medium text-gray-900">No forms found</h3>
@@ -201,7 +201,7 @@ export default function FormLibraryPage() {
                         {form.title}
                       </h3>
                       {form.description && (
-                        <p className="text-sm text-gray-600 mb-3 line-clamp-2">
+                        <p className="text-sm text-gray-800 mb-3 line-clamp-2">
                           {form.description}
                         </p>
                       )}
@@ -228,7 +228,7 @@ export default function FormLibraryPage() {
                     <div className="flex space-x-2">
                       <Link
                         href={`/forms/${form.id}/edit`}
-                        className="inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50"
+                        className="inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-900 bg-white hover:bg-gray-50"
                       >
                         Edit
                       </Link>
@@ -259,25 +259,25 @@ export default function FormLibraryPage() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="text-center">
                 <div className="text-2xl font-bold text-blue-600">{forms.length}</div>
-                <div className="text-sm text-gray-600">Total Forms</div>
+                <div className="text-sm text-gray-800">Total Forms</div>
               </div>
               <div className="text-center">
                 <div className="text-2xl font-bold text-green-600">
                   {forms.filter(f => f.isActive).length}
                 </div>
-                <div className="text-sm text-gray-600">Active Forms</div>
+                <div className="text-sm text-gray-800">Active Forms</div>
               </div>
               <div className="text-center">
                 <div className="text-2xl font-bold text-purple-600">
                   {forms.reduce((total, form) => total + (form.totalAssignments || 0), 0)}
                 </div>
-                <div className="text-sm text-gray-600">Total Assignments</div>
+                <div className="text-sm text-gray-800">Total Assignments</div>
               </div>
               <div className="text-center">
                 <div className="text-2xl font-bold text-orange-600">
                   {categories.length - 1}
                 </div>
-                <div className="text-sm text-gray-600">Categories</div>
+                <div className="text-sm text-gray-800">Categories</div>
               </div>
             </div>
           </div>

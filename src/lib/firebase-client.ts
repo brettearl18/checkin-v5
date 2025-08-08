@@ -1,27 +1,35 @@
 // Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
-import { getFirestore } from "firebase/firestore";
-import { getAuth } from "firebase/auth";
+import { initializeApp } from 'firebase/app';
+import { getAuth, connectAuthEmulator } from 'firebase/auth';
+import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
 
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
-  apiKey: "AIzaSyC0KNjwNBnSGMtp-aMd0Wfi6Hl-wN0bmQY",
-  authDomain: "checkinv5.firebaseapp.com",
-  projectId: "checkinv5",
-  storageBucket: "checkinv5.firebasestorage.app",
-  messagingSenderId: "644898823056",
-  appId: "1:644898823056:web:45266a1807495919ee3115",
-  measurementId: "G-YVQ4RY4KT4"
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
 };
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
-// Initialize Firebase services
-export const analytics = typeof window !== 'undefined' ? getAnalytics(app) : null;
-export const db = getFirestore(app);
+// Initialize Firebase Auth
 export const auth = getAuth(app);
+
+// Initialize Firestore
+export const db = getFirestore(app);
+
+// Connect to emulators in development (disabled for now)
+// if (process.env.NODE_ENV === 'development') {
+//   try {
+//     connectAuthEmulator(auth, 'http://localhost:9099');
+//     connectFirestoreEmulator(db, 'localhost', 8080);
+//   } catch (error) {
+//     // Emulators might not be running, which is fine
+//     console.log('Firebase emulators not running, using production services');
+//   }
+// }
 
 export default app; 

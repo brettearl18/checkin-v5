@@ -108,7 +108,7 @@ export default function QuestionsPage() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading questions...</p>
+          <p className="mt-4 text-gray-800">Loading questions...</p>
         </div>
       </div>
     );
@@ -122,7 +122,7 @@ export default function QuestionsPage() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold text-gray-900">Question Builder</h1>
-              <p className="mt-2 text-gray-600">Create custom questions and forms with weighted scoring</p>
+              <p className="mt-2 text-gray-800">Create custom questions and forms with weighted scoring</p>
             </div>
             <div className="flex space-x-3">
               <Link
@@ -255,7 +255,7 @@ export default function QuestionsPage() {
             <h3 className="text-lg font-medium text-gray-900 mb-4">Recent Questions</h3>
             {questions.length === 0 ? (
               <div className="text-center py-8">
-                <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="mx-auto h-12 w-12 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 <h3 className="mt-2 text-sm font-medium text-gray-900">No questions yet</h3>
@@ -330,7 +330,7 @@ export default function QuestionsPage() {
           <div className="p-6">
             {forms.length === 0 ? (
               <div className="text-center py-8">
-                <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="mx-auto h-12 w-12 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
                 <h3 className="mt-2 text-sm font-medium text-gray-900">No forms yet</h3>
@@ -373,7 +373,7 @@ export default function QuestionsPage() {
                       </Link>
                       <Link
                         href={`/forms/${form.id}/edit`}
-                        className="text-gray-600 hover:text-gray-800 text-sm font-medium"
+                        className="text-gray-800 hover:text-gray-800 text-sm font-medium"
                       >
                         Edit
                       </Link>

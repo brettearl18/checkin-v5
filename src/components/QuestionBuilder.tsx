@@ -116,7 +116,7 @@ export default function QuestionBuilder({ onSave, onCancel, initialQuestion, coa
         <h2 className="text-2xl font-bold text-gray-900 mb-2">
           {initialQuestion ? 'Edit Question' : 'Create New Question'}
         </h2>
-        <p className="text-gray-600">
+        <p className="text-gray-800">
           Build custom questions with weighted scoring for better client insights
         </p>
       </div>
@@ -124,7 +124,7 @@ export default function QuestionBuilder({ onSave, onCancel, initialQuestion, coa
       <div className="space-y-6">
         {/* Question Text */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-medium text-gray-900 mb-2">
             Question Text *
           </label>
           <textarea
@@ -138,7 +138,7 @@ export default function QuestionBuilder({ onSave, onCancel, initialQuestion, coa
 
         {/* Question Type */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-medium text-gray-900 mb-2">
             Question Type *
           </label>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -174,7 +174,7 @@ export default function QuestionBuilder({ onSave, onCancel, initialQuestion, coa
 
         {/* Weight */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-medium text-gray-900 mb-2">
             Question Weight: {question.weight || 5}/10
           </label>
           <input
@@ -193,7 +193,7 @@ export default function QuestionBuilder({ onSave, onCancel, initialQuestion, coa
 
         {/* Category */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-medium text-gray-900 mb-2">
             Category
           </label>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
@@ -205,7 +205,7 @@ export default function QuestionBuilder({ onSave, onCancel, initialQuestion, coa
                 className={`px-3 py-2 rounded-md text-sm font-medium ${
                   question.category === category.value
                     ? category.color
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    : 'bg-gray-100 text-gray-900 hover:bg-gray-200'
                 }`}
               >
                 {category.label}
@@ -217,7 +217,7 @@ export default function QuestionBuilder({ onSave, onCancel, initialQuestion, coa
         {/* Options for select/multiple-choice */}
         {(question.type === 'select' || question.type === 'multiple-choice') && (
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-gray-900 mb-2">
               Options
             </label>
             <div className="space-y-2">
@@ -255,7 +255,7 @@ export default function QuestionBuilder({ onSave, onCancel, initialQuestion, coa
 
         {/* Scoring */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-medium text-gray-900 mb-2">
             Scoring (for risk assessment)
           </label>
           <div className="grid grid-cols-3 gap-4">
@@ -300,7 +300,7 @@ export default function QuestionBuilder({ onSave, onCancel, initialQuestion, coa
 
         {/* Tags */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-medium text-gray-900 mb-2">
             Tags
           </label>
           <div className="space-y-2">
@@ -374,7 +374,7 @@ export default function QuestionBuilder({ onSave, onCancel, initialQuestion, coa
         <button
           type="button"
           onClick={onCancel}
-          className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+          className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-900 hover:bg-gray-50"
         >
           Cancel
         </button>

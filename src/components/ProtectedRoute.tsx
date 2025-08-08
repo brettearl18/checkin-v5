@@ -1,81 +1,118 @@
 'use client';
 
 import { useAuth } from '@/contexts/AuthContext';
-import { hasRoutePermission } from '@/lib/auth';
-import { usePathname, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
   requiredRole?: 'admin' | 'coach' | 'client';
+  allowedRoles?: ('admin' | 'coach' | 'client')[];
 }
 
-export default function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) {
-  const { user, loading } = useAuth();
-  const pathname = usePathname();
+export function AuthenticatedOnly({ children }: { children: React.ReactNode }) {
+  const { userProfile, loading } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (!loading) {
-      // If no user is logged in, redirect to login
-      if (!user) {
-        router.push('/login');
-        return;
-      }
-
-      // If a specific role is required, check if user has that role
-      if (requiredRole && user.role !== requiredRole) {
-        // Redirect based on user's actual role
-        switch (user.role) {
-          case 'admin':
-            router.push('/admin');
-            break;
-          case 'coach':
-            router.push('/dashboard');
-            break;
-          case 'client':
-            router.push('/client-portal');
-            break;
-          default:
-            router.push('/login');
-        }
-        return;
-      }
-
-      // Check if user has permission to access this route
-      if (!hasRoutePermission(user, pathname)) {
-        // Redirect based on user's role
-        switch (user.role) {
-          case 'admin':
-            router.push('/admin');
-            break;
-          case 'coach':
-            router.push('/dashboard');
-            break;
-          case 'client':
-            router.push('/client-portal');
-            break;
-          default:
-            router.push('/login');
-        }
-        return;
-      }
+    if (!loading && !userProfile) {
+      router.push('/login');
     }
-  }, [user, loading, pathname, router, requiredRole]);
+  }, [userProfile, loading, router]);
 
-  // Show loading spinner while checking authentication
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
       </div>
     );
   }
 
-  // If no user or no permission, don't render children
-  if (!user || (requiredRole && user.role !== requiredRole) || !hasRoutePermission(user, pathname)) {
+  if (!userProfile) {
     return null;
   }
 
   return <>{children}</>;
+}
+
+export function RoleProtected({ children, requiredRole, allowedRoles }: ProtectedRouteProps) {
+  const { userProfile, loading } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!loading && !userProfile) {
+      router.push('/login');
+      return;
+    }
+
+    if (!loading && userProfile) {
+      // Check if user has required role
+      if (requiredRole && userProfile.role !== requiredRole) {
+        // Redirect based on actual role
+        if (userProfile.role === 'client') {
+          router.push('/client-portal');
+        } else if (userProfile.role === 'coach') {
+          router.push('/dashboard');
+        } else if (userProfile.role === 'admin') {
+          router.push('/admin');
+        }
+        return;
+      }
+
+      // Check if user has one of the allowed roles
+      if (allowedRoles && !allowedRoles.includes(userProfile.role)) {
+        // Redirect based on actual role
+        if (userProfile.role === 'client') {
+          router.push('/client-portal');
+        } else if (userProfile.role === 'coach') {
+          router.push('/dashboard');
+        } else if (userProfile.role === 'admin') {
+          router.push('/admin');
+        }
+        return;
+      }
+    }
+  }, [userProfile, loading, router, requiredRole, allowedRoles]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  if (!userProfile) {
+    return null;
+  }
+
+  // Check role access
+  if (requiredRole && userProfile.role !== requiredRole) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">Access Denied</h1>
+          <p className="text-gray-600">You don't have permission to access this page.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (allowedRoles && !allowedRoles.includes(userProfile.role)) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">Access Denied</h1>
+          <p className="text-gray-600">You don't have permission to access this page.</p>
+        </div>
+      </div>
+    );
+  }
+
+  return <>{children}</>;
+}
+
+// Legacy component for backward compatibility
+export default function ProtectedRoute({ children, requiredRole }: { children: React.ReactNode; requiredRole?: string }) {
+  return <RoleProtected requiredRole={requiredRole as any}>{children}</RoleProtected>;
 } 

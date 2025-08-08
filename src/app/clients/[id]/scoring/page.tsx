@@ -288,7 +288,7 @@ export default function ClientScoringPage() {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h1 className="text-3xl font-bold text-gray-900">Scoring Configuration</h1>
-              <p className="text-gray-600 mt-2">
+              <p className="text-gray-800 mt-2">
                 Set personalized scoring thresholds for {client.name}
               </p>
             </div>
@@ -328,7 +328,7 @@ export default function ClientScoringPage() {
                     />
                     <div className="flex-1">
                       <div className={`font-medium ${profile.color}`}>{profile.name}</div>
-                      <div className="text-sm text-gray-600 mt-1">{profile.description}</div>
+                      <div className="text-sm text-gray-800 mt-1">{profile.description}</div>
                       <div className="text-xs text-gray-500 mt-2">
                         Red: &lt;{profile.thresholds.red}% | Yellow: {profile.thresholds.yellow}% | Green: &gt;{profile.thresholds.green}%
                       </div>
@@ -410,7 +410,7 @@ export default function ClientScoringPage() {
                       
                       {config.enabled && (
                         <div className="flex items-center space-x-2">
-                          <span className="text-sm text-gray-600">Weight:</span>
+                          <span className="text-sm text-gray-800">Weight:</span>
                           <input
                             type="number"
                             min="0.1"

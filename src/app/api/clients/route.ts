@@ -1,149 +1,124 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/firebase-server';
+import { initializeApp, getApps, cert } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
 
-export async function POST(request: NextRequest) {
-  try {
-    const db = getDb();
-    const formData = await request.json();
-
-    // Generate a unique client ID
-    const clientId = `client-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-    // Calculate BMI if height and weight are provided
-    let bmi = null;
-    if (formData.height && formData.weight) {
-      const heightInMeters = parseFloat(formData.height) / 100;
-      const weightInKg = parseFloat(formData.weight);
-      bmi = weightInKg / (heightInMeters * heightInMeters);
-    }
-
-    // Helper function to remove undefined values
-    const removeUndefined = (obj: any) => {
-      const cleaned = {};
-      Object.keys(obj).forEach(key => {
-        if (obj[key] !== undefined && obj[key] !== null && obj[key] !== '') {
-          cleaned[key] = obj[key];
-        }
-      });
-      return cleaned;
-    };
-
-    // Create the client profile from form data
-    const clientProfile = removeUndefined({
-      id: clientId,
-      
-      // Personal Information
-      name: `${formData.firstName} ${formData.lastName}`,
-      firstName: formData.firstName,
-      lastName: formData.lastName,
-      email: formData.email,
-      phone: formData.phone,
-      dateOfBirth: formData.dateOfBirth,
-      gender: formData.gender,
-      
-      // Contact & Address
-      address: formData.address,
-      city: formData.city,
-      state: formData.state,
-      zipCode: formData.zipCode,
-      emergencyContact: formData.emergencyContact,
-      emergencyPhone: formData.emergencyPhone,
-      
-      // Health Information
-      height: formData.height ? parseFloat(formData.height) : null,
-      weight: formData.weight ? parseFloat(formData.weight) : null,
-      bmi: bmi,
-      
-      // Goals
-      primaryGoal: formData.primaryGoal,
-      secondaryGoals: formData.secondaryGoals,
-      
-      // Health Details
-      medicalConditions: formData.medicalConditions,
-      medications: formData.medications,
-      allergies: formData.allergies,
-      injuries: formData.injuries,
-      
-      // Lifestyle
-      lifestyle: removeUndefined({
-        activityLevel: formData.activityLevel,
-        sleepHours: formData.sleepHours,
-        stressLevel: formData.stressLevel,
-        dietaryRestrictions: formData.dietaryRestrictions,
-        preferredContactMethod: formData.preferredContactMethod,
-        timeZone: formData.timeZone
-      }),
-      
-      // Coaching Preferences
-      coaching: removeUndefined({
-        style: formData.coachingStyle,
-        sessionFrequency: formData.sessionFrequency,
-        sessionDuration: formData.sessionDuration,
-        preferredTime: formData.preferredTime,
-        startDate: new Date().toISOString().split('T')[0],
-        status: 'pending'
-      }),
-      
-      // Notes
-      notes: formData.notes ? [{
-        id: `note-${Date.now()}`,
-        date: new Date().toISOString().split('T')[0],
-        content: formData.notes,
-        type: 'initial-assessment'
-      }] : [],
-      
-      // Timestamps
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      status: 'active'
-    });
-
-    // Add to Firestore
-    await db.collection('clients').doc(clientId).set(clientProfile);
-
-    return NextResponse.json({
-      success: true,
-      message: 'Client created successfully!',
-      clientId: clientId,
-      client: clientProfile
-    });
-
-  } catch (error) {
-    console.error('Error creating client:', error);
-    return NextResponse.json(
-      {
-        success: false,
-        error: 'Failed to create client',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      },
-      { status: 500 }
-    );
-  }
+// Initialize Firebase Admin if not already initialized
+if (!getApps().length) {
+  const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || '{}');
+  
+  initializeApp({
+    credential: cert(serviceAccount),
+    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
+  });
 }
 
-export async function GET() {
+const db = getFirestore();
+
+export async function GET(request: NextRequest) {
   try {
-    const db = getDb();
+    const { searchParams } = new URL(request.url);
+    const coachId = searchParams.get('coachId');
+
+    let query = db.collection('clients');
     
-    // Get all clients
-    const clientsSnapshot = await db.collection('clients').get();
-    const clients = clientsSnapshot.docs.map(doc => ({
+    // If coachId is provided, filter by coachId
+    if (coachId) {
+      query = query.where('coachId', '==', coachId);
+    }
+
+    const snapshot = await query.get();
+    const clients = snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     }));
 
     return NextResponse.json({
       success: true,
-      clients: clients
+      clients
     });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error fetching clients:', error);
     return NextResponse.json(
-      {
-        success: false,
-        error: 'Failed to fetch clients',
-        details: error instanceof Error ? error.message : 'Unknown error'
+      { 
+        success: false, 
+        error: error.message 
+      },
+      { status: 500 }
+    );
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const clientData = await request.json();
+
+    // Validate required fields
+    if (!clientData.firstName || !clientData.lastName || !clientData.email || !clientData.coachId) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: 'First name, last name, email, and coach ID are required' 
+        },
+        { status: 400 }
+      );
+    }
+
+    // Check if client with this email already exists
+    const existingClient = await db.collection('clients')
+      .where('email', '==', clientData.email)
+      .get();
+
+    if (!existingClient.empty) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: 'A client with this email already exists' 
+        },
+        { status: 409 }
+      );
+    }
+
+    // Create client document with new structure
+    const clientDoc = {
+      coachId: clientData.coachId,
+      firstName: clientData.firstName,
+      lastName: clientData.lastName,
+      email: clientData.email,
+      phone: clientData.phone || '',
+      status: 'active',
+      profile: {
+        goals: clientData.goals || [],
+        preferences: {
+          communication: clientData.communicationPreference || 'email',
+          checkInFrequency: clientData.checkInFrequency || 'weekly'
+        },
+        healthMetrics: {}
+      },
+      progress: {
+        overallScore: 0,
+        completedCheckins: 0,
+        totalCheckins: 0,
+        lastActivity: new Date()
+      },
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+
+    const docRef = await db.collection('clients').add(clientDoc);
+
+    return NextResponse.json({
+      success: true,
+      clientId: docRef.id,
+      message: 'Client created successfully'
+    });
+
+  } catch (error: any) {
+    console.error('Error creating client:', error);
+    return NextResponse.json(
+      { 
+        success: false, 
+        error: error.message 
       },
       { status: 500 }
     );

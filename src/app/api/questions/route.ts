@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { collection, addDoc, getDocs, query, orderBy, doc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { getDb } from '@/lib/firebase-server';
 
 // Helper function to remove undefined values
@@ -37,13 +36,13 @@ export async function POST(request: NextRequest) {
       ...cleanedData,
       isActive: true,
       usageCount: 0,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
+      createdAt: new Date(),
+      updatedAt: new Date()
     };
     
-    // Save to Firestore
+    // Save to Firestore using Admin SDK
     const db = getDb();
-    const docRef = await addDoc(collection(db, 'questions'), question);
+    const docRef = await db.collection('questions').add(question);
     
     return NextResponse.json({
       success: true,
@@ -55,24 +54,58 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Error creating question:', error);
     return NextResponse.json(
-      { success: false, message: 'Failed to create question' },
+      { success: false, message: 'Failed to create question', error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
   }
 }
 
 // GET - Fetch all questions
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url);
+    const coachId = searchParams.get('coachId');
+
+    // Use Admin SDK consistently
     const db = getDb();
-    const questionsRef = collection(db, 'questions');
-    const q = query(questionsRef, orderBy('createdAt', 'desc'));
-    const querySnapshot = await getDocs(q);
+    const questionsRef = db.collection('questions');
     
-    const questions = querySnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
+    // Try with index first, fallback to simple query if index doesn't exist
+    let querySnapshot;
+    try {
+      if (coachId) {
+        querySnapshot = await questionsRef.where('coachId', '==', coachId).orderBy('createdAt', 'desc').get();
+      } else {
+        querySnapshot = await questionsRef.orderBy('createdAt', 'desc').get();
+      }
+    } catch (indexError: any) {
+      console.log('Index error, falling back to simple query:', indexError.message);
+      // Fallback: get all questions without ordering and filter client-side
+      if (coachId) {
+        querySnapshot = await questionsRef.where('coachId', '==', coachId).get();
+      } else {
+        querySnapshot = await questionsRef.get();
+      }
+    }
+    
+    const questions = querySnapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        ...data,
+        createdAt: data.createdAt?.toDate?.() || data.createdAt,
+        updatedAt: data.updatedAt?.toDate?.() || data.updatedAt
+      };
+    });
+
+    // If we used fallback and coachId was provided, filter client-side
+    if (coachId && questions.length > 0 && questions.some(q => q.coachId !== coachId)) {
+      const filteredQuestions = questions.filter(q => q.coachId === coachId);
+      console.log(`Filtered ${questions.length} questions to ${filteredQuestions.length} for coachId: ${coachId}`);
+      return NextResponse.json({ success: true, questions: filteredQuestions });
+    }
+    
+    console.log(`Found ${questions.length} questions for coachId: ${coachId}`);
     
     return NextResponse.json({
       success: true,
@@ -82,7 +115,7 @@ export async function GET() {
   } catch (error) {
     console.error('Error fetching questions:', error);
     return NextResponse.json(
-      { success: false, message: 'Failed to fetch questions' },
+      { success: false, message: 'Failed to fetch questions', error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
   }

@@ -58,19 +58,29 @@ export default function RiskAnalysisPage() {
   const fetchRiskData = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch('/api/analytics/risk');
+      // Get coach ID from user context or use a default for testing
+      const coachId = 'BYAUh1d6PwanHhIUhISsmZtgt0B2'; // This should come from auth context
+      
+      const response = await fetch(`/api/analytics/risk?coachId=${coachId}`);
       if (response.ok) {
         const data = await response.json();
-        setRiskData(data.riskAnalysis || []);
-        setMetrics(data.metrics || null);
+        if (data.success) {
+          setRiskData(data.riskAnalysis || []);
+          setMetrics(data.metrics || null);
+        } else {
+          console.error('Failed to fetch risk data:', data.message);
+          setRiskData([]);
+          setMetrics(null);
+        }
       } else {
         console.error('Failed to fetch risk data');
-        // Use mock data for now
-        setMockData();
+        setRiskData([]);
+        setMetrics(null);
       }
     } catch (error) {
       console.error('Error fetching risk data:', error);
-      setMockData();
+      setRiskData([]);
+      setMetrics(null);
     } finally {
       setIsLoading(false);
     }
@@ -174,7 +184,7 @@ export default function RiskAnalysisPage() {
       case 'improving': return 'text-green-600';
       case 'declining': return 'text-red-600';
       case 'stable': return 'text-yellow-600';
-      default: return 'text-gray-600';
+      default: return 'text-gray-800';
     }
   };
 
@@ -222,12 +232,12 @@ export default function RiskAnalysisPage() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 mb-2">Risk Analysis</h1>
-            <p className="text-gray-600">Identify and manage at-risk clients with advanced risk scoring</p>
+            <p className="text-gray-800">Identify and manage at-risk clients with advanced risk scoring</p>
           </div>
           <div className="flex gap-3 mt-4 sm:mt-0">
             <Link 
               href="/analytics"
-              className="px-4 py-2 text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              className="px-4 py-2 text-gray-800 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
             >
               ← Back to Analytics
             </Link>
@@ -243,7 +253,7 @@ export default function RiskAnalysisPage() {
             <div className="bg-white p-6 rounded-lg shadow-sm border">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Total Clients</p>
+                  <p className="text-sm font-medium text-gray-800">Total Clients</p>
                   <p className="text-2xl font-bold text-gray-900">{metrics.totalClients}</p>
                 </div>
                 <div className="p-2 bg-blue-100 rounded-lg">
@@ -255,7 +265,7 @@ export default function RiskAnalysisPage() {
             <div className="bg-white p-6 rounded-lg shadow-sm border">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">At Risk</p>
+                  <p className="text-sm font-medium text-gray-800">At Risk</p>
                   <p className="text-2xl font-bold text-orange-600">{metrics.atRiskClients}</p>
                   <p className="text-xs text-gray-500">{((metrics.atRiskClients / metrics.totalClients) * 100).toFixed(1)}% of total</p>
                 </div>
@@ -268,7 +278,7 @@ export default function RiskAnalysisPage() {
             <div className="bg-white p-6 rounded-lg shadow-sm border">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Critical Risk</p>
+                  <p className="text-sm font-medium text-gray-800">Critical Risk</p>
                   <p className="text-2xl font-bold text-red-600">{metrics.criticalRisk}</p>
                   <p className="text-xs text-gray-500">Immediate attention needed</p>
                 </div>
@@ -281,12 +291,12 @@ export default function RiskAnalysisPage() {
             <div className="bg-white p-6 rounded-lg shadow-sm border">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Avg Risk Score</p>
+                  <p className="text-sm font-medium text-gray-800">Avg Risk Score</p>
                   <p className="text-2xl font-bold text-gray-900">{metrics.averageRiskScore}</p>
                   <p className="text-xs text-gray-500">Trend: {metrics.riskTrend}</p>
                 </div>
                 <div className="p-2 bg-gray-100 rounded-lg">
-                  <span className="text-gray-600 text-xl">📊</span>
+                  <span className="text-gray-800 text-xl">📊</span>
                 </div>
               </div>
             </div>
@@ -394,7 +404,7 @@ export default function RiskAnalysisPage() {
 
               {sortedData.length === 0 && (
                 <div className="text-center py-12">
-                  <div className="text-gray-400 text-6xl mb-4">📊</div>
+                  <div className="text-gray-600 text-6xl mb-4">📊</div>
                   <h3 className="text-lg font-medium text-gray-900 mb-2">No clients found</h3>
                   <p className="text-gray-500">Try adjusting your search or filter criteria</p>
                 </div>
@@ -411,7 +421,7 @@ export default function RiskAnalysisPage() {
                 <div className="space-y-3">
                   {metrics.topRiskFactors.map((factor, index) => (
                     <div key={index} className="flex items-center justify-between">
-                      <span className="text-sm text-gray-600">{factor.factor}</span>
+                      <span className="text-sm text-gray-800">{factor.factor}</span>
                       <span className="text-sm font-medium text-gray-900">{factor.count} clients</span>
                     </div>
                   ))}

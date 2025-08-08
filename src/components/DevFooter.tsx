@@ -78,7 +78,7 @@ export default function DevFooter() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h3 className="text-lg font-semibold">🔧 Development Links</h3>
-            <p className="text-gray-400 text-sm">Quick navigation for development and testing</p>
+            <p className="text-gray-600 text-sm">Quick navigation for development and testing</p>
             <div className="flex items-center space-x-4 mt-2 text-xs text-blue-300">
               <span>👑 Admin</span>
               <span>🏋️ Coach</span>
@@ -122,7 +122,7 @@ export default function DevFooter() {
                         </span>
                       </div>
                       {isExpanded && (
-                        <span className="block text-xs text-gray-400 mt-1 group-hover:text-gray-300">
+                        <span className="block text-xs text-gray-600 mt-1 group-hover:text-gray-300">
                           {link.description}
                         </span>
                       )}

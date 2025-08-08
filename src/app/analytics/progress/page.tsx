@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { RoleProtected } from '@/components/ProtectedRoute';
 
 interface Client {
   id: string;
@@ -76,18 +77,29 @@ export default function ProgressReportsPage() {
   const fetchProgressData = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch(`/api/analytics/progress?timeRange=${timeRange}`);
+      // Get coach ID from user context or use a default for testing
+      const coachId = 'BYAUh1d6PwanHhIUhISsmZtgt0B2'; // This should come from auth context
+      
+      const response = await fetch(`/api/analytics/progress?timeRange=${timeRange}&coachId=${coachId}`);
       if (response.ok) {
         const data = await response.json();
-        setProgressData(data.progressReports || []);
-        setMetrics(data.metrics || null);
+        if (data.success) {
+          setProgressData(data.progressReports || []);
+          setMetrics(data.metrics || null);
+        } else {
+          console.error('Failed to fetch progress data:', data.message);
+          setProgressData([]);
+          setMetrics(null);
+        }
       } else {
         console.error('Failed to fetch progress data');
-        setMockData();
+        setProgressData([]);
+        setMetrics(null);
       }
     } catch (error) {
       console.error('Error fetching progress data:', error);
-      setMockData();
+      setProgressData([]);
+      setMetrics(null);
     } finally {
       setIsLoading(false);
     }
@@ -306,345 +318,297 @@ export default function ProgressReportsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Progress Reports</h1>
-            <p className="text-gray-600">Track client progress, goal achievement, and performance trends</p>
-          </div>
-          <div className="flex gap-3 mt-4 sm:mt-0">
-            <Link 
-              href="/analytics"
-              className="px-4 py-2 text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-            >
-              ← Back to Analytics
-            </Link>
-            <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-              Export Report
-            </button>
-          </div>
-        </div>
-
-        {/* Progress Metrics Overview */}
-        {metrics && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-            <div className="bg-white p-6 rounded-lg shadow-sm border">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Active Clients</p>
-                  <p className="text-2xl font-bold text-gray-900">{metrics.activeClients}</p>
-                  <p className="text-xs text-gray-500">of {metrics.totalClients} total</p>
-                </div>
-                <div className="p-2 bg-blue-100 rounded-lg">
-                  <span className="text-blue-600 text-xl">👥</span>
-                </div>
+    <RoleProtected requiredRole="coach">
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 p-6">
+        <div className="max-w-7xl mx-auto">
+          {/* Modern Header */}
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h1 className="text-4xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
+                  Progress Reports
+                </h1>
+                <p className="text-gray-600 mt-2 text-lg">Track client progress, goal achievement, and performance trends</p>
               </div>
-            </div>
-
-            <div className="bg-white p-6 rounded-lg shadow-sm border">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Avg Progress</p>
-                  <p className="text-2xl font-bold text-gray-900">{metrics.averageOverallProgress}%</p>
-                  <p className="text-xs text-gray-500">Overall goal achievement</p>
-                </div>
-                <div className="p-2 bg-green-100 rounded-lg">
-                  <span className="text-green-600 text-xl">📈</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white p-6 rounded-lg shadow-sm border">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">On Track</p>
-                  <p className="text-2xl font-bold text-green-600">{metrics.clientsOnTrack}</p>
-                  <p className="text-xs text-gray-500">Meeting goals</p>
-                </div>
-                <div className="p-2 bg-green-100 rounded-lg">
-                  <span className="text-green-600 text-xl">✅</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white p-6 rounded-lg shadow-sm border">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Needs Attention</p>
-                  <p className="text-2xl font-bold text-orange-600">{metrics.clientsBehind}</p>
-                  <p className="text-xs text-gray-500">Behind on goals</p>
-                </div>
-                <div className="p-2 bg-orange-100 rounded-lg">
-                  <span className="text-orange-600 text-xl">⚠️</span>
-                </div>
+              <div className="flex items-center space-x-3">
+                <Link
+                  href="/analytics"
+                  className="text-gray-700 hover:text-gray-900 font-medium px-6 py-3 rounded-xl border-2 border-gray-200 hover:border-gray-300 transition-all duration-200"
+                >
+                  ← Back to Analytics
+                </Link>
+                <button className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white px-6 py-3 rounded-xl font-medium transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5">
+                  Export Report
+                </button>
               </div>
             </div>
           </div>
-        )}
 
-        {/* Filters and Controls */}
-        <div className="bg-white p-6 rounded-lg shadow-sm border mb-8">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div className="flex flex-col sm:flex-row gap-4">
-              <select
-                value={timeRange}
-                onChange={(e) => setTimeRange(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="7d">Last 7 Days</option>
-                <option value="30d">Last 30 Days</option>
-                <option value="90d">Last 90 Days</option>
-                <option value="1y">Last Year</option>
-              </select>
-              
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as any)}
-                className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="progress">Sort by Progress</option>
-                <option value="name">Sort by Name</option>
-                <option value="recent">Sort by Recent Activity</option>
-              </select>
+          {/* Filters and Search */}
+          <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden mb-8">
+            <div className="bg-gradient-to-r from-green-50 to-emerald-50 px-8 py-6 border-b border-gray-100">
+              <h2 className="text-2xl font-bold text-gray-900">Filters & Search</h2>
             </div>
-            
-            <input
-              type="text"
-              placeholder="Search clients..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+            <div className="p-8">
+              <div className="flex flex-col md:flex-row gap-4 items-center">
+                <select
+                  value={timeRange}
+                  onChange={(e) => setTimeRange(e.target.value)}
+                  className="px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white shadow-sm"
+                >
+                  <option value="7d">Last 7 Days</option>
+                  <option value="30d">Last 30 Days</option>
+                  <option value="90d">Last 90 Days</option>
+                  <option value="1y">Last Year</option>
+                </select>
+                
+                <select
+                  value={selectedClient}
+                  onChange={(e) => setSelectedClient(e.target.value)}
+                  className="px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white shadow-sm"
+                >
+                  <option value="all">All Clients</option>
+                  {progressData.map((client) => (
+                    <option key={client.clientId} value={client.clientId}>
+                      {client.clientName}
+                    </option>
+                  ))}
+                </select>
+                
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as any)}
+                  className="px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white shadow-sm"
+                >
+                  <option value="progress">Sort by Progress</option>
+                  <option value="name">Sort by Name</option>
+                  <option value="recent">Sort by Recent</option>
+                </select>
+                
+                <input
+                  type="text"
+                  placeholder="Search clients..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="flex-1 px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white shadow-sm"
+                />
+              </div>
+            </div>
           </div>
-        </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Main Progress Reports */}
-          <div className="lg:col-span-2">
-            <div className="space-y-6">
-              {sortedData.map((client) => (
-                <div key={client.clientId} className="bg-white rounded-lg shadow-sm border">
-                  <div className="p-6 border-b border-gray-200">
-                    <div className="flex items-center justify-between mb-4">
-                      <div>
-                        <h3 className="text-lg font-semibold text-gray-900">{client.clientName}</h3>
-                        <p className="text-sm text-gray-600">Overall Progress: {client.overallProgress}%</p>
-                      </div>
-                      <div className={`px-3 py-1 rounded-full text-sm font-medium ${getProgressBgColor(client.overallProgress)} ${getProgressColor(client.overallProgress)}`}>
-                        {client.overallProgress}% Complete
-                      </div>
+          {/* Progress Metrics Overview */}
+          {metrics && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+              <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-6 py-4 border-b border-gray-100">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                      <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
+                      </svg>
                     </div>
+                    <span className="text-sm font-medium text-gray-500">Total Clients</span>
+                  </div>
+                </div>
+                <div className="p-6">
+                  <div className="text-3xl font-bold text-gray-900">{metrics.totalClients}</div>
+                  <div className="text-sm text-gray-500 mt-1">Active clients</div>
+                </div>
+              </div>
 
-                    {/* Goal Progress */}
-                    <div className="mb-4">
-                      <h4 className="text-sm font-medium text-gray-900 mb-3">Goal Progress</h4>
-                      <div className="space-y-3">
-                        {client.goalProgress.map((goal) => (
-                          <div key={goal.goalId} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                            <div className="flex-1">
-                              <div className="flex items-center justify-between mb-1">
-                                <span className="text-sm font-medium text-gray-900">{goal.title}</span>
-                                <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(goal.status)}`}>
-                                  {goal.status}
+              <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+                <div className="bg-gradient-to-r from-green-50 to-emerald-50 px-6 py-4 border-b border-gray-100">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                      <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                    </div>
+                    <span className="text-sm font-medium text-gray-500">Avg Progress</span>
+                  </div>
+                </div>
+                <div className="p-6">
+                  <div className="text-3xl font-bold text-gray-900">{metrics.averageOverallProgress}%</div>
+                  <div className="text-sm text-gray-500 mt-1">Overall progress</div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+                <div className="bg-gradient-to-r from-purple-50 to-pink-50 px-6 py-4 border-b border-gray-100">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                      <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <span className="text-sm font-medium text-gray-500">On Track</span>
+                  </div>
+                </div>
+                <div className="p-6">
+                  <div className="text-3xl font-bold text-gray-900">{metrics.clientsOnTrack}</div>
+                  <div className="text-sm text-gray-500 mt-1">Clients on track</div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+                <div className="bg-gradient-to-r from-orange-50 to-red-50 px-6 py-4 border-b border-gray-100">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+                      <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                      </svg>
+                    </div>
+                    <span className="text-sm font-medium text-gray-500">Needs Attention</span>
+                  </div>
+                </div>
+                <div className="p-6">
+                  <div className="text-3xl font-bold text-gray-900">{metrics.clientsBehind}</div>
+                  <div className="text-sm text-gray-500 mt-1">Behind schedule</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* Main Content */}
+            <div className="lg:col-span-2 space-y-8">
+              {/* Progress Reports */}
+              <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+                <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-8 py-6 border-b border-gray-100">
+                  <h2 className="text-2xl font-bold text-gray-900">Progress Reports</h2>
+                </div>
+                <div className="p-8">
+                  {isLoading ? (
+                    <div className="text-center py-12">
+                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+                      <p className="text-gray-500 text-lg">Loading progress data...</p>
+                    </div>
+                  ) : progressData.length === 0 ? (
+                    <div className="text-center py-12">
+                      <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                      </div>
+                      <p className="text-gray-500 text-lg mb-4">No progress data available</p>
+                      <p className="text-gray-400 text-sm">Progress reports will appear here as clients engage with check-ins</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-6">
+                      {progressData.map((report) => (
+                        <div key={report.clientId} className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl p-6 border border-gray-200 hover:shadow-lg transition-all duration-200 hover:border-gray-300">
+                          <div className="flex items-center justify-between mb-6">
+                            <div className="flex items-center space-x-4">
+                              <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center shadow-lg">
+                                <span className="text-white font-bold text-lg">
+                                  {report.clientName.charAt(0)}
                                 </span>
                               </div>
-                              <div className="flex items-center justify-between">
-                                <div className="flex-1 mr-4">
-                                  <div className="w-full bg-gray-200 rounded-full h-2">
-                                    <div 
-                                      className={`h-2 rounded-full ${getProgressColor(goal.progress).replace('text-', 'bg-')}`}
-                                      style={{ width: `${goal.progress}%` }}
-                                    ></div>
-                                  </div>
-                                </div>
-                                <div className="flex items-center space-x-2">
-                                  <span className="text-sm text-gray-600">{goal.progress}%</span>
-                                  <span className="text-sm">{getTrendIcon(goal.trend)}</span>
-                                </div>
+                              <div>
+                                <h3 className="text-xl font-bold text-gray-900">{report.clientName}</h3>
+                                <p className="text-gray-600">Overall Progress: {report.overallProgress}%</p>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className={`px-4 py-2 text-sm font-medium rounded-full ${getProgressColor(report.overallProgress)}`}>
+                                {report.overallProgress}%
                               </div>
                             </div>
                           </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Performance Metrics */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                      <div className="text-center p-3 bg-blue-50 rounded-lg">
-                        <div className="text-lg font-bold text-blue-600">{client.performanceMetrics.averageScore}%</div>
-                        <div className="text-xs text-gray-600">Avg Score</div>
-                      </div>
-                      <div className="text-center p-3 bg-green-50 rounded-lg">
-                        <div className="text-lg font-bold text-green-600">{client.performanceMetrics.completionRate}%</div>
-                        <div className="text-xs text-gray-600">Completion Rate</div>
-                      </div>
-                      <div className="text-center p-3 bg-purple-50 rounded-lg">
-                        <div className="text-lg font-bold text-purple-600">{client.performanceMetrics.checkInStreak}</div>
-                        <div className="text-xs text-gray-600">Check-in Streak</div>
-                      </div>
-                      <div className="text-center p-3 bg-orange-50 rounded-lg">
-                        <div className="text-lg font-bold text-orange-600">{client.performanceMetrics.totalCheckIns}</div>
-                        <div className="text-xs text-gray-600">Total Check-ins</div>
-                      </div>
-                    </div>
-
-                    {/* Recent Activity */}
-                    <div className="mb-4">
-                      <h4 className="text-sm font-medium text-gray-900 mb-3">Recent Activity</h4>
-                      <div className="space-y-2">
-                        {client.recentActivity.slice(0, 3).map((activity, index) => (
-                          <div key={index} className="flex items-center justify-between text-sm">
-                            <div className="flex items-center space-x-3">
-                              <span className="text-gray-500">{activity.date}</span>
-                              <span className="text-gray-900">{activity.action}</span>
-                              {activity.score && (
-                                <span className="text-blue-600 font-medium">{activity.score}%</span>
-                              )}
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                            <div className="bg-white rounded-lg p-4 border border-gray-200">
+                              <div className="text-2xl font-bold text-blue-600 mb-1">{report.performanceMetrics.averageScore}%</div>
+                              <div className="text-sm text-gray-600">Average Score</div>
                             </div>
-                            {activity.notes && (
-                              <span className="text-gray-500 text-xs italic">{activity.notes}</span>
-                            )}
+                            <div className="bg-white rounded-lg p-4 border border-gray-200">
+                              <div className="text-2xl font-bold text-green-600 mb-1">{report.performanceMetrics.completionRate}%</div>
+                              <div className="text-sm text-gray-600">Completion Rate</div>
+                            </div>
+                            <div className="bg-white rounded-lg p-4 border border-gray-200">
+                              <div className="text-2xl font-bold text-purple-600 mb-1">{report.performanceMetrics.checkInStreak}</div>
+                              <div className="text-sm text-gray-600">Check-in Streak</div>
+                            </div>
                           </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Recommendations */}
-                    {client.recommendations.length > 0 && (
-                      <div>
-                        <h4 className="text-sm font-medium text-gray-900 mb-3">Recommendations</h4>
-                        <div className="space-y-2">
-                          {client.recommendations.map((rec, index) => (
-                            <div key={index} className="flex items-start space-x-2 text-sm">
-                              <span className="text-blue-600">💡</span>
-                              <span className="text-gray-700">{rec}</span>
+                          
+                          <div className="space-y-4">
+                            <h4 className="text-lg font-semibold text-gray-900">Goal Progress</h4>
+                            <div className="space-y-3">
+                              {report.goalProgress.map((goal) => (
+                                <div key={goal.goalId} className="bg-white rounded-lg p-4 border border-gray-200">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <h5 className="font-medium text-gray-900">{goal.title}</h5>
+                                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(goal.status)}`}>
+                                      {goal.status}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center space-x-3">
+                                    <div className="flex-1 bg-gray-200 rounded-full h-2">
+                                      <div 
+                                        className={`h-2 rounded-full ${getProgressBgColor(goal.progress)}`}
+                                        style={{ width: `${goal.progress}%` }}
+                                      ></div>
+                                    </div>
+                                    <span className="text-sm font-medium text-gray-900">{goal.progress}%</span>
+                                  </div>
+                                </div>
+                              ))}
                             </div>
-                          ))}
+                          </div>
                         </div>
-                      </div>
-                    )}
-                  </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
 
-                  <div className="p-4 bg-gray-50 border-t border-gray-200">
-                    <div className="flex justify-between items-center">
-                      <Link 
-                        href={`/clients/${client.clientId}`}
-                        className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                      >
-                        View Full Profile →
-                      </Link>
-                      <button className="text-green-600 hover:text-green-800 text-sm font-medium">
-                        Schedule Check-in
-                      </button>
+            {/* Sidebar */}
+            <div className="space-y-8">
+              {/* Quick Actions */}
+              <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+                <div className="bg-gradient-to-r from-green-50 to-emerald-50 px-6 py-4 border-b border-gray-100">
+                  <h3 className="text-lg font-bold text-gray-900">Quick Actions</h3>
+                </div>
+                <div className="p-6 space-y-3">
+                  <button className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white px-4 py-3 rounded-xl text-sm font-medium text-center transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5">
+                    Generate Progress Report
+                  </button>
+                  <button className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-4 py-3 rounded-xl text-sm font-medium text-center transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5">
+                    Schedule Progress Review
+                  </button>
+                  <button className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white px-4 py-3 rounded-xl text-sm font-medium text-center transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5">
+                    Set New Goals
+                  </button>
+                </div>
+              </div>
+
+              {/* Progress Summary */}
+              {metrics && (
+                <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-6 py-4 border-b border-gray-100">
+                    <h3 className="text-lg font-bold text-gray-900">Progress Summary</h3>
+                  </div>
+                  <div className="p-6 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-600">Completed Goals</span>
+                      <span className="font-bold text-green-600">{metrics.completedGoals}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-600">Overdue Goals</span>
+                      <span className="font-bold text-red-600">{metrics.overdueGoals}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-600">Progress Trend</span>
+                      <span className="font-bold text-gray-900 capitalize">{metrics.progressTrend}</span>
                     </div>
                   </div>
-                </div>
-              ))}
-
-              {sortedData.length === 0 && (
-                <div className="text-center py-12">
-                  <div className="text-gray-400 text-6xl mb-4">📊</div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No progress data found</h3>
-                  <p className="text-gray-500">Try adjusting your search or filter criteria</p>
                 </div>
               )}
             </div>
           </div>
-
-          {/* Sidebar */}
-          <div className="space-y-6">
-            {/* Top Performers */}
-            {metrics && (
-              <div className="bg-white rounded-lg shadow-sm border p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">🏆 Top Performers</h3>
-                <div className="space-y-3">
-                  {metrics.topPerformers.map((performer, index) => (
-                    <div key={performer.clientId} className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
-                      <div className="flex items-center space-x-3">
-                        <span className="text-lg">#{index + 1}</span>
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">{performer.clientName}</p>
-                          <p className="text-xs text-gray-600">{performer.progress}% progress</p>
-                        </div>
-                      </div>
-                      <Link 
-                        href={`/clients/${performer.clientId}`}
-                        className="text-green-600 hover:text-green-800 text-sm"
-                      >
-                        View →
-                      </Link>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Needs Attention */}
-            {metrics && (
-              <div className="bg-white rounded-lg shadow-sm border p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">⚠️ Needs Attention</h3>
-                <div className="space-y-3">
-                  {metrics.needsAttention.map((client, index) => (
-                    <div key={client.clientId} className="flex items-center justify-between p-3 bg-red-50 rounded-lg">
-                      <div className="flex items-center space-x-3">
-                        <span className="text-lg">#{index + 1}</span>
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">{client.clientName}</p>
-                          <p className="text-xs text-gray-600">{client.progress}% progress</p>
-                        </div>
-                      </div>
-                      <Link 
-                        href={`/clients/${client.clientId}`}
-                        className="text-red-600 hover:text-red-800 text-sm"
-                      >
-                        Intervene →
-                      </Link>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Quick Actions */}
-            <div className="bg-white rounded-lg shadow-sm border p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">⚡ Quick Actions</h3>
-              <div className="space-y-3">
-                <button className="w-full text-left p-3 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors">
-                  <div className="flex items-center">
-                    <span className="text-blue-600 mr-3">📊</span>
-                    <div>
-                      <p className="text-sm font-medium text-blue-900">Generate Progress Report</p>
-                      <p className="text-xs text-blue-700">Export detailed analysis</p>
-                    </div>
-                  </div>
-                </button>
-                
-                <button className="w-full text-left p-3 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 transition-colors">
-                  <div className="flex items-center">
-                    <span className="text-green-600 mr-3">📞</span>
-                    <div>
-                      <p className="text-sm font-medium text-green-900">Schedule Progress Calls</p>
-                      <p className="text-xs text-green-700">Reach out to clients</p>
-                    </div>
-                  </div>
-                </button>
-                
-                <button className="w-full text-left p-3 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 transition-colors">
-                  <div className="flex items-center">
-                    <span className="text-purple-600 mr-3">🎯</span>
-                    <div>
-                      <p className="text-sm font-medium text-purple-900">Update Goals</p>
-                      <p className="text-xs text-purple-700">Adjust client objectives</p>
-                    </div>
-                  </div>
-                </button>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
-    </div>
+    </RoleProtected>
   );
 } 

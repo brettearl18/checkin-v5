@@ -196,7 +196,7 @@ export default function FormViewPage() {
                   className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
                   required={question.isRequired}
                 />
-                <span className="ml-3 text-sm text-gray-700">
+                <span className="ml-3 text-sm text-gray-900">
                   {option} {question.weights[index] && `(Weight: ${question.weights[index]})`}
                 </span>
               </label>
@@ -220,7 +220,7 @@ export default function FormViewPage() {
               className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
               required={question.isRequired}
             />
-            <div className="text-center text-sm font-medium text-gray-700">
+            <div className="text-center text-sm font-medium text-gray-900">
               {responses[question.id] || 5}
             </div>
           </div>
@@ -241,7 +241,7 @@ export default function FormViewPage() {
                     className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
                     required={question.isRequired}
                   />
-                  <span className="ml-2 text-sm text-gray-700">{rating}</span>
+                  <span className="ml-2 text-sm text-gray-900">{rating}</span>
                 </label>
               ))}
             </div>
@@ -261,7 +261,7 @@ export default function FormViewPage() {
                 className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
                 required={question.isRequired}
               />
-              <span className="ml-3 text-sm text-gray-700">Yes</span>
+              <span className="ml-3 text-sm text-gray-900">Yes</span>
             </label>
             <label className="flex items-center">
               <input
@@ -273,7 +273,7 @@ export default function FormViewPage() {
                 className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
                 required={question.isRequired}
               />
-              <span className="ml-3 text-sm text-gray-700">No</span>
+              <span className="ml-3 text-sm text-gray-900">No</span>
             </label>
           </div>
         );
@@ -300,7 +300,7 @@ export default function FormViewPage() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading form...</p>
+          <p className="mt-4 text-gray-800">Loading form...</p>
         </div>
       </div>
     );
@@ -311,7 +311,7 @@ export default function FormViewPage() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <h2 className="text-xl font-semibold text-gray-900">Form not found</h2>
-          <p className="mt-2 text-gray-600">The form you're looking for doesn't exist.</p>
+          <p className="mt-2 text-gray-800">The form you're looking for doesn't exist.</p>
         </div>
       </div>
     );
@@ -323,7 +323,7 @@ export default function FormViewPage() {
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">{form.title}</h1>
           {form.description && (
-            <p className="mt-2 text-gray-600">{form.description}</p>
+            <p className="mt-2 text-gray-800">{form.description}</p>
           )}
           <div className="mt-4 flex items-center space-x-4 text-sm text-gray-500">
             <span>{form.totalQuestions} questions</span>
@@ -341,7 +341,7 @@ export default function FormViewPage() {
           <div className="bg-white rounded-lg shadow p-6">
             <div className="mb-4">
               <h3 className="text-lg font-medium text-gray-900">Client Information</h3>
-              <p className="text-gray-700 mt-1">Please enter your client ID to track your responses</p>
+              <p className="text-gray-900 mt-1">Please enter your client ID to track your responses</p>
             </div>
             <div className="mt-4">
               <input
@@ -364,7 +364,7 @@ export default function FormViewPage() {
                   Question {index + 1}
                   {question.isRequired && <span className="text-red-500 ml-1">*</span>}
                 </h3>
-                <p className="text-gray-700 mt-1">{question.title}</p>
+                <p className="text-gray-900 mt-1">{question.title}</p>
                 {question.description && (
                   <p className="text-sm text-gray-500 mt-1">{question.description}</p>
                 )}
@@ -380,7 +380,7 @@ export default function FormViewPage() {
             <button
               type="button"
               onClick={() => router.back()}
-              className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+              className="px-4 py-2 text-gray-900 bg-gray-100 rounded-md hover:bg-gray-200"
             >
               Cancel
             </button>

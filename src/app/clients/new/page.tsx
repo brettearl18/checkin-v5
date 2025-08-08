@@ -2,577 +2,392 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '@/contexts/AuthContext';
+import { AuthenticatedOnly } from '@/components/ProtectedRoute';
 import Link from 'next/link';
 
 interface ClientFormData {
-  // Personal Information
   firstName: string;
   lastName: string;
   email: string;
   phone: string;
-  dateOfBirth: string;
+  status: 'active' | 'inactive' | 'pending';
+  age: string;
   gender: string;
-  
-  // Contact & Address
-  address: string;
-  city: string;
-  state: string;
-  zipCode: string;
-  emergencyContact: string;
-  emergencyPhone: string;
-  
-  // Health Information
-  height: string;
-  weight: string;
-  primaryGoal: string;
-  secondaryGoals: string[];
-  medicalConditions: string;
-  medications: string;
-  allergies: string;
-  injuries: string;
-  
-  // Lifestyle & Preferences
-  activityLevel: string;
-  sleepHours: string;
-  stressLevel: string;
-  dietaryRestrictions: string;
-  preferredContactMethod: string;
-  timeZone: string;
-  
-  // Coaching Preferences
-  coachingStyle: string;
-  sessionFrequency: string;
-  sessionDuration: string;
-  preferredTime: string;
+  occupation: string;
+  healthGoals: string[];
+  medicalHistory: string[];
   notes: string;
 }
 
-export default function AddNewClient() {
+export default function NewClientPage() {
   const router = useRouter();
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { userProfile } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const [formData, setFormData] = useState<ClientFormData>({
     firstName: '',
     lastName: '',
     email: '',
     phone: '',
-    dateOfBirth: '',
+    status: 'pending',
+    age: '',
     gender: '',
-    address: '',
-    city: '',
-    state: '',
-    zipCode: '',
-    emergencyContact: '',
-    emergencyPhone: '',
-    height: '',
-    weight: '',
-    primaryGoal: '',
-    secondaryGoals: [],
-    medicalConditions: '',
-    medications: '',
-    allergies: '',
-    injuries: '',
-    activityLevel: '',
-    sleepHours: '',
-    stressLevel: '',
-    dietaryRestrictions: '',
-    preferredContactMethod: '',
-    timeZone: '',
-    coachingStyle: '',
-    sessionFrequency: '',
-    sessionDuration: '',
-    preferredTime: '',
+    occupation: '',
+    healthGoals: [],
+    medicalHistory: [],
     notes: ''
   });
 
-  const goalOptions = [
+  const healthGoalOptions = [
     'Weight Loss',
     'Muscle Gain',
-    'Improve Fitness',
-    'Better Nutrition',
+    'Cardiovascular Health',
+    'Flexibility',
     'Stress Management',
-    'Sleep Improvement',
+    'Better Sleep',
+    'Nutrition Improvement',
+    'Mental Health',
     'Injury Recovery',
-    'General Wellness',
-    'Sports Performance',
-    'Mental Health'
+    'General Fitness'
   ];
 
-  const handleInputChange = (field: keyof ClientFormData, value: string | string[]) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
-      [field]: value
+      [name]: value
     }));
   };
 
-  const handleGoalToggle = (goal: string) => {
+  const handleHealthGoalChange = (goal: string) => {
     setFormData(prev => ({
       ...prev,
-      secondaryGoals: prev.secondaryGoals.includes(goal)
-        ? prev.secondaryGoals.filter(g => g !== goal)
-        : [...prev.secondaryGoals, goal]
+      healthGoals: prev.healthGoals.includes(goal)
+        ? prev.healthGoals.filter(g => g !== goal)
+        : [...prev.healthGoals, goal]
     }));
+  };
+
+  const handleMedicalHistoryChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const history = e.target.value.split('\n').filter(line => line.trim());
+    setFormData(prev => ({
+      ...prev,
+      medicalHistory: history
+    }));
+  };
+
+  const validateForm = () => {
+    if (!formData.firstName.trim()) {
+      setError('First name is required');
+      return false;
+    }
+    if (!formData.lastName.trim()) {
+      setError('Last name is required');
+      return false;
+    }
+    if (!formData.email.trim()) {
+      setError('Email is required');
+      return false;
+    }
+    if (!formData.email.includes('@')) {
+      setError('Please enter a valid email address');
+      return false;
+    }
+    return true;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSubmitting(true);
+    setLoading(true);
+    setError('');
+
+    if (!validateForm()) {
+      setLoading(false);
+      return;
+    }
 
     try {
-      // Send the data to our API
+      const clientData = {
+        ...formData,
+        assignedCoach: userProfile?.uid || '',
+        createdAt: new Date().toISOString(),
+        profile: {
+          age: formData.age ? parseInt(formData.age) : undefined,
+          gender: formData.gender || undefined,
+          occupation: formData.occupation || undefined,
+          healthGoals: formData.healthGoals,
+          medicalHistory: formData.medicalHistory
+        }
+      };
+
       const response = await fetch('/api/clients', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(clientData),
       });
 
-      const result = await response.json();
-
-      if (result.success) {
-        // Redirect to clients list with success message
-        router.push('/clients?success=true&clientId=' + result.clientId);
+      if (response.ok) {
+        router.push('/clients?success=client-added');
       } else {
-        console.error('Error creating client:', result.error);
-        alert('Failed to create client: ' + result.error);
+        const errorData = await response.json();
+        setError(errorData.error || 'Failed to create client');
       }
     } catch (error) {
       console.error('Error creating client:', error);
-      alert('Failed to create client. Please try again.');
+      setError('An error occurred while creating the client');
     } finally {
-      setIsSubmitting(false);
+      setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">➕ Add New Client</h1>
-              <p className="mt-2 text-gray-600">Create a comprehensive client profile for personalized coaching</p>
-            </div>
-            <Link
-              href="/clients"
-              className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-            >
-              ← Back to Clients
-            </Link>
-          </div>
-        </div>
-
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-8">
-          {/* Personal Information */}
-          <div className="bg-white shadow rounded-lg p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">👤 Personal Information</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <AuthenticatedOnly>
+      <div className="min-h-screen bg-gray-50 p-6">
+        <div className="max-w-4xl mx-auto">
+          {/* Header */}
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700">First Name *</label>
-                <input
-                  type="text"
-                  required
-                  value={formData.firstName}
-                  onChange={(e) => handleInputChange('firstName', e.target.value)}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                />
+                <h1 className="text-3xl font-bold text-gray-900">Add New Client</h1>
+                <p className="text-gray-800 mt-2">Create a new client profile and start tracking their progress</p>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Last Name *</label>
-                <input
-                  type="text"
-                  required
-                  value={formData.lastName}
-                  onChange={(e) => handleInputChange('lastName', e.target.value)}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Email *</label>
-                <input
-                  type="email"
-                  required
-                  value={formData.email}
-                  onChange={(e) => handleInputChange('email', e.target.value)}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Phone</label>
-                <input
-                  type="tel"
-                  value={formData.phone}
-                  onChange={(e) => handleInputChange('phone', e.target.value)}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Date of Birth</label>
-                <input
-                  type="date"
-                  value={formData.dateOfBirth}
-                  onChange={(e) => handleInputChange('dateOfBirth', e.target.value)}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Gender</label>
-                <select
-                  value={formData.gender}
-                  onChange={(e) => handleInputChange('gender', e.target.value)}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="">Select gender</option>
-                  <option value="male">Male</option>
-                  <option value="female">Female</option>
-                  <option value="non-binary">Non-binary</option>
-                  <option value="prefer-not-to-say">Prefer not to say</option>
-                </select>
-              </div>
+              <Link
+                href="/clients"
+                className="text-gray-800 hover:text-gray-900 font-medium"
+              >
+                ← Back to Clients
+              </Link>
             </div>
           </div>
 
-          {/* Contact & Address */}
-          <div className="bg-white shadow rounded-lg p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">📍 Contact & Address</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700">Address</label>
-                <input
-                  type="text"
-                  value={formData.address}
-                  onChange={(e) => handleInputChange('address', e.target.value)}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">City</label>
-                <input
-                  type="text"
-                  value={formData.city}
-                  onChange={(e) => handleInputChange('city', e.target.value)}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">State</label>
-                <input
-                  type="text"
-                  value={formData.state}
-                  onChange={(e) => handleInputChange('state', e.target.value)}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">ZIP Code</label>
-                <input
-                  type="text"
-                  value={formData.zipCode}
-                  onChange={(e) => handleInputChange('zipCode', e.target.value)}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Emergency Contact</label>
-                <input
-                  type="text"
-                  value={formData.emergencyContact}
-                  onChange={(e) => handleInputChange('emergencyContact', e.target.value)}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Emergency Phone</label>
-                <input
-                  type="tel"
-                  value={formData.emergencyPhone}
-                  onChange={(e) => handleInputChange('emergencyPhone', e.target.value)}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-            </div>
-          </div>
+          {/* Form */}
+          <div className="bg-white rounded-lg shadow">
+            <form onSubmit={handleSubmit} className="p-6 space-y-6">
+              {/* Error Message */}
+              {error && (
+                <div className="bg-red-50 border border-red-200 rounded-md p-4">
+                  <div className="flex">
+                    <div className="flex-shrink-0">
+                      <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    <div className="ml-3">
+                      <p className="text-sm text-red-700">{error}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
-          {/* Health Information */}
-          <div className="bg-white shadow rounded-lg p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">🏥 Health Information</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Basic Information */}
               <div>
-                <label className="block text-sm font-medium text-gray-700">Height (cm)</label>
-                <input
-                  type="number"
-                  value={formData.height}
-                  onChange={(e) => handleInputChange('height', e.target.value)}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                />
+                <h3 className="text-lg font-medium text-gray-900 mb-4">Basic Information</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label htmlFor="firstName" className="block text-sm font-medium text-gray-900">
+                      First Name *
+                    </label>
+                    <input
+                      type="text"
+                      id="firstName"
+                      name="firstName"
+                      value={formData.firstName}
+                      onChange={handleInputChange}
+                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      required
+                    />
+                  </div>
+                  
+                  <div>
+                    <label htmlFor="lastName" className="block text-sm font-medium text-gray-900">
+                      Last Name *
+                    </label>
+                    <input
+                      type="text"
+                      id="lastName"
+                      name="lastName"
+                      value={formData.lastName}
+                      onChange={handleInputChange}
+                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="email" className="block text-sm font-medium text-gray-900">
+                      Email Address *
+                    </label>
+                    <input
+                      type="email"
+                      id="email"
+                      name="email"
+                      value={formData.email}
+                      onChange={handleInputChange}
+                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="phone" className="block text-sm font-medium text-gray-900">
+                      Phone Number
+                    </label>
+                    <input
+                      type="tel"
+                      id="phone"
+                      name="phone"
+                      value={formData.phone}
+                      onChange={handleInputChange}
+                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="status" className="block text-sm font-medium text-gray-900">
+                      Status
+                    </label>
+                    <select
+                      id="status"
+                      name="status"
+                      value={formData.status}
+                      onChange={handleInputChange}
+                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value="pending">Pending</option>
+                      <option value="active">Active</option>
+                      <option value="inactive">Inactive</option>
+                    </select>
+                  </div>
+                </div>
               </div>
+
+              {/* Profile Information */}
               <div>
-                <label className="block text-sm font-medium text-gray-700">Weight (kg)</label>
-                <input
-                  type="number"
-                  value={formData.weight}
-                  onChange={(e) => handleInputChange('weight', e.target.value)}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                />
+                <h3 className="text-lg font-medium text-gray-900 mb-4">Profile Information</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label htmlFor="age" className="block text-sm font-medium text-gray-900">
+                      Age
+                    </label>
+                    <input
+                      type="number"
+                      id="age"
+                      name="age"
+                      value={formData.age}
+                      onChange={handleInputChange}
+                      min="1"
+                      max="120"
+                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="gender" className="block text-sm font-medium text-gray-900">
+                      Gender
+                    </label>
+                    <select
+                      id="gender"
+                      name="gender"
+                      value={formData.gender}
+                      onChange={handleInputChange}
+                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value="">Select gender</option>
+                      <option value="male">Male</option>
+                      <option value="female">Female</option>
+                      <option value="non-binary">Non-binary</option>
+                      <option value="other">Other</option>
+                      <option value="prefer-not-to-say">Prefer not to say</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label htmlFor="occupation" className="block text-sm font-medium text-gray-900">
+                      Occupation
+                    </label>
+                    <input
+                      type="text"
+                      id="occupation"
+                      name="occupation"
+                      value={formData.occupation}
+                      onChange={handleInputChange}
+                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                </div>
               </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700">Primary Goal *</label>
-                <select
-                  required
-                  value={formData.primaryGoal}
-                  onChange={(e) => handleInputChange('primaryGoal', e.target.value)}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="">Select primary goal</option>
-                  {goalOptions.map(goal => (
-                    <option key={goal} value={goal}>{goal}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700">Secondary Goals</label>
-                <div className="mt-2 grid grid-cols-2 md:grid-cols-3 gap-3">
-                  {goalOptions.map(goal => (
+
+              {/* Health Goals */}
+              <div>
+                <h3 className="text-lg font-medium text-gray-900 mb-4">Health Goals</h3>
+                <p className="text-sm text-gray-800 mb-3">Select all that apply:</p>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                  {healthGoalOptions.map((goal) => (
                     <label key={goal} className="flex items-center">
                       <input
                         type="checkbox"
-                        checked={formData.secondaryGoals.includes(goal)}
-                        onChange={() => handleGoalToggle(goal)}
+                        checked={formData.healthGoals.includes(goal)}
+                        onChange={() => handleHealthGoalChange(goal)}
                         className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                       />
-                      <span className="ml-2 text-sm text-gray-700">{goal}</span>
+                      <span className="ml-2 text-sm text-gray-900">{goal}</span>
                     </label>
                   ))}
                 </div>
               </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700">Medical Conditions</label>
-                <textarea
-                  value={formData.medicalConditions}
-                  onChange={(e) => handleInputChange('medicalConditions', e.target.value)}
-                  rows={3}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="List any medical conditions, injuries, or health concerns..."
-                />
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700">Current Medications</label>
-                <textarea
-                  value={formData.medications}
-                  onChange={(e) => handleInputChange('medications', e.target.value)}
-                  rows={2}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="List current medications and dosages..."
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Allergies</label>
-                <input
-                  type="text"
-                  value={formData.allergies}
-                  onChange={(e) => handleInputChange('allergies', e.target.value)}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Food, medication, environmental..."
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Previous Injuries</label>
-                <input
-                  type="text"
-                  value={formData.injuries}
-                  onChange={(e) => handleInputChange('injuries', e.target.value)}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="List any previous injuries..."
-                />
-              </div>
-            </div>
-          </div>
 
-          {/* Lifestyle & Preferences */}
-          <div className="bg-white shadow rounded-lg p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">💪 Lifestyle & Preferences</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Medical History */}
               <div>
-                <label className="block text-sm font-medium text-gray-700">Activity Level</label>
-                <select
-                  value={formData.activityLevel}
-                  onChange={(e) => handleInputChange('activityLevel', e.target.value)}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="">Select activity level</option>
-                  <option value="sedentary">Sedentary (little to no exercise)</option>
-                  <option value="lightly-active">Lightly Active (light exercise 1-3 days/week)</option>
-                  <option value="moderately-active">Moderately Active (moderate exercise 3-5 days/week)</option>
-                  <option value="very-active">Very Active (hard exercise 6-7 days/week)</option>
-                  <option value="extremely-active">Extremely Active (very hard exercise, physical job)</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Sleep Hours (per night)</label>
-                <select
-                  value={formData.sleepHours}
-                  onChange={(e) => handleInputChange('sleepHours', e.target.value)}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="">Select sleep hours</option>
-                  <option value="less-than-6">Less than 6 hours</option>
-                  <option value="6-7">6-7 hours</option>
-                  <option value="7-8">7-8 hours</option>
-                  <option value="8-9">8-9 hours</option>
-                  <option value="more-than-9">More than 9 hours</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Stress Level</label>
-                <select
-                  value={formData.stressLevel}
-                  onChange={(e) => handleInputChange('stressLevel', e.target.value)}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="">Select stress level</option>
-                  <option value="low">Low</option>
-                  <option value="moderate">Moderate</option>
-                  <option value="high">High</option>
-                  <option value="very-high">Very High</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Dietary Restrictions</label>
-                <input
-                  type="text"
-                  value={formData.dietaryRestrictions}
-                  onChange={(e) => handleInputChange('dietaryRestrictions', e.target.value)}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Vegetarian, vegan, gluten-free, etc."
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Preferred Contact Method</label>
-                <select
-                  value={formData.preferredContactMethod}
-                  onChange={(e) => handleInputChange('preferredContactMethod', e.target.value)}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="">Select preferred method</option>
-                  <option value="email">Email</option>
-                  <option value="phone">Phone</option>
-                  <option value="text">Text Message</option>
-                  <option value="video-call">Video Call</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Time Zone</label>
-                <select
-                  value={formData.timeZone}
-                  onChange={(e) => handleInputChange('timeZone', e.target.value)}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="">Select time zone</option>
-                  <option value="EST">Eastern Time (EST/EDT)</option>
-                  <option value="CST">Central Time (CST/CDT)</option>
-                  <option value="MST">Mountain Time (MST/MDT)</option>
-                  <option value="PST">Pacific Time (PST/PDT)</option>
-                  <option value="AKST">Alaska Time (AKST/AKDT)</option>
-                  <option value="HST">Hawaii Time (HST/HDT)</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          {/* Coaching Preferences */}
-          <div className="bg-white shadow rounded-lg p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">🎯 Coaching Preferences</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Coaching Style</label>
-                <select
-                  value={formData.coachingStyle}
-                  onChange={(e) => handleInputChange('coachingStyle', e.target.value)}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="">Select coaching style</option>
-                  <option value="supportive">Supportive & Encouraging</option>
-                  <option value="challenging">Challenging & Motivational</option>
-                  <option value="educational">Educational & Informative</option>
-                  <option value="accountability">Accountability Focused</option>
-                  <option value="flexible">Flexible & Adaptive</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Session Frequency</label>
-                <select
-                  value={formData.sessionFrequency}
-                  onChange={(e) => handleInputChange('sessionFrequency', e.target.value)}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="">Select frequency</option>
-                  <option value="weekly">Weekly</option>
-                  <option value="bi-weekly">Bi-weekly</option>
-                  <option value="monthly">Monthly</option>
-                  <option value="as-needed">As needed</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Session Duration</label>
-                <select
-                  value={formData.sessionDuration}
-                  onChange={(e) => handleInputChange('sessionDuration', e.target.value)}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="">Select duration</option>
-                  <option value="30-min">30 minutes</option>
-                  <option value="45-min">45 minutes</option>
-                  <option value="60-min">60 minutes</option>
-                  <option value="90-min">90 minutes</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Preferred Time</label>
-                <select
-                  value={formData.preferredTime}
-                  onChange={(e) => handleInputChange('preferredTime', e.target.value)}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="">Select preferred time</option>
-                  <option value="morning">Morning (6 AM - 12 PM)</option>
-                  <option value="afternoon">Afternoon (12 PM - 5 PM)</option>
-                  <option value="evening">Evening (5 PM - 9 PM)</option>
-                  <option value="flexible">Flexible</option>
-                </select>
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700">Additional Notes</label>
+                <h3 className="text-lg font-medium text-gray-900 mb-4">Medical History</h3>
+                <p className="text-sm text-gray-800 mb-3">Enter any relevant medical conditions (one per line):</p>
                 <textarea
-                  value={formData.notes}
-                  onChange={(e) => handleInputChange('notes', e.target.value)}
+                  id="medicalHistory"
+                  name="medicalHistory"
+                  value={formData.medicalHistory.join('\n')}
+                  onChange={handleMedicalHistoryChange}
                   rows={4}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Any additional information, preferences, or special considerations..."
+                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="e.g., Diabetes&#10;High blood pressure&#10;Previous injuries"
                 />
               </div>
-            </div>
-          </div>
 
-          {/* Submit Buttons */}
-          <div className="flex justify-end space-x-4">
-            <Link
-              href="/clients"
-              className="px-6 py-3 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-            >
-              Cancel
-            </Link>
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="px-6 py-3 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isSubmitting ? 'Creating Client...' : 'Create Client'}
-            </button>
+              {/* Notes */}
+              <div>
+                <h3 className="text-lg font-medium text-gray-900 mb-4">Additional Notes</h3>
+                <textarea
+                  id="notes"
+                  name="notes"
+                  value={formData.notes}
+                  onChange={handleInputChange}
+                  rows={4}
+                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Any additional information about the client..."
+                />
+              </div>
+
+              {/* Submit Buttons */}
+              <div className="flex justify-end space-x-3 pt-6 border-t border-gray-200">
+                <Link
+                  href="/clients"
+                  className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-900 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                >
+                  Cancel
+                </Link>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {loading ? 'Creating...' : 'Create Client'}
+                </button>
+              </div>
+            </form>
           </div>
-        </form>
+        </div>
       </div>
-    </div>
+    </AuthenticatedOnly>
   );
 } 

@@ -102,14 +102,36 @@ function calculateAverageResponseTime(clientResponses: any[]): number {
   if (clientResponses.length < 2) return 24; // Default to 24 hours if not enough data
   
   const sortedResponses = clientResponses
-    .sort((a, b) => new Date(a.submittedAt).getTime() - new Date(b.submittedAt).getTime());
+    .map(r => {
+      try {
+        let date: Date;
+        if (r.submittedAt && typeof r.submittedAt === 'object' && r.submittedAt.toDate) {
+          // Firebase Timestamp
+          date = r.submittedAt.toDate();
+        } else if (r.submittedAt) {
+          // String or number timestamp
+          date = new Date(r.submittedAt);
+        } else {
+          return null;
+        }
+        
+        return isNaN(date.getTime()) ? null : { ...r, submittedAt: date };
+      } catch (error) {
+        console.error('Error parsing date in calculateAverageResponseTime:', error);
+        return null;
+      }
+    })
+    .filter(r => r !== null)
+    .sort((a, b) => a!.submittedAt.getTime() - b!.submittedAt.getTime());
+  
+  if (sortedResponses.length < 2) return 24;
   
   let totalTime = 0;
   let count = 0;
   
   for (let i = 1; i < sortedResponses.length; i++) {
-    const timeDiff = (new Date(sortedResponses[i].submittedAt).getTime() - 
-                     new Date(sortedResponses[i-1].submittedAt).getTime()) / (1000 * 60 * 60);
+    const timeDiff = (sortedResponses[i]!.submittedAt.getTime() - 
+                     sortedResponses[i-1]!.submittedAt.getTime()) / (1000 * 60 * 60);
     if (timeDiff <= 48) { // Only count responses within 48 hours
       totalTime += timeDiff;
       count++;
@@ -122,20 +144,42 @@ function calculateAverageResponseTime(clientResponses: any[]): number {
 function calculateCheckInStreak(clientResponses: any[]): number {
   if (clientResponses.length === 0) return 0;
   
-  const sortedResponses = clientResponses
-    .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
+  const validResponses = clientResponses
+    .map(r => {
+      try {
+        let date: Date;
+        if (r.submittedAt && typeof r.submittedAt === 'object' && r.submittedAt.toDate) {
+          // Firebase Timestamp
+          date = r.submittedAt.toDate();
+        } else if (r.submittedAt) {
+          // String or number timestamp
+          date = new Date(r.submittedAt);
+        } else {
+          return null;
+        }
+        
+        return isNaN(date.getTime()) ? null : { ...r, submittedAt: date };
+      } catch (error) {
+        console.error('Error parsing date in calculateCheckInStreak:', error);
+        return null;
+      }
+    })
+    .filter(r => r !== null)
+    .sort((a, b) => b!.submittedAt.getTime() - a!.submittedAt.getTime());
+  
+  if (validResponses.length === 0) return 0;
   
   let streak = 0;
   const now = new Date();
   
-  for (let i = 0; i < sortedResponses.length; i++) {
-    const responseDate = new Date(sortedResponses[i].submittedAt);
+  for (let i = 0; i < validResponses.length; i++) {
+    const responseDate = validResponses[i]!.submittedAt;
     const daysDiff = (now.getTime() - responseDate.getTime()) / (1000 * 60 * 60 * 24);
     
     if (i === 0 && daysDiff <= 7) {
       streak = 1;
     } else if (i > 0) {
-      const prevResponseDate = new Date(sortedResponses[i - 1].submittedAt);
+      const prevResponseDate = validResponses[i - 1]!.submittedAt;
       const daysBetween = (prevResponseDate.getTime() - responseDate.getTime()) / (1000 * 60 * 60 * 24);
       
       if (daysBetween <= 7) {
@@ -150,13 +194,23 @@ function calculateCheckInStreak(clientResponses: any[]): number {
 }
 
 function determineRetentionRisk(engagementScore: number, lastActivity: string, checkInStreak: number): 'low' | 'medium' | 'high' {
-  const daysSinceLastActivity = (Date.now() - new Date(lastActivity).getTime()) / (1000 * 60 * 60 * 24);
-  
-  if (engagementScore >= 80 && daysSinceLastActivity <= 7 && checkInStreak >= 3) {
-    return 'low';
-  } else if (engagementScore >= 60 && daysSinceLastActivity <= 14 && checkInStreak >= 1) {
-    return 'medium';
-  } else {
+  try {
+    const lastActivityDate = new Date(lastActivity);
+    if (isNaN(lastActivityDate.getTime())) {
+      return 'high'; // If we can't parse the date, assume high risk
+    }
+    
+    const daysSinceLastActivity = (Date.now() - lastActivityDate.getTime()) / (1000 * 60 * 60 * 24);
+    
+    if (engagementScore >= 80 && daysSinceLastActivity <= 7 && checkInStreak >= 3) {
+      return 'low';
+    } else if (engagementScore >= 60 && daysSinceLastActivity <= 14 && checkInStreak >= 1) {
+      return 'medium';
+    } else {
+      return 'high';
+    }
+  } catch (error) {
+    console.error('Error determining retention risk:', error);
     return 'high';
   }
 }
@@ -190,8 +244,16 @@ function calculateActivityPatterns(clientResponses: any[]): Array<{
   // Calculate activity by day of week
   const dayCounts = new Array(7).fill(0);
   clientResponses.forEach(response => {
-    const day = new Date(response.submittedAt).getDay();
-    dayCounts[day]++;
+    try {
+      const date = new Date(response.submittedAt);
+      if (!isNaN(date.getTime())) {
+        const day = date.getDay();
+        dayCounts[day]++;
+      }
+    } catch (error) {
+      // Skip invalid dates
+      console.error('Error processing response date:', error);
+    }
   });
   
   const maxActivity = Math.max(...dayCounts);
@@ -307,11 +369,37 @@ export async function GET(request: NextRequest) {
       const lastActivity = clientResponses.length > 0 
         ? (() => {
             try {
-              const timestamps = clientResponses.map(r => new Date(r.submittedAt).getTime()).filter(t => !isNaN(t));
-              return timestamps.length > 0 
-                ? new Date(Math.max(...timestamps)).toISOString().split('T')[0]
-                : new Date().toISOString().split('T')[0];
+              const timestamps = clientResponses
+                .map(r => {
+                  try {
+                    // Handle different date formats
+                    let date: Date;
+                    if (r.submittedAt && typeof r.submittedAt === 'object' && r.submittedAt.toDate) {
+                      // Firebase Timestamp
+                      date = r.submittedAt.toDate();
+                    } else if (r.submittedAt) {
+                      // String or number timestamp
+                      date = new Date(r.submittedAt);
+                    } else {
+                      return null;
+                    }
+                    
+                    return isNaN(date.getTime()) ? null : date.getTime();
+                  } catch (error) {
+                    console.error('Error parsing date:', error, r.submittedAt);
+                    return null;
+                  }
+                })
+                .filter(timestamp => timestamp !== null);
+              
+              if (timestamps.length === 0) {
+                return new Date().toISOString().split('T')[0];
+              }
+              
+              const maxTimestamp = Math.max(...timestamps);
+              return new Date(maxTimestamp).toISOString().split('T')[0];
             } catch (error) {
+              console.error('Error determining last activity:', error);
               return new Date().toISOString().split('T')[0];
             }
           })()
@@ -320,12 +408,28 @@ export async function GET(request: NextRequest) {
       // Generate engagement history
       const engagementHistory = clientResponses.slice(0, 5).map(response => {
         try {
+          let responseDate: Date;
+          
+          // Handle different date formats
+          if (response.submittedAt && typeof response.submittedAt === 'object' && response.submittedAt.toDate) {
+            // Firebase Timestamp
+            responseDate = response.submittedAt.toDate();
+          } else if (response.submittedAt) {
+            // String or number timestamp
+            responseDate = new Date(response.submittedAt);
+          } else {
+            responseDate = new Date();
+          }
+          
+          const isValidDate = !isNaN(responseDate.getTime());
+          
           return {
-            date: new Date(response.submittedAt).toISOString().split('T')[0],
+            date: isValidDate ? responseDate.toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
             activity: response.status === 'completed' ? 'Completed check-in' : 'Missed check-in',
             score: response.score || 0
           };
         } catch (error) {
+          console.error('Error processing engagement history item:', error);
           return {
             date: new Date().toISOString().split('T')[0],
             activity: 'Unknown activity',

@@ -1,256 +1,217 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/firebase-server';
-import { collection, getDocs, query, where, orderBy, limit, Timestamp } from 'firebase/firestore';
+import { initializeApp, getApps, cert } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
+import { ErrorHandler, ErrorUtils } from '@/lib/error-handler';
+
+// Initialize Firebase Admin if not already initialized
+if (!getApps().length) {
+  const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || '{}');
+  
+  initializeApp({
+    credential: cert(serviceAccount),
+    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
+  });
+}
+
+const db = getFirestore();
+
+interface AnalyticsOverview {
+  clientStats: {
+    total: number;
+    active: number;
+    atRisk: number;
+    newThisMonth: number;
+    completionRate: number;
+  };
+  performanceMetrics: {
+    overallAverage: number;
+    scoreDistribution: {
+      green: number;
+      yellow: number;
+      red: number;
+    };
+    topPerformers: Array<{
+      id: string;
+      name: string;
+      averageScore: number;
+      completionRate: number;
+    }>;
+    needsAttention: Array<{
+      id: string;
+      name: string;
+      averageScore: number;
+      completionRate: number;
+    }>;
+    trendData: Array<{
+      date: string;
+      averageScore: number;
+      activeClients: number;
+    }>;
+  };
+  formAnalytics: {
+    totalForms: number;
+    completionRate: number;
+    averageResponseTime: number;
+    popularTemplates: Array<{
+      name: string;
+      usage: number;
+      completionRate: number;
+    }>;
+  };
+  questionAnalytics: {
+    totalQuestions: number;
+    mostUsed: Array<{
+      text: string;
+      usage: number;
+      effectiveness: number;
+    }>;
+    weightedQuestions: number;
+  };
+  goalProgress: {
+    overallProgress: number;
+    achievementRate: number;
+    trendingGoals: Array<{
+      goal: string;
+      progress: number;
+      clients: number;
+    }>;
+  };
+}
 
 export async function GET(request: NextRequest) {
   try {
-    const db = getDb();
     const { searchParams } = new URL(request.url);
     const timeRange = searchParams.get('timeRange') || '30d';
+    const coachId = searchParams.get('coachId');
 
-    // Calculate date range
-    const now = new Date();
-    let startDate: Date;
+    if (!coachId) {
+      return NextResponse.json({
+        success: false,
+        message: 'Coach ID is required'
+      }, { status: 400 });
+    }
+
+    const analytics = await calculateAnalyticsOverview(coachId, timeRange);
     
-    switch (timeRange) {
-      case '7d':
-        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        break;
-      case '90d':
-        startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-        break;
-      case '1y':
-        startDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
-        break;
-      default: // 30d
-        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    }
+    return NextResponse.json({
+      success: true,
+      data: analytics
+    });
 
-    // Fetch clients
-    let clients: any[] = [];
-    try {
-      const clientsSnapshot = await getDocs(collection(db, 'clients'));
-      clients = clientsSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-    } catch (error) {
-      console.log('No clients collection found, using empty array');
-    }
+  } catch (error) {
+    console.error('Error in analytics overview:', error);
+    const appError = ErrorHandler.handleApiError(error, '/api/analytics/overview');
+    
+    return NextResponse.json({
+      success: false,
+      message: appError.message,
+      error: appError.code
+    }, { status: 500 });
+  }
+}
 
-    // Fetch form responses
-    let responses: any[] = [];
-    try {
-      const responsesSnapshot = await getDocs(
-        query(
-          collection(db, 'formResponses'),
-          where('submittedAt', '>=', Timestamp.fromDate(startDate))
-        )
-      );
-      responses = responsesSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-    } catch (error) {
-      console.log('No formResponses collection found, using empty array');
-    }
+async function calculateAnalyticsOverview(coachId: string, timeRange: string): Promise<AnalyticsOverview> {
+  try {
+    // Fetch data from Firestore with proper error handling
+    const [clients, forms, responses, questions] = await Promise.allSettled([
+      fetchClients(coachId),
+      fetchForms(coachId),
+      fetchResponses(coachId),
+      fetchQuestions(coachId)
+    ]);
 
-    // Fetch questions
-    let questions: any[] = [];
-    try {
-      const questionsSnapshot = await getDocs(collection(db, 'questions'));
-      questions = questionsSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-    } catch (error) {
-      console.log('No questions collection found, using empty array');
-    }
-
-    // Fetch forms
-    let forms: any[] = [];
-    try {
-      const formsSnapshot = await getDocs(collection(db, 'forms'));
-      forms = formsSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-    } catch (error) {
-      console.log('No forms collection found, using empty array');
-    }
+    // Extract data with fallbacks
+    const clientsData = clients.status === 'fulfilled' ? clients.value : [];
+    const formsData = forms.status === 'fulfilled' ? forms.value : [];
+    const responsesData = responses.status === 'fulfilled' ? responses.value : [];
+    const questionsData = questions.status === 'fulfilled' ? questions.value : [];
 
     // Calculate client statistics
-    const totalClients = clients.length;
-    const activeClients = clients.filter(client => {
-      const lastResponse = responses
-        .filter(r => r.clientId === client.id)
-        .sort((a, b) => b.submittedAt.toDate() - a.submittedAt.toDate())[0];
+    const totalClients = clientsData.length;
+    const activeClients = clientsData.filter(c => c.status === 'active').length;
+    const atRiskClients = clientsData.filter(c => {
+      const lastActivity = c.progress?.lastActivity;
+      if (!lastActivity) return true;
       
-      if (!lastResponse) return false;
-      const daysSinceLastResponse = (now.getTime() - lastResponse.submittedAt.toDate().getTime()) / (1000 * 60 * 60 * 24);
-      return daysSinceLastResponse <= 30;
+      const lastActivityDate = lastActivity.toDate ? lastActivity.toDate() : new Date(lastActivity);
+      const daysSinceActivity = (Date.now() - lastActivityDate.getTime()) / (1000 * 60 * 60 * 24);
+      return daysSinceActivity > 14; // At risk if no activity for 14+ days
+    }).length;
+
+    // Calculate new clients this month
+    const oneMonthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const newThisMonth = clientsData.filter(c => {
+      const createdAt = c.createdAt?.toDate ? c.createdAt.toDate() : new Date(c.createdAt);
+      return createdAt > oneMonthAgo;
     }).length;
 
     // Calculate completion rate
-    const totalAssignedForms = forms.reduce((sum, form) => sum + (form.assignments?.length || 0), 0);
-    const completedForms = responses.length;
-    const completionRate = totalAssignedForms > 0 ? (completedForms / totalAssignedForms) * 100 : 0;
+    const totalAssignments = responsesData.length;
+    const completedResponses = responsesData.filter(r => r.status === 'completed').length;
+    const completionRate = totalAssignments > 0 ? (completedResponses / totalAssignments) * 100 : 0;
 
     // Calculate performance metrics
-    const clientScores: { [clientId: string]: number[] } = {};
-    
-    responses.forEach(response => {
-      if (!response.clientId) return;
-      
-      if (!clientScores[response.clientId]) {
-        clientScores[response.clientId] = [];
-      }
-      
-      // Calculate score for this response
-      let totalScore = 0;
-      let maxPossibleScore = 0;
-      
-      if (response.answers && Array.isArray(response.answers)) {
-        response.answers.forEach((answer: any) => {
-          if (answer.weight && answer.value !== undefined) {
-            totalScore += answer.weight * answer.value;
-            maxPossibleScore += answer.weight * 10; // Assuming 1-10 scale
-          }
-        });
-      }
-      
-      if (maxPossibleScore > 0) {
-        const score = (totalScore / maxPossibleScore) * 100;
-        clientScores[response.clientId].push(score);
-      }
-    });
+    const clientScores = clientsData.map(c => c.progress?.overallScore || 0);
+    const overallAverage = clientScores.length > 0 
+      ? clientScores.reduce((sum, score) => sum + score, 0) / clientScores.length 
+      : 0;
 
-    // Calculate average scores and identify at-risk clients
-    const clientAverages: { [clientId: string]: number } = {};
-    let overallAverage = 0;
-    let totalScores = 0;
-    let scoreCount = 0;
+    // Score distribution
+    const green = clientScores.filter(score => score >= 80).length;
+    const yellow = clientScores.filter(score => score >= 60 && score < 80).length;
+    const red = clientScores.filter(score => score < 60).length;
 
-    Object.entries(clientScores).forEach(([clientId, scores]) => {
-      const average = scores.reduce((sum, score) => sum + score, 0) / scores.length;
-      clientAverages[clientId] = average;
-      totalScores += average;
-      scoreCount++;
-    });
+    // Top performers and needs attention
+    const topPerformers = clientsData
+      .filter(c => (c.progress?.overallScore || 0) >= 80)
+      .slice(0, 3)
+      .map(c => ({
+        id: c.id,
+        name: `${c.firstName} ${c.lastName}`,
+        averageScore: c.progress?.overallScore || 0,
+        completionRate: c.progress?.completedCheckins > 0 
+          ? (c.progress.completedCheckins / c.progress.totalCheckins) * 100 
+          : 0
+      }));
 
-    if (scoreCount > 0) {
-      overallAverage = totalScores / scoreCount;
-    }
+    const needsAttention = clientsData
+      .filter(c => (c.progress?.overallScore || 0) < 60)
+      .slice(0, 3)
+      .map(c => ({
+        id: c.id,
+        name: `${c.firstName} ${c.lastName}`,
+        averageScore: c.progress?.overallScore || 0,
+        completionRate: c.progress?.completedCheckins > 0 
+          ? (c.progress.completedCheckins / c.progress.totalCheckins) * 100 
+          : 0
+      }));
 
-    // Identify at-risk clients (below 60% average)
-    const atRiskClients = Object.entries(clientAverages)
-      .filter(([_, average]) => average < 60)
-      .length;
+    // Form analytics
+    const totalForms = formsData.length;
+    const formCompletionRate = totalForms > 0 ? completionRate : 0;
+    const averageResponseTime = responsesData.length > 0 ? 2.3 : 0; // Mock for now
 
-    // Calculate score distribution
-    const scoreDistribution = {
-      green: 0,
-      yellow: 0,
-      red: 0
-    };
+    // Question analytics
+    const totalQuestions = questionsData.length;
+    const weightedQuestions = questionsData.filter(q => q.weight > 1).length;
 
-    Object.values(clientAverages).forEach(average => {
-      if (average >= 80) scoreDistribution.green++;
-      else if (average >= 60) scoreDistribution.yellow++;
-      else scoreDistribution.red++;
-    });
+    // Goal progress
+    const allGoals = clientsData.flatMap(c => c.profile?.goals || []);
+    const goalCounts = allGoals.reduce((acc, goal) => {
+      acc[goal] = (acc[goal] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
 
-    // Get top performers and needs attention
-    const clientPerformance = Object.entries(clientAverages)
-      .map(([clientId, average]) => {
-        const client = clients.find(c => c.id === clientId);
-        const clientResponses = responses.filter(r => r.clientId === clientId);
-        const completionRate = clientResponses.length > 0 ? 
-          (clientResponses.filter(r => r.completed).length / clientResponses.length) * 100 : 0;
-        
-        return {
-          id: clientId,
-          name: client?.name || 'Unknown Client',
-          averageScore: Math.round(average * 10) / 10,
-          completionRate: Math.round(completionRate * 10) / 10
-        };
-      })
-      .sort((a, b) => b.averageScore - a.averageScore);
-
-    const topPerformers = clientPerformance.slice(0, 3);
-    const needsAttention = clientPerformance
-      .filter(client => client.averageScore < 60)
+    const trendingGoals = Object.entries(goalCounts)
+      .map(([goal, count]) => ({
+        goal,
+        progress: 75, // Mock progress for now
+        clients: count
+      }))
+      .sort((a, b) => b.clients - a.clients)
       .slice(0, 3);
 
-    // Calculate form analytics
-    const formUsage: { [formId: string]: number } = {};
-    responses.forEach(response => {
-      if (response.formId) {
-        formUsage[response.formId] = (formUsage[response.formId] || 0) + 1;
-      }
-    });
-
-    const popularTemplates = Object.entries(formUsage)
-      .map(([formId, usage]) => {
-        const form = forms.find(f => f.id === formId);
-        const formResponses = responses.filter(r => r.formId === formId);
-        const completionRate = formResponses.length > 0 ? 
-          (formResponses.filter(r => r.completed).length / formResponses.length) * 100 : 0;
-        
-        return {
-          name: form?.title || 'Unknown Form',
-          usage,
-          completionRate: Math.round(completionRate * 10) / 10
-        };
-      })
-      .sort((a, b) => b.usage - a.usage)
-      .slice(0, 3);
-
-    // Calculate question analytics
-    const questionUsage: { [questionId: string]: number } = {};
-    responses.forEach(response => {
-      if (response.answers && Array.isArray(response.answers)) {
-        response.answers.forEach((answer: any) => {
-          if (answer.questionId) {
-            questionUsage[answer.questionId] = (questionUsage[answer.questionId] || 0) + 1;
-          }
-        });
-      }
-    });
-
-    const mostUsedQuestions = Object.entries(questionUsage)
-      .map(([questionId, usage]) => {
-        const question = questions.find(q => q.id === questionId);
-        return {
-          text: question?.text || 'Unknown Question',
-          usage,
-          effectiveness: Math.round((Math.random() * 3 + 7) * 10) / 10 // Mock effectiveness score
-        };
-      })
-      .sort((a, b) => b.usage - a.usage)
-      .slice(0, 3);
-
-    const weightedQuestions = questions.filter(q => q.hasWeighting).length;
-
-    // Calculate goal progress (mock data for now)
-    const goalProgress = {
-      overallProgress: Math.round((Math.random() * 30 + 60) * 10) / 10,
-      achievementRate: Math.round((Math.random() * 20 + 60) * 10) / 10,
-      trendingGoals: [
-        { goal: 'Weight Loss', progress: Math.round(Math.random() * 30 + 70), clients: Math.floor(Math.random() * 5 + 3) },
-        { goal: 'Muscle Gain', progress: Math.round(Math.random() * 30 + 60), clients: Math.floor(Math.random() * 3 + 2) },
-        { goal: 'Stress Management', progress: Math.round(Math.random() * 30 + 60), clients: Math.floor(Math.random() * 4 + 2) }
-      ]
-    };
-
-    // Calculate new clients this month
-    const newThisMonth = clients.filter(client => {
-      const createdAt = client.createdAt?.toDate?.() || new Date(client.createdAt);
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-      return createdAt >= monthStart;
-    }).length;
-
-    const analyticsData = {
+    return {
       clientStats: {
         total: totalClients,
         active: activeClients,
@@ -260,40 +221,97 @@ export async function GET(request: NextRequest) {
       },
       performanceMetrics: {
         overallAverage: Math.round(overallAverage * 10) / 10,
-        scoreDistribution,
+        scoreDistribution: { green, yellow, red },
         topPerformers,
         needsAttention,
-        trendData: [
-          { date: '2024-01-01', averageScore: Math.max(0, Math.round((overallAverage - 4) * 10) / 10), activeClients: Math.max(0, activeClients - 1) },
-          { date: '2024-01-08', averageScore: Math.max(0, Math.round((overallAverage - 3) * 10) / 10), activeClients: Math.max(0, activeClients) },
-          { date: '2024-01-15', averageScore: Math.max(0, Math.round((overallAverage - 1) * 10) / 10), activeClients: Math.max(0, activeClients) },
-          { date: '2024-01-22', averageScore: Math.max(0, overallAverage), activeClients: Math.max(0, activeClients) }
-        ]
+        trendData: [] // Will be implemented later
       },
       formAnalytics: {
-        totalForms: forms.length,
-        completionRate: Math.round(completionRate * 10) / 10,
-        averageResponseTime: Math.round((Math.random() * 3 + 1) * 10) / 10,
-        popularTemplates
+        totalForms,
+        completionRate: Math.round(formCompletionRate * 10) / 10,
+        averageResponseTime,
+        popularTemplates: []
       },
       questionAnalytics: {
-        totalQuestions: questions.length,
-        mostUsed: mostUsedQuestions,
+        totalQuestions,
+        mostUsed: [],
         weightedQuestions
       },
-      goalProgress
+      goalProgress: {
+        overallProgress: 76.8, // Mock for now
+        achievementRate: 68.2, // Mock for now
+        trendingGoals
+      }
     };
 
-    return NextResponse.json({
-      success: true,
-      data: analyticsData
-    });
-
   } catch (error) {
-    console.error('Error fetching analytics data:', error);
-    return NextResponse.json(
-      { success: false, message: 'Failed to fetch analytics data' },
-      { status: 500 }
-    );
+    console.error('Error calculating analytics overview:', error);
+    throw error;
+  }
+}
+
+async function fetchClients(coachId: string): Promise<any[]> {
+  try {
+    const snapshot = await db.collection('clients')
+      .where('coachId', '==', coachId)
+      .get();
+    
+    return snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+  } catch (error) {
+    console.log('No clients collection found, using empty array');
+    return [];
+  }
+}
+
+async function fetchForms(coachId: string): Promise<any[]> {
+  try {
+    const snapshot = await db.collection('forms')
+      .where('coachId', '==', coachId)
+      .where('isActive', '==', true)
+      .get();
+    
+    return snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+  } catch (error) {
+    console.log('No forms collection found, using empty array');
+    return [];
+  }
+}
+
+async function fetchResponses(coachId: string): Promise<any[]> {
+  try {
+    const snapshot = await db.collection('formResponses')
+      .where('coachId', '==', coachId)
+      .get();
+    
+    return snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+  } catch (error) {
+    console.log('No formResponses collection found, using empty array');
+    return [];
+  }
+}
+
+async function fetchQuestions(coachId: string): Promise<any[]> {
+  try {
+    const snapshot = await db.collection('questions')
+      .where('coachId', '==', coachId)
+      .where('isActive', '==', true)
+      .get();
+    
+    return snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+  } catch (error) {
+    console.log('No questions collection found, using empty array');
+    return [];
   }
 } 
