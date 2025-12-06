@@ -29,14 +29,13 @@ interface CheckInAssignment {
 
 interface Question {
   id: string;
-  title: string;
-  description?: string;
-  questionType: 'text' | 'number' | 'rating' | 'scale' | 'boolean' | 'multiple_choice';
+  text: string;
+  type: string;
   options?: string[];
-  isRequired: boolean;
-  order: number;
-  questionWeight: number;
   category: string;
+  coachId: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface FormResponse {
@@ -97,16 +96,14 @@ export default function CheckInCompletionPage() {
         }
       }
 
-      // Sort questions by order
-      questionsData.sort((a, b) => a.order - b.order);
       setQuestions(questionsData);
 
       // Initialize responses array
       const initialResponses: FormResponse[] = questionsData.map(q => ({
         questionId: q.id,
-        question: q.title,
+        question: q.text,
         answer: '',
-        type: q.questionType
+        type: q.type
       }));
       setResponses(initialResponses);
 
@@ -120,7 +117,20 @@ export default function CheckInCompletionPage() {
 
   const handleAnswerChange = (questionIndex: number, answer: string | number | boolean) => {
     const updatedResponses = [...responses];
-    updatedResponses[questionIndex].answer = answer;
+    if (updatedResponses[questionIndex]) {
+      updatedResponses[questionIndex].answer = answer;
+    } else {
+      // If response doesn't exist, create it
+      const question = questions[questionIndex];
+      if (question) {
+        updatedResponses[questionIndex] = {
+          questionId: question.id,
+          question: question.text,
+          answer: answer,
+          type: question.type
+        };
+      }
+    }
     setResponses(updatedResponses);
   };
 
@@ -141,61 +151,40 @@ export default function CheckInCompletionPage() {
 
     setSubmitting(true);
     try {
-      // Validate required questions
-      const requiredQuestions = questions.filter(q => q.isRequired);
-      const missingRequired = requiredQuestions.filter((_, index) => {
-        const response = responses[questions.findIndex(q => q.id === requiredQuestions[index].id)];
-        return !response.answer || response.answer === '';
+      // Validate that all questions are answered
+      const unansweredQuestions = questions.filter((_, index) => {
+        const response = responses[index];
+        return !response || !response.answer || response.answer === '';
       });
 
-      if (missingRequired.length > 0) {
-        setError(`Please answer all required questions: ${missingRequired.map(q => q.title).join(', ')}`);
+      if (unansweredQuestions.length > 0) {
+        setError(`Please answer all questions before submitting.`);
         setSubmitting(false);
         return;
       }
 
-      // Calculate score
-      const totalWeight = questions.reduce((sum, q) => sum + q.questionWeight, 0);
-      let earnedWeight = 0;
-
-      responses.forEach((response, index) => {
-        const question = questions[index];
-        if (response.answer !== '' && response.answer !== null) {
-          // Simple scoring logic - can be enhanced
-          if (question.questionType === 'rating' || question.questionType === 'scale') {
-            const numAnswer = Number(response.answer);
-            if (numAnswer >= 7) earnedWeight += question.questionWeight;
-            else if (numAnswer >= 5) earnedWeight += question.questionWeight * 0.7;
-            else if (numAnswer >= 3) earnedWeight += question.questionWeight * 0.4;
-            else earnedWeight += question.questionWeight * 0.1;
-          } else if (question.questionType === 'boolean') {
-            if (response.answer === true || response.answer === 'yes') {
-              earnedWeight += question.questionWeight;
-            }
-          } else {
-            // For other types, give partial credit for answering
-            earnedWeight += question.questionWeight * 0.8;
-          }
-        }
-      });
-
-      const score = Math.round((earnedWeight / totalWeight) * 100);
+      // Calculate simple score based on answered questions
+      const answeredCount = responses.filter(r => r.answer !== '' && r.answer !== null).length;
+      const score = Math.round((answeredCount / questions.length) * 100);
 
       // Create response document
       const responseData = {
         formId: assignment.formId,
         formTitle: assignment.formTitle,
+        assignmentId: assignmentId, // Add assignment ID for linking
         clientId: userProfile.uid,
-        clientName: userProfile.displayName || 'Client',
-        clientEmail: userProfile.email,
+        clientName: userProfile.displayName || userProfile.firstName || 'Client',
+        clientEmail: userProfile.email || '',
         submittedAt: new Date(),
         completedAt: new Date(),
         score: score,
         totalQuestions: questions.length,
-        answeredQuestions: responses.filter(r => r.answer !== '' && r.answer !== null).length,
-        responses: responses,
+        answeredQuestions: answeredCount,
+        responses: responses.filter(r => r && r.answer !== undefined && r.answer !== null),
         status: 'completed'
       };
+
+      console.log('Submitting response data:', JSON.stringify(responseData, null, 2));
 
       const responseRef = await addDoc(collection(db, 'formResponses'), responseData);
 
@@ -221,13 +210,13 @@ export default function CheckInCompletionPage() {
     const response = responses.find(r => r.questionId === question.id);
     const answer = response?.answer || '';
 
-    switch (question.questionType) {
+    switch (question.type) {
       case 'text':
         return (
           <textarea
             value={answer as string}
             onChange={(e) => handleAnswerChange(index, e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
             rows={4}
             placeholder="Enter your answer..."
           />
@@ -239,7 +228,7 @@ export default function CheckInCompletionPage() {
             type="number"
             value={answer as string}
             onChange={(e) => handleAnswerChange(index, Number(e.target.value))}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
             placeholder="Enter a number..."
           />
         );
@@ -289,7 +278,7 @@ export default function CheckInCompletionPage() {
       case 'boolean':
         return (
           <div className="space-y-2">
-            <label className="flex items-center">
+            <label className="flex items-center text-gray-900">
               <input
                 type="radio"
                 name={`question-${question.id}`}
@@ -300,7 +289,7 @@ export default function CheckInCompletionPage() {
               />
               Yes
             </label>
-            <label className="flex items-center">
+            <label className="flex items-center text-gray-900">
               <input
                 type="radio"
                 name={`question-${question.id}`}
@@ -318,7 +307,7 @@ export default function CheckInCompletionPage() {
         return (
           <div className="space-y-2">
             {question.options?.map((option, optionIndex) => (
-              <label key={optionIndex} className="flex items-center">
+              <label key={optionIndex} className="flex items-center text-gray-900">
                 <input
                   type="radio"
                   name={`question-${question.id}`}
@@ -339,7 +328,7 @@ export default function CheckInCompletionPage() {
             type="text"
             value={answer as string}
             onChange={(e) => handleAnswerChange(index, e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
             placeholder="Enter your answer..."
           />
         );
@@ -423,11 +412,10 @@ export default function CheckInCompletionPage() {
               <div>
                 <div className="mb-6">
                   <h2 className="text-xl font-semibold text-gray-900 mb-2">
-                    {currentQ.title}
-                    {currentQ.isRequired && <span className="text-red-500 ml-1">*</span>}
+                    {currentQ.text}
                   </h2>
-                  {currentQ.description && (
-                    <p className="text-gray-600">{currentQ.description}</p>
+                  {currentQ.category && (
+                    <p className="text-gray-600">Category: {currentQ.category}</p>
                   )}
                 </div>
 

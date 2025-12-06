@@ -26,6 +26,13 @@ interface CheckIn {
   category: string;
   score: number;
   responseCount: number;
+  checkInWindow?: {
+    enabled: boolean;
+    startDay: string;
+    startTime: string;
+    endDay: string;
+    endTime: string;
+  };
 }
 
 interface ClientMetrics {
@@ -66,7 +73,14 @@ export async function GET(
         totalWeeks: data.totalWeeks,
         category: data.category || 'general',
         score: data.score || 0,
-        responseCount: data.responseCount || 0
+        responseCount: data.responseCount || 0,
+        checkInWindow: data.checkInWindow || {
+          enabled: false,
+          startDay: 'monday',
+          startTime: '09:00',
+          endDay: 'tuesday',
+          endTime: '12:00'
+        }
       };
       
       checkIns.push(checkIn);
@@ -113,7 +127,8 @@ export async function GET(
     
     return NextResponse.json({
       success: true,
-      checkIns: completedCheckIns, // Only return completed check-ins for the table
+      checkIns: checkIns, // Return all check-ins, not just completed ones
+      completedCheckIns: completedCheckIns, // Also return completed check-ins separately
       metrics
     });
 

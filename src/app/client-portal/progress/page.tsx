@@ -48,94 +48,99 @@ export default function ClientProgressPage() {
 
   const fetchProgressData = async () => {
     try {
-      const responsesQuery = query(
-        collection(db, 'formResponses'),
-        where('clientId', '==', userProfile?.uid),
-        orderBy('submittedAt', 'desc')
-      );
-      const responsesSnapshot = await getDocs(responsesQuery);
-      const responsesData: FormResponse[] = [];
+      setLoading(true);
       
-      responsesSnapshot.forEach((doc) => {
-        responsesData.push({ id: doc.id, ...doc.data() } as FormResponse);
-      });
-
-      // If no real data, create mock data for demonstration
-      let finalResponses = responsesData;
-      if (responsesData.length === 0) {
-        const mockResponses = [
-          {
-            id: 'resp-1',
-            formTitle: 'Daily Health Check-in',
-            submittedAt: { toDate: () => new Date(Date.now() - 1 * 24 * 60 * 60 * 1000) },
-            completedAt: { toDate: () => new Date(Date.now() - 1 * 24 * 60 * 60 * 1000) },
-            score: 92,
-            totalQuestions: 10,
-            answeredQuestions: 8,
-            status: 'completed'
-          },
-          {
-            id: 'resp-2',
-            formTitle: 'Weekly Progress Check-in',
-            submittedAt: { toDate: () => new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
-            completedAt: { toDate: () => new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
-            score: 85,
-            totalQuestions: 15,
-            answeredQuestions: 12,
-            status: 'completed'
-          },
-          {
-            id: 'resp-3',
-            formTitle: 'Nutrition Assessment',
-            submittedAt: { toDate: () => new Date(Date.now() - 14 * 24 * 60 * 60 * 1000) },
-            completedAt: { toDate: () => new Date(Date.now() - 14 * 24 * 60 * 60 * 1000) },
-            score: 78,
-            totalQuestions: 20,
-            answeredQuestions: 15,
-            status: 'completed'
-          },
-          {
-            id: 'resp-4',
-            formTitle: 'Fitness Progress Review',
-            submittedAt: { toDate: () => new Date(Date.now() - 21 * 24 * 60 * 60 * 1000) },
-            completedAt: { toDate: () => new Date(Date.now() - 21 * 24 * 60 * 60 * 1000) },
-            score: 88,
-            totalQuestions: 12,
-            answeredQuestions: 10,
-            status: 'completed'
-          },
-          {
-            id: 'resp-5',
-            formTitle: 'Mental Wellness Check',
-            submittedAt: { toDate: () => new Date(Date.now() - 28 * 24 * 60 * 60 * 1000) },
-            completedAt: { toDate: () => new Date(Date.now() - 28 * 24 * 60 * 60 * 1000) },
-            score: 95,
-            totalQuestions: 8,
-            answeredQuestions: 6,
-            status: 'completed'
-          }
-        ];
-        finalResponses = mockResponses;
+      if (!userProfile?.uid) {
+        console.log('No user profile found');
+        setResponses([]);
+        setStats({
+          totalCheckIns: 0,
+          averageScore: 0,
+          bestScore: 0,
+          improvement: 0,
+          consistency: 0,
+          currentStreak: 0
+        });
+        return;
       }
-      
-      setResponses(finalResponses);
 
-      // Calculate stats using the final responses (real or mock)
-      const totalCheckIns = finalResponses.length;
-      const scores = finalResponses.map(r => r.score || 0);
+      // Fetch real responses using the existing API endpoint
+      const response = await fetch(`/api/client-portal/history?clientId=${userProfile.uid}`);
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch progress data');
+      }
+
+      const data = await response.json();
+      
+      if (!data.success) {
+        throw new Error(data.message || 'Failed to fetch progress data');
+      }
+
+      const responsesData: FormResponse[] = data.history || [];
+      
+      console.log('Fetched responses:', responsesData.length);
+      setResponses(responsesData);
+
+      // Calculate stats using real data only
+      const totalCheckIns = responsesData.length;
+      const scores = responsesData.map(r => r.score || 0).filter(score => score > 0);
       const averageScore = scores.length > 0 ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length) : 0;
       const bestScore = scores.length > 0 ? Math.max(...scores) : 0;
       
       // Calculate improvement (comparing first and last scores)
-      const sortedScores = scores.sort((a, b) => a - b);
-      const improvement = sortedScores.length >= 2 ? sortedScores[sortedScores.length - 1] - sortedScores[0] : 0;
+      let improvement = 0;
+      if (scores.length >= 2) {
+        const sortedByDate = responsesData
+          .filter(r => r.score && r.score > 0)
+          .sort((a, b) => {
+            const dateA = new Date(a.submittedAt);
+            const dateB = new Date(b.submittedAt);
+            return dateA.getTime() - dateB.getTime();
+          });
+        
+        if (sortedByDate.length >= 2) {
+          const firstScore = sortedByDate[0].score || 0;
+          const lastScore = sortedByDate[sortedByDate.length - 1].score || 0;
+          improvement = lastScore - firstScore;
+        }
+      }
       
       // Calculate consistency (percentage of scores within 10 points of average)
       const consistentScores = scores.filter(score => Math.abs(score - averageScore) <= 10);
       const consistency = scores.length > 0 ? Math.round((consistentScores.length / scores.length) * 100) : 0;
       
       // Calculate current streak (consecutive days with check-ins)
-      const currentStreak = 2; // Mock streak
+      let currentStreak = 0;
+      if (responsesData.length > 0) {
+        const sortedByDate = responsesData
+          .sort((a, b) => {
+            const dateA = new Date(a.submittedAt);
+            const dateB = new Date(b.submittedAt);
+            return dateB.getTime() - dateA.getTime();
+          });
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        let streak = 0;
+        let currentDate = new Date(today);
+        
+        for (const response of sortedByDate) {
+          const responseDate = new Date(response.submittedAt);
+          responseDate.setHours(0, 0, 0, 0);
+          
+          const daysDiff = Math.floor((currentDate.getTime() - responseDate.getTime()) / (1000 * 60 * 60 * 24));
+          
+          if (daysDiff === streak) {
+            streak++;
+          } else if (daysDiff > streak) {
+            break;
+          }
+        }
+        
+        currentStreak = streak;
+      }
 
       setStats({
         totalCheckIns,
@@ -148,6 +153,15 @@ export default function ClientProgressPage() {
 
     } catch (error) {
       console.error('Error fetching progress data:', error);
+      setResponses([]);
+      setStats({
+        totalCheckIns: 0,
+        averageScore: 0,
+        bestScore: 0,
+        improvement: 0,
+        consistency: 0,
+        currentStreak: 0
+      });
     } finally {
       setLoading(false);
     }
@@ -159,7 +173,7 @@ export default function ClientProgressPage() {
     const cutoffDate = new Date(now.getTime() - daysAgo * 24 * 60 * 60 * 1000);
     
     return responses.filter(response => {
-      const responseDate = response.submittedAt?.toDate?.() || new Date(response.submittedAt);
+      const responseDate = new Date(response.submittedAt);
       return responseDate >= cutoffDate;
     });
   };
@@ -329,6 +343,7 @@ export default function ClientProgressPage() {
                 {filteredResponses.slice(0, 10).reverse().map((response, index) => {
                   const score = response.score || 0;
                   const height = (score / 100) * 100;
+                  const responseDate = new Date(response.submittedAt);
                   return (
                     <div key={response.id} className="flex-1 flex flex-col items-center">
                       <div className="text-xs text-gray-500 mb-2">{score}%</div>
@@ -337,7 +352,7 @@ export default function ClientProgressPage() {
                         style={{ height: `${height}%` }}
                       ></div>
                       <div className="text-xs text-gray-500 mt-2">
-                        {response.submittedAt?.toDate?.()?.toLocaleDateString() || new Date().toLocaleDateString()}
+                        {responseDate.toLocaleDateString()}
                       </div>
                     </div>
                   );
@@ -354,29 +369,32 @@ export default function ClientProgressPage() {
             <div className="bg-white rounded-lg shadow p-6">
               <h2 className="text-lg font-medium text-gray-900 mb-4">Recent Activity</h2>
               <div className="space-y-4">
-                {filteredResponses.slice(0, 5).map((response) => (
-                  <div key={response.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
-                    <div>
-                      <h3 className="font-medium text-gray-900">{response.formTitle}</h3>
-                      <p className="text-sm text-gray-500">
-                        {response.submittedAt?.toDate?.()?.toLocaleDateString() || new Date().toLocaleDateString()}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <div className={`text-lg font-bold ${
-                        (response.score || 0) >= 90 ? 'text-green-600' :
-                        (response.score || 0) >= 80 ? 'text-blue-600' :
-                        (response.score || 0) >= 70 ? 'text-yellow-600' :
-                        'text-red-600'
-                      }`}>
-                        {response.score || 0}%
+                {filteredResponses.slice(0, 5).map((response) => {
+                  const responseDate = new Date(response.submittedAt);
+                  return (
+                    <div key={response.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
+                      <div>
+                        <h3 className="font-medium text-gray-900">{response.formTitle || response.checkInTitle}</h3>
+                        <p className="text-sm text-gray-500">
+                          {responseDate.toLocaleDateString()}
+                        </p>
                       </div>
-                      <div className="text-xs text-gray-500">
-                        {response.answeredQuestions}/{response.totalQuestions} questions
+                      <div className="text-right">
+                        <div className={`text-lg font-bold ${
+                          (response.score || 0) >= 90 ? 'text-green-600' :
+                          (response.score || 0) >= 80 ? 'text-blue-600' :
+                          (response.score || 0) >= 70 ? 'text-yellow-600' :
+                          'text-red-600'
+                        }`}>
+                          {response.score || 0}%
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {response.answeredQuestions || 0}/{response.totalQuestions || 0} questions
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </div>

@@ -10,9 +10,9 @@ interface Form {
   title: string;
   description: string;
   category: string;
-  totalQuestions: number;
+  questions: string[];
   estimatedTime: number;
-  isActive: boolean;
+  isStandard: boolean;
   createdAt: any;
   updatedAt: any;
 }
@@ -21,6 +21,10 @@ export default function FormsPage() {
   const { userProfile, logout } = useAuth();
   const [forms, setForms] = useState<Form[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [showCopyModal, setShowCopyModal] = useState(false);
+  const [selectedForm, setSelectedForm] = useState<Form | null>(null);
+  const [newFormName, setNewFormName] = useState('');
+  const [isCopying, setIsCopying] = useState(false);
   const [stats, setStats] = useState({
     total: 0,
     active: 0,
@@ -43,9 +47,9 @@ export default function FormsPage() {
             
             // Calculate stats
             const total = formsData.length;
-            const active = formsData.filter((form: Form) => form.isActive).length;
-            const inactive = total - active;
-            const avgQuestions = total > 0 ? Math.round(formsData.reduce((sum: number, form: Form) => sum + form.totalQuestions, 0) / total) : 0;
+            const active = formsData.filter((form: Form) => !form.isStandard).length; // Standard forms are always "active"
+            const inactive = 0; // We don't have inactive forms in this implementation
+            const avgQuestions = total > 0 ? Math.round(formsData.reduce((sum: number, form: Form) => sum + (form.questions?.length || 0), 0) / total) : 0;
             
             setStats({ total, active, inactive, avgQuestions });
           } else {
@@ -63,6 +67,71 @@ export default function FormsPage() {
 
     fetchForms();
   }, [userProfile?.uid]);
+
+  const handleCopyForm = (form: Form) => {
+    setSelectedForm(form);
+    setNewFormName(`${form.title} - Copy`);
+    setShowCopyModal(true);
+  };
+
+  const copyForm = async () => {
+    if (!selectedForm || !newFormName.trim()) return;
+
+    setIsCopying(true);
+    try {
+      const response = await fetch('/api/forms', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          title: newFormName.trim(),
+          description: selectedForm.description,
+          category: selectedForm.category,
+          questions: selectedForm.questions,
+          estimatedTime: selectedForm.estimatedTime,
+          coachId: userProfile?.uid,
+          isCopyingStandard: selectedForm.isStandard
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          // Refresh forms list
+          const coachId = userProfile?.uid || 'demo-coach-id';
+          const refreshResponse = await fetch(`/api/forms?coachId=${coachId}`);
+          if (refreshResponse.ok) {
+            const refreshData = await refreshResponse.json();
+            if (refreshData.success) {
+              setForms(refreshData.forms || []);
+              
+              // Update stats
+              const total = refreshData.forms.length;
+              const active = refreshData.forms.filter((form: Form) => !form.isStandard).length;
+              const avgQuestions = total > 0 ? Math.round(refreshData.forms.reduce((sum: number, form: Form) => sum + (form.questions?.length || 0), 0) / total) : 0;
+              
+              setStats({ total, active, inactive: 0, avgQuestions });
+            }
+          }
+          
+          setShowCopyModal(false);
+          setSelectedForm(null);
+          setNewFormName('');
+          alert('Form copied successfully!');
+        } else {
+          throw new Error(data.message || 'Failed to copy form');
+        }
+      } else {
+        throw new Error('Failed to copy form');
+      }
+    } catch (error) {
+      console.error('Error copying form:', error);
+      alert('Error copying form. Please try again.');
+    } finally {
+      setIsCopying(false);
+    }
+  };
 
   const toggleFormStatus = async (formId: string, currentStatus: boolean) => {
     try {
@@ -198,6 +267,19 @@ export default function FormsPage() {
                   </svg>
                 </div>
                 <span>Clients</span>
+              </Link>
+
+              {/* Messages */}
+              <Link
+                href="/messages"
+                className="flex items-center space-x-3 px-4 py-3 text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-blue-50 hover:text-blue-700 rounded-xl font-medium transition-all duration-200"
+              >
+                <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
+                  <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                  </svg>
+                </div>
+                <span>Messages</span>
               </Link>
 
               {/* Check-ins */}
@@ -429,13 +511,47 @@ export default function FormsPage() {
                     </svg>
                   </div>
                   <h3 className="text-lg font-medium text-gray-900 mb-2">No forms yet</h3>
-                  <p className="text-gray-500 mb-6">Get started by creating your first form.</p>
-                  <Link
-                    href="/forms/create"
-                    className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-xl text-sm font-medium transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
-                  >
-                    Create Form
-                  </Link>
+                  <p className="text-gray-500 mb-6">Get started by creating your first form or setting up standard forms.</p>
+                  <div className="flex justify-center space-x-4">
+                    <button
+                      onClick={async () => {
+                        try {
+                          const response = await fetch('/api/setup-standard-forms', {
+                            method: 'POST',
+                            headers: {
+                              'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                              coachId: userProfile?.uid
+                            })
+                          });
+                          
+                          if (response.ok) {
+                            const data = await response.json();
+                            if (data.success) {
+                              // Refresh the page to show the new forms
+                              window.location.reload();
+                            }
+                          }
+                        } catch (error) {
+                          console.error('Error setting up standard forms:', error);
+                          alert('Error setting up standard forms. Please try again.');
+                        }
+                      }}
+                      className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl text-sm font-medium transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                    >
+                      <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                      Setup Standard Forms
+                    </button>
+                    <Link
+                      href="/forms/create"
+                      className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-xl text-sm font-medium transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                    >
+                      Create Custom Form
+                    </Link>
+                  </div>
                 </div>
               ) : (
                 <div className="divide-y divide-gray-200">
@@ -445,16 +561,23 @@ export default function FormsPage() {
                         <div className="flex-1">
                           <div className="flex items-center justify-between mb-4">
                             <div>
-                              <h4 className="text-xl font-bold text-gray-900">{form.title}</h4>
+                              <div className="flex items-center space-x-3">
+                                <h4 className="text-xl font-bold text-gray-900">{form.title}</h4>
+                                {form.isStandard && (
+                                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                                    Standard Form
+                                  </span>
+                                )}
+                              </div>
                               <p className="mt-1 text-gray-600">{form.description}</p>
                             </div>
                             <div className="flex items-center space-x-3">
                               <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-                                form.isActive 
+                                form.isStandard || form.isActive 
                                   ? 'bg-green-100 text-green-800' 
                                   : 'bg-gray-100 text-gray-800'
                               }`}>
-                                {form.isActive ? 'Active' : 'Inactive'}
+                                {form.isStandard ? 'Standard' : (form.isActive ? 'Active' : 'Inactive')}
                               </span>
                               <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
                                 {getCategoryLabel(form.category)}
@@ -467,7 +590,7 @@ export default function FormsPage() {
                               <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                               </svg>
-                              {form.totalQuestions} questions
+                              {form.questions?.length || 0} questions
                             </div>
                             <div className="flex items-center">
                               <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -485,28 +608,39 @@ export default function FormsPage() {
                         </div>
                         
                         <div className="ml-8 flex items-center space-x-3">
-                          <button
-                            onClick={() => toggleFormStatus(form.id, form.isActive)}
-                            className={`px-4 py-2 text-sm rounded-xl font-medium transition-all duration-200 ${
-                              form.isActive
-                                ? 'text-yellow-700 bg-yellow-100 hover:bg-yellow-200'
-                                : 'text-green-700 bg-green-100 hover:bg-green-200'
-                            }`}
-                          >
-                            {form.isActive ? 'Deactivate' : 'Activate'}
-                          </button>
+                          {form.isStandard ? (
+                            <button
+                              onClick={() => handleCopyForm(form)}
+                              className="px-4 py-2 text-sm text-purple-700 bg-purple-100 rounded-xl hover:bg-purple-200 font-medium transition-all duration-200"
+                            >
+                              Copy Form
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => toggleFormStatus(form.id, form.isActive)}
+                              className={`px-4 py-2 text-sm rounded-xl font-medium transition-all duration-200 ${
+                                form.isActive
+                                  ? 'text-yellow-700 bg-yellow-100 hover:bg-yellow-200'
+                                  : 'text-green-700 bg-green-100 hover:bg-green-200'
+                              }`}
+                            >
+                              {form.isActive ? 'Deactivate' : 'Activate'}
+                            </button>
+                          )}
                           <Link
                             href={`/forms/${form.id}`}
                             className="px-4 py-2 text-sm text-blue-700 bg-blue-100 rounded-xl hover:bg-blue-200 font-medium transition-all duration-200"
                           >
                             View
                           </Link>
-                          <Link
-                            href={`/forms/${form.id}/edit`}
-                            className="px-4 py-2 text-sm text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 font-medium transition-all duration-200"
-                          >
-                            Edit
-                          </Link>
+                          {!form.isStandard && (
+                            <Link
+                              href={`/forms/${form.id}/edit`}
+                              className="px-4 py-2 text-sm text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 font-medium transition-all duration-200"
+                            >
+                              Edit
+                            </Link>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -517,6 +651,55 @@ export default function FormsPage() {
           </div>
         </div>
       </div>
+
+      {/* Copy Form Modal */}
+      {showCopyModal && selectedForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4">
+            <div className="mb-6">
+              <h3 className="text-2xl font-bold text-gray-900 mb-2">Copy Standard Form</h3>
+              <p className="text-gray-600">
+                Create a copy of "{selectedForm.title}" that you can customize for your clients.
+              </p>
+            </div>
+            
+            <div className="mb-6">
+              <label htmlFor="formName" className="block text-sm font-medium text-gray-700 mb-2">
+                New Form Name
+              </label>
+              <input
+                type="text"
+                id="formName"
+                value={newFormName}
+                onChange={(e) => setNewFormName(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Enter form name"
+              />
+            </div>
+            
+            <div className="flex space-x-3">
+              <button
+                onClick={() => {
+                  setShowCopyModal(false);
+                  setSelectedForm(null);
+                  setNewFormName('');
+                }}
+                className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 font-medium transition-colors"
+                disabled={isCopying}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={copyForm}
+                disabled={!newFormName.trim() || isCopying}
+                className="flex-1 px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-lg font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isCopying ? 'Copying...' : 'Copy Form'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </RoleProtected>
   );
 } 

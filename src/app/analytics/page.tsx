@@ -254,6 +254,19 @@ export default function AnalyticsPage() {
                 <span>Clients</span>
               </Link>
 
+              {/* Messages */}
+              <Link
+                href="/messages"
+                className="flex items-center space-x-3 px-4 py-3 text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-blue-50 hover:text-blue-700 rounded-xl font-medium transition-all duration-200"
+              >
+                <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
+                  <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                  </svg>
+                </div>
+                <span>Messages</span>
+              </Link>
+
               {/* Check-ins */}
               <Link
                 href="/check-ins"

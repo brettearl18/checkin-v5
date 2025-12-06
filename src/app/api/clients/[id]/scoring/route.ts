@@ -23,10 +23,10 @@ function removeUndefined(obj: any): any {
 // GET - Fetch scoring configuration for a client
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const clientId = params.id;
+    const clientId = await params.id;
     const db = getDb();
     const scoringRef = doc(db, 'clientScoring', clientId);
     const scoringDoc = await getDoc(scoringRef);
@@ -60,10 +60,10 @@ export async function GET(
 // POST - Create or update scoring configuration for a client
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const clientId = params.id;
+    const clientId = await params.id;
     const formData = await request.json();
     
     // Clean the data

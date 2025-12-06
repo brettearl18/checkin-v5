@@ -55,6 +55,23 @@ export default function ClientProfilePage() {
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [newStatus, setNewStatus] = useState('');
   const [statusReason, setStatusReason] = useState('');
+  const [showAllocateModal, setShowAllocateModal] = useState(false);
+  const [allocatingCheckIn, setAllocatingCheckIn] = useState(false);
+  const [selectedAllocateForm, setSelectedAllocateForm] = useState('');
+  const [allocateStartDate, setAllocateStartDate] = useState('');
+  const [allocateDuration, setAllocateDuration] = useState(4);
+  const [allocateFrequency, setAllocateFrequency] = useState('weekly');
+  const [allocateDueTime, setAllocateDueTime] = useState('09:00');
+  const [showCheckInManagementModal, setShowCheckInManagementModal] = useState(false);
+  const [selectedCheckIn, setSelectedCheckIn] = useState<any>(null);
+  const [deletingCheckIn, setDeletingCheckIn] = useState(false);
+  const [updatingCheckIn, setUpdatingCheckIn] = useState(false);
+  const [deletingSeries, setDeletingSeries] = useState(false);
+
+  // Debug forms state changes
+  useEffect(() => {
+    console.log('🔍 Forms state changed:', forms.length, forms);
+  }, [forms]);
 
   const clientId = params.id as string;
 
@@ -76,7 +93,9 @@ export default function ClientProfilePage() {
   };
 
   const fetchAllocatedCheckIns = async () => {
-    if (!clientId || hasLoadedCheckIns) return;
+    if (!clientId || hasLoadedCheckIns) {
+      return;
+    }
     
     setLoadingCheckIns(true);
     try {
@@ -85,15 +104,6 @@ export default function ClientProfilePage() {
         const data = await response.json();
         setAllocatedCheckIns(data.checkIns || []);
         setHasLoadedCheckIns(true);
-        
-        // Update client with calculated metrics
-        if (data.metrics && client) {
-          setClient({
-            ...client,
-            progressScore: data.metrics.averageScore,
-            lastCheckIn: data.metrics.lastActivity
-          });
-        }
       } else {
         console.error('Failed to fetch check-ins');
         setAllocatedCheckIns([]);
@@ -183,15 +193,29 @@ export default function ClientProfilePage() {
 
   const fetchForms = async () => {
     try {
-      const formsQuery = query(collection(db, 'forms'), orderBy('createdAt', 'desc'));
-      const formsSnapshot = await getDocs(formsQuery);
-      const formsData: any[] = [];
-      formsSnapshot.forEach((doc) => {
-        formsData.push({ id: doc.id, ...doc.data() });
-      });
-      setForms(formsData);
+      const coachId = userProfile?.uid;
+      if (!coachId) {
+        console.error('No coach ID available');
+        return;
+      }
+
+      const response = await fetch(`/api/forms?coachId=${coachId}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setForms(data.forms || []);
+          console.log('Fetched forms:', data.forms?.length || 0);
+        } else {
+          console.error('Failed to fetch forms:', data.message);
+          setForms([]);
+        }
+      } else {
+        console.error('Failed to fetch forms:', response.status);
+        setForms([]);
+      }
     } catch (error) {
       console.error('Error fetching forms:', error);
+      setForms([]);
     }
   };
 
@@ -328,7 +352,172 @@ export default function ClientProfilePage() {
 
   const openStatusModal = (currentStatus: string) => {
     setNewStatus(currentStatus);
+    setStatusReason('');
     setShowStatusModal(true);
+  };
+
+  const openAllocateModal = () => {
+    setSelectedAllocateForm('');
+    setAllocateStartDate('');
+    setAllocateDuration(4);
+    setAllocateFrequency('weekly');
+    setAllocateDueTime('09:00');
+    setShowAllocateModal(true);
+    fetchForms(); // Fetch forms when modal opens
+  };
+
+  const handleAllocateCheckIn = async () => {
+    if (!selectedAllocateForm || !client) return;
+    
+    setAllocatingCheckIn(true);
+    try {
+      const selectedFormData = forms.find(f => f.id === selectedAllocateForm);
+      
+      const response = await fetch('/api/check-in-assignments', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          formId: selectedAllocateForm,
+          clientId: client.id,
+          coachId: userProfile?.uid,
+          frequency: allocateFrequency,
+          duration: allocateDuration,
+          startDate: allocateStartDate,
+          dueTime: allocateDueTime,
+          status: 'pending'
+        }),
+      });
+
+      if (response.ok) {
+        alert('Check-in allocated successfully!');
+        setShowAllocateModal(false);
+        setSelectedAllocateForm('');
+        setAllocateStartDate('');
+        setAllocateDuration(4);
+        setAllocateFrequency('weekly');
+        setAllocateDueTime('09:00');
+        
+        // Refresh check-ins
+        setHasLoadedCheckIns(false);
+        fetchAllocatedCheckIns();
+      } else {
+        const errorData = await response.json();
+        alert(`Failed to allocate check-in: ${errorData.message}`);
+      }
+    } catch (error) {
+      console.error('Error allocating check-in:', error);
+      alert('Error allocating check-in. Please try again.');
+    } finally {
+      setAllocatingCheckIn(false);
+    }
+  };
+
+  // Check-in management functions
+  const handleDeleteCheckIn = async (checkInId: string) => {
+    if (!confirm('Are you sure you want to delete this check-in? This action cannot be undone.')) {
+      return;
+    }
+
+    setDeletingCheckIn(true);
+    try {
+      const response = await fetch(`/api/check-in-assignments/${checkInId}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        alert('Check-in deleted successfully!');
+        // Refresh check-ins
+        setHasLoadedCheckIns(false);
+        fetchAllocatedCheckIns();
+      } else {
+        const errorData = await response.json();
+        alert(`Failed to delete check-in: ${errorData.message}`);
+      }
+    } catch (error) {
+      console.error('Error deleting check-in:', error);
+      alert('Error deleting check-in. Please try again.');
+    } finally {
+      setDeletingCheckIn(false);
+    }
+  };
+
+  const handleUpdateCheckIn = async (checkInId: string, updateData: any) => {
+    setUpdatingCheckIn(true);
+    try {
+      const response = await fetch(`/api/check-in-assignments/${checkInId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updateData),
+      });
+
+      if (response.ok) {
+        alert('Check-in updated successfully!');
+        setShowCheckInManagementModal(false);
+        setSelectedCheckIn(null);
+        // Refresh check-ins
+        setHasLoadedCheckIns(false);
+        fetchAllocatedCheckIns();
+      } else {
+        const errorData = await response.json();
+        alert(`Failed to update check-in: ${errorData.message}`);
+      }
+    } catch (error) {
+      console.error('Error updating check-in:', error);
+      alert('Error updating check-in. Please try again.');
+    } finally {
+      setUpdatingCheckIn(false);
+    }
+  };
+
+  const openCheckInManagementModal = (checkIn: any) => {
+    setSelectedCheckIn(checkIn);
+    setShowCheckInManagementModal(true);
+  };
+
+  const handleDeleteSeries = async (formId: string, formTitle: string, preserveHistory: boolean = true) => {
+    const action = preserveHistory ? 'pending' : 'entire';
+    const warning = preserveHistory 
+      ? `Are you sure you want to delete the pending "${formTitle}" check-ins for ${client?.firstName} ${client?.lastName}? This will only remove pending check-ins and preserve all completed history.`
+      : `⚠️ DANGER: Are you absolutely sure you want to delete the ENTIRE series of "${formTitle}" check-ins for ${client?.firstName} ${client?.lastName}? This will delete ALL check-ins (pending, completed, etc.) AND ALL RESPONSE HISTORY. This action cannot be undone and will permanently erase the client's progress data.`;
+
+    if (!confirm(warning)) {
+      return;
+    }
+
+    setDeletingSeries(true);
+    try {
+      const response = await fetch('/api/check-in-assignments/series', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          clientId: clientId,
+          formId: formId,
+          preserveHistory: preserveHistory
+        }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        alert(`Series ${action} deleted successfully! ${result.message}`);
+        // Refresh check-ins
+        setHasLoadedCheckIns(false);
+        fetchAllocatedCheckIns();
+      } else {
+        const errorData = await response.json();
+        alert(`Failed to delete ${action} series: ${errorData.message}`);
+      }
+    } catch (error) {
+      console.error(`Error deleting ${action} series:`, error);
+      alert(`Error deleting ${action} series. Please try again.`);
+    } finally {
+      setDeletingSeries(false);
+    }
   };
 
   // Quick Send Modal Component
@@ -527,6 +716,161 @@ export default function ClientProfilePage() {
                 className="flex-1 px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-md font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {updatingStatus ? 'Updating...' : 'Update Status'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Allocate Check-in Modal Component
+  const AllocateModal = () => {
+    if (!showAllocateModal) return null;
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-medium text-gray-900">
+                Allocate Check-in to {client?.firstName} {client?.lastName}
+              </h3>
+              <button
+                onClick={() => setShowAllocateModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          
+          <div className="px-6 py-4 space-y-4">
+            {/* Form Selection */}
+            <div>
+              <label className="block text-sm font-medium text-gray-900 mb-2">
+                Select Form *
+              </label>
+              <select
+                value={selectedAllocateForm}
+                onChange={(e) => setSelectedAllocateForm(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Choose a form...</option>
+                {forms.map((form) => (
+                  <option key={form.id} value={form.id}>
+                    {form.title} ({form.category})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Recurring Toggle */}
+            <div className="flex items-center">
+              <input
+                type="checkbox"
+                id="recurring"
+                checked={isRecurring}
+                onChange={(e) => setIsRecurring(e.target.checked)}
+                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              <label htmlFor="recurring" className="ml-2 text-sm font-medium text-gray-900">
+                Schedule recurring check-ins
+              </label>
+            </div>
+
+            {/* Recurring Options */}
+            {isRecurring && (
+              <div className="space-y-4 border-t border-gray-200 pt-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-900 mb-2">
+                    Start Date *
+                  </label>
+                  <input
+                    type="date"
+                    value={allocateStartDate}
+                    onChange={(e) => setAllocateStartDate(e.target.value)}
+                    min={new Date().toISOString().split('T')[0]}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-900 mb-2">
+                    Duration (Weeks) *
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="52"
+                    value={allocateDuration}
+                    onChange={(e) => setAllocateDuration(Number(e.target.value))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Enter number of weeks"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">Enter 1-52 weeks</p>
+                </div>
+
+                {/* Frequency */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-900 mb-2">
+                    Frequency *
+                  </label>
+                  <select
+                    value={allocateFrequency}
+                    onChange={(e) => setAllocateFrequency(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="weekly">Weekly</option>
+                    <option value="bi-weekly">Bi-weekly</option>
+                    <option value="monthly">Monthly</option>
+                  </select>
+                </div>
+
+                {/* Due Time */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-900 mb-2">
+                    Due Time *
+                  </label>
+                  <input
+                    type="time"
+                    value={allocateDueTime}
+                    onChange={(e) => setAllocateDueTime(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                {/* Preview */}
+                {allocateStartDate && allocateDuration > 0 && (
+                  <div className="bg-blue-50 p-3 rounded-md">
+                    <p className="text-sm text-blue-800">
+                      <strong>Schedule Preview:</strong><br />
+                      {isRecurring ? 'Recurring check-in' : 'Single check-in'} scheduled for {new Date(allocateStartDate).toLocaleDateString()} at {allocateDueTime}
+                      {isRecurring && (
+                        <span>, ending {new Date(new Date(allocateStartDate).getTime() + (allocateDuration - 1) * 7 * 24 * 60 * 60 * 1000).toLocaleDateString()}</span>
+                      )}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {/* Action Buttons */}
+            <div className="flex space-x-3 pt-4">
+              <button
+                onClick={() => setShowAllocateModal(false)}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAllocateCheckIn}
+                disabled={!selectedAllocateForm || !allocateStartDate || allocatingCheckIn}
+                className="flex-1 px-4 py-2 bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-700 hover:to-cyan-700 text-white rounded-lg font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {allocatingCheckIn ? 'Allocating...' : 'Allocate Check-in'}
               </button>
             </div>
           </div>
@@ -762,7 +1106,7 @@ export default function ClientProfilePage() {
                             </div>
                             <span className="text-gray-700 font-medium">Total Check-ins</span>
                           </div>
-                          <span className="text-2xl font-bold text-gray-900">{allocatedCheckIns.length}</span>
+                          <span className="text-2xl font-bold text-gray-900">{client.totalCheckIns || 0}</span>
                         </div>
                         
                         <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
@@ -775,9 +1119,7 @@ export default function ClientProfilePage() {
                             <span className="text-gray-700 font-medium">Average Score</span>
                           </div>
                           <span className="text-2xl font-bold text-gray-900">
-                            {allocatedCheckIns.length > 0 
-                              ? Math.round(allocatedCheckIns.reduce((sum, c) => sum + c.score, 0) / allocatedCheckIns.length)
-                              : 0}%
+                            {client.progressScore || 0}%
                           </span>
                         </div>
                         
@@ -850,14 +1192,22 @@ export default function ClientProfilePage() {
                 </div>
               )}
 
-              {/* Modern Completed Check-ins */}
+              {/* Modern Check-ins Overview */}
               <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
                 <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-8 py-6 border-b border-gray-100">
                   <div className="flex items-center justify-between">
-                    <h2 className="text-2xl font-bold text-gray-900">Completed Check-ins</h2>
-                    <span className="text-sm text-gray-600 bg-white px-4 py-2 rounded-full shadow-sm border border-gray-200">
-                      {allocatedCheckIns.length} completed
-                    </span>
+                    <h2 className="text-2xl font-bold text-gray-900">Check-ins Overview</h2>
+                    <div className="flex space-x-4">
+                      <span className="text-sm text-gray-600 bg-white px-4 py-2 rounded-full shadow-sm border border-gray-200">
+                        {client.totalCheckIns || 0} total allocated
+                      </span>
+                      <span className="text-sm text-green-600 bg-green-50 px-4 py-2 rounded-full shadow-sm border border-green-200">
+                        {allocatedCheckIns.filter(c => c.status === 'completed').length} completed
+                      </span>
+                      <span className="text-sm text-yellow-600 bg-yellow-50 px-4 py-2 rounded-full shadow-sm border border-yellow-200">
+                        {allocatedCheckIns.filter(c => c.status === 'pending').length} pending
+                      </span>
+                    </div>
                   </div>
                 </div>
                 <div className="p-8">
@@ -873,7 +1223,7 @@ export default function ClientProfilePage() {
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
                       </div>
-                      <p className="text-gray-500 text-lg mb-4">No completed check-ins yet</p>
+                      <p className="text-gray-500 text-lg mb-4">No check-ins allocated yet</p>
                       <button
                         onClick={openQuickSendModal}
                         className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white px-6 py-3 rounded-xl font-medium transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
@@ -882,56 +1232,238 @@ export default function ClientProfilePage() {
                       </button>
                     </div>
                   ) : (
-                    <div className="space-y-4">
-                      {allocatedCheckIns.map((checkIn) => (
-                        <div key={checkIn.id} className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl p-6 border border-gray-200 hover:shadow-lg transition-all duration-200 hover:border-gray-300">
-                          <div className="flex items-center justify-between mb-4">
-                            <div className="flex items-center space-x-4">
-                              <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
-                                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                </svg>
-                              </div>
-                              <div>
-                                <h3 className="text-lg font-bold text-gray-900">{checkIn.formTitle}</h3>
-                                <p className="text-gray-600">{checkIn.responseCount} questions</p>
-                              </div>
+                    <div id="check-ins-section" className="space-y-8">
+                      {/* Series Management Section */}
+                      {(() => {
+                        // Group check-ins by form to identify series
+                        const seriesMap = new Map();
+                        allocatedCheckIns.forEach(checkIn => {
+                          if (!seriesMap.has(checkIn.formId)) {
+                            seriesMap.set(checkIn.formId, {
+                              formId: checkIn.formId,
+                              formTitle: checkIn.formTitle,
+                              totalCheckIns: 0,
+                              completedCheckIns: 0,
+                              pendingCheckIns: 0,
+                              isRecurring: checkIn.isRecurring,
+                              totalWeeks: checkIn.totalWeeks
+                            });
+                          }
+                          const series = seriesMap.get(checkIn.formId);
+                          series.totalCheckIns++;
+                          if (checkIn.status === 'completed') {
+                            series.completedCheckIns++;
+                          } else if (checkIn.status === 'pending') {
+                            series.pendingCheckIns++;
+                          }
+                        });
+
+                        const series = Array.from(seriesMap.values());
+                        
+                        if (series.length === 0) return null;
+
+                        return (
+                          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-200">
+                            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                              <span className="w-2 h-2 bg-blue-500 rounded-full mr-3"></span>
+                              Check-in Series Management
+                            </h3>
+                            <div className="space-y-3">
+                              {series.map((s) => (
+                                <div key={s.formId} className="flex items-center justify-between p-4 bg-white rounded-lg border border-blue-100">
+                                  <div className="flex-1">
+                                    <h4 className="font-medium text-gray-900">{s.formTitle}</h4>
+                                    <div className="flex items-center space-x-4 text-sm text-gray-600 mt-1">
+                                      <span>Total: {s.totalCheckIns}</span>
+                                      <span>Completed: {s.completedCheckIns}</span>
+                                      <span>Pending: {s.pendingCheckIns}</span>
+                                      {s.isRecurring && (
+                                        <span className="px-2 py-1 text-xs font-medium rounded-full bg-purple-100 text-purple-800">
+                                          {s.totalWeeks} weeks
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div className="flex space-x-2">
+                                    <button
+                                      onClick={() => handleDeleteSeries(s.formId, s.formTitle, true)}
+                                      disabled={deletingSeries}
+                                      className="px-3 py-2 bg-orange-600 hover:bg-orange-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                      title="Delete only pending check-ins, preserve completed history"
+                                    >
+                                      {deletingSeries ? 'Deleting...' : 'Delete Pending'}
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteSeries(s.formId, s.formTitle, false)}
+                                      disabled={deletingSeries}
+                                      className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                      title="Delete entire series including all history (cannot be undone)"
+                                    >
+                                      {deletingSeries ? 'Deleting...' : 'Delete All'}
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
                             </div>
-                            <div className="text-right">
-                              <div className={`px-4 py-2 text-sm font-medium rounded-full ${getProgressColor(checkIn.score)}`}>
-                                {checkIn.score}%
-                              </div>
-                            </div>
+                            <p className="text-xs text-gray-600 mt-3">
+                              💡 <strong>Delete Pending:</strong> Remove only future check-ins, preserve completed history. <strong>Delete All:</strong> Remove entire series including all history (cannot be undone).
+                            </p>
                           </div>
-                          
-                          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                            <div className="flex items-center space-x-2">
-                              <span className={`px-3 py-1 text-xs font-medium rounded-full ${getCategoryColor(checkIn.category)}`}>
-                                {checkIn.category}
-                              </span>
-                              {checkIn.isRecurring && (
-                                <span className="px-2 py-1 text-xs font-medium rounded-full bg-purple-100 text-purple-800">
-                                  Week {checkIn.recurringWeek} of {checkIn.totalWeeks}
-                                </span>
-                              )}
-                            </div>
-                            <div className="text-sm text-gray-600">
-                              <span className="font-medium">Assigned:</span> {formatDate(checkIn.assignedAt)}
-                            </div>
-                            <div className="text-sm text-gray-600">
-                              <span className="font-medium">Completed:</span> {formatDate(checkIn.completedAt)}
-                            </div>
-                            <div className="flex space-x-2">
-                              <button className="text-indigo-600 hover:text-indigo-800 font-medium text-sm transition-colors">
-                                View
-                              </button>
-                              <button className="text-gray-600 hover:text-gray-800 font-medium text-sm transition-colors">
-                                Progress
-                              </button>
-                            </div>
+                        );
+                      })()}
+
+                      {/* Completed Check-ins Section */}
+                      {allocatedCheckIns.filter(c => c.status === 'completed').length > 0 && (
+                        <div>
+                          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                            <span className="w-2 h-2 bg-green-500 rounded-full mr-3"></span>
+                            Completed Check-ins ({allocatedCheckIns.filter(c => c.status === 'completed').length})
+                          </h3>
+                          <div className="space-y-4">
+                            {allocatedCheckIns.filter(c => c.status === 'completed').map((checkIn) => (
+                              <div key={checkIn.id} className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-6 border border-green-200 hover:shadow-lg transition-all duration-200">
+                                <div className="flex items-center justify-between mb-4">
+                                  <div className="flex items-center space-x-4">
+                                    <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center shadow-lg">
+                                      <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                      </svg>
+                                    </div>
+                                    <div>
+                                      <h4 className="text-lg font-bold text-gray-900">{checkIn.formTitle}</h4>
+                                      <p className="text-gray-600">{checkIn.responseCount} questions</p>
+                                    </div>
+                                  </div>
+                                  <div className="text-right">
+                                    <div className="px-4 py-2 text-sm font-medium rounded-full bg-green-100 text-green-800">
+                                      {checkIn.score}%
+                                    </div>
+                                  </div>
+                                </div>
+                                
+                                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                  <div className="flex items-center space-x-2">
+                                    <span className={`px-3 py-1 text-xs font-medium rounded-full ${getCategoryColor(checkIn.category)}`}>
+                                      {checkIn.category}
+                                    </span>
+                                    {checkIn.isRecurring && (
+                                      <span className="px-2 py-1 text-xs font-medium rounded-full bg-purple-100 text-purple-800">
+                                        Week {checkIn.recurringWeek} of {checkIn.totalWeeks}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="text-sm text-gray-600">
+                                    <span className="font-medium">Assigned:</span> {formatDate(checkIn.assignedAt)}
+                                  </div>
+                                  <div className="text-sm text-gray-600">
+                                    <span className="font-medium">Completed:</span> {formatDate(checkIn.completedAt)}
+                                  </div>
+                                  <div className="flex space-x-2">
+                                    <button className="text-indigo-600 hover:text-indigo-800 font-medium text-sm transition-colors">
+                                      View
+                                    </button>
+                                    <button className="text-gray-600 hover:text-gray-800 font-medium text-sm transition-colors">
+                                      Progress
+                                    </button>
+                                    <div className="flex space-x-1">
+                                      <button 
+                                        onClick={() => handleDeleteSeries(checkIn.formId, checkIn.formTitle, true)}
+                                        disabled={deletingSeries}
+                                        className="text-orange-600 hover:text-orange-800 font-medium text-xs transition-colors disabled:opacity-50"
+                                        title="Delete only pending check-ins, preserve completed history"
+                                      >
+                                        {deletingSeries ? 'Deleting...' : 'Delete Pending'}
+                                      </button>
+                                      <button 
+                                        onClick={() => handleDeleteSeries(checkIn.formId, checkIn.formTitle, false)}
+                                        disabled={deletingSeries}
+                                        className="text-red-600 hover:text-red-800 font-medium text-xs transition-colors disabled:opacity-50"
+                                        title="Delete entire series including all history (cannot be undone)"
+                                      >
+                                        {deletingSeries ? 'Deleting...' : 'Delete All'}
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
                           </div>
                         </div>
-                      ))}
+                      )}
+
+                      {/* Pending Check-ins Section */}
+                      {allocatedCheckIns.filter(c => c.status === 'pending').length > 0 && (
+                        <div>
+                          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                            <span className="w-2 h-2 bg-yellow-500 rounded-full mr-3"></span>
+                            Pending Check-ins ({allocatedCheckIns.filter(c => c.status === 'pending').length})
+                          </h3>
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {allocatedCheckIns.filter(c => c.status === 'pending').slice(0, 6).map((checkIn) => (
+                              <div key={checkIn.id} className="bg-gradient-to-r from-yellow-50 to-orange-50 rounded-xl p-4 border border-yellow-200 hover:shadow-lg transition-all duration-200">
+                                <div className="flex items-center justify-between mb-3">
+                                  <div className="w-10 h-10 bg-gradient-to-br from-yellow-500 to-orange-600 rounded-lg flex items-center justify-center shadow-md">
+                                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                  </div>
+                                  <div className="flex items-center space-x-2">
+                                    <span className="text-xs text-yellow-600 bg-yellow-100 px-2 py-1 rounded-full">
+                                      Pending
+                                    </span>
+                                    <div className="relative">
+                                      <button
+                                        onClick={() => openCheckInManagementModal(checkIn)}
+                                        className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100 transition-colors"
+                                      >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                                        </svg>
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                                <h4 className="text-sm font-bold text-gray-900 mb-2">{checkIn.formTitle}</h4>
+                                <div className="space-y-2 text-xs text-gray-600">
+                                  <div>Assigned: {formatDate(checkIn.assignedAt)}</div>
+                                  {checkIn.isRecurring && (
+                                    <div>Week {checkIn.recurringWeek} of {checkIn.totalWeeks}</div>
+                                  )}
+                                </div>
+                                <div className="mt-3 pt-3 border-t border-yellow-200 flex justify-between items-center">
+                                  <button
+                                    onClick={() => openCheckInManagementModal(checkIn)}
+                                    className="text-xs text-blue-600 hover:text-blue-800 font-medium transition-colors"
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteCheckIn(checkIn.id)}
+                                    disabled={deletingCheckIn}
+                                    className="text-xs text-red-600 hover:text-red-800 font-medium transition-colors disabled:opacity-50"
+                                  >
+                                    {deletingCheckIn ? 'Deleting...' : 'Delete'}
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                            {allocatedCheckIns.filter(c => c.status === 'pending').length > 6 && (
+                              <div className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl p-4 border border-gray-200 flex items-center justify-center">
+                                <div className="text-center">
+                                  <div className="w-10 h-10 bg-gray-300 rounded-lg flex items-center justify-center mx-auto mb-2">
+                                    <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                  </div>
+                                  <p className="text-sm text-gray-600">
+                                    +{allocatedCheckIns.filter(c => c.status === 'pending').length - 6} more pending
+                                  </p>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -948,7 +1480,7 @@ export default function ClientProfilePage() {
                 <div className="p-6 space-y-4">
                   <div className="flex items-center justify-between">
                     <span className="text-gray-600">Total Check-ins</span>
-                    <span className="font-bold text-gray-900">{allocatedCheckIns.length}</span>
+                    <span className="font-bold text-gray-900">{client.totalCheckIns || 0}</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-gray-600">Average Score</span>
@@ -977,6 +1509,12 @@ export default function ClientProfilePage() {
                   >
                     Send Check-in
                   </button>
+                  <button
+                    onClick={openAllocateModal}
+                    className="w-full bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-700 hover:to-cyan-700 text-white px-4 py-3 rounded-xl text-sm font-medium text-center transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                  >
+                    Allocate Check-in
+                  </button>
                   <Link
                     href={`/clients/${clientId}/progress`}
                     className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white px-4 py-3 rounded-xl text-sm font-medium text-center transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 block"
@@ -989,6 +1527,18 @@ export default function ClientProfilePage() {
                   >
                     Form Responses
                   </Link>
+                  <button
+                    onClick={() => {
+                      // Scroll to check-ins section
+                      const checkInsSection = document.getElementById('check-ins-section');
+                      if (checkInsSection) {
+                        checkInsSection.scrollIntoView({ behavior: 'smooth' });
+                      }
+                    }}
+                    className="w-full bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 text-white px-4 py-3 rounded-xl text-sm font-medium text-center transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                  >
+                    Manage Check-ins
+                  </button>
                 </div>
               </div>
 
@@ -1027,6 +1577,207 @@ export default function ClientProfilePage() {
       </div>
       <QuickSendModal />
       <StatusUpdateModal />
+      
+      {/* Allocate Check-in Modal */}
+      {showAllocateModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <div className="bg-gradient-to-r from-teal-50 to-cyan-50 px-6 py-4 border-b border-gray-100 rounded-t-2xl">
+              <h3 className="text-xl font-bold text-gray-900">Allocate Check-in</h3>
+              <p className="text-gray-600 mt-1">Assign a check-in form to {client?.firstName}</p>
+            </div>
+            
+            <div className="p-6 space-y-6">
+              {/* Form Selection */}
+              <div>
+                <label className="block text-sm font-medium text-gray-900 mb-2">
+                  Select Form *
+                </label>
+                <select
+                  value={selectedAllocateForm}
+                  onChange={(e) => setSelectedAllocateForm(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                >
+                  <option value="">Choose a form...</option>
+                  {forms.map((form) => (
+                    <option key={form.id} value={form.id}>
+                      {form.title}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Start Date */}
+              <div>
+                <label className="block text-sm font-medium text-gray-900 mb-2">
+                  Start Date *
+                </label>
+                <input
+                  type="date"
+                  value={allocateStartDate}
+                  onChange={(e) => setAllocateStartDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                />
+              </div>
+
+              {/* Frequency */}
+              <div>
+                <label className="block text-sm font-medium text-gray-900 mb-2">
+                  Frequency
+                </label>
+                <select
+                  value={allocateFrequency}
+                  onChange={(e) => setAllocateFrequency(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                >
+                  <option value="daily">Daily</option>
+                  <option value="weekly">Weekly</option>
+                  <option value="biweekly">Bi-weekly</option>
+                  <option value="monthly">Monthly</option>
+                </select>
+              </div>
+
+              {/* Duration */}
+              <div>
+                <label className="block text-sm font-medium text-gray-900 mb-2">
+                  Duration (weeks)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="52"
+                  value={allocateDuration}
+                  onChange={(e) => setAllocateDuration(parseInt(e.target.value))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                />
+              </div>
+
+              {/* Due Time */}
+              <div>
+                <label className="block text-sm font-medium text-gray-900 mb-2">
+                  Due Time
+                </label>
+                <input
+                  type="time"
+                  value={allocateDueTime}
+                  onChange={(e) => setAllocateDueTime(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex space-x-3 pt-4">
+                <button
+                  onClick={() => setShowAllocateModal(false)}
+                  className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleAllocateCheckIn}
+                  disabled={!selectedAllocateForm || !allocateStartDate || allocatingCheckIn}
+                  className="flex-1 px-4 py-2 bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-700 hover:to-cyan-700 text-white rounded-lg font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {allocatingCheckIn ? 'Allocating...' : 'Allocate Check-in'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Check-in Management Modal */}
+      {showCheckInManagementModal && selectedCheckIn && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Manage Check-in
+                </h3>
+                <button
+                  onClick={() => setShowCheckInManagementModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            
+            <div className="px-6 py-4 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-900 mb-2">
+                  Form Title
+                </label>
+                <p className="text-gray-700 font-medium">{selectedCheckIn.formTitle}</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-900 mb-2">
+                  Status
+                </label>
+                <select
+                  value={selectedCheckIn.status}
+                  onChange={(e) => setSelectedCheckIn({...selectedCheckIn, status: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="pending">Pending</option>
+                  <option value="completed">Completed</option>
+                  <option value="overdue">Overdue</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-900 mb-2">
+                  Due Date
+                </label>
+                <input
+                  type="date"
+                  value={selectedCheckIn.dueDate ? new Date(selectedCheckIn.dueDate).toISOString().split('T')[0] : ''}
+                  onChange={(e) => setSelectedCheckIn({...selectedCheckIn, dueDate: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-900 mb-2">
+                  Notes
+                </label>
+                <textarea
+                  value={selectedCheckIn.notes || ''}
+                  onChange={(e) => setSelectedCheckIn({...selectedCheckIn, notes: e.target.value})}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Add notes about this check-in..."
+                />
+              </div>
+
+              <div className="flex space-x-3 pt-4">
+                <button
+                  onClick={() => handleDeleteCheckIn(selectedCheckIn.id)}
+                  disabled={deletingCheckIn}
+                  className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+                >
+                  {deletingCheckIn ? 'Deleting...' : 'Delete Check-in'}
+                </button>
+                <button
+                  onClick={() => handleUpdateCheckIn(selectedCheckIn.id, {
+                    status: selectedCheckIn.status,
+                    dueDate: selectedCheckIn.dueDate,
+                    notes: selectedCheckIn.notes
+                  })}
+                  disabled={updatingCheckIn}
+                  className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+                >
+                  {updatingCheckIn ? 'Updating...' : 'Update Check-in'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </AuthenticatedOnly>
   );
 } 

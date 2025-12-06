@@ -18,48 +18,103 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const clientId = searchParams.get('clientId');
+    const clientEmail = searchParams.get('clientEmail');
 
-    if (!clientId) {
+    if (!clientId && !clientEmail) {
       return NextResponse.json({
         success: false,
-        message: 'Client ID is required'
+        message: 'Client ID or email is required'
       }, { status: 400 });
     }
 
-    // Fetch client-specific data
-    const [checkInAssignments, formResponses, clientData] = await Promise.allSettled([
-      fetchClientCheckIns(clientId),
-      fetchClientResponses(clientId),
-      fetchClientData(clientId)
-    ]);
+    let clientData = null;
+    let clientIdToUse = clientId;
 
-    // Extract data with fallbacks
-    const assignments = checkInAssignments.status === 'fulfilled' ? checkInAssignments.value : [];
-    const responses = formResponses.status === 'fulfilled' ? formResponses.value : [];
-    const client = clientData.status === 'fulfilled' ? clientData.value : null;
+    // If we have email but no clientId, find the client by email
+    if (clientEmail && !clientId) {
+      const clientsSnapshot = await db.collection('clients')
+        .where('email', '==', clientEmail)
+        .limit(1)
+        .get();
 
-    // Calculate statistics
-    const pendingCount = assignments.filter((a: any) => a.status === 'pending').length;
-    const overdueCount = assignments.filter((a: any) => a.status === 'overdue').length;
-    const completedCount = responses.length;
-    const totalCount = assignments.length + completedCount;
+      if (!clientsSnapshot.empty) {
+        const clientDoc = clientsSnapshot.docs[0];
+        clientData = {
+          id: clientDoc.id,
+          ...clientDoc.data()
+        };
+        clientIdToUse = clientDoc.id;
+      } else {
+        return NextResponse.json({
+          success: false,
+          message: 'Client not found with this email'
+        }, { status: 404 });
+      }
+    } else if (clientId) {
+      // Fetch client data by ID
+      const clientDoc = await db.collection('clients').doc(clientId).get();
+      if (clientDoc.exists) {
+        clientData = {
+          id: clientDoc.id,
+          ...clientDoc.data()
+        };
+      } else {
+        return NextResponse.json({
+          success: false,
+          message: 'Client not found'
+        }, { status: 404 });
+      }
+    }
 
-    const stats = {
-      overallProgress: totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0,
-      completedCheckins: completedCount,
-      totalCheckins: totalCount,
-      averageScore: responses.length > 0 
-        ? Math.round(responses.reduce((sum: number, r: any) => sum + (r.percentageScore || 0), 0) / responses.length)
-        : 0
-    };
+    if (!clientIdToUse) {
+      return NextResponse.json({
+        success: false,
+        message: 'Unable to determine client ID'
+      }, { status: 400 });
+    }
+
+    // Fetch check-in assignments for this client
+    let checkInAssignments = [];
+    try {
+      const assignmentsSnapshot = await db.collection('check_in_assignments')
+        .where('clientId', '==', clientIdToUse)
+        .get();
+
+      checkInAssignments = assignmentsSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+    } catch (error) {
+      console.log('No check_in_assignments found for client, using empty array');
+    }
+
+    // Fetch coach data if client has a coachId
+    let coachData = null;
+    if (clientData?.coachId) {
+      try {
+        const coachDoc = await db.collection('coaches').doc(clientData.coachId).get();
+        if (coachDoc.exists) {
+          coachData = {
+            id: coachDoc.id,
+            ...coachDoc.data()
+          };
+        }
+      } catch (error) {
+        console.log('Error fetching coach data:', error);
+      }
+    }
 
     return NextResponse.json({
       success: true,
       data: {
-        stats,
-        assignedCheckins: assignments,
-        recentResponses: responses.slice(0, 5), // Only return last 5 responses
-        client
+        client: clientData,
+        coach: coachData,
+        checkInAssignments: checkInAssignments,
+        summary: {
+          totalAssignments: checkInAssignments.length,
+          pendingAssignments: checkInAssignments.filter(a => a.status === 'pending').length,
+          completedAssignments: checkInAssignments.filter(a => a.status === 'completed').length
+        }
       }
     });
 
@@ -70,57 +125,5 @@ export async function GET(request: NextRequest) {
       message: 'Failed to fetch client portal data',
       error: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
-  }
-}
-
-async function fetchClientCheckIns(clientId: string): Promise<any[]> {
-  try {
-    const snapshot = await db.collection('check_in_assignments')
-      .where('clientId', '==', clientId)
-      .orderBy('assignedAt', 'desc')
-      .get();
-    
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
-  } catch (error) {
-    console.log('No check_in_assignments found for client, using empty array');
-    return [];
-  }
-}
-
-async function fetchClientResponses(clientId: string): Promise<any[]> {
-  try {
-    const snapshot = await db.collection('formResponses')
-      .where('clientId', '==', clientId)
-      .orderBy('submittedAt', 'desc')
-      .get();
-    
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
-  } catch (error) {
-    console.log('No formResponses found for client, using empty array');
-    return [];
-  }
-}
-
-async function fetchClientData(clientId: string): Promise<any> {
-  try {
-    const docRef = await db.collection('clients').doc(clientId).get();
-    
-    if (!docRef.exists) {
-      return null;
-    }
-
-    return {
-      id: docRef.id,
-      ...docRef.data()
-    };
-  } catch (error) {
-    console.log('Client not found, returning null');
-    return null;
   }
 } 

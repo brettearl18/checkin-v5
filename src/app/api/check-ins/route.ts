@@ -20,13 +20,15 @@ interface CheckIn {
   clientName: string;
   formId: string;
   formTitle: string;
-  responses: { [key: string]: any };
+  responses: number; // Changed from { [key: string]: any } to number
   score: number;
   totalQuestions: number;
   answeredQuestions: number;
   submittedAt: any;
   mood?: number;
   energy?: number;
+  status: 'pending' | 'completed';
+  isAssignment?: boolean;
 }
 
 interface CheckInMetrics {
@@ -40,6 +42,9 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const coachId = searchParams.get('coachId');
+    const status = searchParams.get('status') || undefined; // Convert null to undefined
+    const sortBy = searchParams.get('sortBy') || 'submittedAt';
+    const sortOrder = searchParams.get('sortOrder') || 'desc';
 
     if (!coachId) {
       return NextResponse.json({
@@ -49,7 +54,7 @@ export async function GET(request: NextRequest) {
     }
 
     const [checkIns, metrics] = await Promise.all([
-      fetchCheckIns(coachId),
+      fetchCheckIns(coachId, status, sortBy, sortOrder),
       calculateMetrics(coachId)
     ]);
 
@@ -69,68 +74,112 @@ export async function GET(request: NextRequest) {
   }
 }
 
-async function fetchCheckIns(coachId: string): Promise<CheckIn[]> {
+async function fetchCheckIns(coachId: string, status?: string, sortBy: string = 'submittedAt', sortOrder: string = 'desc'): Promise<CheckIn[]> {
   try {
-    // Fetch form responses for this coach (without orderBy to avoid index requirement)
-    const responsesSnapshot = await db.collection('formResponses')
+    const checkIns: CheckIn[] = [];
+    const clientIds = new Set<string>();
+    const formIds = new Set<string>();
+
+    // First, fetch all clients for this coach
+    const clientsSnapshot = await db.collection('clients')
       .where('coachId', '==', coachId)
       .get();
 
-    const checkIns: CheckIn[] = [];
-    const clientIds = new Set<string>();
-
-    // Collect all client IDs
-    responsesSnapshot.docs.forEach(doc => {
-      const data = doc.data();
-      if (data.clientId) {
-        clientIds.add(data.clientId);
-      }
+    const clientsData: { [key: string]: any } = {};
+    clientsSnapshot.docs.forEach(doc => {
+      const clientData = doc.data();
+      clientsData[doc.id] = {
+        id: doc.id,
+        name: `${clientData.firstName} ${clientData.lastName}`,
+        email: clientData.email,
+        status: clientData.status || 'active'
+      };
+      clientIds.add(doc.id);
     });
 
-    // Fetch client details
-    const clientsData: { [key: string]: any } = {};
-    if (clientIds.size > 0) {
-      const clientsSnapshot = await db.collection('clients')
-        .where('coachId', '==', coachId)
+    // Fetch check-ins based on status filter
+    if (!status || status === 'pending') {
+      // Fetch check-in assignments for these clients (pending check-ins)
+      const assignmentsSnapshot = await db.collection('check_in_assignments')
+        .where('clientId', 'in', Array.from(clientIds))
+        .where('status', '==', 'pending')
         .get();
 
-      clientsSnapshot.docs.forEach(doc => {
-        const clientData = doc.data();
-        clientsData[doc.id] = {
+      assignmentsSnapshot.docs.forEach(doc => {
+        const assignmentData = doc.data();
+        checkIns.push({
           id: doc.id,
-          name: `${clientData.firstName} ${clientData.lastName}`,
-          email: clientData.email,
-          status: clientData.status || 'active'
-        };
+          clientId: assignmentData.clientId,
+          clientName: clientsData[assignmentData.clientId]?.name || 'Unknown Client',
+          formId: assignmentData.formId,
+          formTitle: assignmentData.formTitle || 'Unknown Form',
+          responses: 0, // Pending check-ins have no responses yet
+          score: 0,
+          totalQuestions: assignmentData.totalQuestions || 0,
+          answeredQuestions: 0,
+          submittedAt: assignmentData.assignedAt || assignmentData.createdAt,
+          status: 'pending',
+          isAssignment: true
+        });
+        formIds.add(assignmentData.formId);
       });
     }
 
-    // Build check-ins with client names
-    responsesSnapshot.docs.forEach(doc => {
-      const data = doc.data();
-      const client = clientsData[data.clientId];
-      
-      checkIns.push({
-        id: doc.id,
-        clientId: data.clientId || 'unknown',
-        clientName: client ? client.name : 'Unknown Client',
-        formId: data.formId || 'unknown',
-        formTitle: data.formTitle || 'Unknown Form',
-        responses: data.responses || {},
-        score: data.percentageScore || 0,
-        totalQuestions: data.totalQuestions || 0,
-        answeredQuestions: data.answeredQuestions || 0,
-        submittedAt: data.submittedAt,
-        mood: data.mood,
-        energy: data.energy
-      });
-    });
+    if (!status || status === 'completed') {
+      // Fetch completed form responses for these clients
+      const responsesSnapshot = await db.collection('formResponses')
+        .where('clientId', 'in', Array.from(clientIds))
+        .where('status', '==', 'completed')
+        .get();
 
-    // Sort by submittedAt in descending order (most recent first)
+      responsesSnapshot.docs.forEach(doc => {
+        const responseData = doc.data();
+        checkIns.push({
+          id: doc.id,
+          clientId: responseData.clientId,
+          clientName: clientsData[responseData.clientId]?.name || 'Unknown Client',
+          formId: responseData.formId,
+          formTitle: responseData.formTitle || 'Unknown Form',
+          responses: Array.isArray(responseData.responses) ? responseData.responses.length : 0, // Just store count, not the actual objects
+          score: responseData.score || 0,
+          totalQuestions: responseData.totalQuestions || 0,
+          answeredQuestions: responseData.answeredQuestions || 0,
+          submittedAt: responseData.submittedAt,
+          mood: responseData.mood,
+          energy: responseData.energy,
+          status: 'completed',
+          isAssignment: false
+        });
+        formIds.add(responseData.formId);
+      });
+    }
+
+    // Sort the check-ins based on the specified criteria
     checkIns.sort((a, b) => {
-      const dateA = a.submittedAt?.toDate ? a.submittedAt.toDate() : new Date(a.submittedAt);
-      const dateB = b.submittedAt?.toDate ? b.submittedAt.toDate() : new Date(b.submittedAt);
-      return dateB.getTime() - dateA.getTime();
+      let aValue: any;
+      let bValue: any;
+
+      switch (sortBy) {
+        case 'clientName':
+          aValue = a.clientName.toLowerCase();
+          bValue = b.clientName.toLowerCase();
+          break;
+        case 'score':
+          aValue = a.score;
+          bValue = b.score;
+          break;
+        case 'submittedAt':
+        default:
+          aValue = new Date(a.submittedAt).getTime();
+          bValue = new Date(b.submittedAt).getTime();
+          break;
+      }
+
+      if (sortOrder === 'asc') {
+        return aValue > bValue ? 1 : -1;
+      } else {
+        return aValue < bValue ? 1 : -1;
+      }
     });
 
     return checkIns;

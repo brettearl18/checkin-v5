@@ -6,7 +6,10 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "setup-indexes": "node scripts/deploy-indexes.js",
+    "test-indexes": "curl http://localhost:3000/api/setup-indexes",
+    "setup-data": "curl -X POST http://localhost:3000/api/setup-indexes -H 'Content-Type: application/json' -d '{\"action\":\"create-sample-data\"}'"
   },
   "dependencies": {
     "firebase": "^12.0.0",

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { RoleProtected } from '@/components/ProtectedRoute';
 import ClientNavigation from '@/components/ClientNavigation';
+import Link from 'next/link';
 
 interface ResponseHistory {
   id: string;
@@ -135,7 +136,7 @@ export default function ClientHistoryPage() {
                     : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
                 }`}
               >
-                Needs Attention (&lt;60%)
+                Needs Attention (under 60%)
               </button>
             </div>
           </div>
@@ -253,12 +254,12 @@ export default function ClientHistoryPage() {
                         <div className={`text-2xl font-bold ${getScoreColor(item.score)}`}>
                           {item.score}%
                         </div>
-                        <button
+                        <Link
+                          href={`/client-portal/history/${item.id}`}
                           className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
-                          onClick={() => {/* TODO: View detailed response */}}
                         >
                           View Details
-                        </button>
+                        </Link>
                       </div>
                     </div>
                   </div>

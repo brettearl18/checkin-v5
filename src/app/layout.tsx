@@ -1,29 +1,30 @@
-import type { Metadata } from "next";
-import { Inter } from "next/font/google";
-import "./globals.css";
-import { AuthProvider } from "@/contexts/AuthContext";
-import DevFooter from "@/components/DevFooter";
+import type { Metadata } from 'next'
+import { Inter } from 'next/font/google'
+import './globals.css'
+import { AuthProvider } from '@/contexts/AuthContext'
+import { NotificationProvider } from '@/contexts/NotificationContext'
 
-const inter = Inter({ subsets: ["latin"] });
+const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: "Client Insights Hub",
-  description: "Health and wellness coaching platform",
-};
+  title: 'CheckinV5 - Health & Wellness Coaching Platform',
+  description: 'A comprehensive platform for health and wellness coaching with check-ins, progress tracking, and client management.',
+}
 
 export default function RootLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+}: {
+  children: React.ReactNode
+}) {
   return (
     <html lang="en">
       <body className={inter.className}>
         <AuthProvider>
-          {children}
-          <DevFooter />
+          <NotificationProvider>
+            {children}
+          </NotificationProvider>
         </AuthProvider>
       </body>
     </html>
-  );
+  )
 }

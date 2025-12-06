@@ -14,15 +14,46 @@ export default function ClientProfilePage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [formData, setFormData] = useState({
-    firstName: userProfile?.profile?.firstName || '',
-    lastName: userProfile?.profile?.lastName || '',
+    firstName: userProfile?.firstName || '',
+    lastName: userProfile?.lastName || '',
     email: userProfile?.email || '',
-    phone: userProfile?.profile?.phone || '',
+    phone: userProfile?.phone || '',
     age: userProfile?.profile?.age || '',
     gender: userProfile?.profile?.gender || '',
     fitnessLevel: userProfile?.profile?.fitnessLevel || '',
     healthGoals: userProfile?.profile?.healthGoals || []
   });
+
+  // Load client data when component mounts or userProfile changes
+  useEffect(() => {
+    const loadClientData = async () => {
+      if (!user?.uid) return;
+      
+      try {
+        const response = await fetch(`/api/clients/${user.uid}`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.client) {
+            const client = data.client;
+            setFormData({
+              firstName: client.firstName || '',
+              lastName: client.lastName || '',
+              email: client.email || '',
+              phone: client.phone || '',
+              age: client.profile?.age || '',
+              gender: client.profile?.gender || '',
+              fitnessLevel: client.profile?.fitnessLevel || '',
+              healthGoals: client.profile?.healthGoals || []
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Error loading client data:', error);
+      }
+    };
+
+    loadClientData();
+  }, [user?.uid]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -50,10 +81,10 @@ export default function ClientProfilePage() {
 
     try {
       const updateData = {
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        phone: formData.phone,
         profile: {
-          firstName: formData.firstName,
-          lastName: formData.lastName,
-          phone: formData.phone,
           age: formData.age ? parseInt(formData.age) : null,
           gender: formData.gender,
           fitnessLevel: formData.fitnessLevel,
@@ -62,7 +93,7 @@ export default function ClientProfilePage() {
         updatedAt: new Date()
       };
 
-      await updateDoc(doc(db, 'users', user.uid), updateData);
+      await updateDoc(doc(db, 'clients', user.uid), updateData);
       setMessage('Profile updated successfully!');
       
       // Clear message after 3 seconds
@@ -125,7 +156,7 @@ export default function ClientProfilePage() {
                       name="firstName"
                       value={formData.firstName}
                       onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                       required
                     />
                   </div>
@@ -139,7 +170,7 @@ export default function ClientProfilePage() {
                       name="lastName"
                       value={formData.lastName}
                       onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                       required
                     />
                   </div>
@@ -153,7 +184,7 @@ export default function ClientProfilePage() {
                       name="email"
                       value={formData.email}
                       disabled
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-700"
                     />
                     <p className="text-xs text-gray-500 mt-1">Email cannot be changed</p>
                   </div>
@@ -167,7 +198,7 @@ export default function ClientProfilePage() {
                       name="phone"
                       value={formData.phone}
                       onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                       placeholder="+1 (555) 123-4567"
                     />
                   </div>
@@ -190,7 +221,7 @@ export default function ClientProfilePage() {
                       onChange={handleInputChange}
                       min="13"
                       max="120"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
                   <div>
@@ -202,7 +233,7 @@ export default function ClientProfilePage() {
                       name="gender"
                       value={formData.gender}
                       onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
                       <option value="">Select gender</option>
                       <option value="male">Male</option>
@@ -220,7 +251,7 @@ export default function ClientProfilePage() {
                       name="fitnessLevel"
                       value={formData.fitnessLevel}
                       onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
                       <option value="">Select level</option>
                       <option value="beginner">Beginner</option>

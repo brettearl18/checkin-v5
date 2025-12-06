@@ -23,10 +23,10 @@ function removeUndefined(obj: any): any {
 // GET - Fetch a specific question by ID
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const questionId = params.id;
+    const questionId = await params.id;
     const db = getDb();
     const questionRef = doc(db, 'questions', questionId);
     const questionDoc = await getDoc(questionRef);
@@ -60,10 +60,10 @@ export async function GET(
 // PUT - Update a specific question
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const questionId = params.id;
+    const questionId = await params.id;
     const formData = await request.json();
     
     // Clean the data
@@ -98,10 +98,10 @@ export async function PUT(
 // DELETE - Delete a specific question
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const questionId = params.id;
+    const questionId = await params.id;
     
     // Delete from Firestore
     const db = getDb();

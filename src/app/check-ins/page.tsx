@@ -18,6 +18,8 @@ interface CheckIn {
   submittedAt: any;
   mood?: number;
   energy?: number;
+  status: 'pending' | 'completed';
+  isAssignment?: boolean;
 }
 
 interface Client {
@@ -45,11 +47,19 @@ export default function CheckInsPage() {
   useEffect(() => {
     const fetchCheckIns = async () => {
       try {
-        const coachId = userProfile?.uid || 'demo-coach-id';
+        const coachId = userProfile?.uid;
+        if (!coachId) {
+          console.error('No coach ID available');
+          setIsLoading(false);
+          return;
+        }
+        console.log('🔍 Fetching check-ins for coachId:', coachId);
+        console.log('🔍 userProfile:', userProfile);
         
         const response = await fetch(`/api/check-ins?coachId=${coachId}`);
         if (response.ok) {
           const data = await response.json();
+          console.log('🔍 API Response:', data);
           if (data.success) {
             setCheckIns(data.checkIns || []);
             setMetrics(data.metrics || {
@@ -243,6 +253,19 @@ export default function CheckInsPage() {
                   </svg>
                 </div>
                 <span>Clients</span>
+              </Link>
+
+              {/* Messages */}
+              <Link
+                href="/messages"
+                className="flex items-center space-x-3 px-4 py-3 text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-blue-50 hover:text-blue-700 rounded-xl font-medium transition-all duration-200"
+              >
+                <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
+                  <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                  </svg>
+                </div>
+                <span>Messages</span>
               </Link>
 
               {/* Check-ins - HIGHLIGHTED */}
@@ -525,7 +548,9 @@ export default function CheckInsPage() {
                 </div>
               ) : (
                 filteredCheckIns.map((checkIn) => (
-                  <div key={checkIn.id} className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden hover:shadow-2xl transition-all duration-200">
+                  <div key={checkIn.id} className={`bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden hover:shadow-2xl transition-all duration-200 ${
+                    checkIn.status === 'pending' ? 'border-orange-200 bg-orange-50' : ''
+                  }`}>
                     <div className="p-8">
                       <div className="flex items-start justify-between mb-6">
                         <div className="flex-1">
@@ -533,59 +558,82 @@ export default function CheckInsPage() {
                             <h3 className="text-xl font-bold text-gray-900">
                               {getClientName(checkIn.clientId)}
                             </h3>
+                            <span className={`px-3 py-1 text-sm font-medium rounded-full ${
+                              checkIn.status === 'pending' 
+                                ? 'bg-orange-100 text-orange-800' 
+                                : 'bg-blue-100 text-blue-800'
+                            }`}>
+                              {checkIn.status === 'pending' ? 'Pending' : 'Completed'}
+                            </span>
                             <span className="px-3 py-1 bg-blue-100 text-blue-800 text-sm font-medium rounded-full">
                               {clients[checkIn.clientId]?.status || 'Active'}
                             </span>
                           </div>
                           <div className="space-y-2 text-sm text-gray-600">
                             <p><span className="font-medium">Form:</span> {checkIn.formTitle}</p>
-                            <p><span className="font-medium">Submitted:</span> {formatDate(checkIn.submittedAt)}</p>
-                            <p><span className="font-medium">Questions:</span> {checkIn.answeredQuestions}/{checkIn.totalQuestions}</p>
+                            {checkIn.status === 'pending' ? (
+                              <p><span className="font-medium">Assigned:</span> {formatDate(checkIn.submittedAt)}</p>
+                            ) : (
+                              <p><span className="font-medium">Submitted:</span> {formatDate(checkIn.submittedAt)}</p>
+                            )}
+                            {checkIn.status === 'completed' && (
+                              <p><span className="font-medium">Questions:</span> {checkIn.answeredQuestions}/{checkIn.totalQuestions}</p>
+                            )}
                           </div>
                         </div>
                         <div className="ml-6 text-right">
-                          <div className={`px-4 py-2 rounded-xl text-sm font-medium ${getScoreColor(checkIn.score)}`}>
-                            {checkIn.score}% - {getScoreLabel(checkIn.score)}
-                          </div>
-                          {checkIn.mood && (
-                            <div className="mt-3 text-sm text-gray-600">
-                              <span className="font-medium">Mood:</span> {checkIn.mood}/10
-                            </div>
-                          )}
-                          {checkIn.energy && (
-                            <div className="text-sm text-gray-600">
-                              <span className="font-medium">Energy:</span> {checkIn.energy}/10
+                          {checkIn.status === 'completed' ? (
+                            <>
+                              <div className={`px-4 py-2 rounded-xl text-sm font-medium ${getScoreColor(checkIn.score)}`}>
+                                {checkIn.score}% - {getScoreLabel(checkIn.score)}
+                              </div>
+                              {checkIn.mood && (
+                                <div className="mt-3 text-sm text-gray-600">
+                                  <span className="font-medium">Mood:</span> {checkIn.mood}/10
+                                </div>
+                              )}
+                              {checkIn.energy && (
+                                <div className="text-sm text-gray-600">
+                                  <span className="font-medium">Energy:</span> {checkIn.energy}/10
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                            <div className="px-4 py-2 rounded-xl text-sm font-medium bg-orange-100 text-orange-800">
+                              Pending Completion
                             </div>
                           )}
                         </div>
                       </div>
 
-                      {/* Response Summary */}
-                      <div className="border-t border-gray-200 pt-6">
-                        <h4 className="text-lg font-semibold text-gray-900 mb-4">Check-in Summary:</h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          <div className="space-y-3">
-                            {Object.entries(checkIn.responses).slice(0, Math.ceil(Object.keys(checkIn.responses).length / 2)).map(([questionId, answer]) => (
-                              <div key={questionId} className="text-sm">
-                                <span className="font-medium text-gray-800">Q{questionId}:</span>
-                                <span className="ml-2 text-gray-900">
-                                  {typeof answer === 'boolean' ? (answer ? 'Yes' : 'No') : answer}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                          <div className="space-y-3">
-                            {Object.entries(checkIn.responses).slice(Math.ceil(Object.keys(checkIn.responses).length / 2)).map(([questionId, answer]) => (
-                              <div key={questionId} className="text-sm">
-                                <span className="font-medium text-gray-800">Q{questionId}:</span>
-                                <span className="ml-2 text-gray-900">
-                                  {typeof answer === 'boolean' ? (answer ? 'Yes' : 'No') : answer}
-                                </span>
-                              </div>
-                            ))}
+                      {/* Response Summary - Only for completed check-ins */}
+                      {checkIn.status === 'completed' && Object.keys(checkIn.responses).length > 0 && (
+                        <div className="border-t border-gray-200 pt-6">
+                          <h4 className="text-lg font-semibold text-gray-900 mb-4">Check-in Summary:</h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="space-y-3">
+                              {Object.entries(checkIn.responses).slice(0, Math.ceil(Object.keys(checkIn.responses).length / 2)).map(([questionId, answer]) => (
+                                <div key={questionId} className="text-sm">
+                                  <span className="font-medium text-gray-800">Q{questionId}:</span>
+                                  <span className="ml-2 text-gray-900">
+                                    {typeof answer === 'boolean' ? (answer ? 'Yes' : 'No') : answer}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="space-y-3">
+                              {Object.entries(checkIn.responses).slice(Math.ceil(Object.keys(checkIn.responses).length / 2)).map(([questionId, answer]) => (
+                                <div key={questionId} className="text-sm">
+                                  <span className="font-medium text-gray-800">Q{questionId}:</span>
+                                  <span className="ml-2 text-gray-900">
+                                    {typeof answer === 'boolean' ? (answer ? 'Yes' : 'No') : answer}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         </div>
-                      </div>
+                      )}
 
                       {/* Actions */}
                       <div className="border-t border-gray-200 pt-6 mt-6">
@@ -602,12 +650,20 @@ export default function CheckInsPage() {
                           >
                             View Form
                           </Link>
-                          <button className="text-purple-600 hover:text-purple-800 text-sm font-medium transition-colors">
-                            Add Coach Notes
-                          </button>
-                          <button className="text-orange-600 hover:text-orange-800 text-sm font-medium transition-colors">
-                            Send Follow-up
-                          </button>
+                          {checkIn.status === 'pending' ? (
+                            <button className="text-orange-600 hover:text-orange-800 text-sm font-medium transition-colors">
+                              Send Reminder
+                            </button>
+                          ) : (
+                            <>
+                              <button className="text-purple-600 hover:text-purple-800 text-sm font-medium transition-colors">
+                                Add Coach Notes
+                              </button>
+                              <button className="text-orange-600 hover:text-orange-800 text-sm font-medium transition-colors">
+                                Send Follow-up
+                              </button>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import NotificationBadge from './NotificationBadge';
 
 interface NavItem {
   name: string;
@@ -23,6 +24,12 @@ const coachNavItems: NavItem[] = [
     href: '/clients',
     icon: '👥',
     description: 'Manage client profiles'
+  },
+  {
+    name: 'Messages',
+    href: '/messages',
+    icon: '💬',
+    description: 'Communicate with clients'
   },
   {
     name: 'Analytics',
@@ -59,6 +66,12 @@ const coachNavItems: NavItem[] = [
     href: '/audit',
     icon: '🔍',
     description: 'System audit logs'
+  },
+  {
+    name: 'Settings',
+    href: '/settings',
+    icon: '⚙️',
+    description: 'Account preferences and timezone'
   }
 ];
 
@@ -156,6 +169,21 @@ export default function CoachNavigation() {
                 )}
               </Link>
             ))}
+            <Link
+              href="/notifications"
+              className={`flex items-center px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                pathname === '/notifications'
+                  ? 'bg-blue-100 text-blue-700'
+                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+              }`}
+            >
+              <svg className="mr-3 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-5 5v-5z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+              </svg>
+              Notifications
+              <NotificationBadge className="ml-auto" />
+            </Link>
           </nav>
 
           {/* Quick Actions */}

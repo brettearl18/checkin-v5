@@ -23,79 +23,55 @@ export async function GET(request: NextRequest) {
         .orderBy('createdAt', 'desc')
         .get();
 
-      goals = goalsSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
+      goals = goalsSnapshot.docs.map(doc => {
+        const data = doc.data();
+        
+        // Helper function to convert date fields
+        const convertDate = (dateField: any) => {
+          if (!dateField) return new Date().toISOString();
+          
+          // Handle Firestore Timestamp
+          if (dateField.toDate && typeof dateField.toDate === 'function') {
+            return dateField.toDate().toISOString();
+          }
+          
+          // Handle Firebase Timestamp object with _seconds
+          if (dateField._seconds) {
+            return new Date(dateField._seconds * 1000).toISOString();
+          }
+          
+          // Handle Date object
+          if (dateField instanceof Date) {
+            return dateField.toISOString();
+          }
+          
+          // Handle ISO string
+          if (typeof dateField === 'string') {
+            return new Date(dateField).toISOString();
+          }
+          
+          // Fallback
+          return new Date().toISOString();
+        };
+
+        return {
+          id: doc.id,
+          title: data.title || '',
+          description: data.description || '',
+          category: data.category || 'general',
+          targetValue: data.targetValue || 0,
+          currentValue: data.currentValue || 0,
+          unit: data.unit || '',
+          deadline: convertDate(data.deadline),
+          status: data.status || 'active',
+          progress: data.progress || 0,
+          createdAt: convertDate(data.createdAt),
+          updatedAt: convertDate(data.updatedAt)
+        };
+      });
     } catch (error) {
       console.log('No clientGoals found for client, using empty array');
       goals = [];
-    }
-
-    // If no goals exist, provide sample data for demonstration
-    if (goals.length === 0) {
-      goals = [
-        {
-          id: 'goal-1',
-          clientId,
-          title: 'Improve Sleep Quality',
-          description: 'Get 7-8 hours of quality sleep each night',
-          category: 'sleep',
-          targetValue: 8,
-          currentValue: 6.5,
-          unit: 'hours',
-          deadline: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
-          status: 'active',
-          progress: 65,
-          createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // 7 days ago
-          updatedAt: new Date()
-        },
-        {
-          id: 'goal-2',
-          clientId,
-          title: 'Increase Daily Steps',
-          description: 'Walk 10,000 steps daily for better fitness',
-          category: 'fitness',
-          targetValue: 10000,
-          currentValue: 8500,
-          unit: 'steps',
-          deadline: new Date(Date.now() + 21 * 24 * 60 * 60 * 1000), // 21 days from now
-          status: 'active',
-          progress: 85,
-          createdAt: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000), // 14 days ago
-          updatedAt: new Date()
-        },
-        {
-          id: 'goal-3',
-          clientId,
-          title: 'Reduce Stress Levels',
-          description: 'Practice meditation for 15 minutes daily',
-          category: 'mental-health',
-          targetValue: 15,
-          currentValue: 10,
-          unit: 'minutes',
-          deadline: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), // 14 days from now
-          status: 'active',
-          progress: 67,
-          createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000), // 3 days ago
-          updatedAt: new Date()
-        },
-        {
-          id: 'goal-4',
-          clientId,
-          title: 'Eat More Vegetables',
-          description: 'Include 5 servings of vegetables in daily meals',
-          category: 'nutrition',
-          targetValue: 5,
-          currentValue: 3,
-          unit: 'servings',
-          deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days from now
-          status: 'active',
-          progress: 60,
-          createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000), // 5 days ago
-          updatedAt: new Date()
-        }
-      ];
     }
 
     return NextResponse.json({

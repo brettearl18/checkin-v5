@@ -7,14 +7,13 @@ import { db } from '@/lib/firebase-client';
 
 interface Question {
   id: string;
-  title: string;
-  description: string;
-  questionType: string;
-  options: string[];
-  weights: number[];
-  yesNoWeight?: number;
-  questionWeight: number;
-  isRequired: boolean;
+  text: string;
+  type: string;
+  options?: string[];
+  category: string;
+  coachId: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface Form {
@@ -24,8 +23,9 @@ interface Form {
   category: string;
   totalQuestions: number;
   estimatedTime: number;
-  isActive: boolean;
-  questionIds: string[];
+  isActive?: boolean;
+  isStandard?: boolean;
+  questions: string[];
 }
 
 export default function FormViewPage() {
@@ -55,7 +55,8 @@ export default function FormViewPage() {
         const formData = { id: formDoc.id, ...formDoc.data() } as Form;
         setForm(formData);
 
-        if (!formData.isActive) {
+        // Check if form is active or is a standard form
+        if (!formData.isActive && !formData.isStandard) {
           alert('This form is not active');
           router.push('/forms');
           return;
@@ -63,7 +64,7 @@ export default function FormViewPage() {
 
         // Fetch questions
         const questionsData: Question[] = [];
-        for (const questionId of formData.questionIds) {
+        for (const questionId of formData.questions) {
           const questionDoc = await getDoc(doc(db, 'questions', questionId));
           if (questionDoc.exists()) {
             questionsData.push({ id: questionDoc.id, ...questionDoc.data() } as Question);
@@ -93,8 +94,8 @@ export default function FormViewPage() {
 
   const validateResponses = () => {
     for (const question of questions) {
-      if (question.isRequired && !responses[question.id]) {
-        alert(`Please answer the required question: ${question.title}`);
+      if (!responses[question.id]) {
+        alert(`Please answer the question: ${question.text}`);
         return false;
       }
     }
@@ -103,46 +104,33 @@ export default function FormViewPage() {
 
   const calculateScore = () => {
     let totalScore = 0;
-    let totalWeight = 0;
+    let totalQuestions = 0;
 
     for (const question of questions) {
-      if (responses[question.id] !== undefined) {
+      if (responses[question.id] !== undefined && responses[question.id] !== '') {
         let questionScore = 0;
-        let questionMaxWeight = 0;
         
-        if (question.questionType === 'multiple_choice') {
-          const selectedIndex = question.options.indexOf(responses[question.id]);
-          if (selectedIndex >= 0) {
-            questionScore = question.weights[selectedIndex] || 1;
-            questionMaxWeight = Math.max(...question.weights) || 1;
-          }
-        } else if (question.questionType === 'scale' || question.questionType === 'rating') {
+        if (question.type === 'multiple_choice') {
+          // For multiple choice, give a score based on the option index
+          const selectedIndex = question.options?.indexOf(responses[question.id]) || 0;
+          questionScore = (selectedIndex + 1) * 2; // 2, 4, 6, 8, 10
+        } else if (question.type === 'scale') {
           questionScore = responses[question.id];
-          questionMaxWeight = 10; // Max scale/rating
-        } else if (question.questionType === 'boolean') {
-          const yesNoWeight = question.yesNoWeight || 5; // Default to neutral
-          if (responses[question.id]) {
-            // "Yes" was selected
-            questionScore = yesNoWeight >= 5 ? 10 : 1; // If weight favors Yes, give 10, else 1
-          } else {
-            // "No" was selected
-            questionScore = yesNoWeight < 5 ? 10 : 1; // If weight favors No, give 10, else 1
-          }
-          questionMaxWeight = 10;
-        } else if (question.questionType === 'text') {
-          // For text questions, give a neutral score based on question weight
-          questionScore = question.questionWeight;
-          questionMaxWeight = 10;
+        } else if (question.type === 'number') {
+          // For number questions, normalize to 1-10 scale
+          const value = responses[question.id];
+          questionScore = Math.min(10, Math.max(1, value / 10));
+        } else if (question.type === 'text') {
+          // For text questions, give a neutral score
+          questionScore = 5;
         }
         
-        // Apply question weight multiplier
-        const weightMultiplier = question.questionWeight / 5; // Normalize to 1.0 (5/5 = 1.0)
-        totalScore += questionScore * weightMultiplier;
-        totalWeight += questionMaxWeight * weightMultiplier;
+        totalScore += questionScore;
+        totalQuestions++;
       }
     }
 
-    return totalWeight > 0 ? Math.round((totalScore / totalWeight) * 100) : 0;
+    return totalQuestions > 0 ? Math.round((totalScore / (totalQuestions * 10)) * 100) : 0;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -181,11 +169,11 @@ export default function FormViewPage() {
   };
 
   const renderQuestion = (question: Question) => {
-    switch (question.questionType) {
+    switch (question.type) {
       case 'multiple_choice':
         return (
           <div className="space-y-2">
-            {question.options.map((option, index) => (
+            {question.options?.map((option, index) => (
               <label key={index} className="flex items-center">
                 <input
                   type="radio"
@@ -194,10 +182,9 @@ export default function FormViewPage() {
                   checked={responses[question.id] === option}
                   onChange={(e) => handleResponseChange(question.id, e.target.value)}
                   className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
-                  required={question.isRequired}
                 />
                 <span className="ml-3 text-sm text-gray-900">
-                  {option} {question.weights[index] && `(Weight: ${question.weights[index]})`}
+                  {option}
                 </span>
               </label>
             ))}
@@ -218,7 +205,6 @@ export default function FormViewPage() {
               value={responses[question.id] || 5}
               onChange={(e) => handleResponseChange(question.id, parseInt(e.target.value))}
               className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-              required={question.isRequired}
             />
             <div className="text-center text-sm font-medium text-gray-900">
               {responses[question.id] || 5}
@@ -226,72 +212,38 @@ export default function FormViewPage() {
           </div>
         );
 
-      case 'rating':
+      case 'number':
         return (
           <div className="space-y-2">
-            <div className="flex items-center space-x-2">
-              {[1, 2, 3, 4, 5].map((rating) => (
-                <label key={rating} className="flex items-center">
-                  <input
-                    type="radio"
-                    name={question.id}
-                    value={rating}
-                    checked={responses[question.id] === rating}
-                    onChange={(e) => handleResponseChange(question.id, parseInt(e.target.value))}
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
-                    required={question.isRequired}
-                  />
-                  <span className="ml-2 text-sm text-gray-900">{rating}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-        );
-
-      case 'boolean':
-        return (
-          <div className="space-y-2">
-            <label className="flex items-center">
-              <input
-                type="radio"
-                name={question.id}
-                value="true"
-                checked={responses[question.id] === true}
-                onChange={(e) => handleResponseChange(question.id, e.target.value === 'true')}
-                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
-                required={question.isRequired}
-              />
-              <span className="ml-3 text-sm text-gray-900">Yes</span>
-            </label>
-            <label className="flex items-center">
-              <input
-                type="radio"
-                name={question.id}
-                value="false"
-                checked={responses[question.id] === false}
-                onChange={(e) => handleResponseChange(question.id, e.target.value === 'true')}
-                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
-                required={question.isRequired}
-              />
-              <span className="ml-3 text-sm text-gray-900">No</span>
-            </label>
+            <input
+              type="number"
+              value={responses[question.id] || ''}
+              onChange={(e) => handleResponseChange(question.id, parseInt(e.target.value))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Enter your answer"
+            />
           </div>
         );
 
       case 'text':
         return (
-          <textarea
-            value={responses[question.id] || ''}
-            onChange={(e) => handleResponseChange(question.id, e.target.value)}
-            rows={3}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="Enter your answer..."
-            required={question.isRequired}
-          />
+          <div className="space-y-2">
+            <textarea
+              value={responses[question.id] || ''}
+              onChange={(e) => handleResponseChange(question.id, e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              rows={3}
+              placeholder="Enter your answer"
+            />
+          </div>
         );
 
       default:
-        return <p className="text-gray-500">Unsupported question type</p>;
+        return (
+          <div className="text-sm text-gray-500">
+            Question type "{question.type}" not supported
+          </div>
+        );
     }
   };
 
@@ -362,11 +314,10 @@ export default function FormViewPage() {
               <div className="mb-4">
                 <h3 className="text-lg font-medium text-gray-900">
                   Question {index + 1}
-                  {question.isRequired && <span className="text-red-500 ml-1">*</span>}
                 </h3>
-                <p className="text-gray-900 mt-1">{question.title}</p>
-                {question.description && (
-                  <p className="text-sm text-gray-500 mt-1">{question.description}</p>
+                <p className="text-gray-900 mt-1">{question.text}</p>
+                {question.category && (
+                  <p className="text-sm text-gray-500 mt-1">Category: {question.category}</p>
                 )}
               </div>
               

@@ -27,12 +27,34 @@ interface CheckInAssignment {
   totalWeeks?: number;
 }
 
+interface FormResponse {
+  id: string;
+  formId: string;
+  formTitle: string;
+  clientId: string;
+  clientName: string;
+  clientEmail: string;
+  submittedAt: any;
+  completedAt: any;
+  score: number;
+  totalQuestions: number;
+  answeredQuestions: number;
+  responses: Array<{
+    questionId: string;
+    question: string;
+    answer: string | number | boolean;
+    type: string;
+  }>;
+  status: string;
+}
+
 export default function CheckInSuccessPage() {
   const params = useParams();
   const searchParams = useSearchParams();
   const router = useRouter();
   const { userProfile } = useAuth();
   const [assignment, setAssignment] = useState<CheckInAssignment | null>(null);
+  const [formResponse, setFormResponse] = useState<FormResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [score, setScore] = useState(0);
 
@@ -43,17 +65,29 @@ export default function CheckInSuccessPage() {
     if (scoreParam) {
       setScore(parseInt(scoreParam));
     }
-    fetchAssignmentData();
+    fetchData();
   }, [assignmentId, scoreParam]);
 
-  const fetchAssignmentData = async () => {
+  const fetchData = async () => {
     try {
+      // Fetch assignment data
       const assignmentDoc = await getDoc(doc(db, 'check_in_assignments', assignmentId));
       if (assignmentDoc.exists()) {
-        setAssignment(assignmentDoc.data() as CheckInAssignment);
+        const assignmentData = assignmentDoc.data() as CheckInAssignment;
+        setAssignment(assignmentData);
+
+        // Fetch the form response using the responseId
+        if (assignmentData.responseId) {
+          const responseDoc = await getDoc(doc(db, 'formResponses', assignmentData.responseId));
+          if (responseDoc.exists()) {
+            const responseData = responseDoc.data() as FormResponse;
+            setFormResponse(responseData);
+            setScore(responseData.score || 0);
+          }
+        }
       }
     } catch (error) {
-      console.error('Error fetching assignment:', error);
+      console.error('Error fetching data:', error);
     } finally {
       setLoading(false);
     }
@@ -177,7 +211,13 @@ export default function CheckInSuccessPage() {
                 <div>
                   <p className="text-sm text-gray-500">Completed On</p>
                   <p className="font-medium text-gray-900">
-                    {assignment.completedAt?.toDate?.()?.toLocaleDateString() || new Date().toLocaleDateString()}
+                    {formResponse?.submittedAt ? 
+                      (formResponse.submittedAt._seconds ? 
+                        new Date(formResponse.submittedAt._seconds * 1000).toLocaleDateString() :
+                        new Date(formResponse.submittedAt).toLocaleDateString()
+                      ) : 
+                      new Date().toLocaleDateString()
+                    }
                   </p>
                 </div>
                 {assignment.isRecurring && (
@@ -199,64 +239,114 @@ export default function CheckInSuccessPage() {
               <div className="flex items-start">
                 <span className="text-blue-600 mr-3 mt-1">📊</span>
                 <div>
-                  <p className="font-medium text-blue-900">Your coach will review your responses</p>
-                  <p className="text-sm text-blue-700">They'll provide feedback and adjust your program if needed</p>
+                  <p className="text-blue-900 font-medium">Your coach will review your responses</p>
+                  <p className="text-blue-700 text-sm">They'll analyze your answers and provide personalized feedback</p>
                 </div>
               </div>
               <div className="flex items-start">
                 <span className="text-blue-600 mr-3 mt-1">📈</span>
                 <div>
-                  <p className="font-medium text-blue-900">Track your progress over time</p>
-                  <p className="text-sm text-blue-700">View your improvement trends in your dashboard</p>
+                  <p className="text-blue-900 font-medium">Track your progress over time</p>
+                  <p className="text-blue-700 text-sm">Monitor your improvements and trends in your wellness journey</p>
                 </div>
               </div>
               <div className="flex items-start">
                 <span className="text-blue-600 mr-3 mt-1">⏰</span>
                 <div>
-                  <p className="font-medium text-blue-900">Look out for your next check-in</p>
-                  <p className="text-sm text-blue-700">Your coach will assign new check-ins based on your progress</p>
+                  <p className="text-blue-900 font-medium">Look out for your next check-in</p>
+                  <p className="text-blue-700 text-sm">Complete regular check-ins to maintain momentum</p>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Action Buttons */}
-          <div className="flex flex-col sm:flex-row gap-4">
+          {/* Your Responses */}
+          {formResponse && formResponse.responses && formResponse.responses.length > 0 && (
+            <div className="bg-white rounded-lg shadow p-6 mb-8">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900">Your Responses</h3>
+                <div className="text-sm text-gray-500">
+                  Made a mistake? You can edit your responses below.
+                </div>
+              </div>
+              <div className="space-y-6">
+                {formResponse.responses.map((response, index) => (
+                  <div key={response.questionId} className="border-b border-gray-100 pb-4 last:border-b-0">
+                    <div className="mb-3">
+                      <h4 className="text-md font-medium text-gray-900 mb-1">
+                        Question {index + 1}
+                      </h4>
+                      <p className="text-gray-700">{response.question}</p>
+                    </div>
+                    
+                    <div className="bg-gray-50 rounded-lg p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-gray-500">Your Answer</p>
+                          <p className="text-lg text-gray-900">
+                            {typeof response.answer === 'boolean' 
+                              ? (response.answer ? 'Yes' : 'No')
+                              : response.answer.toString()}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                            {response.type}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Tips */}
+          <div className="bg-green-50 rounded-lg p-6 mb-8">
+            <h3 className="text-lg font-medium text-green-900 mb-4">Tips for Better Results</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <h4 className="font-medium text-green-900 mb-2">Be Consistent</h4>
+                <p className="text-green-700 text-sm">Complete check-ins regularly to track your progress accurately</p>
+              </div>
+              <div>
+                <h4 className="font-medium text-green-900 mb-2">Be Honest</h4>
+                <p className="text-green-700 text-sm">Your responses help your coach provide better guidance</p>
+              </div>
+              <div>
+                <h4 className="font-medium text-green-900 mb-2">Set Reminders</h4>
+                <p className="text-green-700 text-sm">Schedule regular check-ins to stay on track</p>
+              </div>
+              <div>
+                <h4 className="font-medium text-green-900 mb-2">Celebrate Progress</h4>
+                <p className="text-green-700 text-sm">Every step forward is progress worth celebrating</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Navigation Buttons */}
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link
               href="/client-portal"
-              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-md font-medium text-center transition-colors"
+              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-center"
             >
               Back to Dashboard
             </Link>
             <Link
               href="/client-portal/progress"
-              className="flex-1 bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-md font-medium text-center transition-colors"
+              className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium text-center"
             >
               View Progress Report
             </Link>
-          </div>
-
-          {/* Tips */}
-          <div className="mt-8 bg-yellow-50 rounded-lg p-6">
-            <h3 className="text-lg font-medium text-yellow-900 mb-4">💡 Tips for Better Results</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-              <div>
-                <p className="font-medium text-yellow-900 mb-2">Be Consistent</p>
-                <p className="text-yellow-800">Complete check-ins regularly to track your progress accurately</p>
-              </div>
-              <div>
-                <p className="font-medium text-yellow-900 mb-2">Be Honest</p>
-                <p className="text-yellow-800">Your responses help your coach provide better guidance</p>
-              </div>
-              <div>
-                <p className="font-medium text-yellow-900 mb-2">Set Reminders</p>
-                <p className="text-yellow-800">Schedule time for your check-ins to build a routine</p>
-              </div>
-              <div>
-                <p className="font-medium text-yellow-900 mb-2">Celebrate Progress</p>
-                <p className="text-yellow-800">Every improvement, no matter how small, is worth celebrating</p>
-              </div>
-            </div>
+            {formResponse && (
+              <Link
+                href={`/client-portal/check-in/${assignmentId}/edit`}
+                className="px-6 py-3 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors font-medium text-center"
+              >
+                Edit Response
+              </Link>
+            )}
           </div>
         </div>
       </div>

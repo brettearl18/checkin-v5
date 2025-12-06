@@ -7,43 +7,43 @@ export async function GET(request: NextRequest) {
     const coachId = searchParams.get('coachId');
 
     if (!coachId) {
-      return NextResponse.json({ success: false, message: 'coachId is required' }, { status: 400 });
+      return NextResponse.json({ success: false, message: 'Coach ID is required' }, { status: 400 });
     }
 
     const db = getDb();
-    const formsRef = db.collection('forms');
-    
-    // Try with index first, fallback to simple query if index doesn't exist
     let formsSnapshot;
+
     try {
-      formsSnapshot = await formsRef
+      // Try with orderBy first
+      formsSnapshot = await db.collection('forms')
         .where('coachId', '==', coachId)
         .orderBy('createdAt', 'desc')
         .get();
-    } catch (indexError: any) {
-      console.log('Index error, falling back to simple query:', indexError.message);
-      // Fallback: get all forms without ordering and filter client-side
-      formsSnapshot = await formsRef.where('coachId', '==', coachId).get();
+    } catch (error: any) {
+      console.log('Index error, falling back to simple query:', error.message);
+      // Fallback without orderBy
+      formsSnapshot = await db.collection('forms')
+        .where('coachId', '==', coachId)
+        .get();
     }
 
     const forms = formsSnapshot.docs.map(doc => {
       const data = doc.data();
       return {
         id: doc.id,
-        ...data,
-        createdAt: data.createdAt?.toDate?.() || data.createdAt,
-        updatedAt: data.updatedAt?.toDate?.() || data.updatedAt
+        title: data.title,
+        description: data.description,
+        category: data.category,
+        questions: data.questions || [],
+        estimatedTime: data.estimatedTime,
+        isStandard: data.isStandard || false,
+        createdAt: data.createdAt?.toDate?.()?.toISOString() || data.createdAt,
+        updatedAt: data.updatedAt?.toDate?.()?.toISOString() || data.updatedAt
       };
     });
 
-    // If we used fallback, filter by coachId client-side
-    if (forms.length > 0 && forms.some(form => form.coachId !== coachId)) {
-      const filteredForms = forms.filter(form => form.coachId === coachId);
-      console.log(`Filtered ${forms.length} forms to ${filteredForms.length} for coachId: ${coachId}`);
-      return NextResponse.json({ success: true, forms: filteredForms });
-    }
-
     console.log(`Found ${forms.length} forms for coachId: ${coachId}`);
+
     return NextResponse.json({ success: true, forms });
 
   } catch (error) {
@@ -60,33 +60,72 @@ export async function POST(request: NextRequest) {
     const formData = await request.json();
     
     // Validate required fields
-    if (!formData.title || !formData.coachId) {
-      return NextResponse.json(
-        { success: false, message: 'Title and coachId are required' },
-        { status: 400 }
-      );
+    const { title, description, category, questions, estimatedTime, coachId, isCopyingStandard } = formData;
+    
+    if (!title || !description || !category || !coachId) {
+      return NextResponse.json({
+        success: false,
+        message: 'Missing required fields: title, description, category, coachId'
+      }, { status: 400 });
     }
 
     const db = getDb();
     
+    // If copying a standard form, we need to copy the questions too
+    if (isCopyingStandard && questions && questions.length > 0) {
+      const newQuestions = [];
+      
+      for (const questionId of questions) {
+        // Fetch the original question
+        const questionDoc = await db.collection('questions').doc(questionId).get();
+        if (questionDoc.exists) {
+          const originalQuestion = questionDoc.data();
+          
+          // Create a new question with a new ID
+          const newQuestionId = `q-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+          const newQuestion = {
+            ...originalQuestion,
+            id: newQuestionId,
+            coachId: coachId,
+            createdAt: new Date(),
+            updatedAt: new Date()
+          };
+          
+          // Save the new question
+          await db.collection('questions').doc(newQuestionId).set(newQuestion);
+          newQuestions.push(newQuestionId);
+        }
+      }
+      
+      // Update the form data with new question IDs
+      formData.questions = newQuestions;
+    }
+
+    // Generate unique form ID
+    const formId = `form-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
     // Create form object
     const form = {
-      ...formData,
-      isActive: formData.isActive || false,
+      id: formId,
+      title,
+      description,
+      category,
+      questions: formData.questions || [],
+      estimatedTime: estimatedTime || 5,
+      coachId,
+      isStandard: false, // Always false for copied forms
       createdAt: new Date(),
       updatedAt: new Date()
     };
     
     // Save to Firestore
-    const docRef = await db.collection('forms').add(form);
-    
-    console.log('Form created successfully:', docRef.id);
+    await db.collection('forms').doc(formId).set(form);
     
     return NextResponse.json({
       success: true,
       message: 'Form created successfully',
-      formId: docRef.id,
-      form: { ...form, id: docRef.id }
+      formId: formId,
+      form: { ...form, id: formId }
     });
     
   } catch (error) {

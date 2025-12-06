@@ -55,7 +55,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Fetch user profile from Firestore
   const fetchUserProfile = async (uid: string) => {
     try {
-      const userDoc = await getDoc(doc(db, 'users', uid));
+      // First try to get from users collection (for coaches and admins)
+      let userDoc = await getDoc(doc(db, 'users', uid));
+      
       if (userDoc.exists()) {
         const data = userDoc.data();
         setUserProfile({
@@ -75,9 +77,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             invitedBy: data.metadata.invitedBy
           } : undefined
         });
+        return;
       }
+
+      // If not found in users, try clients collection
+      const clientsQuery = await db.collection('clients').where('authUid', '==', uid).limit(1).get();
+      
+      if (!clientsQuery.empty) {
+        const clientDoc = clientsQuery.docs[0];
+        const clientData = clientDoc.data();
+        
+        setUserProfile({
+          uid,
+          email: clientData.email,
+          role: 'client',
+          firstName: clientData.firstName,
+          lastName: clientData.lastName,
+          phone: clientData.phone,
+          avatar: undefined,
+          status: clientData.status,
+          createdAt: clientData.createdAt?.toDate() || new Date(),
+          updatedAt: clientData.updatedAt?.toDate() || new Date(),
+          metadata: {
+            lastLogin: new Date(),
+            loginCount: 1,
+            coachId: clientData.coachId
+          }
+        });
+        return;
+      }
+
+      // If not found in either collection, set profile to null
+      setUserProfile(null);
     } catch (error) {
       console.error('Error fetching user profile:', error);
+      setUserProfile(null);
     }
   };
 

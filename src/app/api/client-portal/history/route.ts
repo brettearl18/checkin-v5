@@ -56,15 +56,45 @@ export async function GET(request: NextRequest) {
 
     // Process responses to include check-in titles
     const history = responses.map(response => {
-      const assignment = assignmentMap.get(response.checkInAssignmentId);
+      // Find the assignment by formId (since that's what we save in formResponses)
+      const assignment = Array.from(assignmentMap.values()).find(a => a.formId === response.formId);
+      
+      // Convert Firebase Timestamp to proper date
+      let submittedDate = new Date();
+      if (response.submittedAt) {
+        if (response.submittedAt._seconds) {
+          // Firebase Timestamp
+          submittedDate = new Date(response.submittedAt._seconds * 1000);
+        } else if (response.submittedAt.toDate) {
+          // Firestore Timestamp
+          submittedDate = response.submittedAt.toDate();
+        } else {
+          // Regular Date
+          submittedDate = new Date(response.submittedAt);
+        }
+      }
+
+      // Calculate score percentage
+      let scorePercentage = 0;
+      if (response.score !== undefined) {
+        // The score is already a percentage (0-100), not a raw score
+        scorePercentage = response.score;
+      }
+
       return {
         id: response.id,
-        checkInTitle: assignment?.title || 'Unknown Check-in',
+        checkInTitle: assignment?.formTitle || response.formTitle || 'Unknown Check-in',
         formTitle: response.formTitle || 'Unknown Form',
-        submittedAt: response.submittedAt,
-        score: response.percentageScore || 0,
+        submittedAt: submittedDate.toISOString(),
+        submittedDate: submittedDate,
+        score: scorePercentage,
+        totalQuestions: response.totalQuestions || 0,
+        answeredQuestions: response.answeredQuestions || 0,
         status: response.status || 'completed',
-        responses: response.responses || []
+        responses: response.responses || [],
+        assignmentId: assignment?.id || null,
+        recurringWeek: assignment?.recurringWeek || null,
+        totalWeeks: assignment?.totalWeeks || null
       };
     });
 

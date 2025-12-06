@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { RoleProtected } from '@/components/ProtectedRoute';
 import ClientNavigation from '@/components/ClientNavigation';
@@ -21,6 +21,16 @@ export default function ClientMessagesPage() {
   const [loading, setLoading] = useState(true);
   const [newMessage, setNewMessage] = useState('');
   const [sending, setSending] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to bottom when messages change
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
 
   useEffect(() => {
     fetchMessages();
@@ -31,13 +41,18 @@ export default function ClientMessagesPage() {
       const clientId = userProfile?.uid;
       if (!clientId) return;
 
+      console.log('Fetching messages for clientId:', clientId);
       const response = await fetch(`/api/client-portal/messages?clientId=${clientId}`);
       
       if (response.ok) {
         const data = await response.json();
+        console.log('Messages API response:', data);
         if (data.success) {
+          console.log('Setting messages:', data.messages);
           setMessages(data.messages);
         }
+      } else {
+        console.error('Messages API error:', response.status, response.statusText);
       }
     } catch (error) {
       console.error('Error fetching messages:', error);
@@ -50,6 +65,7 @@ export default function ClientMessagesPage() {
     e.preventDefault();
     if (!newMessage.trim() || !userProfile?.uid) return;
 
+    console.log('Sending message:', newMessage);
     setSending(true);
     try {
       const response = await fetch('/api/client-portal/messages', {
@@ -64,12 +80,20 @@ export default function ClientMessagesPage() {
         }),
       });
 
+      console.log('Send message response status:', response.status);
       if (response.ok) {
         const data = await response.json();
+        console.log('Send message response:', data);
         if (data.success) {
           setNewMessage('');
-          fetchMessages(); // Refresh messages
+          console.log('Message sent successfully, refreshing messages...');
+          await fetchMessages(); // Refresh messages
+          // Auto-scroll to the new message
+          setTimeout(() => scrollToBottom(), 100);
         }
+      } else {
+        const errorData = await response.json();
+        console.error('Send message error:', errorData);
       }
     } catch (error) {
       console.error('Error sending message:', error);
@@ -99,6 +123,11 @@ export default function ClientMessagesPage() {
   };
 
   const unreadCount = messages.filter(msg => !msg.isRead && msg.senderId !== userProfile?.uid).length;
+
+  // Debug logging
+  console.log('Current messages state:', messages);
+  console.log('Messages length:', messages.length);
+  console.log('Loading state:', loading);
 
   return (
     <RoleProtected requiredRole="client">
@@ -173,6 +202,8 @@ export default function ClientMessagesPage() {
                       </div>
                     </div>
                   ))}
+                  {/* Scroll target for auto-scroll */}
+                  <div ref={messagesEndRef} />
                 </div>
               )}
             </div>

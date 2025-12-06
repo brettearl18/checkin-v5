@@ -24,6 +24,7 @@ export default function ClientGoalsPage() {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddGoal, setShowAddGoal] = useState(false);
+  const [clientId, setClientId] = useState<string | null>(null);
   const [newGoal, setNewGoal] = useState({
     title: '',
     description: '',
@@ -34,13 +35,46 @@ export default function ClientGoalsPage() {
   });
 
   useEffect(() => {
-    fetchGoals();
-  }, []);
+    fetchClientId();
+  }, [userProfile?.email]);
+
+  useEffect(() => {
+    if (clientId) {
+      fetchGoals();
+    }
+  }, [clientId]);
+
+  const fetchClientId = async () => {
+    try {
+      if (!userProfile?.email) {
+        console.error('No user email available');
+        setLoading(false);
+        return;
+      }
+
+      // Fetch client ID from clients collection using email
+      const response = await fetch(`/api/client-portal?clientEmail=${userProfile.email}`);
+      const result = await response.json();
+
+      if (result.success && result.data.client) {
+        setClientId(result.data.client.id);
+      } else {
+        console.error('Failed to fetch client ID:', result.message);
+        setLoading(false);
+      }
+    } catch (error) {
+      console.error('Error fetching client ID:', error);
+      setLoading(false);
+    }
+  };
 
   const fetchGoals = async () => {
     try {
-      const clientId = userProfile?.uid;
-      if (!clientId) return;
+      if (!clientId) {
+        console.error('No client ID available');
+        setLoading(false);
+        return;
+      }
 
       const response = await fetch(`/api/client-portal/goals?clientId=${clientId}`);
       
@@ -61,8 +95,10 @@ export default function ClientGoalsPage() {
     e.preventDefault();
     
     try {
-      const clientId = userProfile?.uid;
-      if (!clientId) return;
+      if (!clientId) {
+        console.error('No client ID available');
+        return;
+      }
 
       const response = await fetch('/api/client-portal/goals', {
         method: 'POST',
@@ -88,7 +124,11 @@ export default function ClientGoalsPage() {
             deadline: ''
           });
           fetchGoals(); // Refresh goals
+        } else {
+          console.error('Failed to create goal:', data.message);
         }
+      } else {
+        console.error('Failed to create goal:', response.status, response.statusText);
       }
     } catch (error) {
       console.error('Error adding goal:', error);
@@ -225,12 +265,38 @@ export default function ClientGoalsPage() {
                 <div className="text-6xl mb-4">🎯</div>
                 <h3 className="text-xl font-semibold text-gray-900 mb-2">No goals set yet</h3>
                 <p className="text-gray-600 mb-6">Start by setting your first wellness goal to track your progress.</p>
-                <button
-                  onClick={() => setShowAddGoal(true)}
-                  className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
-                >
-                  Set Your First Goal
-                </button>
+                <div className="space-y-3">
+                  <button
+                    onClick={() => setShowAddGoal(true)}
+                    className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                  >
+                    Set Your First Goal
+                  </button>
+                  <div className="text-sm text-gray-500">or</div>
+                  <button
+                    onClick={async () => {
+                      try {
+                        const response = await fetch('/api/setup-sample-goals', {
+                          method: 'POST',
+                          headers: {
+                            'Content-Type': 'application/json',
+                          },
+                          body: JSON.stringify({
+                            clientId: userProfile?.uid
+                          }),
+                        });
+                        if (response.ok) {
+                          fetchGoals(); // Refresh goals
+                        }
+                      } catch (error) {
+                        console.error('Error creating sample goals:', error);
+                      }
+                    }}
+                    className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+                  >
+                    Create Sample Goals (Demo)
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="p-6">

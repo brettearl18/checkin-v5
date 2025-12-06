@@ -3,10 +3,10 @@ import { getDb } from '@/lib/firebase-server';
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params;
+    const { id } = await params;
     const { status, reason } = await request.json();
     
     if (!status || !['active', 'inactive', 'pending', 'at-risk'].includes(status)) {
@@ -55,28 +55,32 @@ export async function PATCH(
       
       // Get last activity
       const lastCheckIn = checkIns.sort((a, b) => 
-        new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime()
+        new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime()
       )[0];
-      lastActivity = lastCheckIn?.submittedAt;
+      lastActivity = lastCheckIn?.completedAt;
+    }
+
+    // Prepare update data, filtering out undefined values
+    const updateData: any = {
+      progressScore: averageScore,
+      completionRate,
+      totalCheckIns: checkIns.length
+    };
+
+    // Only add lastCheckIn if it's not null/undefined
+    if (lastActivity !== null && lastActivity !== undefined) {
+      updateData.lastCheckIn = lastActivity;
     }
 
     // Update client with calculated metrics
-    await clientRef.update({
-      progressScore: averageScore,
-      completionRate,
-      lastCheckIn: lastActivity,
-      totalCheckIns: checkIns.length
-    });
+    await clientRef.update(updateData);
 
     return NextResponse.json({
       success: true,
       client: {
         id: clientDoc.id,
         ...clientData,
-        progressScore: averageScore,
-        completionRate,
-        lastCheckIn: lastActivity,
-        totalCheckIns: checkIns.length
+        ...updateData
       }
     });
 
