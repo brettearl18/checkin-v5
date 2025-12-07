@@ -123,7 +123,7 @@ async function fetchResponses(coachId: string): Promise<FormResponse[]> {
         clientId: data.clientId || 'unknown',
         clientName: client ? client.name : 'Unknown Client',
         responses: data.responses || {},
-        score: data.percentageScore || 0,
+        score: data.score || data.percentageScore || 0, // Use score first, fallback to percentageScore
         totalQuestions: data.totalQuestions || 0,
         answeredQuestions: data.answeredQuestions || 0,
         submittedAt: data.submittedAt

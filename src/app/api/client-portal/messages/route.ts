@@ -114,31 +114,12 @@ export async function POST(request: NextRequest) {
               updatedAt: new Date()
             });
           } else {
-            // Create a demo coach if none exists
-            const demoCoachData = {
-              id: 'demo-coach-id',
-              firstName: 'Demo',
-              lastName: 'Coach',
-              email: 'demo@coach.com',
-              phone: '',
-              status: 'active',
-              specialization: 'Wellness Coaching',
-              bio: 'Demo coach for testing purposes',
-              clients: [clientId],
-              createdAt: new Date(),
-              updatedAt: new Date()
-            };
-            
-            await db.collection('coaches').doc('demo-coach-id').set(demoCoachData);
-            coachId = 'demo-coach-id';
-            coachName = 'Demo Coach';
-            
-            // Update the client record
-            await db.collection('clients').doc(clientId).update({
-              coachId: coachId,
-              status: 'active',
-              updatedAt: new Date()
-            });
+            // No coach found - this should not happen in production
+            console.error(`No coach found for client ${clientId}`);
+            return NextResponse.json({
+              success: false,
+              message: 'Coach not found for this client. Please ensure the client has an assigned coach.'
+            }, { status: 404 });
           }
         } else {
           // Get coach name for assigned coach

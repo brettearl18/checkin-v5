@@ -17,6 +17,7 @@ interface UserProfile {
   uid: string;
   email: string;
   role: 'admin' | 'coach' | 'client';
+  roles?: ('admin' | 'coach' | 'client')[]; // Support multiple roles
   firstName: string;
   lastName: string;
   phone?: string;
@@ -60,15 +61,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       if (userDoc.exists()) {
         const data = userDoc.data();
+        // Prioritize admin role if present, otherwise use data.role or first role in roles array
+        const determinePrimaryRole = () => {
+          if (data.role === 'admin' || (data.roles && data.roles.includes('admin'))) {
+            return 'admin';
+          }
+          return data.role || (data.roles && data.roles[0]) || 'client';
+        };
         setUserProfile({
           uid,
           email: data.email,
-          role: data.role,
-          firstName: data.profile?.firstName || '',
-          lastName: data.profile?.lastName || '',
-          phone: data.profile?.phone,
-          avatar: data.profile?.avatar,
-          status: data.status,
+          role: determinePrimaryRole(), // Primary role (prioritize admin)
+          roles: data.roles || [data.role || 'client'], // Support multiple roles
+          firstName: data.profile?.firstName || data.firstName || '',
+          lastName: data.profile?.lastName || data.lastName || '',
+          phone: data.profile?.phone || data.phone,
+          avatar: data.profile?.avatar || data.avatar,
+          status: data.status || 'active',
           createdAt: data.createdAt?.toDate() || new Date(),
           updatedAt: data.updatedAt?.toDate() || new Date(),
           metadata: data.metadata ? {
@@ -246,10 +255,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => unsubscribe();
   }, []);
 
-  // Computed properties for role checking
-  const isAdmin = userProfile?.role === 'admin';
-  const isCoach = userProfile?.role === 'coach';
-  const isClient = userProfile?.role === 'client';
+  // Computed properties for role checking (support multiple roles)
+  const isAdmin = userProfile?.role === 'admin' || userProfile?.roles?.includes('admin') || false;
+  const isCoach = userProfile?.role === 'coach' || userProfile?.roles?.includes('coach') || false;
+  const isClient = userProfile?.role === 'client' || userProfile?.roles?.includes('client') || false;
 
   const value = {
     user,

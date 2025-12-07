@@ -8,6 +8,258 @@ import ProtectedRoute from '@/components/ProtectedRoute';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
+function SetAdminButton() {
+  const [isSetting, setIsSetting] = useState(false);
+  const [userId, setUserId] = useState('k5rT8EGNUqbWCSf5g56msZoFdX02');
+  const [firstName, setFirstName] = useState('Silvana');
+  const [lastName, setLastName] = useState('Earl');
+  const [email, setEmail] = useState('Silvi@vanahealth.com.au');
+  const [password, setPassword] = useState('');
+  const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  const handleSetAdmin = async () => {
+    if (!userId.trim()) {
+      alert('Please enter a user ID');
+      return;
+    }
+
+    const confirmMessage = password 
+      ? `Set user ${userId} as Admin and Coach?\n\nThis will:\n- Create/update Firebase Auth account\n- Set role to admin (with coach privileges)\n- Create/update user profile\n- Create/update coach record\n- Set Firebase Auth custom claims`
+      : `Set user ${userId} as Admin and Coach?\n\nThis will:\n- Set role to admin (with coach privileges)\n- Create/update user profile\n- Create/update coach record\n- Set Firebase Auth custom claims\n\nNote: If user doesn't exist in Firebase Auth, email and password are required.`;
+    
+    if (!window.confirm(confirmMessage)) {
+      return;
+    }
+
+    setIsSetting(true);
+    setResult(null);
+
+    try {
+      const response = await fetch('/api/admin/set-admin', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: userId.trim(),
+          firstName: firstName.trim() || 'Silvana',
+          lastName: lastName.trim() || 'Earl',
+          email: email.trim() || undefined,
+          password: password.trim() || undefined
+        })
+      });
+
+      const data = await response.json();
+      setResult(data);
+      
+      if (data.success) {
+        const message = data.accountCreated 
+          ? `✅ Successfully created account and set user as Admin and Coach!\n\nUser ID: ${data.userId}\nEmail: ${data.email}\nRoles: ${data.roles.join(', ')}\n\nAccount created! User can now log in with the provided email and password.`
+          : `✅ Successfully set user as Admin and Coach!\n\nUser ID: ${data.userId}\nRoles: ${data.roles.join(', ')}\n\nUser will need to sign out and sign back in for changes to take effect.`;
+        alert(message);
+        if (data.accountCreated) {
+          setPassword(''); // Clear password after successful creation
+        }
+      } else {
+        alert(`❌ Error: ${data.message}`);
+      }
+    } catch (error) {
+      console.error('Error setting admin role:', error);
+      setResult({
+        success: false,
+        message: 'Failed to set admin role. Please check the console for details.'
+      });
+      alert('Error setting admin role. Please check the console for details.');
+    } finally {
+      setIsSetting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-blue-900 mb-1">User ID (Firebase UID)</label>
+          <input
+            type="text"
+            value={userId}
+            onChange={(e) => setUserId(e.target.value)}
+            placeholder="k5rT8EGNUqbWCSf5g56msZoFdX02"
+            className="w-full px-3 py-2 border border-blue-300 rounded-md text-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-blue-900 mb-1">Email <span className="text-red-500">*</span></label>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="Silvi@vanahealth.com.au"
+            className="w-full px-3 py-2 border border-blue-300 rounded-md text-sm"
+          />
+          <p className="text-xs text-gray-600 mt-1">Required if creating new account</p>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-blue-900 mb-1">First Name</label>
+          <input
+            type="text"
+            value={firstName}
+            onChange={(e) => setFirstName(e.target.value)}
+            placeholder="Silvana"
+            className="w-full px-3 py-2 border border-blue-300 rounded-md text-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-blue-900 mb-1">Last Name</label>
+          <input
+            type="text"
+            value={lastName}
+            onChange={(e) => setLastName(e.target.value)}
+            placeholder="Earl"
+            className="w-full px-3 py-2 border border-blue-300 rounded-md text-sm"
+          />
+        </div>
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-blue-900 mb-1">Password <span className="text-gray-500">(optional)</span></label>
+        <input
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="Leave empty if account exists"
+          className="w-full px-3 py-2 border border-blue-300 rounded-md text-sm"
+        />
+        <p className="text-xs text-gray-600 mt-1">Required only if creating a new Firebase Auth account</p>
+      </div>
+      <button
+        onClick={handleSetAdmin}
+        disabled={isSetting || !userId.trim()}
+        className={`inline-flex items-center px-6 py-3 border border-transparent text-sm font-medium rounded-md text-white ${
+          isSetting || !userId.trim()
+            ? 'bg-gray-400 cursor-not-allowed'
+            : 'bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500'
+        }`}
+      >
+        {isSetting ? (
+          <>
+            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            Setting...
+          </>
+        ) : (
+          <>
+            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+            </svg>
+            Set as Admin & Coach
+          </>
+        )}
+      </button>
+      {result && (
+        <div className={`p-3 rounded-md ${result.success ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>
+          <p className="text-sm font-medium">{result.message}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ClearTestDataButton() {
+  const [isClearing, setIsClearing] = useState(false);
+  const [result, setResult] = useState<{ success: boolean; message: string; totalDeleted?: number } | null>(null);
+
+  const handleClear = async () => {
+    if (!window.confirm('⚠️ WARNING: This will delete ALL test/demo data including:\n\n- Questions with demo/test coach IDs\n- Clients with demo/test coach IDs or test email addresses\n- Forms, assignments, and responses for test data\n\nThis action cannot be undone. Continue?')) {
+      return;
+    }
+
+    if (!window.confirm('Are you absolutely sure? Type "CLEAR" in the next prompt to confirm.')) {
+      return;
+    }
+
+    const confirmText = window.prompt('Type "CLEAR" to confirm deletion of all test data:');
+    if (confirmText !== 'CLEAR') {
+      alert('Cancelled. Test data was not deleted.');
+      return;
+    }
+
+    setIsClearing(true);
+    setResult(null);
+
+    try {
+      const response = await fetch('/api/clear-test-data', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          confirm: 'CLEAR_ALL_TEST_DATA'
+        })
+      });
+
+      const data = await response.json();
+      setResult(data);
+      
+      if (data.success) {
+        alert(`✅ Successfully cleared ${data.totalDeleted} test/demo records!\n\nPlease refresh the page to see updated statistics.`);
+        window.location.reload();
+      } else {
+        alert(`❌ Error: ${data.message}`);
+      }
+    } catch (error) {
+      console.error('Error clearing test data:', error);
+      setResult({
+        success: false,
+        message: 'Failed to clear test data. Please try again.'
+      });
+      alert('Error clearing test data. Please check the console for details.');
+    } finally {
+      setIsClearing(false);
+    }
+  };
+
+  return (
+    <div>
+      <button
+        onClick={handleClear}
+        disabled={isClearing}
+        className={`inline-flex items-center px-6 py-3 border border-transparent text-sm font-medium rounded-md text-white ${
+          isClearing
+            ? 'bg-gray-400 cursor-not-allowed'
+            : 'bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500'
+        }`}
+      >
+        {isClearing ? (
+          <>
+            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            Clearing...
+          </>
+        ) : (
+          <>
+            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+            Clear All Test Data
+          </>
+        )}
+      </button>
+      {result && (
+        <div className={`mt-4 p-3 rounded-md ${result.success ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>
+          <p className="text-sm font-medium">{result.message}</p>
+          {result.totalDeleted !== undefined && (
+            <p className="text-xs mt-1">Total records deleted: {result.totalDeleted}</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface UserStats {
   totalUsers: number;
   admins: number;
@@ -249,7 +501,7 @@ export default function AdminDashboard() {
           </div>
 
           {/* Quick Actions */}
-          <div className="bg-white shadow rounded-lg p-6 px-4 sm:px-0">
+          <div className="bg-white shadow rounded-lg p-6 px-4 sm:px-0 mb-8">
             <h3 className="text-lg font-medium text-gray-900 mb-4">Quick Actions</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <Link
@@ -271,6 +523,24 @@ export default function AdminDashboard() {
                 Manage Clients
               </Link>
             </div>
+          </div>
+
+          {/* Production Preparation */}
+          <div className="bg-red-50 border-2 border-red-200 shadow rounded-lg p-6 px-4 sm:px-0 mb-8">
+            <h3 className="text-lg font-medium text-red-900 mb-2">Production Preparation</h3>
+            <p className="text-sm text-red-700 mb-4">
+              Clear all test/demo data (questions, clients, forms) with test identifiers or demo email addresses.
+            </p>
+            <ClearTestDataButton />
+          </div>
+
+          {/* Admin Management */}
+          <div className="bg-blue-50 border-2 border-blue-200 shadow rounded-lg p-6 px-4 sm:px-0">
+            <h3 className="text-lg font-medium text-blue-900 mb-2">Admin Management</h3>
+            <p className="text-sm text-blue-700 mb-4">
+              Set user roles and permissions. Users can have multiple roles (e.g., admin + coach).
+            </p>
+            <SetAdminButton />
           </div>
         </div>
       </div>

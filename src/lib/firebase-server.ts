@@ -1,5 +1,7 @@
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
+import { getAuth } from 'firebase-admin/auth';
+import { getStorage } from 'firebase-admin/storage';
 
 // Initialize Firebase Admin SDK
 function initializeFirebaseAdmin() {
@@ -46,5 +48,27 @@ export function getDb() {
   } catch (error) {
     console.error('Error getting Firestore instance:', error);
     throw new Error('Database connection failed');
+  }
+}
+
+// Get Auth instance
+export function getAuthInstance() {
+  try {
+    initializeFirebaseAdmin();
+    return getAuth();
+  } catch (error) {
+    console.error('Error getting Auth instance:', error);
+    throw new Error('Auth connection failed');
+  }
+}
+
+// Get Storage instance
+export function getStorageInstance() {
+  try {
+    initializeFirebaseAdmin();
+    return getStorage();
+  } catch (error) {
+    console.error('Error getting Storage instance:', error);
+    throw new Error('Storage connection failed');
   }
 } 

@@ -3,6 +3,7 @@ import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getDb } from '@/lib/firebase-server';
 import { notificationService } from '@/lib/notification-service';
+import { DEFAULT_CHECK_IN_WINDOW } from '@/lib/checkin-window-utils';
 
 // Initialize Firebase Admin if not already initialized
 if (!getApps().length) {
@@ -82,13 +83,7 @@ export async function GET(request: NextRequest) {
           isRecurring: data.isRecurring || false,
           recurringWeek: data.recurringWeek || 1,
           totalWeeks: data.totalWeeks || 1,
-          checkInWindow: data.checkInWindow || {
-            enabled: false,
-            startDay: 'monday',
-            startTime: '09:00',
-            endDay: 'tuesday',
-            endTime: '12:00'
-          }
+          checkInWindow: data.checkInWindow || DEFAULT_CHECK_IN_WINDOW
         };
       });
     } catch (indexError) {
@@ -144,13 +139,7 @@ export async function GET(request: NextRequest) {
           isRecurring: data.isRecurring || false,
           recurringWeek: data.recurringWeek || 1,
           totalWeeks: data.totalWeeks || 1,
-          checkInWindow: data.checkInWindow || {
-            enabled: false,
-            startDay: 'monday',
-            startTime: '09:00',
-            endDay: 'tuesday',
-            endTime: '12:00'
-          }
+          checkInWindow: data.checkInWindow || DEFAULT_CHECK_IN_WINDOW
         };
       });
 

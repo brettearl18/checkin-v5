@@ -14,6 +14,8 @@ interface QuestionFormData {
   required: boolean;
   description?: string;
   hasWeighting: boolean;
+  questionWeight: number; // Weight of the question itself (1-10)
+  yesIsPositive?: boolean; // For boolean questions: true if YES is positive, false if YES is negative
 }
 
 export default function CreateQuestionPage() {
@@ -26,7 +28,9 @@ export default function CreateQuestionPage() {
     options: [],
     required: false,
     description: '',
-    hasWeighting: false
+    hasWeighting: false,
+    questionWeight: 5, // Default weight
+    yesIsPositive: true // Default: YES is positive
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [newOption, setNewOption] = useState('');
@@ -97,13 +101,73 @@ export default function CreateQuestionPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validation
+    if (!formData.text.trim()) {
+      alert('Please enter a question text');
+      return;
+    }
+
+    // Validate options for select/multiselect types (but not scale - scale always has 1-10)
+    if ((formData.type === 'select' || formData.type === 'multiselect') && (!formData.options || formData.options.length === 0)) {
+      alert('Please add at least one answer option');
+      return;
+    }
+
+    // For scale questions, ensure we have all 10 options (1-10) with weights
+    if (formData.type === 'scale') {
+      const scaleOptions = Array.from({ length: 10 }, (_, i) => {
+        const num = String(i + 1);
+        const existingOption = formData.options?.find(opt => opt.text === num);
+        return {
+          text: num,
+          weight: existingOption?.weight ?? (i + 1) // Use existing weight or default to scale value
+        };
+      });
+      formData.options = scaleOptions;
+    }
+
+    // For boolean questions, ensure we have default options if weighting is enabled
+    if (formData.type === 'boolean' && formData.hasWeighting && (!formData.options || formData.options.length === 0)) {
+      // Set default YES/NO options with weights
+      formData.options = [
+        { text: 'YES', weight: formData.yesIsPositive ? 9 : 2 },
+        { text: 'NO', weight: formData.yesIsPositive ? 2 : 9 }
+      ];
+    }
+
     setIsSubmitting(true);
 
     try {
-      const questionData = {
-        ...formData,
+      // Prepare question data
+      const questionData: any = {
+        text: formData.text.trim(),
+        title: formData.text.trim(), // Also include as 'title' for compatibility
+        type: formData.type,
+        questionType: formData.type, // Also include as 'questionType' for compatibility
+        category: formData.category || 'General',
+        required: formData.required || false,
+        isRequired: formData.required || false, // Also include as 'isRequired' for compatibility
+        questionWeight: formData.questionWeight || 5,
+        weight: formData.questionWeight || 5, // Also include as 'weight' for compatibility
         coachId: userProfile?.uid
       };
+
+      // Add optional fields only if they have values
+      if (formData.description) {
+        questionData.description = formData.description;
+      }
+
+      if (formData.yesIsPositive !== undefined) {
+        questionData.yesIsPositive = formData.yesIsPositive;
+      }
+
+      // Add options if they exist
+      if (formData.options && formData.options.length > 0) {
+        questionData.options = formData.options;
+      }
+
+      console.log('Submitting question data:', questionData);
 
       const response = await fetch('/api/questions', {
         method: 'POST',
@@ -119,8 +183,8 @@ export default function CreateQuestionPage() {
         // Redirect to question library with success message
         router.push('/questions/library?success=true&questionId=' + data.questionId);
       } else {
-        console.error('Error creating question:', data.message);
-        alert('Failed to create question: ' + data.message);
+        console.error('Error creating question:', data.message, data);
+        alert('Failed to create question: ' + (data.message || 'Unknown error'));
       }
     } catch (error) {
       console.error('Error creating question:', error);
@@ -426,6 +490,63 @@ export default function CreateQuestionPage() {
                     />
                   </div>
 
+                  {/* Question Weight */}
+                  <div className="bg-gradient-to-r from-purple-50 to-pink-50 p-6 rounded-xl border border-purple-200">
+                    <label className="block text-sm font-medium text-purple-900 mb-4">
+                      Question Weight: {formData.questionWeight}/10
+                    </label>
+                    <input
+                      type="range"
+                      min="1"
+                      max="10"
+                      value={formData.questionWeight}
+                      onChange={(e) => handleInputChange('questionWeight', parseInt(e.target.value))}
+                      className="w-full h-2 bg-purple-200 rounded-lg appearance-none cursor-pointer"
+                    />
+                    <div className="flex justify-between text-xs text-purple-700 mt-2">
+                      <span>Low Impact (1)</span>
+                      <span>High Impact (10)</span>
+                    </div>
+                    <p className="text-xs text-purple-600 mt-2">
+                      This determines how much this question contributes to the overall score
+                    </p>
+                  </div>
+
+                  {/* Boolean Question Settings */}
+                  {formData.type === 'boolean' && (
+                    <div className="bg-gradient-to-r from-green-50 to-emerald-50 p-6 rounded-xl border border-green-200">
+                      <label className="block text-sm font-medium text-green-900 mb-4">
+                        Boolean Answer Scoring
+                      </label>
+                      <div className="space-y-3">
+                        <label className="flex items-center">
+                          <input
+                            type="radio"
+                            name="yesIsPositive"
+                            checked={formData.yesIsPositive === true}
+                            onChange={() => handleInputChange('yesIsPositive', true)}
+                            className="h-5 w-5 text-green-600 focus:ring-green-500 border-gray-300"
+                          />
+                          <span className="ml-3 text-sm text-green-900">
+                            <strong>YES is Positive</strong> (e.g., "Do you feel happy?" - YES = good score)
+                          </span>
+                        </label>
+                        <label className="flex items-center">
+                          <input
+                            type="radio"
+                            name="yesIsPositive"
+                            checked={formData.yesIsPositive === false}
+                            onChange={() => handleInputChange('yesIsPositive', false)}
+                            className="h-5 w-5 text-green-600 focus:ring-green-500 border-gray-300"
+                          />
+                          <span className="ml-3 text-sm text-green-900">
+                            <strong>YES is Negative</strong> (e.g., "Do you feel anxious?" - YES = bad score)
+                          </span>
+                        </label>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Answer Weighting Toggle */}
                   {supportsWeighting && (
                     <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-xl border border-blue-200">
@@ -463,16 +584,52 @@ export default function CreateQuestionPage() {
                       
                       {formData.type === 'scale' ? (
                         <div className="space-y-4">
-                          <div className="text-sm text-gray-600">
-                            Scale will be from 1 to 10 with custom weights:
+                          <div className="text-sm text-gray-600 mb-4">
+                            Scale will be from 1 to 10. {formData.hasWeighting && 'Set custom weights for each value:'}
                           </div>
-                          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
-                              <div key={num} className="text-center p-3 bg-gray-100 rounded-lg font-medium">
-                                {num}
-                              </div>
-                            ))}
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+                            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => {
+                              const optionIndex = formData.options?.findIndex(opt => opt.text === String(num)) ?? -1;
+                              const option = optionIndex >= 0 ? formData.options![optionIndex] : { text: String(num), weight: num };
+                              
+                              return (
+                                <div key={num} className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                                  <div className="text-center mb-2">
+                                    <span className="text-lg font-bold text-gray-900">{num}</span>
+                                  </div>
+                                  {formData.hasWeighting && (
+                                    <div className="mt-2">
+                                      <label className="block text-xs text-gray-600 mb-1">Weight:</label>
+                                      <input
+                                        type="number"
+                                        min="1"
+                                        max="10"
+                                        value={option.weight}
+                                        onChange={(e) => {
+                                          const weight = parseInt(e.target.value) || 1;
+                                          if (optionIndex >= 0) {
+                                            handleUpdateOptionWeight(optionIndex, weight);
+                                          } else {
+                                            // Add new option if it doesn't exist
+                                            setFormData(prev => ({
+                                              ...prev,
+                                              options: [...(prev.options || []), { text: String(num), weight }]
+                                            }));
+                                          }
+                                        }}
+                                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                                      />
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
+                          {!formData.hasWeighting && (
+                            <p className="text-xs text-gray-500 mt-2">
+                              Enable weighting above to set custom weights for each scale value
+                            </p>
+                          )}
                         </div>
                       ) : (
                         <div className="space-y-4">

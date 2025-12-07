@@ -7,6 +7,7 @@ import ClientNavigation from '@/components/ClientNavigation';
 import Link from 'next/link';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase-client';
+import { isWithinCheckInWindow, getCheckInWindowDescription, DEFAULT_CHECK_IN_WINDOW, CheckInWindow } from '@/lib/checkin-window-utils';
 
 interface CheckIn {
   id: string;
@@ -19,13 +20,17 @@ interface CheckIn {
   assignedAt: string;
   completedAt?: string;
   score?: number;
+  checkInWindow?: CheckInWindow;
+  isRecurring?: boolean;
+  recurringWeek?: number;
+  totalWeeks?: number;
 }
 
 export default function ClientCheckInsPage() {
   const { userProfile } = useAuth();
   const [checkins, setCheckins] = useState<CheckIn[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<'upcoming' | 'pending' | 'completed' | 'overdue'>('upcoming');
+  const [filter, setFilter] = useState<'needsAction' | 'upcoming' | 'pending' | 'completed' | 'overdue'>('needsAction');
   const [clientId, setClientId] = useState<string | null>(null);
   const [coachTimezone, setCoachTimezone] = useState<string>(Intl.DateTimeFormat().resolvedOptions().timeZone);
 
@@ -163,45 +168,131 @@ export default function ClientCheckInsPage() {
     });
   };
 
+  // Get check-ins that are available now (window is open)
+  const getAvailableCheckins = () => {
+    return checkins.filter(checkin => {
+      if (checkin.status === 'completed') return false;
+      const checkInWindow = checkin.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
+      const windowStatus = isWithinCheckInWindow(checkInWindow);
+      return windowStatus.isOpen;
+    });
+  };
+
+  // Get check-ins that need action (overdue + available now)
+  const getNeedsActionCheckins = () => {
+    const overdue = checkins.filter(c => c.status === 'overdue');
+    const available = getAvailableCheckins();
+    const combined = [...overdue, ...available];
+    // Remove duplicates
+    return combined.filter((checkin, index, self) => 
+      index === self.findIndex(c => c.id === checkin.id)
+    );
+  };
+
+  // Sort check-ins by urgency: overdue > available now > upcoming > completed
+  const sortByUrgency = (checkinsList: CheckIn[]) => {
+    return [...checkinsList].sort((a, b) => {
+      // Overdue first
+      if (a.status === 'overdue' && b.status !== 'overdue') return -1;
+      if (b.status === 'overdue' && a.status !== 'overdue') return 1;
+      
+      // Then available now
+      const aWindow = a.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
+      const bWindow = b.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
+      const aAvailable = isWithinCheckInWindow(aWindow).isOpen && a.status !== 'completed';
+      const bAvailable = isWithinCheckInWindow(bWindow).isOpen && b.status !== 'completed';
+      if (aAvailable && !bAvailable) return -1;
+      if (bAvailable && !aAvailable) return 1;
+      
+      // Then by due date (earliest first)
+      const aDue = new Date(a.dueDate).getTime();
+      const bDue = new Date(b.dueDate).getTime();
+      if (a.status !== 'completed' && b.status === 'completed') return -1;
+      if (a.status === 'completed' && b.status !== 'completed') return 1;
+      return aDue - bDue;
+    });
+  };
+
   const filteredCheckins = (() => {
+    let result: CheckIn[] = [];
     switch (filter) {
+      case 'needsAction':
+        result = getNeedsActionCheckins();
+        break;
       case 'upcoming':
-        return getUpcomingCheckins();
+        result = getUpcomingCheckins();
+        break;
       case 'pending':
-        return checkins.filter(c => c.status === 'pending');
+        result = checkins.filter(c => c.status === 'pending');
+        break;
       case 'completed':
-        return checkins.filter(c => c.status === 'completed');
+        result = checkins.filter(c => c.status === 'completed');
+        break;
       case 'overdue':
-        return checkins.filter(c => c.status === 'overdue');
+        result = checkins.filter(c => c.status === 'overdue');
+        break;
       default:
-        return checkins;
+        result = checkins;
     }
+    // Always sort by urgency
+    return sortByUrgency(result);
   })();
+
+  // Helper function to get time until due date
+  const getTimeUntilDue = (dueDate: string) => {
+    const now = new Date();
+    const due = new Date(dueDate);
+    const diffMs = due.getTime() - now.getTime();
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffHours / 24);
+    
+    if (diffMs < 0) {
+      const daysOverdue = Math.abs(diffDays);
+      return daysOverdue === 0 ? 'Due today' : `${daysOverdue} day${daysOverdue > 1 ? 's' : ''} overdue`;
+    }
+    
+    if (diffHours < 1) return 'Due in less than an hour';
+    if (diffHours < 24) return `Due in ${diffHours} hour${diffHours > 1 ? 's' : ''}`;
+    if (diffDays === 1) return 'Due tomorrow';
+    return `Due in ${diffDays} days`;
+  };
+
+  // Helper function to get card border color based on status and availability
+  const getCardBorderColor = (checkin: CheckIn) => {
+    if (checkin.status === 'overdue') return 'border-l-4 border-red-500';
+    if (checkin.status === 'completed') return 'border-l-4 border-green-500';
+    
+    const checkInWindow = checkin.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
+    const windowStatus = isWithinCheckInWindow(checkInWindow);
+    if (windowStatus.isOpen) return 'border-l-4 border-green-500';
+    
+    return 'border-l-4 border-yellow-500';
+  };
 
   const stats = {
     upcoming: getUpcomingCheckins().length,
     pending: checkins.filter(c => c.status === 'pending').length,
     completed: checkins.filter(c => c.status === 'completed').length,
-    overdue: checkins.filter(c => c.status === 'overdue').length
+    overdue: checkins.filter(c => c.status === 'overdue').length,
+    available: getAvailableCheckins().length,
+    needsAction: getNeedsActionCheckins().length
   };
 
   if (loading) {
     return (
       <RoleProtected requiredRole="client">
-        <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex">
+        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/50 flex">
           <ClientNavigation />
-          <div className="flex-1 p-6">
-            <div className="max-w-7xl mx-auto">
-              <div className="animate-pulse">
-                <div className="h-8 bg-gray-200 rounded w-1/4 mb-6"></div>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-                  {[...Array(4)].map((_, i) => (
-                    <div key={i} className="bg-white rounded-xl shadow-lg p-6">
-                      <div className="h-4 bg-gray-200 rounded w-1/2 mb-2"></div>
-                      <div className="h-8 bg-gray-200 rounded w-1/3"></div>
-                    </div>
-                  ))}
-                </div>
+          <div className="flex-1 ml-4 p-5">
+            <div className="animate-pulse">
+              <div className="h-8 bg-gray-200 rounded w-1/4 mb-6"></div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} className="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm p-4">
+                    <div className="h-4 bg-gray-200 rounded w-1/2 mb-2"></div>
+                    <div className="h-8 bg-gray-200 rounded w-1/3"></div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
@@ -212,191 +303,302 @@ export default function ClientCheckInsPage() {
 
   return (
     <RoleProtected requiredRole="client">
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/50 flex">
         <ClientNavigation />
         
-        <div className="flex-1 p-6">
-          <div className="max-w-7xl mx-auto">
+        <div className="flex-1 ml-4 p-5">
+          <div className="max-w-7xl">
             {/* Header */}
-            <div className="mb-8">
-              <h1 className="text-4xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
+            <div className="mb-6">
+              <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
                 My Check-ins
               </h1>
-              <p className="text-gray-600 mt-2 text-lg">
+              <p className="text-gray-900 text-sm mt-1 font-medium">
                 Complete your assigned check-ins and track your progress
               </p>
             </div>
 
             {/* Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-              <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-6 hover:shadow-2xl transition-shadow">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-500">This Week</p>
-                    <p className="text-3xl font-bold text-blue-600">{stats.upcoming}</p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+              <div className="group relative bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200/60 overflow-hidden hover:shadow-lg hover:border-red-300/50 transition-all duration-300 hover:-translate-y-0.5">
+                <div className="absolute inset-0 bg-gradient-to-br from-red-500/5 to-pink-500/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                <div className="relative px-4 py-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="w-10 h-10 bg-gradient-to-br from-red-500 to-red-600 rounded-lg flex items-center justify-center shadow-sm">
+                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                    </div>
                   </div>
-                  <div className="p-3 bg-blue-100 rounded-full">
-                    <span className="text-2xl">📅</span>
-                  </div>
+                  <div className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">{stats.needsAction}</div>
+                  <div className="text-xs text-gray-900 mt-1 font-medium">Needs Action</div>
                 </div>
               </div>
 
-              <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-6 hover:shadow-2xl transition-shadow">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-500">Pending</p>
-                    <p className="text-3xl font-bold text-yellow-600">{stats.pending}</p>
+              <div className="group relative bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200/60 overflow-hidden hover:shadow-lg hover:border-blue-300/50 transition-all duration-300 hover:-translate-y-0.5">
+                <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-indigo-500/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                <div className="relative px-4 py-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center shadow-sm">
+                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                    </div>
                   </div>
-                  <div className="p-3 bg-yellow-100 rounded-full">
-                    <span className="text-2xl">⏳</span>
-                  </div>
+                  <div className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">{stats.upcoming}</div>
+                  <div className="text-xs text-gray-900 mt-1 font-medium">This Week</div>
                 </div>
               </div>
 
-              <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-6 hover:shadow-2xl transition-shadow">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-500">Completed</p>
-                    <p className="text-3xl font-bold text-green-600">{stats.completed}</p>
+              <div className="group relative bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200/60 overflow-hidden hover:shadow-lg hover:border-green-300/50 transition-all duration-300 hover:-translate-y-0.5">
+                <div className="absolute inset-0 bg-gradient-to-br from-green-500/5 to-emerald-500/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                <div className="relative px-4 py-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-green-600 rounded-lg flex items-center justify-center shadow-sm">
+                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
                   </div>
-                  <div className="p-3 bg-green-100 rounded-full">
-                    <span className="text-2xl">✅</span>
-                  </div>
+                  <div className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">{stats.completed}</div>
+                  <div className="text-xs text-gray-900 mt-1 font-medium">Completed</div>
                 </div>
               </div>
 
-              <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-6 hover:shadow-2xl transition-shadow">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-500">Overdue</p>
-                    <p className="text-3xl font-bold text-red-600">{stats.overdue}</p>
+              <div className="group relative bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200/60 overflow-hidden hover:shadow-lg hover:border-yellow-300/50 transition-all duration-300 hover:-translate-y-0.5">
+                <div className="absolute inset-0 bg-gradient-to-br from-yellow-500/5 to-orange-500/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                <div className="relative px-4 py-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="w-10 h-10 bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-lg flex items-center justify-center shadow-sm">
+                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
                   </div>
-                  <div className="p-3 bg-red-100 rounded-full">
-                    <span className="text-2xl">⚠️</span>
-                  </div>
+                  <div className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">{stats.pending}</div>
+                  <div className="text-xs text-gray-900 mt-1 font-medium">Pending</div>
                 </div>
               </div>
             </div>
 
             {/* Filters */}
             <div className="mb-6">
-              <div className="flex space-x-2">
+              <div className="flex flex-wrap gap-2">
                 {[
-                  { key: 'upcoming', label: 'This Week', count: stats.upcoming },
-                  { key: 'pending', label: 'Pending', count: stats.pending },
-                  { key: 'completed', label: 'Completed', count: stats.completed },
-                  { key: 'overdue', label: 'Overdue', count: stats.overdue }
+                  { key: 'needsAction', label: 'Needs Action', count: stats.needsAction, color: 'red' },
+                  { key: 'upcoming', label: 'This Week', count: stats.upcoming, color: 'blue' },
+                  { key: 'pending', label: 'Pending', count: stats.pending, color: 'yellow' },
+                  { key: 'completed', label: 'Completed', count: stats.completed, color: 'green' },
+                  { key: 'overdue', label: 'Overdue', count: stats.overdue, color: 'red' }
                 ].map((filterOption) => (
                   <button
                     key={filterOption.key}
                     onClick={() => setFilter(filterOption.key as any)}
-                    className={`px-6 py-3 rounded-xl text-sm font-medium transition-all duration-200 ${
+                    className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
                       filter === filterOption.key
-                        ? 'bg-blue-600 text-white shadow-lg transform scale-105'
-                        : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200 hover:shadow-md'
+                        ? filterOption.color === 'red'
+                          ? 'bg-red-600 text-white shadow-lg'
+                          : filterOption.color === 'green'
+                          ? 'bg-green-600 text-white shadow-lg'
+                          : filterOption.color === 'yellow'
+                          ? 'bg-yellow-500 text-white shadow-lg'
+                          : 'bg-blue-600 text-white shadow-lg'
+                        : 'bg-white/80 backdrop-blur-sm text-gray-900 hover:bg-white border border-gray-200/60 hover:shadow-md'
                     }`}
                   >
-                    {filterOption.label} ({filterOption.count})
+                    {filterOption.label} {filterOption.count > 0 && `(${filterOption.count})`}
                   </button>
                 ))}
               </div>
             </div>
 
             {/* Check-ins List */}
-            <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-              <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-white">
-                <h2 className="text-2xl font-bold text-gray-900">
-                  {filter === 'upcoming' ? 'This Week\'s Check-ins' : `${filter.charAt(0).toUpperCase() + filter.slice(1)} Check-ins`}
+            <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200/60 overflow-hidden">
+              <div className="p-5 border-b border-gray-200/60 bg-gradient-to-r from-gray-50/50 to-white/50">
+                <h2 className="text-xl font-bold text-gray-900">
+                  {filter === 'needsAction' ? '🔴 Needs Your Action' : 
+                   filter === 'upcoming' ? '📅 This Week\'s Check-ins' : 
+                   filter === 'overdue' ? '⚠️ Overdue Check-ins' :
+                   filter === 'completed' ? '✅ Completed Check-ins' :
+                   `${filter.charAt(0).toUpperCase() + filter.slice(1)} Check-ins`}
                 </h2>
-                <p className="text-gray-600 mt-1">
+                <p className="text-gray-900 text-sm mt-1">
                   {filteredCheckins.length} check-in{filteredCheckins.length !== 1 ? 's' : ''} found
                 </p>
               </div>
               
-              <div className="p-6">
+              <div className="p-5">
                 {filteredCheckins.length > 0 ? (
-                  <div className="space-y-6">
-                    {filteredCheckins.map((checkin) => (
-                      <div key={checkin.id} className="border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-shadow bg-gradient-to-r from-white to-gray-50">
-                        <div className="flex items-start justify-between mb-4">
-                          <div className="flex-1">
-                            <div className="flex items-center space-x-3 mb-3">
-                              <span className="text-3xl">{getStatusIcon(checkin.status)}</span>
-                              <h3 className="text-xl font-bold text-gray-900">{checkin.title}</h3>
-                              <span className={`px-4 py-2 rounded-full text-sm font-medium ${getStatusColor(checkin.status)}`}>
-                                {checkin.status}
-                              </span>
-                            </div>
-                            <p className="text-gray-600 mb-4 text-lg">{checkin.description}</p>
-                            
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-gray-500 bg-white p-4 rounded-lg border border-gray-100">
-                              <div>
-                                <span className="font-semibold text-gray-700">Assigned by:</span> {checkin.assignedBy}
-                              </div>
-                              <div>
-                                <span className="font-semibold text-gray-700">Assigned:</span> {formatDate(checkin.assignedAt)}
-                              </div>
-                              <div>
-                                <span className="font-semibold text-gray-700">Due:</span> {formatDate(checkin.dueDate)}
-                              </div>
-                            </div>
+                  <div className="space-y-3">
+                    {filteredCheckins.map((checkin) => {
+                      const checkInWindow = checkin.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
+                      const windowStatus = isWithinCheckInWindow(checkInWindow);
+                      const isAvailable = windowStatus.isOpen && checkin.status !== 'completed';
+                      const isOverdue = checkin.status === 'overdue';
+                      const isCompleted = checkin.status === 'completed';
+                      
+                      return (
+                        <div 
+                          key={checkin.id} 
+                          className={`${getCardBorderColor(checkin)} bg-white/80 backdrop-blur-sm rounded-lg p-4 hover:shadow-md transition-all duration-200 border border-gray-200/60`}
+                        >
+                          <div className="flex items-start justify-between gap-4">
+                            {/* Left: Main Content */}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-start justify-between gap-3 mb-2">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <h3 className="text-base font-bold text-gray-900 truncate">{checkin.title}</h3>
+                                    {checkin.status === 'overdue' && (
+                                      <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 flex-shrink-0">
+                                        Overdue
+                                      </span>
+                                    )}
+                                    {isAvailable && !isOverdue && (
+                                      <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 flex-shrink-0">
+                                        Available Now
+                                      </span>
+                                    )}
+                                    {!windowStatus.isOpen && !isOverdue && !isCompleted && (
+                                      <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 flex-shrink-0">
+                                        Window Closed
+                                      </span>
+                                    )}
+                                  </div>
+                                  
+                                  {/* Time indicator */}
+                                  <p className="text-xs text-gray-900 mb-2">
+                                    {isOverdue 
+                                      ? getTimeUntilDue(checkin.dueDate)
+                                      : isCompleted
+                                      ? `Completed ${checkin.completedAt ? formatDate(checkin.completedAt) : ''}`
+                                      : getTimeUntilDue(checkin.dueDate)
+                                    }
+                                  </p>
 
-                            {checkin.status === 'completed' && checkin.score && (
-                              <div className="mt-4 p-4 bg-green-50 rounded-lg border border-green-200">
-                                <span className="text-xl font-bold text-green-600">
-                                  Score: {checkin.score}%
-                                </span>
-                                <span className="text-sm text-gray-500 ml-2">
-                                  Completed: {checkin.completedAt ? formatDate(checkin.completedAt) : 'N/A'}
-                                </span>
+                                  {/* Window status for pending check-ins */}
+                                  {!isCompleted && !isOverdue && (
+                                    <div className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs ${
+                                      windowStatus.isOpen 
+                                        ? 'bg-green-50 text-green-800' 
+                                        : 'bg-yellow-50 text-yellow-800'
+                                    }`}>
+                                      {windowStatus.isOpen ? '✅' : '⏰'} {windowStatus.message}
+                                    </div>
+                                  )}
+
+                                  {/* Progress indicator for recurring check-ins */}
+                                  {checkin.isRecurring && checkin.recurringWeek && checkin.totalWeeks && (
+                                    <div className="mt-2">
+                                      <div className="flex items-center justify-between text-xs text-gray-900 mb-1">
+                                        <span className="font-medium">Week {checkin.recurringWeek} of {checkin.totalWeeks}</span>
+                                        <span>{Math.round((checkin.recurringWeek / checkin.totalWeeks) * 100)}%</span>
+                                      </div>
+                                      <div className="w-full bg-gray-200 rounded-full h-1.5">
+                                        <div 
+                                          className="bg-gradient-to-r from-blue-500 to-indigo-600 h-1.5 rounded-full transition-all duration-300"
+                                          style={{ width: `${(checkin.recurringWeek / checkin.totalWeeks) * 100}%` }}
+                                        ></div>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Score for completed with traffic light */}
+                                  {isCompleted && checkin.score && (
+                                    <div className="inline-flex items-center gap-2 px-2 py-1 rounded text-xs mt-1">
+                                      {/* Determine traffic light status (default to lifestyle thresholds) */}
+                                      {(() => {
+                                        const score = checkin.score;
+                                        let status: 'red' | 'orange' | 'green';
+                                        if (score <= 33) status = 'red';
+                                        else if (score <= 80) status = 'orange';
+                                        else status = 'green';
+                                        
+                                        const colors = {
+                                          red: 'bg-red-50 text-red-800 border-red-200',
+                                          orange: 'bg-orange-50 text-orange-800 border-orange-200',
+                                          green: 'bg-green-50 text-green-800 border-green-200'
+                                        };
+                                        const icons = {
+                                          red: '🔴',
+                                          orange: '🟠',
+                                          green: '🟢'
+                                        };
+                                        
+                                        return (
+                                          <div className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full border ${colors[status]}`}>
+                                            <span className="text-xs">{icons[status]}</span>
+                                            <span className="font-bold">Score: {score}%</span>
+                                          </div>
+                                        );
+                                      })()}
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Right: Action Button */}
+                                <div className="flex-shrink-0">
+                                  {isOverdue && (
+                                    <Link
+                                      href={`/client-portal/check-in/${checkin.id}`}
+                                      className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-semibold transition-all duration-200 shadow-sm hover:shadow-md whitespace-nowrap"
+                                    >
+                                      Complete Now
+                                    </Link>
+                                  )}
+                                  {isAvailable && !isOverdue && (
+                                    <Link
+                                      href={`/client-portal/check-in/${checkin.id}`}
+                                      className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-semibold transition-all duration-200 shadow-sm hover:shadow-md whitespace-nowrap"
+                                    >
+                                      Start Check-in
+                                    </Link>
+                                  )}
+                                  {!windowStatus.isOpen && !isOverdue && !isCompleted && (
+                                    <button
+                                      disabled
+                                      className="px-4 py-2 bg-gray-300 text-gray-600 rounded-lg text-sm font-semibold cursor-not-allowed whitespace-nowrap"
+                                      title={getCheckInWindowDescription(checkInWindow)}
+                                    >
+                                      Window Closed
+                                    </button>
+                                  )}
+                                  {isCompleted && (
+                                    <Link
+                                      href={`/client-portal/check-in/${checkin.id}/success`}
+                                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-all duration-200 shadow-sm hover:shadow-md whitespace-nowrap"
+                                    >
+                                      View Results
+                                    </Link>
+                                  )}
+                                </div>
                               </div>
-                            )}
+                            </div>
                           </div>
                         </div>
-
-                        <div className="flex space-x-3">
-                          {checkin.status === 'pending' && (
-                            <Link
-                              href={`/client-portal/check-in/${checkin.id}`}
-                              className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-xl font-semibold transition-all duration-200 hover:shadow-lg transform hover:scale-105"
-                            >
-                              Complete Check-in
-                            </Link>
-                          )}
-                          {checkin.status === 'overdue' && (
-                            <Link
-                              href={`/client-portal/check-in/${checkin.id}`}
-                              className="bg-red-600 hover:bg-red-700 text-white px-8 py-3 rounded-xl font-semibold transition-all duration-200 hover:shadow-lg transform hover:scale-105"
-                            >
-                              Complete Now
-                            </Link>
-                          )}
-                          {checkin.status === 'completed' && (
-                            <Link
-                              href={`/client-portal/check-in/${checkin.id}/success`}
-                              className="bg-green-600 hover:bg-green-700 text-white px-8 py-3 rounded-xl font-semibold transition-all duration-200 hover:shadow-lg transform hover:scale-105"
-                            >
-                              View Results
-                            </Link>
-                          )}
-                          <button className="text-blue-600 hover:text-blue-800 font-semibold hover:underline">
-                            View Details
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 ) : (
-                  <div className="text-center py-16">
-                    <div className="text-gray-400 text-8xl mb-6">
-                      {filter === 'completed' ? '✅' : filter === 'overdue' ? '⚠️' : filter === 'upcoming' ? '📅' : '📋'}
+                  <div className="text-center py-12">
+                    <div className="text-6xl mb-4">
+                      {filter === 'needsAction' ? '🎯' :
+                       filter === 'completed' ? '✅' : 
+                       filter === 'overdue' ? '🎉' : 
+                       filter === 'upcoming' ? '📅' : '📋'}
                     </div>
-                    <h3 className="text-2xl font-bold text-gray-900 mb-4">
-                      No {filter} check-ins
+                    <h3 className="text-xl font-bold text-gray-900 mb-2">
+                      {filter === 'needsAction' ? 'All caught up!' :
+                       filter === 'completed' ? 'No completed check-ins yet' :
+                       filter === 'overdue' ? 'No overdue check-ins!' :
+                       filter === 'upcoming' ? 'No check-ins this week' :
+                       'No check-ins found'}
                     </h3>
-                    <p className="text-gray-600 text-lg max-w-md mx-auto">
-                      {filter === 'completed' 
-                        ? 'Complete your first check-in to see it here.'
+                    <p className="text-gray-900 text-sm max-w-md mx-auto">
+                      {filter === 'needsAction' 
+                        ? 'You\'re all set! No check-ins need your immediate attention.'
+                        : filter === 'completed' 
+                        ? 'Complete your first check-in to see your results here.'
                         : filter === 'overdue'
                         ? 'Great job staying on top of your check-ins!'
                         : filter === 'upcoming'

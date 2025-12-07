@@ -4,7 +4,7 @@ import { getDb } from '@/lib/firebase-server';
 interface Notification {
   id: string;
   userId: string;
-  type: 'check_in_due' | 'message_received' | 'goal_achieved' | 'check_in_completed' | 'form_assigned' | 'coach_message' | 'system_alert';
+  type: 'check_in_due' | 'message_received' | 'goal_achieved' | 'check_in_completed' | 'form_assigned' | 'coach_message' | 'system_alert' | 'coach_feedback_ready';
   title: string;
   message: string;
   isRead: boolean;

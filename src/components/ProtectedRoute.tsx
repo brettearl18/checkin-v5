@@ -46,27 +46,35 @@ export function RoleProtected({ children, requiredRole, allowedRoles }: Protecte
     }
 
     if (!loading && userProfile) {
+      // Helper to check if user has a role (supports multiple roles)
+      const hasRole = (role: string) => {
+        return userProfile.role === role || 
+               (userProfile.roles && userProfile.roles.includes(role as any));
+      };
+
       // Check if user has required role
-      if (requiredRole && userProfile.role !== requiredRole) {
-        // Redirect based on actual role
-        if (userProfile.role === 'client') {
+      if (requiredRole && !hasRole(requiredRole)) {
+        // Redirect based on primary role or first role in roles array
+        const primaryRole = userProfile.role || (userProfile.roles && userProfile.roles[0]) || 'client';
+        if (primaryRole === 'client') {
           router.push('/client-portal');
-        } else if (userProfile.role === 'coach') {
+        } else if (primaryRole === 'coach') {
           router.push('/dashboard');
-        } else if (userProfile.role === 'admin') {
+        } else if (primaryRole === 'admin') {
           router.push('/admin');
         }
         return;
       }
 
       // Check if user has one of the allowed roles
-      if (allowedRoles && !allowedRoles.includes(userProfile.role)) {
-        // Redirect based on actual role
-        if (userProfile.role === 'client') {
+      if (allowedRoles && !allowedRoles.some(role => hasRole(role))) {
+        // Redirect based on primary role
+        const primaryRole = userProfile.role || (userProfile.roles && userProfile.roles[0]) || 'client';
+        if (primaryRole === 'client') {
           router.push('/client-portal');
-        } else if (userProfile.role === 'coach') {
+        } else if (primaryRole === 'coach') {
           router.push('/dashboard');
-        } else if (userProfile.role === 'admin') {
+        } else if (primaryRole === 'admin') {
           router.push('/admin');
         }
         return;
@@ -86,8 +94,14 @@ export function RoleProtected({ children, requiredRole, allowedRoles }: Protecte
     return null;
   }
 
+  // Helper to check if user has a role (supports multiple roles)
+  const hasRole = (role: string) => {
+    return userProfile.role === role || 
+           (userProfile.roles && userProfile.roles.includes(role as any));
+  };
+
   // Check role access
-  if (requiredRole && userProfile.role !== requiredRole) {
+  if (requiredRole && !hasRole(requiredRole)) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -98,7 +112,7 @@ export function RoleProtected({ children, requiredRole, allowedRoles }: Protecte
     );
   }
 
-  if (allowedRoles && !allowedRoles.includes(userProfile.role)) {
+  if (allowedRoles && !allowedRoles.some(role => hasRole(role))) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">

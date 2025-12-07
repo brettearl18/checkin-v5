@@ -57,23 +57,77 @@ export async function GET(request: NextRequest) {
       console.log('Found completed assignments:', allAssignments.length);
       console.log('Assignments:', allAssignments);
 
-      // Build check-ins to review with client data
-      checkInsToReview = allAssignments.map(assignment => {
+      // Helper to convert Firestore Timestamp to ISO string
+      const convertDate = (dateField: any) => {
+        if (!dateField) return null;
+        if (dateField.toDate && typeof dateField.toDate === 'function') {
+          return dateField.toDate().toISOString();
+        }
+        if (dateField._seconds) {
+          return new Date(dateField._seconds * 1000).toISOString();
+        }
+        if (dateField instanceof Date) {
+          return dateField.toISOString();
+        }
+        if (typeof dateField === 'string') {
+          return dateField;
+        }
+        return null;
+      };
+
+      // Build check-ins to review with client data and fetch scores from responses if needed
+      checkInsToReview = await Promise.all(allAssignments.map(async (assignment) => {
         const client = clients.find(c => c.id === assignment.clientId);
+        
+        // Get score from assignment, or fetch from response if missing
+        let score = assignment.score || 0;
+        let totalQuestions = assignment.totalQuestions || 0;
+        let answeredQuestions = assignment.answeredQuestions || 0;
+        
+        // If score is missing or 0, try to get it from the form response
+        if ((!assignment.score || assignment.score === 0) && assignment.responseId) {
+          try {
+            const responseDoc = await db.collection('formResponses').doc(assignment.responseId).get();
+            if (responseDoc.exists()) {
+              const responseData = responseDoc.data();
+              score = responseData?.score || responseData?.percentageScore || score;
+              totalQuestions = responseData?.totalQuestions || totalQuestions;
+              answeredQuestions = responseData?.answeredQuestions || answeredQuestions;
+              
+              // Update the assignment with the score for future queries
+              if (score > 0) {
+                try {
+                  await db.collection('check_in_assignments').doc(assignment.id).update({
+                    score: score,
+                    totalQuestions: totalQuestions,
+                    answeredQuestions: answeredQuestions
+                  });
+                } catch (updateError) {
+                  console.log('Error updating assignment score:', updateError);
+                  // Don't fail if update doesn't work
+                }
+              }
+            }
+          } catch (error) {
+            console.log(`Error fetching response for assignment ${assignment.id}:`, error);
+          }
+        }
+        
         return {
-          id: assignment.id,
+          id: assignment.responseId || assignment.id, // Use responseId if available, fallback to assignment ID
           clientId: assignment.clientId,
           clientName: client ? `${client.firstName} ${client.lastName}` : 'Unknown Client',
-          formTitle: assignment.title || 'Check-in Form',
-          submittedAt: assignment.completedAt,
-          score: assignment.score || 0,
-          totalQuestions: assignment.totalQuestions || 0,
-          answeredQuestions: assignment.answeredQuestions || 0,
+          formTitle: assignment.formTitle || assignment.title || 'Check-in Form',
+          submittedAt: convertDate(assignment.completedAt),
+          score: score,
+          totalQuestions: totalQuestions,
+          answeredQuestions: answeredQuestions,
           status: 'completed',
           formId: assignment.formId,
-          assignmentId: assignment.id
+          assignmentId: assignment.id,
+          responseId: assignment.responseId // Include responseId for reference
         };
-      });
+      }));
 
       // Sort the results
       checkInsToReview.sort((a, b) => {

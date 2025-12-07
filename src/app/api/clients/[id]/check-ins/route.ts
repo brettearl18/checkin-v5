@@ -60,11 +60,42 @@ export async function GET(
     let lastActivity: string | null = null;
     let totalScore = 0;
     
+    // Fetch form titles for all assignments in parallel
+    const formIds = new Set<string>();
     assignmentsSnapshot.forEach((doc) => {
       const data = doc.data();
+      if (data.formId) {
+        formIds.add(data.formId);
+      }
+    });
+
+    // Fetch all forms at once
+    const formPromises = Array.from(formIds).map(async (formId) => {
+      try {
+        const formDoc = await db.collection('forms').doc(formId).get();
+        if (formDoc.exists) {
+          return { formId, title: formDoc.data()?.title || 'Unknown Form' };
+        }
+      } catch (error) {
+        console.error(`Error fetching form ${formId}:`, error);
+      }
+      return { formId, title: 'Unknown Form' };
+    });
+
+    const formTitlesMap = new Map<string, string>();
+    const formResults = await Promise.all(formPromises);
+    formResults.forEach(({ formId, title }) => {
+      formTitlesMap.set(formId, title);
+    });
+
+    assignmentsSnapshot.forEach((doc) => {
+      const data = doc.data();
+      // Get form title from the map, or use stored formTitle, or fallback to 'Unknown Form'
+      const formTitle = data.formTitle || (data.formId ? formTitlesMap.get(data.formId) : null) || 'Unknown Form';
+      
       const checkIn: CheckIn = {
         id: doc.id,
-        formTitle: data.formTitle || 'Unknown Form',
+        formTitle: formTitle,
         assignedAt: data.assignedAt?.toDate?.()?.toISOString() || data.assignedAt,
         completedAt: data.completedAt?.toDate?.()?.toISOString() || data.completedAt,
         status: data.status || 'pending',

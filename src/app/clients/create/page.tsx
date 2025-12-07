@@ -11,6 +11,8 @@ interface ClientForm {
   lastName: string;
   email: string;
   phone: string;
+  username: string;
+  password: string;
   goals: string[];
   communicationPreference: 'email' | 'sms' | 'both';
   checkInFrequency: 'daily' | 'weekly' | 'monthly';
@@ -24,6 +26,8 @@ export default function CreateClientPage() {
     lastName: '',
     email: '',
     phone: '',
+    username: '',
+    password: '',
     goals: [],
     communicationPreference: 'email',
     checkInFrequency: 'weekly'
@@ -31,6 +35,8 @@ export default function CreateClientPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [showCredentialsModal, setShowCredentialsModal] = useState(false);
+  const [clientCredentials, setClientCredentials] = useState<{email: string; username: string; password: string} | null>(null);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -71,10 +77,20 @@ export default function CreateClientPage() {
       const data = await response.json();
 
       if (data.success) {
-        setSuccess('Client created successfully! Redirecting...');
-        setTimeout(() => {
-          router.push('/clients');
-        }, 2000);
+        // Show credentials modal if credentials were generated
+        if (data.credentials) {
+          setClientCredentials({
+            email: data.credentials.email,
+            username: data.credentials.username || data.credentials.email,
+            password: data.credentials.password
+          });
+          setShowCredentialsModal(true);
+        } else {
+          setSuccess('Client created successfully! Redirecting...');
+          setTimeout(() => {
+            router.push('/clients');
+          }, 2000);
+        }
       } else {
         setError(data.message || 'Failed to create client');
       }
@@ -353,6 +369,49 @@ export default function CreateClientPage() {
                         />
                       </div>
                     </div>
+
+                    {/* Login Credentials */}
+                    <div className="border-t border-gray-200 pt-6">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-4">Login Credentials</h3>
+                      <p className="text-sm text-gray-600 mb-4">
+                        Set up login credentials for the client. These will be provided via email or shown in a popup for you to send manually.
+                      </p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                          <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-2">
+                            Username
+                          </label>
+                          <input
+                            type="text"
+                            id="username"
+                            name="username"
+                            value={formData.username}
+                            onChange={handleInputChange}
+                            className="w-full border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 placeholder-gray-500"
+                            placeholder="Enter username (optional - email will be used if blank)"
+                          />
+                          <p className="mt-1 text-xs text-gray-500">If left blank, email will be used as username</p>
+                        </div>
+
+                        <div>
+                          <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+                            Password *
+                          </label>
+                          <input
+                            type="password"
+                            id="password"
+                            name="password"
+                            required
+                            minLength={6}
+                            value={formData.password}
+                            onChange={handleInputChange}
+                            className="w-full border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 placeholder-gray-500"
+                            placeholder="Enter password (min 6 characters)"
+                          />
+                          <p className="mt-1 text-xs text-gray-500">Minimum 6 characters</p>
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Wellness Goals */}
@@ -447,6 +506,186 @@ export default function CreateClientPage() {
           </div>
         </div>
       </div>
+
+      {/* Credentials Modal */}
+      {showCredentialsModal && clientCredentials && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="bg-gradient-to-r from-green-50 to-emerald-50 px-6 py-4 border-b border-gray-100 rounded-t-2xl">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900">Client Account Created Successfully!</h3>
+                  <p className="text-gray-600 mt-1">Copy these credentials to send to the client</p>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowCredentialsModal(false);
+                    router.push('/clients');
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            
+            <div className="p-6 space-y-6">
+              {/* Email Template */}
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
+                <h4 className="text-lg font-semibold text-gray-900 mb-4">Email Template</h4>
+                <div className="bg-white rounded-lg p-4 border border-blue-200">
+                  <div className="space-y-3 text-sm text-gray-700">
+                    <p><strong>Subject:</strong> Welcome to Your Wellness Journey - Account Credentials</p>
+                    <div className="border-t border-gray-200 pt-3">
+                      <p className="mb-2">Dear {formData.firstName},</p>
+                      <p className="mb-2">Your account has been created! Here are your login credentials:</p>
+                      <div className="bg-gray-50 rounded-lg p-4 my-3 space-y-2">
+                        <p><strong>Email/Username:</strong> {clientCredentials.email}</p>
+                        <p><strong>Password:</strong> {clientCredentials.password}</p>
+                      </div>
+                      <p className="mb-2">You can log in at: <a href={`${typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'}/login`} className="text-blue-600 underline">{typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'}/login</a></p>
+                      <p className="mb-2">Please change your password after your first login for security.</p>
+                      <p>Best regards,<br />Your Coach</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Credentials Display */}
+              <div className="bg-gradient-to-r from-gray-50 to-blue-50 rounded-xl p-6 border border-gray-200">
+                <h4 className="text-lg font-semibold text-gray-900 mb-4">Client Credentials</h4>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Email/Username</label>
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="text"
+                        readOnly
+                        value={clientCredentials.email}
+                        className="flex-1 border border-gray-300 rounded-lg px-4 py-3 bg-white text-gray-900 font-mono"
+                      />
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(clientCredentials.email);
+                          alert('Email copied to clipboard!');
+                        }}
+                        className="px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="text"
+                        readOnly
+                        value={clientCredentials.password}
+                        className="flex-1 border border-gray-300 rounded-lg px-4 py-3 bg-white text-gray-900 font-mono"
+                      />
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(clientCredentials.password);
+                          alert('Password copied to clipboard!');
+                        }}
+                        className="px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Login URL</label>
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="text"
+                        readOnly
+                        value={`${typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'}/login`}
+                        className="flex-1 border border-gray-300 rounded-lg px-4 py-3 bg-white text-gray-900 font-mono text-sm"
+                      />
+                      <button
+                        onClick={() => {
+                          const loginUrl = `${typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'}/login`;
+                          navigator.clipboard.writeText(loginUrl);
+                          alert('Login URL copied to clipboard!');
+                        }}
+                        className="px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+                      const emailText = `Subject: Welcome to Your Wellness Journey - Account Credentials
+
+Dear ${formData.firstName},
+
+Your account has been created! Here are your login credentials:
+
+Email/Username: ${clientCredentials.email}
+Password: ${clientCredentials.password}
+
+You can log in at: ${baseUrl}/login
+
+Please change your password after your first login for security.
+
+Best regards,
+Your Coach`;
+                      navigator.clipboard.writeText(emailText);
+                      alert('Full email text copied to clipboard!');
+                    }}
+                    className="w-full px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors"
+                  >
+                    📋 Copy Full Email Text
+                  </button>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex space-x-3 pt-4 border-t border-gray-200">
+                <button
+                  onClick={() => {
+                    setShowCredentialsModal(false);
+                    router.push('/clients');
+                  }}
+                  className="flex-1 px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium transition-colors"
+                >
+                  Done
+                </button>
+                <button
+                  onClick={() => {
+                    setShowCredentialsModal(false);
+                    // Reset form
+                    setFormData({
+                      firstName: '',
+                      lastName: '',
+                      email: '',
+                      phone: '',
+                      username: '',
+                      password: '',
+                      goals: [],
+                      communicationPreference: 'email',
+                      checkInFrequency: 'weekly'
+                    });
+                    setClientCredentials(null);
+                  }}
+                  className="flex-1 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+                >
+                  Add Another Client
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </RoleProtected>
   );
 } 

@@ -16,6 +16,7 @@ if (!getApps().length) {
 }
 
 const db = getFirestore();
+const auth = getAuth();
 
 // Generate a secure onboarding token
 function generateOnboardingToken(): string {
@@ -76,7 +77,18 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const clientData = await request.json();
-    const { firstName, lastName, email, phone, wellnessGoals, preferredCommunication, checkInFrequency, coachId } = clientData;
+    const { 
+      firstName, 
+      lastName, 
+      email, 
+      phone, 
+      username,
+      password,
+      goals,
+      communicationPreference,
+      checkInFrequency, 
+      coachId 
+    } = clientData;
 
     // Validate required fields
     if (!firstName || !lastName || !email || !coachId) {
@@ -86,7 +98,15 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Check if client already exists
+    // Validate password if provided
+    if (password && password.length < 6) {
+      return NextResponse.json({
+        success: false,
+        message: 'Password must be at least 6 characters long'
+      }, { status: 400 });
+    }
+
+    // Check if client already exists by email
     const existingClientQuery = await db.collection('clients')
       .where('email', '==', email)
       .get();
@@ -98,30 +118,99 @@ export async function POST(request: NextRequest) {
       }, { status: 409 });
     }
 
-    // Generate onboarding token
-    const onboardingToken = generateOnboardingToken();
-    const tokenExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+    // Check if Firebase Auth user already exists
+    let authUid: string | null = null;
+    let userCredentials: { email: string; username: string; password: string } | null = null;
+
+    try {
+      const existingUser = await auth.getUserByEmail(email);
+      return NextResponse.json({
+        success: false,
+        message: 'A user with this email already exists in the system'
+      }, { status: 409 });
+    } catch (error: any) {
+      // User doesn't exist, which is what we want
+      if (error.code !== 'auth/user-not-found') {
+        throw error;
+      }
+    }
 
     // Get coach information
     const coachDoc = await db.collection('coaches').doc(coachId).get();
     const coachData = coachDoc.exists ? coachDoc.data() : null;
     const coachName = coachData ? `${coachData.firstName} ${coachData.lastName}` : 'Your Coach';
 
+    // If password is provided, create Firebase Auth account immediately
+    if (password) {
+      try {
+        // Use email as username if username not provided
+        const displayName = `${firstName} ${lastName}`;
+        
+        // Create Firebase Auth user
+        const userRecord = await auth.createUser({
+          email: email,
+          password: password,
+          displayName: displayName,
+          emailVerified: false // Client should verify email on first login
+        });
+
+        authUid = userRecord.uid;
+
+        // Set custom claims for client role
+        await auth.setCustomUserClaims(userRecord.uid, {
+          role: 'client',
+          coachId: coachId
+        });
+
+        // Create user profile in users collection
+        await db.collection('users').doc(userRecord.uid).set({
+          uid: userRecord.uid,
+          email: email,
+          role: 'client',
+          status: 'active',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          profile: {
+            firstName: firstName,
+            lastName: lastName,
+          },
+          metadata: {
+            lastLogin: null,
+            loginCount: 0,
+            invitedBy: coachId,
+          }
+        }, { merge: true });
+
+        // Store credentials for response (username is optional, email is used for login)
+        userCredentials = {
+          email: email,
+          username: username || email, // Use email if username not provided
+          password: password
+        };
+
+      } catch (authError: any) {
+        console.error('Error creating Firebase Auth user:', authError);
+        return NextResponse.json({
+          success: false,
+          message: `Failed to create user account: ${authError.message}`
+        }, { status: 500 });
+      }
+    }
+
     // Create client record
-    const clientId = `client-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const clientId = authUid || `client-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const client = {
       id: clientId,
       firstName,
       lastName,
       email,
       phone: phone || '',
-      wellnessGoals: wellnessGoals || [],
-      preferredCommunication: preferredCommunication || 'email',
+      wellnessGoals: goals || [],
+      preferredCommunication: communicationPreference || 'email',
       checkInFrequency: checkInFrequency || 'weekly',
       coachId,
-      status: 'pending', // Client needs to complete onboarding
-      onboardingToken,
-      tokenExpiry,
+      status: authUid ? 'active' : 'pending', // Active if account created, pending if not
+      authUid: authUid || null,
       progressScore: 0,
       totalCheckIns: 0,
       lastCheckIn: null,
@@ -132,15 +221,35 @@ export async function POST(request: NextRequest) {
     // Save to Firestore
     await db.collection('clients').doc(clientId).set(client);
 
-    // Send onboarding email
-    await sendOnboardingEmail(email, onboardingToken, coachName);
+    // If credentials were created, return them (for popup display)
+    // Otherwise, send onboarding email with token
+    if (userCredentials) {
+      return NextResponse.json({
+        success: true,
+        message: 'Client created successfully with login credentials.',
+        clientId: clientId,
+        client: client,
+        credentials: userCredentials
+      });
+    } else {
+      // Fallback to old onboarding flow if no password provided
+      const onboardingToken = generateOnboardingToken();
+      const tokenExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+      
+      await db.collection('clients').doc(clientId).update({
+        onboardingToken,
+        tokenExpiry
+      });
 
-    return NextResponse.json({
-      success: true,
-      message: 'Client created successfully. Onboarding email sent.',
-      clientId: clientId,
-      client: { ...client, onboardingToken } // Include token for testing
-    });
+      await sendOnboardingEmail(email, onboardingToken, coachName);
+
+      return NextResponse.json({
+        success: true,
+        message: 'Client created successfully. Onboarding email sent.',
+        clientId: clientId,
+        client: { ...client, onboardingToken }
+      });
+    }
 
   } catch (error) {
     console.error('Error creating client:', error);

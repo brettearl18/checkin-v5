@@ -20,7 +20,7 @@ interface CheckIn {
   clientName: string;
   formId: string;
   formTitle: string;
-  responses: number; // Changed from { [key: string]: any } to number
+  responses: { [key: string]: any } | number; // Can be actual responses object or count
   score: number;
   totalQuestions: number;
   answeredQuestions: number;
@@ -29,6 +29,7 @@ interface CheckIn {
   energy?: number;
   status: 'pending' | 'completed';
   isAssignment?: boolean;
+  responseId?: string; // ID of the formResponse document for completed check-ins
 }
 
 interface CheckInMetrics {
@@ -140,7 +141,7 @@ async function fetchCheckIns(coachId: string, status?: string, sortBy: string = 
           clientName: clientsData[responseData.clientId]?.name || 'Unknown Client',
           formId: responseData.formId,
           formTitle: responseData.formTitle || 'Unknown Form',
-          responses: Array.isArray(responseData.responses) ? responseData.responses.length : 0, // Just store count, not the actual objects
+          responses: responseData.responses || {}, // Store actual response data
           score: responseData.score || 0,
           totalQuestions: responseData.totalQuestions || 0,
           answeredQuestions: responseData.answeredQuestions || 0,
@@ -148,7 +149,8 @@ async function fetchCheckIns(coachId: string, status?: string, sortBy: string = 
           mood: responseData.mood,
           energy: responseData.energy,
           status: 'completed',
-          isAssignment: false
+          isAssignment: false,
+          responseId: doc.id // Store the response ID for linking
         });
         formIds.add(responseData.formId);
       });

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { AuthenticatedOnly } from '@/components/ProtectedRoute';
+import { RoleProtected } from '@/components/ProtectedRoute';
 import Link from 'next/link';
 import { collection, getDocs, query, orderBy, addDoc, updateDoc, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase-client';
@@ -48,6 +48,12 @@ export default function ClientProfilePage() {
   const [startDate, setStartDate] = useState('');
   const [durationWeeks, setDurationWeeks] = useState(1);
   const [isRecurring, setIsRecurring] = useState(false);
+  const [progressImages, setProgressImages] = useState<any[]>([]);
+  const [loadingImages, setLoadingImages] = useState(false);
+  const [onboardingData, setOnboardingData] = useState<any>(null);
+  const [loadingOnboarding, setLoadingOnboarding] = useState(false);
+  const [measurementHistory, setMeasurementHistory] = useState<any[]>([]);
+  const [loadingMeasurements, setLoadingMeasurements] = useState(false);
   const [allocatedCheckIns, setAllocatedCheckIns] = useState<any[]>([]);
   const [loadingCheckIns, setLoadingCheckIns] = useState(false);
   const [hasLoadedCheckIns, setHasLoadedCheckIns] = useState(false);
@@ -129,6 +135,75 @@ export default function ClientProfilePage() {
       fetchAllocatedCheckIns();
     }
   }, [client, hasLoadedCheckIns]);
+
+  // Fetch progress images
+  useEffect(() => {
+    const fetchProgressImages = async () => {
+      const clientId = params.id as string;
+      if (!clientId) return;
+
+      setLoadingImages(true);
+      try {
+        const response = await fetch(`/api/progress-images?clientId=${clientId}&limit=12`);
+        const data = await response.json();
+        if (data.success) {
+          setProgressImages(data.data || []);
+        }
+      } catch (error) {
+        console.error('Error fetching progress images:', error);
+      } finally {
+        setLoadingImages(false);
+      }
+    };
+
+    fetchProgressImages();
+  }, [params.id]);
+
+  // Fetch onboarding data
+  useEffect(() => {
+    const fetchOnboardingData = async () => {
+      const clientId = params.id as string;
+      if (!clientId) return;
+
+      setLoadingOnboarding(true);
+      try {
+        const response = await fetch(`/api/client-onboarding/data?clientId=${clientId}`);
+        const data = await response.json();
+        if (data.success) {
+          setOnboardingData(data.data);
+        }
+      } catch (error) {
+        console.error('Error fetching onboarding data:', error);
+      } finally {
+        setLoadingOnboarding(false);
+      }
+    };
+
+    fetchOnboardingData();
+  }, [params.id]);
+
+  // Fetch measurement history
+  useEffect(() => {
+    const fetchMeasurementHistory = async () => {
+      const clientId = params.id as string;
+      if (!clientId) return;
+
+      setLoadingMeasurements(true);
+      try {
+        const response = await fetch(`/api/client-measurements?clientId=${clientId}&limit=10`);
+        const data = await response.json();
+        if (data.success) {
+          setMeasurementHistory(data.data || []);
+        }
+      } catch (error) {
+        console.error('Error fetching measurement history:', error);
+      } finally {
+        setLoadingMeasurements(false);
+      }
+    };
+
+    fetchMeasurementHistory();
+  }, [params.id]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -881,7 +956,7 @@ export default function ClientProfilePage() {
 
   if (loading) {
     return (
-      <AuthenticatedOnly>
+      <RoleProtected requiredRole="coach">
         <div className="min-h-screen bg-gray-50 p-6">
           <div className="max-w-4xl mx-auto">
             <div className="animate-pulse">
@@ -894,13 +969,13 @@ export default function ClientProfilePage() {
             </div>
           </div>
         </div>
-      </AuthenticatedOnly>
+      </RoleProtected>
     );
   }
 
   if (error || !client) {
     return (
-      <AuthenticatedOnly>
+      <RoleProtected requiredRole="coach">
         <div className="min-h-screen bg-gray-50 p-6">
           <div className="max-w-4xl mx-auto">
             <div className="text-center py-12">
@@ -916,12 +991,12 @@ export default function ClientProfilePage() {
             </div>
           </div>
         </div>
-      </AuthenticatedOnly>
+      </RoleProtected>
     );
   }
 
   return (
-    <AuthenticatedOnly>
+    <RoleProtected requiredRole="coach">
       <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 p-6">
         <div className="max-w-7xl mx-auto">
           {/* Modern Header */}
@@ -1140,6 +1215,260 @@ export default function ClientProfilePage() {
                 </div>
               </div>
 
+              {/* Baseline Data (Onboarding) */}
+              {onboardingData && (onboardingData.beforeImages?.front || onboardingData.beforeImages?.back || onboardingData.beforeImages?.side || onboardingData.bodyWeight || (onboardingData.measurements && Object.keys(onboardingData.measurements).length > 0)) && (
+                <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+                  <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-8 py-6 border-b border-gray-100">
+                    <h2 className="text-2xl font-bold text-gray-900">Baseline Data</h2>
+                    <p className="text-sm text-gray-600 mt-1">Starting measurements and photos</p>
+                  </div>
+                  <div className="p-8">
+                    {/* Before Images */}
+                    {(onboardingData.beforeImages?.front || onboardingData.beforeImages?.back || onboardingData.beforeImages?.side) && (
+                      <div className="mb-8">
+                        <h3 className="text-lg font-semibold text-gray-700 mb-4">Before Photos</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          {onboardingData.beforeImages.front && (
+                            <div className="space-y-2">
+                              <label className="block text-sm font-medium text-gray-600">Front View</label>
+                              <div className="aspect-square rounded-xl overflow-hidden border border-gray-200">
+                                <img
+                                  src={onboardingData.beforeImages.front}
+                                  alt="Front view"
+                                  className="w-full h-full object-cover"
+                                />
+                              </div>
+                            </div>
+                          )}
+                          {onboardingData.beforeImages.back && (
+                            <div className="space-y-2">
+                              <label className="block text-sm font-medium text-gray-600">Back View</label>
+                              <div className="aspect-square rounded-xl overflow-hidden border border-gray-200">
+                                <img
+                                  src={onboardingData.beforeImages.back}
+                                  alt="Back view"
+                                  className="w-full h-full object-cover"
+                                />
+                              </div>
+                            </div>
+                          )}
+                          {onboardingData.beforeImages.side && (
+                            <div className="space-y-2">
+                              <label className="block text-sm font-medium text-gray-600">Side View</label>
+                              <div className="aspect-square rounded-xl overflow-hidden border border-gray-200">
+                                <img
+                                  src={onboardingData.beforeImages.side}
+                                  alt="Side view"
+                                  className="w-full h-full object-cover"
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Body Weight and Measurements */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                      {/* Body Weight */}
+                      {onboardingData.bodyWeight && (
+                        <div>
+                          <h3 className="text-lg font-semibold text-gray-700 mb-4">Starting Weight</h3>
+                          <div className="bg-gray-50 rounded-xl p-6">
+                            <div className="text-4xl font-bold text-gray-900 mb-2">
+                              {onboardingData.bodyWeight} kg
+                            </div>
+                            <p className="text-sm text-gray-500">Baseline weight</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Measurements */}
+                      {onboardingData.measurements && Object.keys(onboardingData.measurements).length > 0 && (
+                        <div>
+                          <h3 className="text-lg font-semibold text-gray-700 mb-4">Starting Measurements</h3>
+                          <div className="bg-gray-50 rounded-xl p-6 space-y-3">
+                            {Object.entries(onboardingData.measurements).map(([key, value]) => {
+                              if (!value) return null;
+                              return (
+                                <div key={key} className="flex justify-between items-center py-2 border-b border-gray-200 last:border-0">
+                                  <span className="text-gray-700 font-medium capitalize">{key}</span>
+                                  <span className="text-gray-900 font-semibold">{value} cm</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {onboardingData.completed && (
+                      <div className="mt-6 flex items-center text-sm text-green-600">
+                        <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        Onboarding completed {onboardingData.completedAt ? new Date(onboardingData.completedAt).toLocaleDateString() : ''}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Progress Images */}
+              <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+                <div className="bg-gradient-to-r from-pink-50 to-rose-50 px-8 py-6 border-b border-gray-100 flex items-center justify-between">
+                  <h2 className="text-2xl font-bold text-gray-900">Progress Images</h2>
+                </div>
+                <div className="p-8">
+                  {loadingImages ? (
+                    <div className="text-center py-12">
+                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pink-600 mx-auto mb-4"></div>
+                      <p className="text-gray-500 text-lg">Loading images...</p>
+                    </div>
+                  ) : progressImages.length === 0 ? (
+                    <div className="text-center py-12">
+                      <div className="w-16 h-16 bg-pink-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <svg className="w-8 h-8 text-pink-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                      </div>
+                      <p className="text-gray-500 text-lg mb-2">No progress images yet</p>
+                      <p className="text-gray-400 text-sm">Client photos will appear here as they're uploaded</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                      {progressImages.slice(0, 8).map((image) => (
+                        <div key={image.id} className="group relative aspect-square rounded-xl overflow-hidden border border-gray-200 hover:border-pink-300 transition-all duration-200 hover:shadow-lg">
+                          <img
+                            src={image.imageUrl}
+                            alt={image.caption || image.imageType}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = `data:image/svg+xml,${encodeURIComponent(`
+                                <svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
+                                  <rect width="200" height="200" fill="#f3f4f6"/>
+                                  <text x="50%" y="50%" font-family="Arial" font-size="14" fill="#9ca3af" text-anchor="middle" dy=".3em">Image</text>
+                                </svg>
+                              `)}`;
+                            }}
+                          />
+                          <div className="absolute top-2 left-2 flex flex-col gap-1">
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                              image.imageType === 'profile' ? 'bg-blue-100 text-blue-800' :
+                              image.imageType === 'before' ? 'bg-orange-100 text-orange-800' :
+                              image.imageType === 'after' ? 'bg-green-100 text-green-800' :
+                              'bg-purple-100 text-purple-800'
+                            }`}>
+                              {image.imageType === 'profile' ? 'Profile' :
+                               image.imageType === 'before' ? 'Before' :
+                               image.imageType === 'after' ? 'After' :
+                               'Progress'}
+                            </span>
+                            {image.orientation && (
+                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                image.orientation === 'front' ? 'bg-pink-100 text-pink-800' :
+                                image.orientation === 'back' ? 'bg-indigo-100 text-indigo-800' :
+                                'bg-teal-100 text-teal-800'
+                              }`}>
+                                {image.orientation.charAt(0).toUpperCase() + image.orientation.slice(1)}
+                              </span>
+                            )}
+                          </div>
+                          <div className="absolute bottom-2 right-2">
+                            <span className="px-2 py-1 rounded-full text-xs font-medium bg-black bg-opacity-50 text-white">
+                              {new Date(image.uploadedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                            </span>
+                          </div>
+                          {image.caption && (
+                            <div className="absolute bottom-2 left-2 right-2">
+                              <p className="px-2 py-1 rounded text-xs font-medium bg-black bg-opacity-50 text-white truncate">
+                                {image.caption}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {progressImages.length > 8 && (
+                    <div className="text-center pt-6">
+                      <p className="text-gray-500 text-sm">
+                        Showing 8 of {progressImages.length} images
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Measurement History */}
+              {measurementHistory.length > 0 && (
+                <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+                  <div className="bg-gradient-to-r from-teal-50 to-cyan-50 px-8 py-6 border-b border-gray-100">
+                    <h2 className="text-2xl font-bold text-gray-900">Measurement History</h2>
+                    <p className="text-sm text-gray-600 mt-1">Track weight and body measurements over time</p>
+                  </div>
+                  <div className="p-8">
+                    {loadingMeasurements ? (
+                      <div className="text-center py-12">
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600 mx-auto mb-4"></div>
+                        <p className="text-gray-500 text-lg">Loading measurements...</p>
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
+                          <thead className="bg-gray-50 border-b border-gray-200">
+                            <tr>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Date</th>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Weight (kg)</th>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Waist (cm)</th>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Hips (cm)</th>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Chest (cm)</th>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Neck (cm)</th>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Thigh (cm)</th>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Arm (cm)</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-200">
+                            {measurementHistory.map((entry) => (
+                              <tr key={entry.id} className="hover:bg-gray-50">
+                                <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                                  {new Date(entry.date).toLocaleDateString('en-US', { 
+                                    year: 'numeric', 
+                                    month: 'short', 
+                                    day: 'numeric' 
+                                  })}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-gray-600">
+                                  {entry.bodyWeight ? `${entry.bodyWeight}` : '-'}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-gray-600">
+                                  {entry.measurements?.waist ? `${entry.measurements.waist}` : '-'}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-gray-600">
+                                  {entry.measurements?.hips ? `${entry.measurements.hips}` : '-'}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-gray-600">
+                                  {entry.measurements?.chest ? `${entry.measurements.chest}` : '-'}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-gray-600">
+                                  {entry.measurements?.neck ? `${entry.measurements.neck}` : '-'}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-gray-600">
+                                  {entry.measurements?.thigh ? `${entry.measurements.thigh}` : '-'}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-gray-600">
+                                  {entry.measurements?.arm ? `${entry.measurements.arm}` : '-'}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Health Goals */}
               {client.goals && client.goals.length > 0 && (
                 <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
@@ -1199,7 +1528,7 @@ export default function ClientProfilePage() {
                     <h2 className="text-2xl font-bold text-gray-900">Check-ins Overview</h2>
                     <div className="flex space-x-4">
                       <span className="text-sm text-gray-600 bg-white px-4 py-2 rounded-full shadow-sm border border-gray-200">
-                        {client.totalCheckIns || 0} total allocated
+                        {allocatedCheckIns.length} total allocated
                       </span>
                       <span className="text-sm text-green-600 bg-green-50 px-4 py-2 rounded-full shadow-sm border border-green-200">
                         {allocatedCheckIns.filter(c => c.status === 'completed').length} completed
@@ -1207,6 +1536,11 @@ export default function ClientProfilePage() {
                       <span className="text-sm text-yellow-600 bg-yellow-50 px-4 py-2 rounded-full shadow-sm border border-yellow-200">
                         {allocatedCheckIns.filter(c => c.status === 'pending').length} pending
                       </span>
+                      {allocatedCheckIns.filter(c => c.status === 'overdue').length > 0 && (
+                        <span className="text-sm text-red-600 bg-red-50 px-4 py-2 rounded-full shadow-sm border border-red-200">
+                          {allocatedCheckIns.filter(c => c.status === 'overdue').length} overdue
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1233,6 +1567,99 @@ export default function ClientProfilePage() {
                     </div>
                   ) : (
                     <div id="check-ins-section" className="space-y-8">
+                      {/* All Allocated Check-ins Table */}
+                      <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-6 border border-indigo-200">
+                        <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                          <span className="w-2 h-2 bg-indigo-500 rounded-full mr-3"></span>
+                          All Allocated Check-ins ({allocatedCheckIns.length})
+                        </h3>
+                        <div className="bg-white rounded-lg overflow-hidden border border-gray-200">
+                          <div className="overflow-x-auto">
+                            <table className="w-full">
+                              <thead className="bg-gray-50 border-b border-gray-200">
+                                <tr>
+                                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Form Title</th>
+                                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Status</th>
+                                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Assigned</th>
+                                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Due Date</th>
+                                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Score</th>
+                                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Week</th>
+                                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Actions</th>
+                                </tr>
+                              </thead>
+                              <tbody className="bg-white divide-y divide-gray-200">
+                                {[...allocatedCheckIns].sort((a, b) => {
+                                  // Sort by recurring week number (1-20)
+                                  const weekA = a.recurringWeek || 0;
+                                  const weekB = b.recurringWeek || 0;
+                                  return weekA - weekB;
+                                }).map((checkIn, index) => (
+                                  <tr key={checkIn.id || `checkin-${index}`} className="hover:bg-gray-50 transition-colors">
+                                    <td className="px-4 py-3 whitespace-nowrap">
+                                      <div className="text-sm font-medium text-gray-900">{checkIn.formTitle || 'Unknown Form'}</div>
+                                      {checkIn.category && (
+                                        <div className="text-xs text-gray-500">{checkIn.category}</div>
+                                      )}
+                                    </td>
+                                    <td className="px-4 py-3 whitespace-nowrap">
+                                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                                        checkIn.status === 'completed' ? 'bg-green-100 text-green-800' :
+                                        checkIn.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                                        checkIn.status === 'overdue' ? 'bg-red-100 text-red-800' :
+                                        'bg-gray-100 text-gray-800'
+                                      }`}>
+                                        {checkIn.status}
+                                      </span>
+                                    </td>
+                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
+                                      {formatDate(checkIn.assignedAt)}
+                                    </td>
+                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
+                                      {checkIn.dueDate ? formatDate(checkIn.dueDate) : 'N/A'}
+                                    </td>
+                                    <td className="px-4 py-3 whitespace-nowrap">
+                                      {checkIn.status === 'completed' && checkIn.score !== undefined ? (
+                                        <span className="text-sm font-medium text-gray-900">{checkIn.score}%</span>
+                                      ) : (
+                                        <span className="text-sm text-gray-400">-</span>
+                                      )}
+                                    </td>
+                                    <td className="px-4 py-3 whitespace-nowrap">
+                                      {checkIn.isRecurring ? (
+                                        <span className="px-2 py-1 text-xs font-medium rounded-full bg-purple-100 text-purple-800">
+                                          Week {checkIn.recurringWeek || 1}/{checkIn.totalWeeks || 1}
+                                        </span>
+                                      ) : (
+                                        <span className="text-xs text-gray-400">Single</span>
+                                      )}
+                                    </td>
+                                    <td className="px-4 py-3 whitespace-nowrap text-sm">
+                                      <div className="flex space-x-2">
+                                        {checkIn.status === 'pending' && (
+                                          <button
+                                            onClick={() => openCheckInManagementModal(checkIn)}
+                                            className="text-blue-600 hover:text-blue-800 font-medium"
+                                          >
+                                            Edit
+                                          </button>
+                                        )}
+                                        <button
+                                          onClick={() => handleDeleteCheckIn(checkIn.id)}
+                                          disabled={deletingCheckIn}
+                                          className="text-red-600 hover:text-red-800 font-medium disabled:opacity-50"
+                                        >
+                                          Delete
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      </div>
+
                       {/* Series Management Section */}
                       {(() => {
                         // Group check-ins by form to identify series
@@ -1269,8 +1696,8 @@ export default function ClientProfilePage() {
                               Check-in Series Management
                             </h3>
                             <div className="space-y-3">
-                              {series.map((s) => (
-                                <div key={s.formId} className="flex items-center justify-between p-4 bg-white rounded-lg border border-blue-100">
+                              {series.map((s, index) => (
+                                <div key={s.formId || `series-${index}`} className="flex items-center justify-between p-4 bg-white rounded-lg border border-blue-100">
                                   <div className="flex-1">
                                     <h4 className="font-medium text-gray-900">{s.formTitle}</h4>
                                     <div className="flex items-center space-x-4 text-sm text-gray-600 mt-1">
@@ -1320,8 +1747,12 @@ export default function ClientProfilePage() {
                             Completed Check-ins ({allocatedCheckIns.filter(c => c.status === 'completed').length})
                           </h3>
                           <div className="space-y-4">
-                            {allocatedCheckIns.filter(c => c.status === 'completed').map((checkIn) => (
-                              <div key={checkIn.id} className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-6 border border-green-200 hover:shadow-lg transition-all duration-200">
+                            {allocatedCheckIns.filter(c => c.status === 'completed').sort((a, b) => {
+                              const weekA = a.recurringWeek || 0;
+                              const weekB = b.recurringWeek || 0;
+                              return weekA - weekB;
+                            }).map((checkIn, index) => (
+                              <div key={checkIn.id || `completed-${index}`} className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-6 border border-green-200 hover:shadow-lg transition-all duration-200">
                                 <div className="flex items-center justify-between mb-4">
                                   <div className="flex items-center space-x-4">
                                     <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center shadow-lg">
@@ -1399,8 +1830,12 @@ export default function ClientProfilePage() {
                             Pending Check-ins ({allocatedCheckIns.filter(c => c.status === 'pending').length})
                           </h3>
                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {allocatedCheckIns.filter(c => c.status === 'pending').slice(0, 6).map((checkIn) => (
-                              <div key={checkIn.id} className="bg-gradient-to-r from-yellow-50 to-orange-50 rounded-xl p-4 border border-yellow-200 hover:shadow-lg transition-all duration-200">
+                            {allocatedCheckIns.filter(c => c.status === 'pending').sort((a, b) => {
+                              const weekA = a.recurringWeek || 0;
+                              const weekB = b.recurringWeek || 0;
+                              return weekA - weekB;
+                            }).slice(0, 6).map((checkIn, index) => (
+                              <div key={checkIn.id || `pending-${index}`} className="bg-gradient-to-r from-yellow-50 to-orange-50 rounded-xl p-4 border border-yellow-200 hover:shadow-lg transition-all duration-200">
                                 <div className="flex items-center justify-between mb-3">
                                   <div className="w-10 h-10 bg-gradient-to-br from-yellow-500 to-orange-600 rounded-lg flex items-center justify-center shadow-md">
                                     <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1778,6 +2213,6 @@ export default function ClientProfilePage() {
           </div>
         </div>
       )}
-    </AuthenticatedOnly>
+    </RoleProtected>
   );
 } 

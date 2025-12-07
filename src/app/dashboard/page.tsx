@@ -80,6 +80,7 @@ interface ClientPhoto {
   clientName: string;
   photoUrl: string;
   photoType: 'profile' | 'before' | 'after' | 'progress';
+  orientation?: 'front' | 'back' | 'side';
   uploadedAt: string;
   caption?: string;
 }
@@ -134,7 +135,11 @@ export default function DashboardPage() {
     }
     
     try {
-      const coachId = userProfile?.uid || 'demo-coach-id';
+      if (!userProfile?.uid) {
+        console.error('No user profile found');
+        return;
+      }
+      const coachId = userProfile.uid;
       
       // Fetch all data in parallel for better performance
       const [
@@ -262,46 +267,33 @@ export default function DashboardPage() {
       setCompletedCheckIns(completedCheckIns);
       setRecentActivity(realActivity);
       
-      // Sample client photos data - Replace with real API call when available
-      const samplePhotos: ClientPhoto[] = [
-        {
-          id: 'photo-1',
-          clientId: 'client-1',
-          clientName: 'Sarah Johnson',
-          photoUrl: '/api/photos/client-1/profile',
-          photoType: 'profile',
-          uploadedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), // 2 hours ago
-          caption: 'Updated profile photo'
-        },
-        {
-          id: 'photo-2',
-          clientId: 'client-2',
-          clientName: 'Mike Chen',
-          photoUrl: '/api/photos/client-2/before',
-          photoType: 'before',
-          uploadedAt: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(), // 6 hours ago
-          caption: 'Starting point photo'
-        },
-        {
-          id: 'photo-3',
-          clientId: 'client-1',
-          clientName: 'Sarah Johnson',
-          photoUrl: '/api/photos/client-1/progress',
-          photoType: 'progress',
-          uploadedAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(), // 1 day ago
-          caption: 'Week 4 progress'
-        },
-        {
-          id: 'photo-4',
-          clientId: 'client-3',
-          clientName: 'Emma Davis',
-          photoUrl: '/api/photos/client-3/profile',
-          photoType: 'profile',
-          uploadedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(), // 2 days ago
-          caption: 'New profile photo'
+      // Fetch real progress images for coach's clients
+      try {
+        const photosResponse = await fetch(`/api/progress-images?coachId=${coachId}&limit=8`);
+        if (photosResponse.ok) {
+          const photosData = await photosResponse.json();
+          if (photosData.success && photosData.data) {
+            const realPhotos: ClientPhoto[] = photosData.data.map((img: any) => ({
+              id: img.id,
+              clientId: img.clientId,
+              clientName: img.clientName || 'Client',
+              photoUrl: img.imageUrl,
+              photoType: img.imageType,
+              orientation: img.orientation,
+              uploadedAt: img.uploadedAt || new Date().toISOString(),
+              caption: img.caption || ''
+            }));
+            setClientPhotos(realPhotos);
+          } else {
+            setClientPhotos([]);
+          }
+        } else {
+          setClientPhotos([]);
         }
-      ];
-      setClientPhotos(samplePhotos);
+      } catch (error) {
+        console.error('Error fetching progress images:', error);
+        setClientPhotos([]);
+      }
       
       // Log summary for debugging
       console.log(`Dashboard loaded: ${totalClients} clients, ${totalForms} forms, ${checkIns.length} check-ins to review, ${completedCheckIns.length} completed check-ins`);
@@ -560,7 +552,7 @@ export default function DashboardPage() {
 
             {/* Quick Actions */}
             <div className="space-y-2">
-              <h3 className="px-4 text-sm font-semibold text-gray-500 uppercase tracking-wider">Quick Actions</h3>
+              <h3 className="px-4 text-sm font-semibold text-gray-700 uppercase tracking-wider">Quick Actions</h3>
               
               <Link
                 href="/clients/create"
@@ -602,7 +594,7 @@ export default function DashboardPage() {
                   <p className="text-sm font-medium text-gray-900">
                     {userProfile?.firstName} {userProfile?.lastName}
                   </p>
-                  <p className="text-xs text-gray-500">Coach</p>
+                  <p className="text-xs text-gray-700">Coach</p>
                 </div>
                 <button
                   onClick={logout}
@@ -644,7 +636,7 @@ export default function DashboardPage() {
                   {coachData?.shortUID && (
                     <div className="flex items-center space-x-3 bg-blue-50 px-4 py-2 rounded-lg border border-blue-200">
                       <div className="text-right">
-                        <p className="text-sm text-gray-500">Verification Code</p>
+                        <p className="text-sm text-gray-700">Verification Code</p>
                         <p className="text-lg font-mono font-semibold text-blue-600 tracking-wider">{coachData.shortUID}</p>
                       </div>
                       <button
@@ -851,12 +843,12 @@ export default function DashboardPage() {
                         {checkInsToReview.length === 0 ? (
                           <div className="text-center py-12">
                             <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                              <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <svg className="w-8 h-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                               </svg>
                             </div>
-                            <p className="text-gray-500 text-lg mb-4">No check-ins to review</p>
-                            <p className="text-gray-400 text-sm">Completed check-ins will appear here for your review</p>
+                            <p className="text-gray-700 text-lg mb-4">No check-ins to review</p>
+                            <p className="text-gray-600 text-sm">Completed check-ins will appear here for your review</p>
                           </div>
                         ) : (
                           <div className="space-y-4">
@@ -872,13 +864,13 @@ export default function DashboardPage() {
                                     <div>
                                       <h3 className="text-lg font-bold text-gray-900">{checkIn.clientName}</h3>
                                       <p className="text-gray-600">{checkIn.formTitle}</p>
-                                      <p className="text-sm text-gray-500 mt-1">{formatTimeAgo(checkIn.submittedAt)}</p>
+                                      <p className="text-sm text-gray-700 mt-1">{formatTimeAgo(checkIn.submittedAt)}</p>
                                     </div>
                                   </div>
                                   <div className="flex items-center space-x-4">
                                     <div className="text-right">
                                       <div className="text-2xl font-bold text-gray-900">{checkIn.score}%</div>
-                                      <div className="text-sm text-gray-500">Score</div>
+                                      <div className="text-sm text-gray-700">Score</div>
                                     </div>
                                     <Link
                                       href={`/responses/${checkIn.id}`}
@@ -905,8 +897,8 @@ export default function DashboardPage() {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                               </svg>
                             </div>
-                            <p className="text-gray-500 text-lg mb-4">No completed check-ins yet</p>
-                            <p className="text-gray-400 text-sm">Completed check-ins will appear here with scores and form details</p>
+                            <p className="text-gray-700 text-lg mb-4">No completed check-ins yet</p>
+                            <p className="text-gray-600 text-sm">Completed check-ins will appear here with scores and form details</p>
                           </div>
                         ) : (
                           <div className="space-y-4">
@@ -922,7 +914,7 @@ export default function DashboardPage() {
                                     <div>
                                       <h3 className="text-lg font-bold text-gray-900">{checkIn.clientName}</h3>
                                       <p className="text-gray-600 font-medium">{checkIn.formTitle}</p>
-                                      <p className="text-sm text-gray-500 mt-1">{formatTimeAgo(checkIn.submittedAt)}</p>
+                                      <p className="text-sm text-gray-700 mt-1">{formatTimeAgo(checkIn.submittedAt)}</p>
                                     </div>
                                   </div>
                                   <div className="flex items-center space-x-4">
@@ -933,8 +925,8 @@ export default function DashboardPage() {
                                       }`}>
                                         {checkIn.score}%
                                       </div>
-                                      <div className="text-sm text-gray-500">Score</div>
-                                      <div className="text-xs text-gray-400 mt-1">
+                                      <div className="text-sm text-gray-700">Score</div>
+                                      <div className="text-xs text-gray-600 mt-1">
                                         {checkIn.answeredQuestions}/{checkIn.totalQuestions} questions
                                       </div>
                                     </div>
@@ -986,7 +978,7 @@ export default function DashboardPage() {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                           </svg>
                         </div>
-                        <p className="text-gray-500 text-lg mb-4">No client photos yet</p>
+                        <p className="text-gray-700 text-lg mb-4">No client photos yet</p>
                         <p className="text-gray-400 text-sm">Client photos will appear here as they're uploaded</p>
                       </div>
                     ) : (
@@ -994,8 +986,23 @@ export default function DashboardPage() {
                         {clientPhotos.slice(0, 8).map((photo) => (
                           <div key={photo.id} className="group relative">
                             <div className="aspect-square bg-gradient-to-br from-gray-100 to-gray-200 rounded-xl overflow-hidden border border-gray-200 hover:border-pink-300 transition-all duration-200 hover:shadow-lg">
-                              {/* Photo Placeholder - Replace with actual photo when available */}
-                              <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-pink-50 to-rose-50">
+                              {/* Actual Photo Thumbnail */}
+                              <img
+                                src={photo.photoUrl}
+                                alt={`${photo.clientName} - ${photo.photoType}`}
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  // Fallback to placeholder if image fails to load
+                                  const target = e.target as HTMLImageElement;
+                                  target.style.display = 'none';
+                                  const placeholder = target.nextElementSibling as HTMLElement;
+                                  if (placeholder) {
+                                    placeholder.style.display = 'flex';
+                                  }
+                                }}
+                              />
+                              {/* Fallback Placeholder - Hidden by default, shown if image fails */}
+                              <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-pink-50 to-rose-50 absolute inset-0" style={{ display: 'none' }}>
                                 <div className="text-center">
                                   <div className="w-12 h-12 bg-pink-100 rounded-full flex items-center justify-center mx-auto mb-2">
                                     <svg className="w-6 h-6 text-pink-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1006,8 +1013,8 @@ export default function DashboardPage() {
                                 </div>
                               </div>
                               
-                              {/* Photo Type Badge */}
-                              <div className="absolute top-2 left-2">
+                              {/* Photo Type and Orientation Badges */}
+                              <div className="absolute top-2 left-2 flex flex-col gap-1">
                                 <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                                   photo.photoType === 'profile' ? 'bg-blue-100 text-blue-800' :
                                   photo.photoType === 'before' ? 'bg-orange-100 text-orange-800' :
@@ -1019,6 +1026,15 @@ export default function DashboardPage() {
                                    photo.photoType === 'after' ? 'After' :
                                    'Progress'}
                                 </span>
+                                {photo.orientation && (
+                                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                    photo.orientation === 'front' ? 'bg-pink-100 text-pink-800' :
+                                    photo.orientation === 'back' ? 'bg-indigo-100 text-indigo-800' :
+                                    'bg-teal-100 text-teal-800'
+                                  }`}>
+                                    {photo.orientation.charAt(0).toUpperCase() + photo.orientation.slice(1)}
+                                  </span>
+                                )}
                               </div>
                               
                               {/* Upload Time */}

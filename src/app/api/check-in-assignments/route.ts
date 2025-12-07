@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase-server';
 import { notificationService } from '@/lib/notification-service';
+import { DEFAULT_CHECK_IN_WINDOW } from '@/lib/checkin-window-utils';
 
 // POST - Create a new check-in assignment
 export async function POST(request: NextRequest) {
@@ -17,6 +18,20 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
+    // Fetch form to get the title
+    const db = getDb();
+    let formTitle = 'Unknown Form';
+    try {
+      const formDoc = await db.collection('forms').doc(formId).get();
+      if (formDoc.exists) {
+        const formData = formDoc.data();
+        formTitle = formData?.title || 'Unknown Form';
+      }
+    } catch (error) {
+      console.error('Error fetching form:', error);
+      // Continue with default title
+    }
+
     // Generate unique assignment ID
     const assignmentId = `assignment-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     
@@ -24,19 +39,14 @@ export async function POST(request: NextRequest) {
     const assignment = {
       id: assignmentId,
       formId,
+      formTitle: formTitle, // Include form title
       clientId,
       coachId,
       frequency: frequency || 'weekly',
       duration: duration || 4,
       startDate: startDate || new Date().toISOString().split('T')[0],
       dueTime: dueTime || '09:00',
-      checkInWindow: checkInWindow || {
-        enabled: false,
-        startDay: 'monday',
-        startTime: '09:00',
-        endDay: 'tuesday',
-        endTime: '12:00'
-      },
+      checkInWindow: checkInWindow || DEFAULT_CHECK_IN_WINDOW,
       status: status || 'pending',
       assignedAt: new Date(),
       completedAt: null,
@@ -48,7 +58,6 @@ export async function POST(request: NextRequest) {
     };
     
     // Save to Firestore using Admin SDK
-    const db = getDb();
     const docRef = await db.collection('check_in_assignments').add(assignment);
 
     // Create notification for client

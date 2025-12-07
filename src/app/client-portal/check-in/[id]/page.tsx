@@ -7,6 +7,7 @@ import { AuthenticatedOnly } from '@/components/ProtectedRoute';
 import { doc, getDoc, addDoc, collection, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase-client';
 import Link from 'next/link';
+import { isWithinCheckInWindow, getCheckInWindowDescription, DEFAULT_CHECK_IN_WINDOW, CheckInWindow } from '@/lib/checkin-window-utils';
 
 interface CheckInAssignment {
   id: string;
@@ -25,17 +26,21 @@ interface CheckInAssignment {
   isRecurring?: boolean;
   recurringWeek?: number;
   totalWeeks?: number;
+  checkInWindow?: CheckInWindow;
 }
 
 interface Question {
   id: string;
   text: string;
   type: string;
-  options?: string[];
+  options?: string[] | Array<{ text: string; weight: number }>;
   category: string;
   coachId: string;
   createdAt: string;
   updatedAt: string;
+  questionWeight?: number; // Weight of the question (1-10)
+  weight?: number; // Alternative field name for weight
+  yesIsPositive?: boolean; // For boolean questions: true if YES is positive
 }
 
 interface FormResponse {
@@ -43,6 +48,7 @@ interface FormResponse {
   question: string;
   answer: string | number | boolean;
   type: string;
+  comment?: string; // Optional comment/notes for the answer
 }
 
 export default function CheckInCompletionPage() {
@@ -56,6 +62,7 @@ export default function CheckInCompletionPage() {
   const [submitting, setSubmitting] = useState(false);
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [error, setError] = useState('');
+  const [windowStatus, setWindowStatus] = useState<{ isOpen: boolean; message: string; nextOpenTime?: Date } | null>(null);
 
   const assignmentId = params.id as string;
 
@@ -74,9 +81,8 @@ export default function CheckInCompletionPage() {
       }
 
       const assignmentData = assignmentDoc.data() as CheckInAssignment;
-      setAssignment(assignmentData);
-
-      // Fetch form questions
+      
+      // Fetch form questions and get form title if missing
       const formDoc = await getDoc(doc(db, 'forms', assignmentData.formId));
       if (!formDoc.exists()) {
         setError('Form not found');
@@ -85,6 +91,24 @@ export default function CheckInCompletionPage() {
       }
 
       const formData = formDoc.data();
+      
+      // Ensure formTitle is set (fetch from form if missing in assignment)
+      if (!assignmentData.formTitle && formData.title) {
+        assignmentData.formTitle = formData.title;
+      }
+      
+      // If still no title, use a default
+      if (!assignmentData.formTitle) {
+        assignmentData.formTitle = 'Check-in Form';
+      }
+      
+      setAssignment(assignmentData);
+
+      // Check check-in window status
+      const checkInWindow = assignmentData.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
+      const status = isWithinCheckInWindow(checkInWindow);
+      setWindowStatus(status);
+
       const questionIds = formData.questions || [];
 
       // Fetch individual questions
@@ -103,7 +127,8 @@ export default function CheckInCompletionPage() {
         questionId: q.id,
         question: q.text,
         answer: '',
-        type: q.type
+        type: q.type,
+        comment: '' // Initialize comment field
       }));
       setResponses(initialResponses);
 
@@ -127,7 +152,28 @@ export default function CheckInCompletionPage() {
           questionId: question.id,
           question: question.text,
           answer: answer,
-          type: question.type
+          type: question.type,
+          comment: ''
+        };
+      }
+    }
+    setResponses(updatedResponses);
+  };
+
+  const handleCommentChange = (questionIndex: number, comment: string) => {
+    const updatedResponses = [...responses];
+    if (updatedResponses[questionIndex]) {
+      updatedResponses[questionIndex].comment = comment;
+    } else {
+      // If response doesn't exist, create it
+      const question = questions[questionIndex];
+      if (question) {
+        updatedResponses[questionIndex] = {
+          questionId: question.id,
+          question: question.text,
+          answer: '',
+          type: question.type,
+          comment: comment
         };
       }
     }
@@ -149,6 +195,16 @@ export default function CheckInCompletionPage() {
   const handleSubmit = async () => {
     if (!assignment || !userProfile) return;
 
+    // Check if check-in window is open
+    const checkInWindow = assignment.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
+    const status = isWithinCheckInWindow(checkInWindow);
+    
+    if (!status.isOpen) {
+      setError(`Check-in window is currently closed. ${status.message}`);
+      setSubmitting(false);
+      return;
+    }
+
     setSubmitting(true);
     try {
       // Validate that all questions are answered
@@ -163,16 +219,141 @@ export default function CheckInCompletionPage() {
         return;
       }
 
-      // Calculate simple score based on answered questions
-      const answeredCount = responses.filter(r => r.answer !== '' && r.answer !== null).length;
-      const score = Math.round((answeredCount / questions.length) * 100);
+      // Calculate score based on answer quality with question weights
+      let totalWeightedScore = 0;
+      let totalWeight = 0;
+      let answeredCount = 0;
+      
+      responses.forEach((response, index) => {
+        const question = questions[index];
+        if (!question || !response || response.answer === '' || response.answer === null || response.answer === undefined) {
+          return; // Skip unanswered questions
+        }
+        
+        // Get question weight (default to 5 if not set)
+        const questionWeight = question.questionWeight || question.weight || 5;
+        
+        let questionScore = 0; // Score out of 10
+        
+        switch (question.type) {
+          case 'scale':
+          case 'rating':
+            // For scale/rating (1-10), use the value directly
+            const scaleValue = Number(response.answer);
+            if (!isNaN(scaleValue) && scaleValue >= 1 && scaleValue <= 10) {
+              questionScore = scaleValue; // 1-10 scale
+            }
+            break;
+            
+          case 'number':
+            // For number questions, normalize to 1-10 scale
+            const numValue = Number(response.answer);
+            if (!isNaN(numValue)) {
+              // Normalize: if it's a percentage (0-100), convert to 1-10
+              if (numValue >= 0 && numValue <= 100) {
+                questionScore = 1 + (numValue / 100) * 9; // Map 0-100 to 1-10
+              } else {
+                // For other numbers, clamp to 1-10 range
+                questionScore = Math.min(10, Math.max(1, numValue / 10));
+              }
+            }
+            break;
+            
+          case 'multiple_choice':
+          case 'select':
+            // For multiple choice, check if options have weights
+            if (question.options && Array.isArray(question.options)) {
+              // Check if options have weight property
+              const optionWithWeight = question.options.find((opt: any) => 
+                (typeof opt === 'object' && opt.text === String(response.answer)) ||
+                (typeof opt === 'string' && opt === String(response.answer))
+              );
+              
+              if (optionWithWeight && typeof optionWithWeight === 'object' && optionWithWeight.weight) {
+                // Use the weight from the option (1-10)
+                questionScore = optionWithWeight.weight;
+              } else {
+                // Fallback: score based on option position
+                const selectedIndex = question.options.findIndex((opt: any) => 
+                  (typeof opt === 'object' ? opt.text : opt) === String(response.answer)
+                );
+                if (selectedIndex >= 0) {
+                  const numOptions = question.options.length;
+                  if (numOptions === 1) {
+                    questionScore = 5;
+                  } else {
+                    questionScore = 1 + (selectedIndex / (numOptions - 1)) * 9;
+                  }
+                }
+              }
+            }
+            break;
+            
+          case 'boolean':
+            // Use yesIsPositive field to determine scoring
+            const yesIsPositive = question.yesIsPositive !== undefined ? question.yesIsPositive : true;
+            const isYes = response.answer === true || response.answer === 'yes' || response.answer === 'Yes';
+            
+            if (yesIsPositive) {
+              // YES is positive (e.g., "Do you feel happy?")
+              questionScore = isYes ? 8 : 3;
+            } else {
+              // YES is negative (e.g., "Do you feel anxious?")
+              questionScore = isYes ? 3 : 8;
+            }
+            break;
+            
+          case 'text':
+          case 'textarea':
+            // For text questions, give a neutral score
+            const textValue = String(response.answer).trim();
+            if (textValue.length > 0) {
+              questionScore = 5; // Neutral score for text answers
+            }
+            break;
+            
+          default:
+            // Default: give partial credit for answering
+            questionScore = 5;
+            break;
+        }
+        
+        // Add weighted score (questionScore * questionWeight)
+        totalWeightedScore += questionScore * questionWeight;
+        totalWeight += questionWeight;
+        answeredCount++;
+      });
+      
+      // Calculate final score as percentage (0-100)
+      // Normalize by total possible weighted score (10 * totalWeight)
+      const score = totalWeight > 0 
+        ? Math.round((totalWeightedScore / (totalWeight * 10)) * 100)
+        : 0;
+
+      // Ensure formTitle is set (should already be set from fetch, but double-check)
+      let formTitle = assignment.formTitle;
+      if (!formTitle) {
+        // Fallback: fetch from form if still missing
+        try {
+          const formDoc = await getDoc(doc(db, 'forms', assignment.formId));
+          if (formDoc.exists()) {
+            formTitle = formDoc.data().title || 'Check-in Form';
+          } else {
+            formTitle = 'Check-in Form';
+          }
+        } catch (error) {
+          console.error('Error fetching form title:', error);
+          formTitle = 'Check-in Form';
+        }
+      }
 
       // Create response document
       const responseData = {
         formId: assignment.formId,
-        formTitle: assignment.formTitle,
+        formTitle: formTitle, // Use the ensured formTitle
         assignmentId: assignmentId, // Add assignment ID for linking
         clientId: userProfile.uid,
+        coachId: assignment.coachId, // CRITICAL: Include coachId for coach to find responses
         clientName: userProfile.displayName || userProfile.firstName || 'Client',
         clientEmail: userProfile.email || '',
         submittedAt: new Date(),
@@ -188,12 +369,40 @@ export default function CheckInCompletionPage() {
 
       const responseRef = await addDoc(collection(db, 'formResponses'), responseData);
 
-      // Update assignment status
+      // Update assignment status with score and response details
       await updateDoc(doc(db, 'check_in_assignments', assignmentId), {
         status: 'completed',
         completedAt: new Date(),
-        responseId: responseRef.id
+        responseId: responseRef.id,
+        score: score, // Save the score to the assignment
+        totalQuestions: questions.length, // Save total questions
+        answeredQuestions: answeredCount // Save answered questions count
       });
+
+      // Create notification for coach
+      try {
+        const notificationResponse = await fetch('/api/check-in-completed', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            clientId: userProfile.uid,
+            formId: assignment.formId,
+            responseId: responseRef.id,
+            score: score,
+            formTitle: formTitle,
+            clientName: userProfile.displayName || userProfile.firstName || 'Client'
+          })
+        });
+        
+        if (!notificationResponse.ok) {
+          console.error('Failed to create notification');
+        }
+      } catch (error) {
+        console.error('Error creating notification:', error);
+        // Don't fail the check-in if notification fails
+      }
 
       // Redirect to success page
       router.push(`/client-portal/check-in/${assignmentId}/success?score=${score}`);
@@ -394,6 +603,44 @@ export default function CheckInCompletionPage() {
               </Link>
             </div>
 
+            {/* Check-in Window Status */}
+            {windowStatus && (
+              <div className={`mb-4 p-4 rounded-lg border ${
+                windowStatus.isOpen 
+                  ? 'bg-green-50 border-green-200' 
+                  : 'bg-yellow-50 border-yellow-200'
+              }`}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className={`font-medium ${
+                      windowStatus.isOpen ? 'text-green-800' : 'text-yellow-800'
+                    }`}>
+                      {windowStatus.isOpen ? '✅ Check-in window is open' : '⏰ Check-in window is closed'}
+                    </p>
+                    <p className={`text-sm mt-1 ${
+                      windowStatus.isOpen ? 'text-green-700' : 'text-yellow-700'
+                    }`}>
+                      {windowStatus.message}
+                    </p>
+                    {windowStatus.nextOpenTime && (
+                      <p className="text-sm mt-1 text-yellow-700">
+                        Next available: {windowStatus.nextOpenTime.toLocaleString('en-US', {
+                          weekday: 'long',
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </p>
+                    )}
+                  </div>
+                  <div className="text-sm text-gray-600">
+                    Window: {getCheckInWindowDescription(assignment.checkInWindow || DEFAULT_CHECK_IN_WINDOW)}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Progress Bar */}
             <div className="w-full bg-gray-200 rounded-full h-2 mb-4">
               <div 
@@ -421,6 +668,23 @@ export default function CheckInCompletionPage() {
 
                 <div className="mb-8">
                   {renderQuestion(currentQ, currentQuestion)}
+                </div>
+
+                {/* Comment/Notes Section */}
+                <div className="mt-6 pt-6 border-t border-gray-200">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Additional Notes (Optional)
+                  </label>
+                  <textarea
+                    value={responses[currentQuestion]?.comment || ''}
+                    onChange={(e) => handleCommentChange(currentQuestion, e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                    rows={3}
+                    placeholder="Add any additional notes or context about your answer..."
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    Use this space to provide more context or details about your response
+                  </p>
                 </div>
 
                 {/* Navigation */}

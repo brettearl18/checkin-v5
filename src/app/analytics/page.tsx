@@ -112,7 +112,11 @@ export default function AnalyticsPage() {
   useEffect(() => {
     const fetchAnalyticsData = async () => {
       try {
-        const coachId = userProfile?.uid || 'demo-coach-id';
+        if (!userProfile?.uid) {
+          console.error('No user profile found');
+          return;
+        }
+        const coachId = userProfile.uid;
         
         const response = await fetch(`/api/analytics/overview?timeRange=${timeRange}&coachId=${coachId}`);
         const result = await response.json();

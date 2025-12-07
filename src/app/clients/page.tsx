@@ -34,13 +34,17 @@ export default function ClientsPage() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'pending'>('all');
 
   useEffect(() => {
-    fetchClients();
-  }, []);
+    if (userProfile?.uid) {
+      fetchClients();
+    } else if (userProfile === null) {
+      // User profile is loaded but user is not authenticated
+      setLoading(false);
+    }
+  }, [userProfile]);
 
   const fetchClients = async () => {
     try {
       if (!userProfile?.uid) {
-        console.error('No user profile available');
         setLoading(false);
         return;
       }

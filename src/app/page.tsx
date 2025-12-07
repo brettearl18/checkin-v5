@@ -10,13 +10,17 @@ export default function HomePage() {
 
   useEffect(() => {
     if (!loading && userProfile) {
-      // Redirect based on user role
-      if (userProfile.role === 'client') {
-        router.push('/client-portal');
-      } else if (userProfile.role === 'coach') {
-        router.push('/dashboard');
-      } else if (userProfile.role === 'admin') {
+      // Redirect based on user role (supports multiple roles - prioritize admin > coach > client)
+      const hasAdmin = userProfile.role === 'admin' || userProfile?.roles?.includes('admin');
+      const hasCoach = userProfile.role === 'coach' || userProfile?.roles?.includes('coach');
+      const hasClient = userProfile.role === 'client' || userProfile?.roles?.includes('client');
+      
+      if (hasAdmin) {
         router.push('/admin');
+      } else if (hasCoach) {
+        router.push('/dashboard');
+      } else if (hasClient) {
+        router.push('/client-portal');
       } else {
         // Default fallback
         router.push('/dashboard');

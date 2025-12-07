@@ -11,7 +11,7 @@ interface CheckIn {
   clientName?: string;
   formId: string;
   formTitle: string;
-  responses: { [key: string]: any };
+  responses: { [key: string]: any } | number;
   score: number;
   totalQuestions: number;
   answeredQuestions: number;
@@ -20,6 +20,7 @@ interface CheckIn {
   energy?: number;
   status: 'pending' | 'completed';
   isAssignment?: boolean;
+  responseId?: string; // ID of the formResponse document for completed check-ins
 }
 
 interface Client {
@@ -607,7 +608,10 @@ export default function CheckInsPage() {
                       </div>
 
                       {/* Response Summary - Only for completed check-ins */}
-                      {checkIn.status === 'completed' && Object.keys(checkIn.responses).length > 0 && (
+                      {checkIn.status === 'completed' && 
+                       typeof checkIn.responses === 'object' && 
+                       !Array.isArray(checkIn.responses) &&
+                       Object.keys(checkIn.responses).length > 0 && (
                         <div className="border-t border-gray-200 pt-6">
                           <h4 className="text-lg font-semibold text-gray-900 mb-4">Check-in Summary:</h4>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -616,7 +620,7 @@ export default function CheckInsPage() {
                                 <div key={questionId} className="text-sm">
                                   <span className="font-medium text-gray-800">Q{questionId}:</span>
                                   <span className="ml-2 text-gray-900">
-                                    {typeof answer === 'boolean' ? (answer ? 'Yes' : 'No') : answer}
+                                    {typeof answer === 'boolean' ? (answer ? 'Yes' : 'No') : String(answer)}
                                   </span>
                                 </div>
                               ))}
@@ -626,7 +630,7 @@ export default function CheckInsPage() {
                                 <div key={questionId} className="text-sm">
                                   <span className="font-medium text-gray-800">Q{questionId}:</span>
                                   <span className="ml-2 text-gray-900">
-                                    {typeof answer === 'boolean' ? (answer ? 'Yes' : 'No') : answer}
+                                    {typeof answer === 'boolean' ? (answer ? 'Yes' : 'No') : String(answer)}
                                   </span>
                                 </div>
                               ))}
@@ -656,6 +660,14 @@ export default function CheckInsPage() {
                             </button>
                           ) : (
                             <>
+                              {checkIn.responseId && (
+                                <Link
+                                  href={`/responses/${checkIn.responseId}`}
+                                  className="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors"
+                                >
+                                  View Full Response
+                                </Link>
+                              )}
                               <button className="text-purple-600 hover:text-purple-800 text-sm font-medium transition-colors">
                                 Add Coach Notes
                               </button>

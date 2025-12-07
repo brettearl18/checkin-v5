@@ -1,18 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase-server';
 
-// Helper function to remove undefined values
+// Helper function to remove undefined values (but keep empty strings and false values)
 function removeUndefined(obj: any): any {
   if (obj === null || obj === undefined) return null;
   if (typeof obj !== 'object') return obj;
   
   if (Array.isArray(obj)) {
-    return obj.map(removeUndefined).filter(item => item !== null);
+    return obj.map(removeUndefined).filter(item => item !== null && item !== undefined);
   }
   
   const cleaned: any = {};
   for (const [key, value] of Object.entries(obj)) {
-    if (value !== undefined && value !== null && value !== '') {
+    // Keep false, 0, and empty strings as they are valid values
+    if (value !== undefined && value !== null) {
       cleaned[key] = removeUndefined(value);
     }
   }
@@ -27,6 +28,28 @@ export async function POST(request: NextRequest) {
     // Generate unique question ID
     const questionId = `question-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     
+    // Validate required fields
+    if (!formData.text && !formData.title) {
+      return NextResponse.json({
+        success: false,
+        message: 'Question text is required'
+      }, { status: 400 });
+    }
+
+    if (!formData.type) {
+      return NextResponse.json({
+        success: false,
+        message: 'Question type is required'
+      }, { status: 400 });
+    }
+
+    if (!formData.coachId) {
+      return NextResponse.json({
+        success: false,
+        message: 'Coach ID is required'
+      }, { status: 400 });
+    }
+
     // Clean the data
     const cleanedData = removeUndefined(formData);
     
@@ -40,9 +63,13 @@ export async function POST(request: NextRequest) {
       updatedAt: new Date()
     };
     
+    console.log('Creating question with data:', JSON.stringify(question, null, 2));
+    
     // Save to Firestore using Admin SDK
     const db = getDb();
     const docRef = await db.collection('questions').add(question);
+    
+    console.log('Question created with ID:', docRef.id);
     
     return NextResponse.json({
       success: true,

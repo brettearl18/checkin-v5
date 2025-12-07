@@ -37,6 +37,7 @@ export async function GET(request: NextRequest) {
         questions: data.questions || [],
         estimatedTime: data.estimatedTime,
         isStandard: data.isStandard || false,
+        isActive: data.isActive !== undefined ? data.isActive : true, // Default to true if not set
         createdAt: data.createdAt?.toDate?.()?.toISOString() || data.createdAt,
         updatedAt: data.updatedAt?.toDate?.()?.toISOString() || data.updatedAt
       };
@@ -60,7 +61,8 @@ export async function POST(request: NextRequest) {
     const formData = await request.json();
     
     // Validate required fields
-    const { title, description, category, questions, estimatedTime, coachId, isCopyingStandard } = formData;
+    // Accept both 'questions' and 'questionIds' for compatibility
+    const { title, description, category, questions, questionIds, estimatedTime, coachId, isCopyingStandard } = formData;
     
     if (!title || !description || !category || !coachId) {
       return NextResponse.json({
@@ -71,11 +73,14 @@ export async function POST(request: NextRequest) {
 
     const db = getDb();
     
+    // Use questionIds if provided, otherwise use questions
+    const questionList = questionIds || questions || [];
+    
     // If copying a standard form, we need to copy the questions too
-    if (isCopyingStandard && questions && questions.length > 0) {
+    if (isCopyingStandard && questionList && questionList.length > 0) {
       const newQuestions = [];
       
-      for (const questionId of questions) {
+      for (const questionId of questionList) {
         // Fetch the original question
         const questionDoc = await db.collection('questions').doc(questionId).get();
         if (questionDoc.exists) {
@@ -97,8 +102,9 @@ export async function POST(request: NextRequest) {
         }
       }
       
-      // Update the form data with new question IDs
-      formData.questions = newQuestions;
+      // Update the question list with new question IDs
+      questionList.length = 0;
+      questionList.push(...newQuestions);
     }
 
     // Generate unique form ID
@@ -110,10 +116,11 @@ export async function POST(request: NextRequest) {
       title,
       description,
       category,
-      questions: formData.questions || [],
+      questions: questionList, // Use the processed question list
       estimatedTime: estimatedTime || 5,
       coachId,
       isStandard: false, // Always false for copied forms
+      isActive: formData.isActive !== undefined ? formData.isActive : true, // Default to active
       createdAt: new Date(),
       updatedAt: new Date()
     };

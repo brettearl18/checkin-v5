@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { scoringProfiles as defaultScoringProfiles, getDefaultThresholds, type ScoringProfile } from '@/lib/scoring-utils';
 
 interface Client {
   id: string;
@@ -17,9 +18,9 @@ interface ScoringConfig {
   clientName: string;
   scoringProfile: 'high-performance' | 'moderate' | 'lifestyle' | 'custom';
   thresholds: {
-    red: number;    // Below this = Red (needs attention)
-    yellow: number; // Below this = Yellow (caution)
-    green: number;  // Above this = Green (doing well)
+    redMax: number;    // Maximum score for Red zone (e.g., 33 or 75)
+    orangeMax: number; // Maximum score for Orange zone (e.g., 80 or 89)
+    // Green is implicitly: orangeMax + 1 to 100
   };
   categories: {
     [category: string]: {
@@ -47,29 +48,31 @@ const defaultCategories = [
   'Lifestyle'
 ];
 
+import { scoringProfiles as defaultScoringProfiles, getDefaultThresholds, type ScoringProfile } from '@/lib/scoring-utils';
+
 const scoringProfiles = {
   'high-performance': {
     name: 'High Performance',
-    description: 'Elite athletes, competitive clients, strict adherence required',
-    thresholds: { red: 85, yellow: 90, green: 95 },
+    description: 'Elite athletes, competitive clients - Stricter standards (Red: 0-75%, Orange: 76-89%, Green: 90-100%)',
+    thresholds: getDefaultThresholds('high-performance'),
     color: 'text-purple-600'
   },
   'moderate': {
     name: 'Moderate',
-    description: 'Active clients, good adherence expected',
-    thresholds: { red: 70, yellow: 80, green: 85 },
+    description: 'Active clients, good adherence expected (Red: 0-60%, Orange: 61-85%, Green: 86-100%)',
+    thresholds: getDefaultThresholds('moderate'),
     color: 'text-blue-600'
   },
   'lifestyle': {
     name: 'Lifestyle',
-    description: 'General wellness, flexible approach',
-    thresholds: { red: 60, yellow: 70, green: 80 },
+    description: 'General wellness, flexible approach - More lenient standards (Red: 0-33%, Orange: 34-80%, Green: 81-100%)',
+    thresholds: getDefaultThresholds('lifestyle'),
     color: 'text-green-600'
   },
   'custom': {
     name: 'Custom',
     description: 'Customized thresholds for specific needs',
-    thresholds: { red: 70, yellow: 80, green: 85 },
+    thresholds: getDefaultThresholds('custom'),
     color: 'text-orange-600'
   }
 };
@@ -148,7 +151,7 @@ export default function ClientScoringPage() {
     }
   };
 
-  const handleThresholdChange = (type: 'red' | 'yellow' | 'green', value: number) => {
+  const handleThresholdChange = (type: 'redMax' | 'orangeMax', value: number) => {
     if (scoringConfig) {
       setScoringConfig({
         ...scoringConfig,
@@ -190,7 +193,7 @@ export default function ClientScoringPage() {
     }
   };
 
-  const handleCategoryThresholdChange = (category: string, type: 'red' | 'yellow' | 'green', value: number) => {
+  const handleCategoryThresholdChange = (category: string, type: 'redMax' | 'orangeMax', value: number) => {
     if (scoringConfig) {
       setScoringConfig({
         ...scoringConfig,
@@ -240,15 +243,15 @@ export default function ClientScoringPage() {
 
   const getScoreColor = (score: number) => {
     if (!scoringConfig) return 'text-gray-500';
-    if (score >= scoringConfig.thresholds.green) return 'text-green-600';
-    if (score >= scoringConfig.thresholds.yellow) return 'text-yellow-600';
+    if (score > scoringConfig.thresholds.orangeMax) return 'text-green-600';
+    if (score > scoringConfig.thresholds.redMax) return 'text-orange-600';
     return 'text-red-600';
   };
 
   const getScoreStatus = (score: number) => {
     if (!scoringConfig) return 'Unknown';
-    if (score >= scoringConfig.thresholds.green) return '🟢 Excellent';
-    if (score >= scoringConfig.thresholds.yellow) return '🟡 Good';
+    if (score > scoringConfig.thresholds.orangeMax) return '🟢 Excellent';
+    if (score > scoringConfig.thresholds.redMax) return '🟠 On Track';
     return '🔴 Needs Attention';
   };
 
@@ -330,7 +333,7 @@ export default function ClientScoringPage() {
                       <div className={`font-medium ${profile.color}`}>{profile.name}</div>
                       <div className="text-sm text-gray-800 mt-1">{profile.description}</div>
                       <div className="text-xs text-gray-500 mt-2">
-                        Red: &lt;{profile.thresholds.red}% | Yellow: {profile.thresholds.yellow}% | Green: &gt;{profile.thresholds.green}%
+                        Red: 0-{profile.thresholds.redMax}% | Orange: {profile.thresholds.redMax + 1}-{profile.thresholds.orangeMax}% | Green: {profile.thresholds.orangeMax + 1}-100%
                       </div>
                     </div>
                   </label>
@@ -345,47 +348,42 @@ export default function ClientScoringPage() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-red-600 mb-2">
-                    🔴 Red Zone (Needs Attention)
+                    🔴 Red Zone Max (Needs Attention)
                   </label>
                   <input
                     type="number"
                     min="0"
                     max="100"
-                    value={scoringConfig.thresholds.red}
-                    onChange={(e) => handleThresholdChange('red', parseInt(e.target.value) || 0)}
+                    value={scoringConfig.thresholds.redMax}
+                    onChange={(e) => handleThresholdChange('redMax', parseInt(e.target.value) || 0)}
                     className="w-full px-3 py-2 border border-red-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
                   />
-                  <p className="text-xs text-gray-500 mt-1">Below this percentage</p>
+                  <p className="text-xs text-gray-500 mt-1">Maximum score for Red zone (0-{scoringConfig.thresholds.redMax}%)</p>
                 </div>
                 
                 <div>
-                  <label className="block text-sm font-medium text-yellow-600 mb-2">
-                    🟡 Yellow Zone (Caution)
+                  <label className="block text-sm font-medium text-orange-600 mb-2">
+                    🟠 Orange Zone Max (On Track)
                   </label>
                   <input
                     type="number"
                     min="0"
                     max="100"
-                    value={scoringConfig.thresholds.yellow}
-                    onChange={(e) => handleThresholdChange('yellow', parseInt(e.target.value) || 0)}
-                    className="w-full px-3 py-2 border border-yellow-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                    value={scoringConfig.thresholds.orangeMax}
+                    onChange={(e) => handleThresholdChange('orangeMax', parseInt(e.target.value) || 0)}
+                    className="w-full px-3 py-2 border border-orange-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
                   />
-                  <p className="text-xs text-gray-500 mt-1">Below this percentage</p>
+                  <p className="text-xs text-gray-500 mt-1">Maximum score for Orange zone ({scoringConfig.thresholds.redMax + 1}-{scoringConfig.thresholds.orangeMax}%)</p>
                 </div>
                 
                 <div>
                   <label className="block text-sm font-medium text-green-600 mb-2">
                     🟢 Green Zone (Excellent)
                   </label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    value={scoringConfig.thresholds.green}
-                    onChange={(e) => handleThresholdChange('green', parseInt(e.target.value) || 0)}
-                    className="w-full px-3 py-2 border border-green-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">Above this percentage</p>
+                  <div className="w-full px-3 py-2 border border-green-300 rounded-md bg-gray-50">
+                    <p className="text-sm text-gray-700">{scoringConfig.thresholds.orangeMax + 1}-100%</p>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">Automatically calculated (above Orange max)</p>
                 </div>
               </div>
             </div>
@@ -478,15 +476,15 @@ export default function ClientScoringPage() {
                   <div className="space-y-2 text-sm">
                     <div className="flex items-center justify-between">
                       <span>🔴 Red Zone:</span>
-                      <span className="font-medium">&lt; {scoringConfig.thresholds.red}%</span>
+                      <span className="font-medium">0-{scoringConfig.thresholds.redMax}%</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span>🟡 Yellow Zone:</span>
-                      <span className="font-medium">{scoringConfig.thresholds.yellow}%</span>
+                      <span>🟠 Orange Zone:</span>
+                      <span className="font-medium">{scoringConfig.thresholds.redMax + 1}-{scoringConfig.thresholds.orangeMax}%</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span>🟢 Green Zone:</span>
-                      <span className="font-medium">&gt; {scoringConfig.thresholds.green}%</span>
+                      <span className="font-medium">{scoringConfig.thresholds.orangeMax + 1}-100%</span>
                     </div>
                   </div>
                 </div>

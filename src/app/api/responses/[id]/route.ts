@@ -34,32 +34,57 @@ export async function GET(
       responseData = responseDoc.data();
     } else {
       // If not found, try to find by assignmentId
-      const responsesSnapshot = await db.collection('formResponses')
-        .where('assignmentId', '==', id)
-        .limit(1)
-        .get();
+      try {
+        const responsesSnapshot = await db.collection('formResponses')
+          .where('assignmentId', '==', id)
+          .limit(1)
+          .get();
 
-      if (!responsesSnapshot.empty) {
-        responseDoc = responsesSnapshot.docs[0];
-        responseData = responseDoc.data();
-      } else {
-        // If still not found, try to find by checking the assignment
-        const assignmentDoc = await db.collection('check_in_assignments').doc(id).get();
-        
-        if (assignmentDoc.exists) {
-          const assignmentData = assignmentDoc.data();
+        if (!responsesSnapshot.empty) {
+          responseDoc = responsesSnapshot.docs[0];
+          responseData = responseDoc.data();
+        }
+      } catch (error) {
+        console.log('Error querying by assignmentId:', error);
+      }
+      
+      // If still not found, try to find by checking the assignment
+      if (!responseData) {
+        try {
+          const assignmentDoc = await db.collection('check_in_assignments').doc(id).get();
           
-          // Try to find response by assignmentId or by matching formId and clientId
-          const responsesSnapshot2 = await db.collection('formResponses')
-            .where('formId', '==', assignmentData?.formId)
-            .where('clientId', '==', assignmentData?.clientId)
-            .limit(1)
-            .get();
+          if (assignmentDoc.exists) {
+            const assignmentData = assignmentDoc.data();
+            
+            // First, try using responseId from assignment if it exists
+            if (assignmentData?.responseId) {
+              const responseById = await db.collection('formResponses').doc(assignmentData.responseId).get();
+              if (responseById.exists) {
+                responseDoc = responseById;
+                responseData = responseDoc.data();
+              }
+            }
+            
+            // If still not found, try to find by assignmentId or by matching formId and clientId
+            if (!responseData) {
+              try {
+                const responsesSnapshot2 = await db.collection('formResponses')
+                  .where('formId', '==', assignmentData?.formId)
+                  .where('clientId', '==', assignmentData?.clientId)
+                  .limit(1)
+                  .get();
 
-          if (!responsesSnapshot2.empty) {
-            responseDoc = responsesSnapshot2.docs[0];
-            responseData = responseDoc.data();
+                if (!responsesSnapshot2.empty) {
+                  responseDoc = responsesSnapshot2.docs[0];
+                  responseData = responseDoc.data();
+                }
+              } catch (queryError) {
+                console.log('Error querying by formId and clientId:', queryError);
+              }
+            }
           }
+        } catch (error) {
+          console.log('Error fetching assignment:', error);
         }
       }
     }
@@ -144,7 +169,10 @@ export async function GET(
       score: responseData?.score || responseData?.percentageScore || 0,
       totalQuestions: responseData?.totalQuestions || questions.length,
       submittedAt: responseData?.submittedAt?.toDate?.()?.toISOString() || responseData?.submittedAt || new Date().toISOString(),
-      status: responseData?.status || 'completed'
+      status: responseData?.status || 'completed',
+      reviewedByCoach: responseData?.reviewedByCoach || false,
+      reviewedAt: responseData?.reviewedAt?.toDate?.()?.toISOString() || responseData?.reviewedAt || null,
+      reviewedBy: responseData?.reviewedBy || null
     };
 
     return NextResponse.json({

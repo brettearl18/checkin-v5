@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -8,17 +8,38 @@ import Link from 'next/link';
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [selectedRole, setSelectedRole] = useState<'admin' | 'coach' | 'client'>('coach');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [loginSuccess, setLoginSuccess] = useState(false);
   
-  const { login } = useAuth();
+  const { login, userProfile } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   
   // Get error from URL params (for redirects from other pages)
   const urlError = searchParams.get('error');
   const errorMessage = searchParams.get('message');
+
+  // Handle redirect after successful login and profile load
+  useEffect(() => {
+    if (loginSuccess && userProfile) {
+      // Redirect based on selected role
+      // ProtectedRoute components will verify the user actually has access
+      if (selectedRole === 'admin') {
+        router.push('/admin');
+      } else if (selectedRole === 'coach') {
+        router.push('/dashboard');
+      } else if (selectedRole === 'client') {
+        router.push('/client-portal');
+      } else {
+        router.push('/');
+      }
+      setLoginSuccess(false);
+      setLoading(false); // Reset loading after redirect is initiated
+    }
+  }, [loginSuccess, userProfile, selectedRole, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,9 +48,9 @@ export default function LoginPage() {
 
     try {
       await login(email, password);
-      
-      // Redirect to home page, which will handle role-based routing
-      router.push('/');
+      setLoginSuccess(true);
+      // Don't set loading to false here - let useEffect handle it after redirect
+      // The useEffect will handle the redirect once userProfile is loaded
     } catch (error: any) {
       console.error('Login error:', error);
       
@@ -41,6 +62,9 @@ export default function LoginPage() {
         case 'auth/wrong-password':
           setError('Incorrect password. Please try again.');
           break;
+        case 'auth/invalid-credential':
+          setError('Invalid email or password. Please check your credentials and try again.');
+          break;
         case 'auth/invalid-email':
           setError('Please enter a valid email address.');
           break;
@@ -51,7 +75,7 @@ export default function LoginPage() {
           setError('This account has been disabled. Please contact support.');
           break;
         default:
-          setError('An error occurred during login. Please try again.');
+          setError(`Login failed: ${error.message || 'An error occurred during login. Please try again.'}`);
       }
     } finally {
       setLoading(false);
@@ -148,6 +172,80 @@ export default function LoginPage() {
                     </svg>
                   )}
                 </button>
+              </div>
+            </div>
+
+            {/* Role Selection */}
+            <div>
+              <label className="block text-sm font-medium text-gray-900 mb-3">
+                Sign in as
+              </label>
+              <div className="grid grid-cols-3 gap-3">
+                {/* Admin Option */}
+                <label className={`relative flex flex-col items-center justify-center p-3 border-2 rounded-lg cursor-pointer transition-all ${
+                  selectedRole === 'admin'
+                    ? 'border-blue-600 bg-blue-50'
+                    : 'border-gray-300 bg-white hover:border-gray-400'
+                }`}>
+                  <input
+                    type="radio"
+                    name="role"
+                    value="admin"
+                    checked={selectedRole === 'admin'}
+                    onChange={(e) => setSelectedRole(e.target.value as 'admin')}
+                    className="sr-only"
+                  />
+                  <svg className={`w-6 h-6 mb-1 ${selectedRole === 'admin' ? 'text-blue-600' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                  </svg>
+                  <span className={`text-xs font-medium ${selectedRole === 'admin' ? 'text-blue-600' : 'text-gray-600'}`}>
+                    Admin
+                  </span>
+                </label>
+
+                {/* Coach Option */}
+                <label className={`relative flex flex-col items-center justify-center p-3 border-2 rounded-lg cursor-pointer transition-all ${
+                  selectedRole === 'coach'
+                    ? 'border-blue-600 bg-blue-50'
+                    : 'border-gray-300 bg-white hover:border-gray-400'
+                }`}>
+                  <input
+                    type="radio"
+                    name="role"
+                    value="coach"
+                    checked={selectedRole === 'coach'}
+                    onChange={(e) => setSelectedRole(e.target.value as 'coach')}
+                    className="sr-only"
+                  />
+                  <svg className={`w-6 h-6 mb-1 ${selectedRole === 'coach' ? 'text-blue-600' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  <span className={`text-xs font-medium ${selectedRole === 'coach' ? 'text-blue-600' : 'text-gray-600'}`}>
+                    Coach
+                  </span>
+                </label>
+
+                {/* Client Option */}
+                <label className={`relative flex flex-col items-center justify-center p-3 border-2 rounded-lg cursor-pointer transition-all ${
+                  selectedRole === 'client'
+                    ? 'border-blue-600 bg-blue-50'
+                    : 'border-gray-300 bg-white hover:border-gray-400'
+                }`}>
+                  <input
+                    type="radio"
+                    name="role"
+                    value="client"
+                    checked={selectedRole === 'client'}
+                    onChange={(e) => setSelectedRole(e.target.value as 'client')}
+                    className="sr-only"
+                  />
+                  <svg className={`w-6 h-6 mb-1 ${selectedRole === 'client' ? 'text-blue-600' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
+                  </svg>
+                  <span className={`text-xs font-medium ${selectedRole === 'client' ? 'text-blue-600' : 'text-gray-600'}`}>
+                    Client
+                  </span>
+                </label>
               </div>
             </div>
 

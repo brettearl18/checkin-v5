@@ -186,7 +186,7 @@ export default function ClientGoalsPage() {
             <div className="flex items-center justify-between">
               <div>
                 <h1 className="text-3xl font-bold text-gray-900 mb-2">My Goals</h1>
-                <p className="text-gray-600">Set and track your wellness goals</p>
+                <p className="text-gray-900">Set and track your wellness goals</p>
               </div>
               <button
                 onClick={() => setShowAddGoal(true)}
@@ -205,7 +205,7 @@ export default function ClientGoalsPage() {
                   <span className="text-2xl">🎯</span>
                 </div>
                 <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Total Goals</p>
+                  <p className="text-sm font-medium text-gray-900">Total Goals</p>
                   <p className="text-2xl font-bold text-gray-900">{goals.length}</p>
                 </div>
               </div>
@@ -217,7 +217,7 @@ export default function ClientGoalsPage() {
                   <span className="text-2xl">⏳</span>
                 </div>
                 <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Active Goals</p>
+                  <p className="text-sm font-medium text-gray-900">Active Goals</p>
                   <p className="text-2xl font-bold text-gray-900">{activeGoals.length}</p>
                 </div>
               </div>
@@ -229,7 +229,7 @@ export default function ClientGoalsPage() {
                   <span className="text-2xl">✅</span>
                 </div>
                 <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Completed</p>
+                  <p className="text-sm font-medium text-gray-900">Completed</p>
                   <p className="text-2xl font-bold text-gray-900">{completedGoals.length}</p>
                 </div>
               </div>
@@ -241,7 +241,7 @@ export default function ClientGoalsPage() {
                   <span className="text-2xl">⚠️</span>
                 </div>
                 <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Overdue</p>
+                  <p className="text-sm font-medium text-gray-900">Overdue</p>
                   <p className="text-2xl font-bold text-gray-900">{overdueGoals.length}</p>
                 </div>
               </div>
@@ -252,19 +252,19 @@ export default function ClientGoalsPage() {
           <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
             <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-8 py-6 border-b border-gray-100">
               <h2 className="text-2xl font-bold text-gray-900">Your Goals</h2>
-              <p className="text-gray-600 mt-1">Track your progress towards achieving your wellness goals</p>
+              <p className="text-gray-900 mt-1">Track your progress towards achieving your wellness goals</p>
             </div>
 
             {loading ? (
               <div className="p-8 text-center">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-                <p className="mt-4 text-gray-600">Loading your goals...</p>
+                <p className="mt-4 text-gray-900">Loading your goals...</p>
               </div>
             ) : goals.length === 0 ? (
               <div className="p-8 text-center">
                 <div className="text-6xl mb-4">🎯</div>
                 <h3 className="text-xl font-semibold text-gray-900 mb-2">No goals set yet</h3>
-                <p className="text-gray-600 mb-6">Start by setting your first wellness goal to track your progress.</p>
+                <p className="text-gray-900 mb-6">Start by setting your first wellness goal to track your progress.</p>
                 <div className="space-y-3">
                   <button
                     onClick={() => setShowAddGoal(true)}
@@ -272,7 +272,7 @@ export default function ClientGoalsPage() {
                   >
                     Set Your First Goal
                   </button>
-                  <div className="text-sm text-gray-500">or</div>
+                  <div className="text-sm text-gray-700">or</div>
                   <button
                     onClick={async () => {
                       try {
@@ -331,10 +331,10 @@ export default function ClientGoalsPage() {
                             style={{ width: `${Math.min(goal.progress, 100)}%` }}
                           ></div>
                         </div>
-                        <p className="text-xs text-gray-500 mt-1">{Math.round(goal.progress)}% complete</p>
+                        <p className="text-xs text-gray-700 mt-1">{Math.round(goal.progress)}% complete</p>
                       </div>
 
-                      <div className="text-xs text-gray-500">
+                      <div className="text-xs text-gray-700">
                         Deadline: {formatDate(goal.deadline)}
                       </div>
 
@@ -363,7 +363,7 @@ export default function ClientGoalsPage() {
                   <h3 className="text-lg font-medium text-gray-900">Add New Goal</h3>
                   <button
                     onClick={() => setShowAddGoal(false)}
-                    className="text-gray-400 hover:text-gray-600"
+                    className="text-gray-600 hover:text-gray-800"
                   >
                     <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { doc, getDoc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { getDb } from '@/lib/firebase-server';
 
 // Helper function to remove undefined values
@@ -28,10 +27,9 @@ export async function GET(
   try {
     const questionId = await params.id;
     const db = getDb();
-    const questionRef = doc(db, 'questions', questionId);
-    const questionDoc = await getDoc(questionRef);
+    const questionDoc = await db.collection('questions').doc(questionId).get();
     
-    if (!questionDoc.exists()) {
+    if (!questionDoc.exists) {
       return NextResponse.json(
         { success: false, message: 'Question not found' },
         { status: 404 }
@@ -72,13 +70,12 @@ export async function PUT(
     // Add updated timestamp
     const updateData = {
       ...cleanedData,
-      updatedAt: serverTimestamp()
+      updatedAt: new Date()
     };
     
-    // Update in Firestore
+    // Update in Firestore using Admin SDK
     const db = getDb();
-    const questionRef = doc(db, 'questions', questionId);
-    await updateDoc(questionRef, updateData);
+    await db.collection('questions').doc(questionId).update(updateData);
     
     return NextResponse.json({
       success: true,
@@ -89,7 +86,7 @@ export async function PUT(
   } catch (error) {
     console.error('Error updating question:', error);
     return NextResponse.json(
-      { success: false, message: 'Failed to update question' },
+      { success: false, message: 'Failed to update question', error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
   }
@@ -103,10 +100,9 @@ export async function DELETE(
   try {
     const questionId = await params.id;
     
-    // Delete from Firestore
+    // Delete from Firestore using Admin SDK
     const db = getDb();
-    const questionRef = doc(db, 'questions', questionId);
-    await deleteDoc(questionRef);
+    await db.collection('questions').doc(questionId).delete();
     
     return NextResponse.json({
       success: true,
@@ -117,7 +113,7 @@ export async function DELETE(
   } catch (error) {
     console.error('Error deleting question:', error);
     return NextResponse.json(
-      { success: false, message: 'Failed to delete question' },
+      { success: false, message: 'Failed to delete question', error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
   }

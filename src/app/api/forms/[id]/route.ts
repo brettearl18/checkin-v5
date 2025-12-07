@@ -3,10 +3,11 @@ import { getDb } from '@/lib/firebase-server';
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const formId = params.id;
+    const { id } = await params;
+    const formId = id;
     const body = await request.json();
     const { isActive, updatedAt } = body;
 
@@ -21,9 +22,12 @@ export async function PATCH(
     }
 
     // Update the form
-    const updateData: any = {};
-    if (isActive !== undefined) updateData.isActive = isActive;
-    if (updatedAt) updateData.updatedAt = new Date(updatedAt);
+    const updateData: any = {
+      updatedAt: new Date() // Always update the timestamp
+    };
+    if (isActive !== undefined) {
+      updateData.isActive = isActive;
+    }
 
     await db.collection('forms').doc(formId).update(updateData);
 
@@ -74,6 +78,72 @@ export async function GET(
     console.error('Error fetching form:', error);
     return NextResponse.json(
       { success: false, message: 'Failed to fetch form' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const formId = id;
+    const body = await request.json();
+    const { title, description, category, questionIds, estimatedTime, coachId, isActive } = body;
+
+    if (!title || !description || !category || !coachId) {
+      return NextResponse.json({
+        success: false,
+        message: 'Missing required fields: title, description, category, coachId'
+      }, { status: 400 });
+    }
+
+    const db = getDb();
+    const formDoc = await db.collection('forms').doc(formId).get();
+    
+    if (!formDoc.exists) {
+      return NextResponse.json(
+        { success: false, message: 'Form not found' },
+        { status: 404 }
+      );
+    }
+
+    // Check if the coach owns this form
+    const existingForm = formDoc.data();
+    if (existingForm?.coachId !== coachId) {
+      return NextResponse.json(
+        { success: false, message: 'Unauthorized: You can only edit your own forms' },
+        { status: 403 }
+      );
+    }
+
+    // Update the form
+    const updateData: any = {
+      title,
+      description,
+      category,
+      questions: questionIds || [],
+      estimatedTime: estimatedTime || 5,
+      updatedAt: new Date()
+    };
+
+    if (isActive !== undefined) {
+      updateData.isActive = isActive;
+    }
+
+    await db.collection('forms').doc(formId).update(updateData);
+
+    return NextResponse.json({
+      success: true,
+      message: 'Form updated successfully',
+      formId: formId
+    });
+  } catch (error) {
+    console.error('Error updating form:', error);
+    return NextResponse.json(
+      { success: false, message: 'Failed to update form', error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
   }

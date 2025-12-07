@@ -5,6 +5,24 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { RoleProtected } from '@/components/ProtectedRoute';
+import { DEFAULT_CHECK_IN_WINDOW } from '@/lib/checkin-window-utils';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 interface Question {
   id: string;
@@ -30,6 +48,85 @@ interface Client {
   status: string;
 }
 
+// Sortable Question Item Component
+function SortableQuestionItem({ 
+  questionId, 
+  question, 
+  index 
+}: { 
+  questionId: string; 
+  question: Question; 
+  index: number;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: questionId });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  const getQuestionTitle = (q: Question) => q.title || q.text || 'Untitled Question';
+  const getQuestionType = (q: Question) => q.type || q.questionType || 'text';
+  const getQuestionTypeLabel = (type: string) => {
+    const labels: { [key: string]: string } = {
+      'text': 'Short Text',
+      'textarea': 'Long Text',
+      'number': 'Number',
+      'select': 'Single Choice',
+      'multiselect': 'Multiple Choice',
+      'boolean': 'Yes/No',
+      'scale': 'Scale (1-10)',
+      'date': 'Date',
+      'time': 'Time',
+    };
+    return labels[type] || type;
+  };
+  const getCategoryLabel = (category: string) => {
+    // Simple category label - just return the category or format it nicely
+    if (!category) return 'Uncategorized';
+    return category
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`flex items-start gap-3 p-3 bg-gray-50 rounded-lg border-2 transition-all ${
+        isDragging ? 'border-blue-400 shadow-lg bg-blue-50' : 'border-transparent hover:border-gray-200'
+      }`}
+    >
+      <div
+        {...attributes}
+        {...listeners}
+        className="cursor-grab active:cursor-grabbing flex items-center justify-center w-10 h-10 text-gray-400 hover:text-blue-600 hover:bg-blue-100 rounded transition-colors"
+        title="Drag to reorder"
+      >
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
+        </svg>
+      </div>
+      <span className="text-sm font-medium text-gray-500 w-8">#{index + 1}</span>
+      <div className="flex-1">
+        <p className="font-medium text-gray-900">{getQuestionTitle(question)}</p>
+        <p className="text-sm text-gray-600">
+          {getQuestionTypeLabel(getQuestionType(question))} • {getCategoryLabel(question.category)}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export default function CreateFormPage() {
   const router = useRouter();
   const { userProfile, logout } = useAuth();
@@ -39,6 +136,17 @@ export default function CreateFormPage() {
   const [clients, setCliients] = useState<Client[]>([]);
   const [selectedQuestions, setSelectedQuestions] = useState<string[]>([]);
   const [selectedClients, setSelectedClients] = useState<string[]>([]);
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('all');
+  const [selectedTypeFilter, setSelectedTypeFilter] = useState<string>('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  
+  // Drag and drop sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -51,13 +159,7 @@ export default function CreateFormPage() {
     duration: 4,
     startDate: new Date().toISOString().split('T')[0],
     dueTime: '09:00',
-    checkInWindow: {
-      enabled: false,
-      startDay: 'monday',
-      startTime: '09:00',
-      endDay: 'tuesday', 
-      endTime: '12:00'
-    }
+    checkInWindow: DEFAULT_CHECK_IN_WINDOW
   });
 
   const categories = [
@@ -92,7 +194,11 @@ export default function CreateFormPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const coachId = userProfile?.uid || 'demo-coach-id';
+        if (!userProfile?.uid) {
+          console.error('No user profile found');
+          return;
+        }
+        const coachId = userProfile.uid;
         console.log('Fetching data for coachId:', coachId);
         
         // Fetch questions
@@ -153,6 +259,18 @@ export default function CreateFormPage() {
         : [...prev, questionId];
       return newSelection;
     });
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      setSelectedQuestions((items) => {
+        const oldIndex = items.indexOf(active.id as string);
+        const newIndex = items.indexOf(over.id as string);
+        return arrayMove(items, oldIndex, newIndex);
+      });
+    }
   };
 
   const toggleClientSelection = (clientId: string) => {
@@ -308,13 +426,30 @@ export default function CreateFormPage() {
     const categoryMap: { [key: string]: string } = {
       'general': 'General',
       'mental_health': 'Mental Health',
+      'Mental Health': 'Mental Health',
       'physical_health': 'Physical Health',
+      'Health & Wellness': 'Health & Wellness',
+      'Fitness & Exercise': 'Fitness & Exercise',
       'relationships': 'Relationships',
       'work': 'Work/Career',
       'lifestyle': 'Lifestyle',
-      'goals': 'Goals & Progress'
+      'Lifestyle': 'Lifestyle',
+      'goals': 'Goals & Progress',
+      'Goals & Progress': 'Goals & Progress',
+      'Hormonal Health': 'Hormonal Health',
+      'Nutrition & Diet': 'Nutrition & Diet',
+      'Sleep & Recovery': 'Sleep & Recovery',
+      'Self-Care': 'Self-Care',
+      'Stress Management': 'Stress Management'
     };
-    return categoryMap[category] || category;
+    // If not in map, format the category nicely (capitalize words)
+    if (!categoryMap[category]) {
+      return category
+        .split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .join(' ');
+    }
+    return categoryMap[category];
   };
 
   const getQuestionTitle = (question: Question) => {
@@ -415,6 +550,21 @@ export default function CreateFormPage() {
         );
 
       case 2:
+        // Get unique categories and types from questions
+        const uniqueCategories = [...new Set(questions.map(q => q.category))].sort();
+        const uniqueTypes = [...new Set(questions.map(q => getQuestionType(q)))].sort();
+        
+        // Filter questions based on selected filters
+        const filteredQuestions = questions.filter(question => {
+          const categoryMatch = selectedCategoryFilter === 'all' || question.category === selectedCategoryFilter;
+          const typeMatch = selectedTypeFilter === 'all' || getQuestionType(question) === selectedTypeFilter;
+          const searchMatch = searchTerm === '' || 
+            getQuestionTitle(question).toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (question.description && question.description.toLowerCase().includes(searchTerm.toLowerCase()));
+          
+          return categoryMatch && typeMatch && searchMatch;
+        });
+        
         return (
           <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8">
             <div className="flex items-center justify-between mb-6">
@@ -426,6 +576,125 @@ export default function CreateFormPage() {
                 + Create New Question
               </Link>
             </div>
+
+            {/* Filters */}
+            {questions.length > 0 && (
+              <div className="mb-6 space-y-4">
+                {/* Search */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Search Questions
+                  </label>
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Search by question text or description..."
+                    className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                  />
+                </div>
+
+                {/* Category and Type Filters */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Filter by Category
+                    </label>
+                    <select
+                      value={selectedCategoryFilter}
+                      onChange={(e) => setSelectedCategoryFilter(e.target.value)}
+                      className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 bg-white"
+                    >
+                      <option value="all">All Categories ({questions.length})</option>
+                      {uniqueCategories.map(category => {
+                        const count = questions.filter(q => q.category === category).length;
+                        return (
+                          <option key={category} value={category}>
+                            {getCategoryLabel(category)} ({count})
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Filter by Type
+                    </label>
+                    <select
+                      value={selectedTypeFilter}
+                      onChange={(e) => setSelectedTypeFilter(e.target.value)}
+                      className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 bg-white"
+                    >
+                      <option value="all">All Types ({questions.length})</option>
+                      {uniqueTypes.map(type => {
+                        const count = questions.filter(q => getQuestionType(q) === type).length;
+                        return (
+                          <option key={type} value={type}>
+                            {getQuestionTypeLabel(type)} ({count})
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Active Filters Display */}
+                {(selectedCategoryFilter !== 'all' || selectedTypeFilter !== 'all' || searchTerm) && (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm text-gray-600">Active filters:</span>
+                    {selectedCategoryFilter !== 'all' && (
+                      <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                        Category: {getCategoryLabel(selectedCategoryFilter)}
+                        <button
+                          onClick={() => setSelectedCategoryFilter('all')}
+                          className="ml-2 text-blue-600 hover:text-blue-800"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    )}
+                    {selectedTypeFilter !== 'all' && (
+                      <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                        Type: {getQuestionTypeLabel(selectedTypeFilter)}
+                        <button
+                          onClick={() => setSelectedTypeFilter('all')}
+                          className="ml-2 text-green-600 hover:text-green-800"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    )}
+                    {searchTerm && (
+                      <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                        Search: "{searchTerm}"
+                        <button
+                          onClick={() => setSearchTerm('')}
+                          className="ml-2 text-purple-600 hover:text-purple-800"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    )}
+                    <button
+                      onClick={() => {
+                        setSelectedCategoryFilter('all');
+                        setSelectedTypeFilter('all');
+                        setSearchTerm('');
+                      }}
+                      className="text-sm text-gray-600 hover:text-gray-900 underline"
+                    >
+                      Clear all
+                    </button>
+                  </div>
+                )}
+
+                {/* Results Count */}
+                <div className="text-sm text-gray-600">
+                  Showing {filteredQuestions.length} of {questions.length} questions
+                </div>
+              </div>
+            )}
 
             {questions.length === 0 ? (
               <div className="text-center py-12">
@@ -443,9 +712,29 @@ export default function CreateFormPage() {
                   Create Question
                 </Link>
               </div>
+            ) : filteredQuestions.length === 0 ? (
+              <div className="text-center py-12">
+                <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-8 h-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No questions match your filters</h3>
+                <p className="text-gray-500 mb-6">Try adjusting your search or filter criteria.</p>
+                <button
+                  onClick={() => {
+                    setSelectedCategoryFilter('all');
+                    setSelectedTypeFilter('all');
+                    setSearchTerm('');
+                  }}
+                  className="inline-flex items-center px-6 py-3 bg-gray-600 text-white rounded-xl text-sm font-medium hover:bg-gray-700 transition-colors"
+                >
+                  Clear Filters
+                </button>
+              </div>
             ) : (
               <div className="space-y-4">
-                {questions.map((question) => (
+                {filteredQuestions.map((question) => (
                   <div
                     key={question.id}
                     className={`border-2 rounded-xl p-4 cursor-pointer transition-all duration-200 ${
@@ -514,24 +803,33 @@ export default function CreateFormPage() {
 
               <div>
                 <h4 className="font-semibold text-gray-900 mb-4">Selected Questions:</h4>
-                <div className="space-y-3">
-                  {selectedQuestions.map((questionId, index) => {
-                    const question = questions.find(q => q.id === questionId);
-                    if (!question) return null;
-                    
-                    return (
-                      <div key={questionId} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
-                        <span className="text-sm font-medium text-gray-500 w-8">#{index + 1}</span>
-                        <div className="flex-1">
-                          <p className="font-medium text-gray-900">{getQuestionTitle(question)}</p>
-                          <p className="text-sm text-gray-600">
-                            {getQuestionTypeLabel(getQuestionType(question))} • {getCategoryLabel(question.category)}
-                          </p>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                <p className="text-sm text-gray-500 mb-4">Drag and drop to reorder questions</p>
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={handleDragEnd}
+                >
+                  <SortableContext
+                    items={selectedQuestions}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    <div className="space-y-3">
+                      {selectedQuestions.map((questionId, index) => {
+                        const question = questions.find(q => q.id === questionId);
+                        if (!question) return null;
+                        
+                        return (
+                          <SortableQuestionItem
+                            key={questionId}
+                            questionId={questionId}
+                            question={question}
+                            index={index}
+                          />
+                        );
+                      })}
+                    </div>
+                  </SortableContext>
+                </DndContext>
               </div>
             </div>
           </div>

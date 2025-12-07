@@ -38,24 +38,54 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    const feedbackData: CoachFeedback = {
-      responseId,
-      coachId,
-      clientId,
-      questionId: questionId || null,
-      feedbackType,
-      content,
-      createdAt: new Date(),
-      updatedAt: new Date()
-    };
+    // Check if feedback already exists for this combination
+    let existingFeedbackQuery = db.collection('coachFeedback')
+      .where('responseId', '==', responseId)
+      .where('coachId', '==', coachId)
+      .where('feedbackType', '==', feedbackType);
+    
+    // If questionId is provided, filter by it; otherwise filter for null questionId (overall feedback)
+    if (questionId) {
+      existingFeedbackQuery = existingFeedbackQuery.where('questionId', '==', questionId);
+    } else {
+      existingFeedbackQuery = existingFeedbackQuery.where('questionId', '==', null);
+    }
 
-    // Save to Firestore
-    const feedbackRef = await db.collection('coachFeedback').add(feedbackData);
+    const existingFeedbackSnapshot = await existingFeedbackQuery.get();
+
+    let feedbackId: string;
+    const now = new Date();
+
+    if (!existingFeedbackSnapshot.empty) {
+      // Update existing feedback
+      const existingDoc = existingFeedbackSnapshot.docs[0];
+      feedbackId = existingDoc.id;
+      
+      await db.collection('coachFeedback').doc(feedbackId).update({
+        content,
+        updatedAt: now
+      });
+    } else {
+      // Create new feedback
+      const feedbackData: CoachFeedback = {
+        responseId,
+        coachId,
+        clientId,
+        questionId: questionId || null,
+        feedbackType,
+        content,
+        createdAt: now,
+        updatedAt: now
+      };
+
+      const feedbackRef = await db.collection('coachFeedback').add(feedbackData);
+      feedbackId = feedbackRef.id;
+    }
     
     return NextResponse.json({
       success: true,
-      feedbackId: feedbackRef.id,
-      message: 'Feedback saved successfully'
+      feedbackId: feedbackId,
+      message: existingFeedbackSnapshot.empty ? 'Feedback saved successfully' : 'Feedback updated successfully'
     });
 
   } catch (error) {
@@ -71,7 +101,7 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const responseId = searchParams.get('responseId');
+    let responseId = searchParams.get('responseId');
     const coachId = searchParams.get('coachId');
 
     if (!responseId || !coachId) {
@@ -81,12 +111,43 @@ export async function GET(request: NextRequest) {
       }, { status: 400 });
     }
 
+    // If responseId might be an assignmentId, try to find the actual responseId
+    let actualResponseId = responseId;
+    try {
+      // First check if it's a response document
+      const responseDoc = await db.collection('formResponses').doc(responseId).get();
+      if (!responseDoc.exists) {
+        // If not, check if it's an assignment and get the responseId from it
+        const assignmentDoc = await db.collection('check_in_assignments').doc(responseId).get();
+        if (assignmentDoc.exists) {
+          const assignmentData = assignmentDoc.data();
+          if (assignmentData?.responseId) {
+            actualResponseId = assignmentData.responseId;
+          }
+        }
+      }
+    } catch (error) {
+      console.log('Error looking up responseId:', error);
+      // Continue with original responseId
+    }
+
     // Fetch all feedback for this response
-    const feedbackSnapshot = await db.collection('coachFeedback')
-      .where('responseId', '==', responseId)
-      .where('coachId', '==', coachId)
-      .orderBy('createdAt', 'desc')
-      .get();
+    let feedbackSnapshot;
+    try {
+      // Try with orderBy first
+      feedbackSnapshot = await db.collection('coachFeedback')
+        .where('responseId', '==', actualResponseId)
+        .where('coachId', '==', coachId)
+        .orderBy('createdAt', 'desc')
+        .get();
+    } catch (indexError: any) {
+      // Fallback without orderBy if index doesn't exist
+      console.log('Index error, fetching without orderBy:', indexError.message);
+      feedbackSnapshot = await db.collection('coachFeedback')
+        .where('responseId', '==', actualResponseId)
+        .where('coachId', '==', coachId)
+        .get();
+    }
 
     const feedback: CoachFeedback[] = [];
     feedbackSnapshot.docs.forEach(doc => {
@@ -96,9 +157,38 @@ export async function GET(request: NextRequest) {
       } as CoachFeedback);
     });
 
+    // If we didn't use orderBy, sort client-side
+    if (feedback.length > 0) {
+      feedback.sort((a, b) => {
+        const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0);
+        const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0);
+        return dateB.getTime() - dateA.getTime();
+      });
+    }
+
+    // Group feedback by questionId and feedbackType, keeping only the most recent
+    const feedbackMap = new Map<string, CoachFeedback>();
+    feedback.forEach(f => {
+      const key = `${f.questionId || 'overall'}_${f.feedbackType}`;
+      const existing = feedbackMap.get(key);
+      if (!existing) {
+        feedbackMap.set(key, f);
+      } else {
+        // Keep the most recent one
+        const existingDate = existing.createdAt?.toDate ? existing.createdAt.toDate() : new Date(existing.createdAt || 0);
+        const currentDate = f.createdAt?.toDate ? f.createdAt.toDate() : new Date(f.createdAt || 0);
+        if (currentDate > existingDate) {
+          feedbackMap.set(key, f);
+        }
+      }
+    });
+
+    // Return the deduplicated feedback
+    const deduplicatedFeedback = Array.from(feedbackMap.values());
+
     return NextResponse.json({
       success: true,
-      feedback
+      feedback: deduplicatedFeedback
     });
 
   } catch (error) {

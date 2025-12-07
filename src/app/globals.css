@@ -2,7 +2,7 @@
 
 :root {
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #1c1c1c; /* Specific dark gray color for all text */
 }
 
 @theme inline {
@@ -24,3 +24,80 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Ensure all text defaults to #1c1c1c */
+body,
+p,
+span,
+div,
+h1, h2, h3, h4, h5, h6,
+a,
+label,
+li,
+td,
+th {
+  color: #1c1c1c;
+}
+
+/* Ensure better text readability - make all text near black */
+* {
+  color: inherit;
+}
+
+/* Override ALL text colors to be #1c1c1c for consistency */
+.text-gray-100,
+.text-gray-200,
+.text-gray-300,
+.text-gray-400,
+.text-gray-500,
+.text-gray-600,
+.text-gray-700,
+.text-gray-800,
+.text-gray-900 {
+  color: #1c1c1c !important;
+}
+
+/* Also override slate and zinc colors */
+.text-slate-100,
+.text-slate-200,
+.text-slate-300,
+.text-slate-400,
+.text-slate-500,
+.text-slate-600,
+.text-slate-700,
+.text-slate-800,
+.text-slate-900,
+.text-zinc-100,
+.text-zinc-200,
+.text-zinc-300,
+.text-zinc-400,
+.text-zinc-500,
+.text-zinc-600,
+.text-zinc-700,
+.text-zinc-800,
+.text-zinc-900 {
+  color: #1c1c1c !important;
+}
+
+/* Override neutral colors too */
+.text-neutral-100,
+.text-neutral-200,
+.text-neutral-300,
+.text-neutral-400,
+.text-neutral-500,
+.text-neutral-600,
+.text-neutral-700,
+.text-neutral-800,
+.text-neutral-900 {
+  color: #1c1c1c !important;
+}
+
+/* Ensure placeholders use the same color but with slight opacity */
+input::placeholder,
+textarea::placeholder,
+select::placeholder {
+  color: #1c1c1c !important;
+  opacity: 0.7;
+}
+
+/* Keep gray-800 and gray-900 as is (already dark) */

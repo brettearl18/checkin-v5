@@ -53,13 +53,13 @@ const coachNavItems: NavItem[] = [
     name: 'Check-ins',
     href: '/check-ins',
     icon: '✅',
-    description: 'Send and track check-ins'
+    description: 'View check-ins & responses'
   },
   {
     name: 'Responses',
-    href: '/responses',
+    href: '/check-ins',
     icon: '📋',
-    description: 'View client responses'
+    description: 'Redirects to Check-ins'
   },
   {
     name: 'Audit',

@@ -12,11 +12,14 @@ interface Question {
   id: string;
   text: string;
   type: string;
-  options?: string[];
+  options?: string[] | Array<{ text: string; weight: number }>;
   category: string;
   coachId: string;
   createdAt: string;
   updatedAt: string;
+  questionWeight?: number; // Weight of the question (1-10)
+  weight?: number; // Alternative field name for weight
+  yesIsPositive?: boolean; // For boolean questions: true if YES is positive
 }
 
 interface FormResponse {
@@ -86,7 +89,11 @@ export default function EditCheckInPage() {
       }
 
       const responseData = responseDoc.data() as FormResponse;
-      setFormResponse(responseData);
+      // Ensure the ID is set (Firestore doc.data() doesn't include the ID)
+      setFormResponse({
+        ...responseData,
+        id: responseDoc.id
+      });
 
       // Fetch questions
       const questionsData: Question[] = [];
@@ -133,9 +140,13 @@ export default function EditCheckInPage() {
   };
 
   const handleSave = async () => {
-    if (!formResponse) return;
+    if (!formResponse || !formResponse.id) {
+      setError('Form response data is missing. Please refresh the page.');
+      return;
+    }
 
     setSaving(true);
+    setError('');
     try {
       // Update the responses array
       const updatedResponses = formResponse.responses.map(response => ({
@@ -143,16 +154,98 @@ export default function EditCheckInPage() {
         answer: responses[response.questionId] !== undefined ? responses[response.questionId] : response.answer
       }));
 
-      // Calculate new score - handle different answer types safely
-      const answeredCount = updatedResponses.filter(r => {
-        if (r.answer === undefined || r.answer === null) return false;
-        if (typeof r.answer === 'string') return r.answer.trim() !== '';
-        if (typeof r.answer === 'number') return !isNaN(r.answer);
-        if (typeof r.answer === 'boolean') return true;
-        return false;
-      }).length;
+      // Calculate score based on answer quality with question weights
+      let totalWeightedScore = 0;
+      let totalWeight = 0;
+      let answeredCount = 0;
       
-      const newScore = Math.round((answeredCount / questions.length) * 100);
+      updatedResponses.forEach((response) => {
+        const question = questions.find(q => q.id === response.questionId);
+        if (!question || response.answer === undefined || response.answer === null) {
+          return; // Skip unanswered questions
+        }
+        
+        // Get question weight (default to 5 if not set)
+        const questionWeight = (question as any).questionWeight || (question as any).weight || 5;
+        
+        let questionScore = 0; // Score out of 10
+        
+        switch (question.type) {
+          case 'scale':
+          case 'rating':
+            const scaleValue = Number(response.answer);
+            if (!isNaN(scaleValue) && scaleValue >= 1 && scaleValue <= 10) {
+              questionScore = scaleValue;
+            }
+            break;
+            
+          case 'number':
+            const numValue = Number(response.answer);
+            if (!isNaN(numValue)) {
+              if (numValue >= 0 && numValue <= 100) {
+                questionScore = 1 + (numValue / 100) * 9;
+              } else {
+                questionScore = Math.min(10, Math.max(1, numValue / 10));
+              }
+            }
+            break;
+            
+          case 'multiple_choice':
+          case 'select':
+            if (question.options && Array.isArray(question.options)) {
+              const optionWithWeight = question.options.find((opt: any) => 
+                (typeof opt === 'object' && opt.text === String(response.answer)) ||
+                (typeof opt === 'string' && opt === String(response.answer))
+              );
+              
+              if (optionWithWeight && typeof optionWithWeight === 'object' && optionWithWeight.weight) {
+                questionScore = optionWithWeight.weight;
+              } else {
+                const selectedIndex = question.options.findIndex((opt: any) => 
+                  (typeof opt === 'object' ? opt.text : opt) === String(response.answer)
+                );
+                if (selectedIndex >= 0) {
+                  const numOptions = question.options.length;
+                  questionScore = numOptions === 1 ? 5 : 1 + (selectedIndex / (numOptions - 1)) * 9;
+                }
+              }
+            }
+            break;
+            
+          case 'boolean':
+            // Use yesIsPositive field to determine scoring
+            const yesIsPositive = (question as any).yesIsPositive !== undefined ? (question as any).yesIsPositive : true;
+            const isYes = response.answer === true || response.answer === 'yes' || response.answer === 'Yes';
+            
+            if (yesIsPositive) {
+              questionScore = isYes ? 8 : 3;
+            } else {
+              questionScore = isYes ? 3 : 8;
+            }
+            break;
+            
+          case 'text':
+          case 'textarea':
+            const textValue = String(response.answer).trim();
+            if (textValue.length > 0) {
+              questionScore = 5;
+            }
+            break;
+            
+          default:
+            questionScore = 5;
+            break;
+        }
+        
+        totalWeightedScore += questionScore * questionWeight;
+        totalWeight += questionWeight;
+        answeredCount++;
+      });
+      
+      // Calculate final score as percentage (0-100)
+      const newScore = totalWeight > 0 
+        ? Math.round((totalWeightedScore / (totalWeight * 10)) * 100)
+        : 0;
 
       // Update the form response
       await updateDoc(doc(db, 'formResponses', formResponse.id), {

@@ -56,7 +56,11 @@ export default function ClientFeedbackPage() {
         setError(null);
 
         // Fetch the specific response
-        const responseRes = await fetch(`/api/responses/${responseId}?coachId=${userProfile?.uid || 'demo-coach-id'}`);
+        if (!userProfile?.uid) {
+          console.error('No user profile found');
+          return;
+        }
+        const responseRes = await fetch(`/api/responses/${responseId}?coachId=${userProfile.uid}`);
         
         if (!responseRes.ok) {
           throw new Error('Failed to fetch response data');

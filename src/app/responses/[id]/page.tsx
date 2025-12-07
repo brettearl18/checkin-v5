@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { RoleProtected } from '@/components/ProtectedRoute';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import VoiceRecorder from '@/components/VoiceRecorder';
 
 interface FormResponse {
@@ -42,6 +42,7 @@ interface CoachFeedback {
 export default function ResponseDetailPage() {
   const { userProfile } = useAuth();
   const params = useParams();
+  const router = useRouter();
   const responseId = params.id as string;
   
   const [response, setResponse] = useState<FormResponse | null>(null);
@@ -52,6 +53,10 @@ export default function ResponseDetailPage() {
   const [textFeedback, setTextFeedback] = useState<{ [key: string]: string }>({});
   const [overallTextFeedback, setOverallTextFeedback] = useState('');
   const [savingFeedback, setSavingFeedback] = useState(false);
+  const [isReviewed, setIsReviewed] = useState(false);
+  const [markingAsReviewed, setMarkingAsReviewed] = useState(false);
+  const [checkInsList, setCheckInsList] = useState<any[]>([]);
+  const [currentIndex, setCurrentIndex] = useState<number>(-1);
 
   useEffect(() => {
     const fetchResponseData = async () => {
@@ -59,8 +64,30 @@ export default function ResponseDetailPage() {
         setLoading(true);
         setError(null);
 
+        // Fetch the list of check-ins to review for navigation
+        let checkIns: any[] = [];
+        if (userProfile?.uid) {
+          try {
+            const checkInsRes = await fetch(`/api/dashboard/check-ins-to-review?coachId=${userProfile.uid}`);
+            if (checkInsRes.ok) {
+              const checkInsData = await checkInsRes.json();
+              if (checkInsData.success && checkInsData.data?.checkIns) {
+                checkIns = checkInsData.data.checkIns;
+                setCheckInsList(checkIns);
+              }
+            }
+          } catch (error) {
+            console.log('Error fetching check-ins list:', error);
+            // Don't fail if this fails
+          }
+        }
+
         // Fetch the specific response
-        const responseRes = await fetch(`/api/responses/${responseId}?coachId=${userProfile?.uid || 'demo-coach-id'}`);
+        if (!userProfile?.uid) {
+          console.error('No user profile found');
+          return;
+        }
+        const responseRes = await fetch(`/api/responses/${responseId}?coachId=${userProfile.uid}`);
         
         if (!responseRes.ok) {
           throw new Error('Failed to fetch response data');
@@ -74,9 +101,24 @@ export default function ResponseDetailPage() {
 
         setResponse(responseData.response);
         setQuestions(responseData.questions || []);
+        setIsReviewed(responseData.response?.reviewedByCoach || false);
         
-        // Fetch existing feedback
-        await fetchFeedback();
+        // Find current check-in index after we have both the list and the response
+        if (checkIns.length > 0 && responseData.response) {
+          const index = checkIns.findIndex((ci: any) => 
+            ci.id === responseId || 
+            ci.responseId === responseId || 
+            ci.assignmentId === responseId ||
+            ci.id === responseData.response.id ||
+            ci.responseId === responseData.response.id
+          );
+          setCurrentIndex(index >= 0 ? index : -1);
+        }
+        
+        // Fetch existing feedback after response is loaded
+        if (responseData.response?.id) {
+          await fetchFeedbackForResponse(responseData.response.id);
+        }
       } catch (err) {
         console.error('Error fetching response:', err);
         setError(err instanceof Error ? err.message : 'Failed to fetch response');
@@ -90,9 +132,11 @@ export default function ResponseDetailPage() {
     }
   }, [responseId, userProfile?.uid]);
 
-  const fetchFeedback = async () => {
+  const fetchFeedbackForResponse = async (actualResponseId: string) => {
     try {
-      const feedbackRes = await fetch(`/api/coach-feedback?responseId=${responseId}&coachId=${userProfile?.uid}`);
+      if (!userProfile?.uid) return;
+      
+      const feedbackRes = await fetch(`/api/coach-feedback?responseId=${actualResponseId}&coachId=${userProfile.uid}`);
       if (feedbackRes.ok) {
         const feedbackData = await feedbackRes.json();
         if (feedbackData.success) {
@@ -111,15 +155,40 @@ export default function ResponseDetailPage() {
           });
           setTextFeedback(textFeedbackMap);
         }
+      } else {
+        console.error('Failed to fetch feedback:', await feedbackRes.text());
       }
     } catch (error) {
       console.error('Error fetching feedback:', error);
     }
   };
 
+  const fetchFeedback = async () => {
+    // Use actual response ID if available, otherwise fallback to params
+    const actualResponseId = response?.id || responseId;
+    if (actualResponseId) {
+      await fetchFeedbackForResponse(actualResponseId);
+    }
+  };
+
+  // Refetch feedback when response is loaded (to ensure we use the correct response ID)
+  useEffect(() => {
+    if (response?.id && userProfile?.uid) {
+      fetchFeedbackForResponse(response.id);
+    }
+  }, [response?.id, userProfile?.uid]);
+
   const saveVoiceFeedback = async (questionId: string | null, audioBlob: Blob) => {
     try {
       setSavingFeedback(true);
+      
+      if (!response) {
+        console.error('Response not loaded yet');
+        return;
+      }
+      
+      // Use the actual response ID from the response object, not params
+      const actualResponseId = response.id;
       
       // Convert audio blob to base64 for storage (in production, you'd upload to cloud storage)
       const reader = new FileReader();
@@ -127,9 +196,9 @@ export default function ResponseDetailPage() {
         const base64Audio = reader.result as string;
         
         const feedbackData = {
-          responseId,
+          responseId: actualResponseId, // Use actual response ID
           coachId: userProfile?.uid,
-          clientId: response?.clientId,
+          clientId: response.clientId,
           questionId,
           feedbackType: 'voice',
           content: base64Audio
@@ -142,7 +211,11 @@ export default function ResponseDetailPage() {
         });
 
         if (res.ok) {
-          await fetchFeedback();
+          // Refetch feedback using the actual response ID
+          await fetchFeedbackForResponse(actualResponseId);
+        } else {
+          const errorData = await res.json();
+          console.error('Error saving voice feedback:', errorData);
         }
       };
       reader.readAsDataURL(audioBlob);
@@ -157,10 +230,18 @@ export default function ResponseDetailPage() {
     try {
       setSavingFeedback(true);
       
+      if (!response) {
+        console.error('Response not loaded yet');
+        return;
+      }
+      
+      // Use the actual response ID from the response object, not params
+      const actualResponseId = response.id;
+      
       const feedbackData = {
-        responseId,
+        responseId: actualResponseId, // Use actual response ID
         coachId: userProfile?.uid,
-        clientId: response?.clientId,
+        clientId: response.clientId,
         questionId,
         feedbackType: 'text',
         content: text
@@ -173,7 +254,11 @@ export default function ResponseDetailPage() {
       });
 
       if (res.ok) {
-        await fetchFeedback();
+        // Refetch feedback using the actual response ID
+        await fetchFeedbackForResponse(actualResponseId);
+      } else {
+        const errorData = await res.json();
+        console.error('Error saving text feedback:', errorData);
       }
     } catch (error) {
       console.error('Error saving text feedback:', error);
@@ -194,6 +279,50 @@ export default function ResponseDetailPage() {
     const text = questionId ? textFeedback[questionId] : overallTextFeedback;
     if (text && text.trim()) {
       saveTextFeedback(questionId, text.trim());
+    }
+  };
+
+  const handleMarkAsReviewed = async () => {
+    if (!response || !userProfile) return;
+    
+    setMarkingAsReviewed(true);
+    try {
+      const res = await fetch(`/api/responses/${responseId}/review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          coachId: userProfile.uid,
+          reviewedAt: new Date().toISOString()
+        })
+      });
+
+      if (res.ok) {
+        setIsReviewed(true);
+        // Optionally create notification for client
+        try {
+          await fetch('/api/notifications', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              userId: response.clientId,
+              type: 'coach_feedback_ready',
+              title: 'Coach Feedback Available',
+              message: `Your coach has reviewed your check-in and provided feedback.`,
+              actionUrl: `/client-portal/feedback/${responseId}`,
+              metadata: {
+                responseId: responseId,
+                formTitle: response.formTitle
+              }
+            })
+          });
+        } catch (error) {
+          console.error('Error creating client notification:', error);
+        }
+      }
+    } catch (error) {
+      console.error('Error marking as reviewed:', error);
+    } finally {
+      setMarkingAsReviewed(false);
     }
   };
 
@@ -309,8 +438,8 @@ export default function ResponseDetailPage() {
           {/* Header */}
           <div className="mb-8">
             <div className="flex items-center justify-between">
-              <div>
-                <div className="flex items-center space-x-4">
+              <div className="flex-1">
+                <div className="flex items-center space-x-4 mb-4">
                   <Link
                     href="/responses"
                     className="inline-flex items-center px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
@@ -320,8 +449,49 @@ export default function ResponseDetailPage() {
                     </svg>
                     Back to Responses
                   </Link>
+                  
+                  {/* Navigation Buttons */}
+                  {checkInsList.length > 0 && currentIndex >= 0 && (
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={() => {
+                          if (currentIndex > 0) {
+                            const prevCheckIn = checkInsList[currentIndex - 1];
+                            router.push(`/responses/${prevCheckIn.id}`);
+                          }
+                        }}
+                        disabled={currentIndex === 0}
+                        className="inline-flex items-center px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
+                      >
+                        <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                        </svg>
+                        Previous
+                      </button>
+                      
+                      <span className="text-sm text-gray-600 px-3">
+                        {currentIndex + 1} of {checkInsList.length}
+                      </span>
+                      
+                      <button
+                        onClick={() => {
+                          if (currentIndex < checkInsList.length - 1) {
+                            const nextCheckIn = checkInsList[currentIndex + 1];
+                            router.push(`/responses/${nextCheckIn.id}`);
+                          }
+                        }}
+                        disabled={currentIndex === checkInsList.length - 1}
+                        className="inline-flex items-center px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
+                      >
+                        Next
+                        <svg className="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </button>
+                    </div>
+                  )}
                 </div>
-                <h1 className="text-3xl font-bold text-gray-900 mt-4">Response Details</h1>
+                <h1 className="text-3xl font-bold text-gray-900">Response Details</h1>
                 <p className="text-gray-600 mt-2">
                   Reviewing response from {response.clientName} for {response.formTitle}
                 </p>
@@ -496,6 +666,50 @@ export default function ResponseDetailPage() {
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+
+          {/* Mark as Reviewed Section */}
+          <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden mt-8">
+            <div className="bg-gradient-to-r from-green-50 to-emerald-50 px-8 py-6 border-b border-gray-100">
+              <h2 className="text-2xl font-bold text-gray-900">Review Status</h2>
+              <p className="text-gray-600 mt-1">Mark this response as reviewed when you're done providing feedback</p>
+            </div>
+            <div className="p-8">
+              {isReviewed ? (
+                <div className="flex items-center space-x-3 text-green-600">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span className="text-lg font-semibold">This response has been marked as reviewed</span>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-gray-700 mb-2">Once you've finished reviewing and providing feedback, mark this response as reviewed.</p>
+                    <p className="text-sm text-gray-500">The client will be notified that your feedback is ready.</p>
+                  </div>
+                  <button
+                    onClick={handleMarkAsReviewed}
+                    disabled={markingAsReviewed}
+                    className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-medium flex items-center space-x-2"
+                  >
+                    {markingAsReviewed ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        <span>Marking...</span>
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>Mark as Reviewed</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
