@@ -13,6 +13,8 @@ interface Form {
   questions: string[];
   estimatedTime: number;
   isStandard: boolean;
+  isActive?: boolean;
+  isArchived?: boolean;
   createdAt: any;
   updatedAt: any;
 }
@@ -25,6 +27,10 @@ export default function FormsPage() {
   const [selectedForm, setSelectedForm] = useState<Form | null>(null);
   const [newFormName, setNewFormName] = useState('');
   const [isCopying, setIsCopying] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [formToDelete, setFormToDelete] = useState<Form | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isArchiving, setIsArchiving] = useState<string | null>(null);
   const [stats, setStats] = useState({
     total: 0,
     active: 0,
@@ -51,8 +57,8 @@ export default function FormsPage() {
             
             // Calculate stats
             const total = formsData.length;
-            const active = formsData.filter((form: Form) => !form.isStandard).length; // Standard forms are always "active"
-            const inactive = 0; // We don't have inactive forms in this implementation
+            const active = formsData.filter((form: Form) => !form.isStandard && !form.isArchived && (form.isActive !== false)).length;
+            const inactive = formsData.filter((form: Form) => form.isArchived === true).length; // Archived forms
             const avgQuestions = total > 0 ? Math.round(formsData.reduce((sum: number, form: Form) => sum + (form.questions?.length || 0), 0) / total) : 0;
             
             setStats({ total, active, inactive, avgQuestions });
@@ -130,10 +136,11 @@ export default function FormsPage() {
               
               // Update stats
               const total = refreshData.forms.length;
-              const active = refreshData.forms.filter((form: Form) => !form.isStandard).length;
+              const active = refreshData.forms.filter((form: Form) => !form.isStandard && !form.isArchived && (form.isActive !== false)).length;
+              const inactive = refreshData.forms.filter((form: Form) => form.isArchived === true).length;
               const avgQuestions = total > 0 ? Math.round(refreshData.forms.reduce((sum: number, form: Form) => sum + (form.questions?.length || 0), 0) / total) : 0;
               
-              setStats({ total, active, inactive: 0, avgQuestions });
+              setStats({ total, active, inactive, avgQuestions });
             }
           }
           
@@ -188,6 +195,81 @@ export default function FormsPage() {
     } catch (error) {
       console.error('Error updating form status:', error);
       alert('Error updating form status. Please try again.');
+    }
+  };
+
+  const handleArchiveForm = async (formId: string) => {
+    setIsArchiving(formId);
+    try {
+      const response = await fetch(`/api/forms/${formId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          isArchived: true,
+          isActive: false,
+          updatedAt: new Date()
+        })
+      });
+
+      if (response.ok) {
+        // Update local state
+        setForms(prev => prev.map(form => 
+          form.id === formId 
+            ? { ...form, isArchived: true, isActive: false }
+            : form
+        ));
+        
+        // Update stats
+        setStats(prev => ({
+          ...prev,
+          active: prev.active - 1,
+          inactive: prev.inactive + 1
+        }));
+      } else {
+        throw new Error('Failed to archive form');
+      }
+    } catch (error) {
+      console.error('Error archiving form:', error);
+      alert('Error archiving form. Please try again.');
+    } finally {
+      setIsArchiving(null);
+    }
+  };
+
+  const handleDeleteForm = async () => {
+    if (!formToDelete) return;
+    
+    setIsDeleting(true);
+    try {
+      const response = await fetch(`/api/forms/${formToDelete.id}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        // Remove from local state
+        setForms(prev => prev.filter(form => form.id !== formToDelete.id));
+        
+        // Update stats
+        setStats(prev => ({
+          ...prev,
+          total: prev.total - 1,
+          active: formToDelete.isActive && !formToDelete.isArchived ? prev.active - 1 : prev.active,
+          inactive: formToDelete.isArchived ? prev.inactive - 1 : prev.inactive
+        }));
+        
+        setShowDeleteModal(false);
+        setFormToDelete(null);
+      } else {
+        const data = await response.json();
+        throw new Error(data.message || 'Failed to delete form');
+      }
+    } catch (error) {
+      console.error('Error deleting form:', error);
+      alert(error instanceof Error ? error.message : 'Error deleting form. Please try again.');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -604,11 +686,13 @@ export default function FormsPage() {
                             </div>
                             <div className="flex items-center space-x-3">
                               <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-                                form.isStandard || form.isActive 
+                                form.isArchived
+                                  ? 'bg-gray-100 text-gray-800'
+                                  : form.isStandard || form.isActive 
                                   ? 'bg-green-100 text-green-800' 
-                                  : 'bg-gray-100 text-gray-800'
+                                  : 'bg-yellow-100 text-yellow-800'
                               }`}>
-                                {form.isStandard ? 'Standard' : (form.isActive ? 'Active' : 'Inactive')}
+                                {form.isArchived ? 'Archived' : (form.isStandard ? 'Standard' : (form.isActive ? 'Active' : 'Inactive'))}
                               </span>
                               <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
                                 {getCategoryLabel(form.category)}
@@ -639,14 +723,15 @@ export default function FormsPage() {
                         </div>
                         
                         <div className="ml-8 flex items-center space-x-3">
-                          {form.isStandard ? (
+                          {form.isStandard && (
                             <button
                               onClick={() => handleCopyForm(form)}
                               className="px-4 py-2 text-sm text-purple-700 bg-purple-100 rounded-xl hover:bg-purple-200 font-medium transition-all duration-200"
                             >
                               Copy Form
                             </button>
-                          ) : (
+                          )}
+                          {!form.isStandard && !form.isArchived && (
                             <button
                               onClick={() => toggleFormStatus(form.id, form.isActive)}
                               className={`px-4 py-2 text-sm rounded-xl font-medium transition-all duration-200 ${
@@ -658,13 +743,31 @@ export default function FormsPage() {
                               {form.isActive ? 'Deactivate' : 'Activate'}
                             </button>
                           )}
+                          {!form.isArchived && (
+                            <button
+                              onClick={() => handleArchiveForm(form.id)}
+                              disabled={isArchiving === form.id}
+                              className="px-4 py-2 text-sm text-orange-700 bg-orange-100 rounded-xl hover:bg-orange-200 font-medium transition-all duration-200 disabled:opacity-50"
+                            >
+                              {isArchiving === form.id ? 'Archiving...' : 'Archive'}
+                            </button>
+                          )}
+                          <button
+                            onClick={() => {
+                              setFormToDelete(form);
+                              setShowDeleteModal(true);
+                            }}
+                            className="px-4 py-2 text-sm text-red-700 bg-red-100 rounded-xl hover:bg-red-200 font-medium transition-all duration-200"
+                          >
+                            Delete
+                          </button>
                           <Link
                             href={`/forms/${form.id}`}
                             className="px-4 py-2 text-sm text-blue-700 bg-blue-100 rounded-xl hover:bg-blue-200 font-medium transition-all duration-200"
                           >
                             View
                           </Link>
-                          {!form.isStandard && (
+                          {!form.isStandard && !form.isArchived && (
                             <Link
                               href={`/forms/${form.id}/edit`}
                               className="px-4 py-2 text-sm text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 font-medium transition-all duration-200"
@@ -727,6 +830,79 @@ export default function FormsPage() {
               >
                 {isCopying ? 'Copying...' : 'Copy Form'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Warning Modal */}
+      {showDeleteModal && formToDelete && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Delete Form
+                </h3>
+                <button
+                  onClick={() => {
+                    setShowDeleteModal(false);
+                    setFormToDelete(null);
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            
+            <div className="px-6 py-4 space-y-4">
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <div className="flex items-start">
+                  <svg className="w-5 h-5 text-yellow-600 mt-0.5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  <div>
+                    <h4 className="text-sm font-semibold text-yellow-800 mb-2">Warning: This action cannot be undone</h4>
+                    <p className="text-sm text-yellow-700">
+                      Deleting this form will remove it from your Forms Library. However:
+                    </p>
+                    <ul className="text-sm text-yellow-700 mt-2 list-disc list-inside space-y-1">
+                      <li>All client check-in history will be preserved</li>
+                      <li>All client answers and responses will remain intact</li>
+                      <li>Clients can still view their past check-ins using this form</li>
+                      <li>This form will no longer appear in your Forms Library</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <p className="text-sm text-gray-700">
+                  Are you sure you want to delete <span className="font-semibold text-gray-900">"{formToDelete.title}"</span>?
+                </p>
+              </div>
+
+              <div className="flex space-x-3 pt-4">
+                <button
+                  onClick={() => {
+                    setShowDeleteModal(false);
+                    setFormToDelete(null);
+                  }}
+                  className="flex-1 px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg font-medium transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeleteForm}
+                  disabled={isDeleting}
+                  className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+                >
+                  {isDeleting ? 'Deleting...' : 'Delete Form'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

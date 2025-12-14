@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
+import { notificationService } from '@/lib/notification-service';
 
 // Initialize Firebase Admin if not already initialized
 if (!getApps().length) {
@@ -81,11 +82,88 @@ export async function POST(request: NextRequest) {
       const feedbackRef = await db.collection('coachFeedback').add(feedbackData);
       feedbackId = feedbackRef.id;
     }
+
+    // Check if this is the first feedback for this response (coach is responding)
+    const allFeedbackSnapshot = await db.collection('coachFeedback')
+      .where('responseId', '==', responseId)
+      .where('coachId', '==', coachId)
+      .get();
+
+    const isFirstFeedback = allFeedbackSnapshot.size === 1; // Only the one we just created/updated
+
+    // Update formResponses to mark coach as responded
+    try {
+      const responseDoc = await db.collection('formResponses').doc(responseId).get();
+      if (responseDoc.exists) {
+        await db.collection('formResponses').doc(responseId).update({
+          coachResponded: true,
+          coachRespondedAt: now,
+          feedbackStatus: 'responded'
+        });
+      }
+    } catch (error) {
+      console.log('Error updating formResponses:', error);
+    }
+
+    // Update check_in_assignments to mark coach as responded
+    try {
+      const assignmentsSnapshot = await db.collection('check_in_assignments')
+        .where('responseId', '==', responseId)
+        .get();
+      
+      for (const assignmentDoc of assignmentsSnapshot.docs) {
+        await assignmentDoc.ref.update({
+          coachResponded: true,
+          coachRespondedAt: now,
+          workflowStatus: 'responded'
+        });
+      }
+    } catch (error) {
+      console.log('Error updating check_in_assignments:', error);
+    }
+
+    // Create notification for client if this is the first feedback
+    if (isFirstFeedback) {
+      try {
+        // Get form response to get form title
+        const responseDoc = await db.collection('formResponses').doc(responseId).get();
+        if (responseDoc.exists) {
+          const responseData = responseDoc.data();
+          const formTitle = responseData?.formTitle || 'Check-in';
+          
+          // Get coach name
+          let coachName = 'Your coach';
+          try {
+            const coachDoc = await db.collection('coaches').doc(coachId).get();
+            if (coachDoc.exists) {
+              const coachData = coachDoc.data();
+              const firstName = coachData?.profile?.firstName || coachData?.firstName || '';
+              const lastName = coachData?.profile?.lastName || coachData?.lastName || '';
+              coachName = `${firstName} ${lastName}`.trim() || 'Your coach';
+            }
+          } catch (error) {
+            console.log('Error fetching coach name:', error);
+          }
+
+          // Create notification using the notification service
+          await notificationService.createSystemAlertNotification(
+            clientId,
+            'Coach Feedback Available',
+            `${coachName} has provided feedback on your "${formTitle}" check-in. Click to view your coach's response.`,
+            `/client-portal/feedback/${responseId}`
+          );
+        }
+      } catch (error) {
+        console.error('Error creating client notification:', error);
+        // Don't fail the feedback save if notification fails
+      }
+    }
     
     return NextResponse.json({
       success: true,
       feedbackId: feedbackId,
-      message: existingFeedbackSnapshot.empty ? 'Feedback saved successfully' : 'Feedback updated successfully'
+      message: existingFeedbackSnapshot.empty ? 'Feedback saved successfully' : 'Feedback updated successfully',
+      isFirstFeedback
     });
 
   } catch (error) {
@@ -103,11 +181,13 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     let responseId = searchParams.get('responseId');
     const coachId = searchParams.get('coachId');
+    const clientId = searchParams.get('clientId');
 
-    if (!responseId || !coachId) {
+    // Allow either coachId or clientId for authentication
+    if (!responseId || (!coachId && !clientId)) {
       return NextResponse.json({
         success: false,
-        message: 'Response ID and Coach ID are required'
+        message: 'Response ID and Coach ID or Client ID are required'
       }, { status: 400 });
     }
 
@@ -134,19 +214,47 @@ export async function GET(request: NextRequest) {
     // Fetch all feedback for this response
     let feedbackSnapshot;
     try {
+      // Build query based on whether we have coachId or clientId
+      let query = db.collection('coachFeedback')
+        .where('responseId', '==', actualResponseId);
+      
+      if (coachId) {
+        query = query.where('coachId', '==', coachId);
+      } else if (clientId) {
+        // For clients, we need to verify the response belongs to them first
+        const responseDoc = await db.collection('formResponses').doc(actualResponseId).get();
+        if (responseDoc.exists) {
+          const responseData = responseDoc.data();
+          if (responseData?.clientId !== clientId) {
+            return NextResponse.json({
+              success: false,
+              message: 'You do not have permission to view this feedback'
+            }, { status: 403 });
+          }
+          // If client owns the response, fetch all feedback for it (no coachId filter)
+        } else {
+          return NextResponse.json({
+            success: false,
+            message: 'Response not found'
+          }, { status: 404 });
+        }
+      }
+      
       // Try with orderBy first
-      feedbackSnapshot = await db.collection('coachFeedback')
-        .where('responseId', '==', actualResponseId)
-        .where('coachId', '==', coachId)
-        .orderBy('createdAt', 'desc')
-        .get();
-    } catch (indexError: any) {
-      // Fallback without orderBy if index doesn't exist
-      console.log('Index error, fetching without orderBy:', indexError.message);
-      feedbackSnapshot = await db.collection('coachFeedback')
-        .where('responseId', '==', actualResponseId)
-        .where('coachId', '==', coachId)
-        .get();
+      try {
+        feedbackSnapshot = await query.orderBy('createdAt', 'desc').get();
+      } catch (indexError: any) {
+        // Fallback without orderBy if index doesn't exist
+        console.log('Index error, fetching without orderBy:', indexError.message);
+        feedbackSnapshot = await query.get();
+      }
+    } catch (error) {
+      console.error('Error fetching feedback:', error);
+      return NextResponse.json({
+        success: false,
+        message: 'Failed to fetch feedback',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }, { status: 500 });
     }
 
     const feedback: CoachFeedback[] = [];

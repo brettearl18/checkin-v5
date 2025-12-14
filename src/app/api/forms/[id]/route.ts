@@ -28,6 +28,9 @@ export async function PATCH(
     if (isActive !== undefined) {
       updateData.isActive = isActive;
     }
+    if (body.isArchived !== undefined) {
+      updateData.isArchived = body.isArchived;
+    }
 
     await db.collection('forms').doc(formId).update(updateData);
 
@@ -144,6 +147,41 @@ export async function PUT(
     console.error('Error updating form:', error);
     return NextResponse.json(
       { success: false, message: 'Failed to update form', error: error instanceof Error ? error.message : 'Unknown error' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const formId = id;
+
+    const db = getDb();
+    const formDoc = await db.collection('forms').doc(formId).get();
+    
+    if (!formDoc.exists) {
+      return NextResponse.json(
+        { success: false, message: 'Form not found' },
+        { status: 404 }
+      );
+    }
+
+    // IMPORTANT: Only delete the form document, NOT client check-ins or responses
+    // All client history, answers, and responses remain intact
+    await db.collection('forms').doc(formId).delete();
+
+    return NextResponse.json({
+      success: true,
+      message: 'Form deleted successfully. Client history and responses remain intact.'
+    });
+  } catch (error) {
+    console.error('Error deleting form:', error);
+    return NextResponse.json(
+      { success: false, message: 'Failed to delete form', error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
   }

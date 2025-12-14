@@ -11,12 +11,13 @@ interface Client {
   lastName: string;
   email: string;
   phone?: string;
-  status: 'active' | 'inactive' | 'pending';
+  status: 'active' | 'inactive' | 'pending' | 'paused' | 'completed';
   assignedCoach: string;
   lastCheckIn?: string;
   progressScore?: number;
   goals?: string[];
   createdAt: string;
+  pausedUntil?: string;
   profile?: {
     age?: number;
     gender?: string;
@@ -32,6 +33,10 @@ export default function ClientsPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'pending'>('all');
+  const [clientTableSortBy, setClientTableSortBy] = useState<string>('name');
+  const [clientTableSortOrder, setClientTableSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
+  const [statusModal, setStatusModal] = useState<{ clientId: string; status: string; pausedUntil?: string } | null>(null);
 
   useEffect(() => {
     if (userProfile?.uid) {
@@ -87,6 +92,8 @@ export default function ClientsPage() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'active': return 'bg-green-100 text-green-800';
+      case 'paused': return 'bg-orange-100 text-orange-800';
+      case 'completed': return 'bg-blue-100 text-blue-800';
       case 'inactive': return 'bg-gray-100 text-gray-800';
       case 'pending': return 'bg-yellow-100 text-yellow-800';
       default: return 'bg-gray-100 text-gray-800';
@@ -393,6 +400,257 @@ export default function ClientsPage() {
               </div>
             </div>
 
+            {/* Client Inventory Table */}
+            <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden mb-8">
+              <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-8 py-6 border-b border-gray-100">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-2xl font-bold text-gray-900">Client Inventory</h2>
+                  <div className="flex items-center space-x-3">
+                    <span className="text-sm text-gray-600">{clients.length} total clients</span>
+                    <select
+                      value={`${clientTableSortBy}-${clientTableSortOrder}`}
+                      onChange={(e) => {
+                        const [sortBy, sortOrder] = e.target.value.split('-') as [string, 'asc' | 'desc'];
+                        setClientTableSortBy(sortBy);
+                        setClientTableSortOrder(sortOrder);
+                      }}
+                      className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                      <option value="name-asc">Name A-Z</option>
+                      <option value="name-desc">Name Z-A</option>
+                      <option value="weeks-asc">Weeks (Low to High)</option>
+                      <option value="weeks-desc">Weeks (High to Low)</option>
+                      <option value="score-asc">Score (Low to High)</option>
+                      <option value="score-desc">Score (High to Low)</option>
+                      <option value="status-asc">Status A-Z</option>
+                      <option value="status-desc">Status Z-A</option>
+                      <option value="lastCheckIn-desc">Last Check-in (Recent)</option>
+                      <option value="lastCheckIn-asc">Last Check-in (Oldest)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Name</th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Email</th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Status</th>
+                      <th className="px-6 py-4 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Weeks on Program</th>
+                      <th className="px-6 py-4 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Avg Score</th>
+                      <th className="px-6 py-4 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Completion Rate</th>
+                      <th className="px-6 py-4 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Total Check-ins</th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Last Check-in</th>
+                      <th className="px-6 py-4 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {(() => {
+                      // Calculate weeks on program and sort clients
+                      const clientsWithWeeks = filteredClients.map(client => {
+                        let createdAt: Date;
+                        try {
+                          if (client.createdAt) {
+                            if (typeof client.createdAt === 'string') {
+                              createdAt = new Date(client.createdAt);
+                            } else if (client.createdAt.seconds) {
+                              createdAt = new Date(client.createdAt.seconds * 1000);
+                            } else {
+                              createdAt = new Date(client.createdAt);
+                            }
+                          } else {
+                            createdAt = new Date();
+                          }
+                        } catch {
+                          createdAt = new Date();
+                        }
+                        
+                        const now = new Date();
+                        const timeDiff = now.getTime() - createdAt.getTime();
+                        const weeksOnProgram = isNaN(timeDiff) ? 0 : Math.max(0, Math.floor(timeDiff / (1000 * 60 * 60 * 24 * 7)));
+                        
+                        let lastCheckInDate: Date | null = null;
+                        if (client.lastCheckIn) {
+                          try {
+                            if (typeof client.lastCheckIn === 'string') {
+                              lastCheckInDate = new Date(client.lastCheckIn);
+                            } else if (client.lastCheckIn.seconds) {
+                              lastCheckInDate = new Date(client.lastCheckIn.seconds * 1000);
+                            } else {
+                              lastCheckInDate = new Date(client.lastCheckIn);
+                            }
+                            if (isNaN(lastCheckInDate.getTime())) {
+                              lastCheckInDate = null;
+                            }
+                          } catch {
+                            lastCheckInDate = null;
+                          }
+                        }
+                        
+                        return {
+                          ...client,
+                          weeksOnProgram: isNaN(weeksOnProgram) ? 0 : weeksOnProgram,
+                          displayName: `${client.firstName || ''} ${client.lastName || ''}`.trim() || 'Unknown',
+                          lastCheckInDate
+                        };
+                      });
+
+                      // Sort clients
+                      const sortedClients = [...clientsWithWeeks].sort((a, b) => {
+                        let aValue: any, bValue: any;
+                        
+                        switch (clientTableSortBy) {
+                          case 'name':
+                            aValue = a.displayName.toLowerCase();
+                            bValue = b.displayName.toLowerCase();
+                            break;
+                          case 'weeks':
+                            aValue = a.weeksOnProgram;
+                            bValue = b.weeksOnProgram;
+                            break;
+                          case 'score':
+                            aValue = a.progressScore || 0;
+                            bValue = b.progressScore || 0;
+                            break;
+                          case 'status':
+                            aValue = a.status || 'unknown';
+                            bValue = b.status || 'unknown';
+                            break;
+                          case 'lastCheckIn':
+                            aValue = a.lastCheckInDate ? a.lastCheckInDate.getTime() : 0;
+                            bValue = b.lastCheckInDate ? b.lastCheckInDate.getTime() : 0;
+                            break;
+                          default:
+                            return 0;
+                        }
+                        
+                        if (aValue < bValue) return clientTableSortOrder === 'asc' ? -1 : 1;
+                        if (aValue > bValue) return clientTableSortOrder === 'asc' ? 1 : -1;
+                        return 0;
+                      });
+
+                      if (sortedClients.length === 0) {
+                        return (
+                          <tr>
+                            <td colSpan={9} className="px-6 py-12 text-center">
+                              <div className="text-gray-500">
+                                <svg className="w-12 h-12 mx-auto mb-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
+                                </svg>
+                                <p className="text-lg font-medium">No clients found</p>
+                                <p className="text-sm mt-1">Add your first client to get started</p>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      }
+
+                      const formatTimeAgo = (timestamp: string) => {
+                        const now = new Date();
+                        const time = new Date(timestamp);
+                        const diffInHours = Math.floor((now.getTime() - time.getTime()) / (1000 * 60 * 60));
+                        
+                        if (diffInHours < 1) return 'Just now';
+                        if (diffInHours < 24) return `${diffInHours}h ago`;
+                        const diffInDays = Math.floor(diffInHours / 24);
+                        return `${diffInDays}d ago`;
+                      };
+
+                      return sortedClients.map((client) => {
+                        const score = typeof client.progressScore === 'number' && !isNaN(client.progressScore) ? client.progressScore : 0;
+                        const completionRate = typeof client.completionRate === 'number' && !isNaN(client.completionRate) ? client.completionRate : 0;
+                        const totalCheckIns = typeof client.totalCheckIns === 'number' && !isNaN(client.totalCheckIns) ? client.totalCheckIns : 0;
+                        const weeksOnProgram = typeof client.weeksOnProgram === 'number' && !isNaN(client.weeksOnProgram) ? client.weeksOnProgram : 0;
+                        
+                        return (
+                          <tr key={client.id} className="hover:bg-gray-50 transition-colors">
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex items-center">
+                                <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center text-white font-semibold text-sm mr-3">
+                                  {client.displayName.charAt(0).toUpperCase()}
+                                </div>
+                                <div>
+                                  <div className="text-sm font-medium text-gray-900">{client.displayName}</div>
+                                  {client.phone && (
+                                    <div className="text-xs text-gray-500">{client.phone}</div>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm text-gray-900">{client.email || 'N/A'}</div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                                client.status === 'active' ? 'bg-green-100 text-green-800' :
+                                client.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                                client.status === 'at-risk' ? 'bg-red-100 text-red-800' :
+                                'bg-gray-100 text-gray-800'
+                              }`}>
+                                {client.status ? client.status.charAt(0).toUpperCase() + client.status.slice(1) : 'Unknown'}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-center">
+                              <div className="text-sm font-medium text-gray-900">{isNaN(weeksOnProgram) ? '0' : String(weeksOnProgram)}</div>
+                              <div className="text-xs text-gray-500">weeks</div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-center">
+                              <div className={`text-sm font-bold ${
+                                score >= 80 ? 'text-green-600' :
+                                score >= 60 ? 'text-yellow-600' :
+                                'text-red-600'
+                              }`}>
+                                {score > 0 && !isNaN(score) ? `${score}%` : 'N/A'}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-center">
+                              <div className="text-sm font-medium text-gray-900">{isNaN(completionRate) ? '0' : String(completionRate)}%</div>
+                              <div className="w-16 bg-gray-200 rounded-full h-1.5 mx-auto mt-1">
+                                <div 
+                                  className={`h-1.5 rounded-full ${
+                                    completionRate >= 80 ? 'bg-green-500' :
+                                    completionRate >= 60 ? 'bg-yellow-500' :
+                                    'bg-red-500'
+                                  }`}
+                                  style={{ width: `${Math.min(isNaN(completionRate) ? 0 : completionRate, 100)}%` }}
+                                ></div>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-center">
+                              <div className="text-sm font-medium text-gray-900">{isNaN(totalCheckIns) ? '0' : String(totalCheckIns)}</div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              {client.lastCheckInDate ? (
+                                <div>
+                                  <div className="text-sm text-gray-900">
+                                    {client.lastCheckInDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                  </div>
+                                  <div className="text-xs text-gray-500">
+                                    {formatTimeAgo(client.lastCheckInDate.toISOString())}
+                                  </div>
+                                </div>
+                              ) : (
+                                <span className="text-sm text-gray-400">Never</span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-center">
+                              <Link
+                                href={`/clients/${client.id}`}
+                                className="text-indigo-600 hover:text-indigo-900 text-sm font-medium"
+                              >
+                                View →
+                              </Link>
+                            </td>
+                          </tr>
+                        );
+                      });
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
             {/* Clients Grid */}
             <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
               <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-8 py-6 border-b border-gray-100">
@@ -439,11 +697,27 @@ export default function ClientsPage() {
                         </div>
                         
                         <div className="space-y-3">
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm text-gray-500">Status</span>
-                            <span className={`px-3 py-1 text-xs font-medium rounded-full ${getStatusColor(client.status)}`}>
-                              {client.status}
-                            </span>
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm text-gray-500">Status</span>
+                              <button
+                                onClick={() => setStatusModal({ 
+                                  clientId: client.id, 
+                                  status: client.status === 'paused' ? 'paused' : client.status,
+                                  pausedUntil: client.pausedUntil 
+                                })}
+                                className={`px-3 py-1 text-xs font-medium rounded-full transition-all hover:shadow-md cursor-pointer ${getStatusColor(client.status)}`}
+                              >
+                                {client.status === 'paused' && client.pausedUntil 
+                                  ? `Paused until ${new Date(client.pausedUntil).toLocaleDateString()}`
+                                  : client.status.charAt(0).toUpperCase() + client.status.slice(1)}
+                              </button>
+                            </div>
+                            {client.status === 'paused' && client.pausedUntil && (
+                              <p className="text-xs text-gray-500 text-right">
+                                Resumes: {new Date(client.pausedUntil).toLocaleDateString()}
+                              </p>
+                            )}
                           </div>
                           
                           {client.progressScore !== undefined && (
@@ -494,6 +768,116 @@ export default function ClientsPage() {
           </div>
         </div>
       </div>
+
+      {/* Status Update Modal */}
+      {statusModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Update Client Status
+                </h3>
+                <button
+                  onClick={() => setStatusModal(null)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            
+            <div className="px-6 py-4 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-900 mb-2">
+                  Status
+                </label>
+                <select
+                  value={statusModal.status}
+                  onChange={(e) => setStatusModal({ 
+                    ...statusModal, 
+                    status: e.target.value,
+                    pausedUntil: e.target.value !== 'paused' ? undefined : statusModal.pausedUntil
+                  })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="active">Active</option>
+                  <option value="paused">Paused</option>
+                  <option value="completed">Completed</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </div>
+
+              {statusModal.status === 'paused' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-900 mb-2">
+                    Paused Until
+                  </label>
+                  <input
+                    type="date"
+                    value={statusModal.pausedUntil ? (typeof statusModal.pausedUntil === 'string' ? statusModal.pausedUntil.split('T')[0] : new Date(statusModal.pausedUntil).toISOString().split('T')[0]) : ''}
+                    onChange={(e) => setStatusModal({ ...statusModal, pausedUntil: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Client will automatically resume on this date
+                  </p>
+                </div>
+              )}
+
+              <div className="flex space-x-3 pt-4">
+                <button
+                  onClick={() => setStatusModal(null)}
+                  className="flex-1 px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg font-medium transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={async () => {
+                    setUpdatingStatus(statusModal.clientId);
+                    try {
+                      const response = await fetch(`/api/clients/${statusModal.clientId}`, {
+                        method: 'PUT',
+                        headers: {
+                          'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                          status: statusModal.status,
+                          pausedUntil: statusModal.status === 'paused' && statusModal.pausedUntil ? statusModal.pausedUntil : null,
+                          statusUpdatedAt: new Date().toISOString()
+                        }),
+                      });
+
+                      if (response.ok) {
+                        // Update local state
+                        setClients(clients.map(c => 
+                          c.id === statusModal.clientId 
+                            ? { ...c, status: statusModal.status as any, pausedUntil: statusModal.pausedUntil }
+                            : c
+                        ));
+                        setStatusModal(null);
+                      } else {
+                        alert('Failed to update status');
+                      }
+                    } catch (error) {
+                      console.error('Error updating status:', error);
+                      alert('Error updating status');
+                    } finally {
+                      setUpdatingStatus(null);
+                    }
+                  }}
+                  disabled={updatingStatus === statusModal.clientId || (statusModal.status === 'paused' && !statusModal.pausedUntil)}
+                  className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+                >
+                  {updatingStatus === statusModal.clientId ? 'Updating...' : 'Update Status'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </RoleProtected>
   );
 } 

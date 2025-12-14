@@ -31,6 +31,8 @@ interface CheckInToReview {
   status: string;
   formId: string;
   assignmentId: string;
+  coachResponded?: boolean;
+  workflowStatus?: 'completed' | 'reviewed' | 'responded';
 }
 
 interface CompletedCheckIn {
@@ -114,6 +116,9 @@ export default function DashboardPage() {
   const [completedSortBy, setCompletedSortBy] = useState<'submittedAt' | 'clientName' | 'score'>('submittedAt');
   const [completedSortOrder, setCompletedSortOrder] = useState<'asc' | 'desc'>('desc');
   const [activeTab, setActiveTab] = useState<'review' | 'completed'>('review');
+  const [allClients, setAllClients] = useState<any[]>([]);
+  const [clientTableSortBy, setClientTableSortBy] = useState<string>('name');
+  const [clientTableSortOrder, setClientTableSortOrder] = useState<'asc' | 'desc'>('asc');
 
   // Refresh dashboard data when notifications change
   useEffect(() => {
@@ -173,6 +178,8 @@ export default function DashboardPage() {
       // Process clients data
       const clientsData = await clientsResponse.json();
       const clients = clientsData.clients || [];
+      setAllClients(clients);
+      setAllClients(clients);
 
       // Process forms data with enhanced error handling
       let forms: Form[] = [];
@@ -717,13 +724,15 @@ export default function DashboardPage() {
                 <div className="bg-gradient-to-r from-orange-50 to-red-50 border border-orange-200 rounded-xl p-6">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-orange-600 text-sm font-medium">Priority Actions</p>
-                      <p className="text-2xl font-bold text-orange-900">{checkInsToReview.length}</p>
-                      <p className="text-xs text-orange-700 mt-1">Check-ins to review</p>
+                      <p className="text-orange-600 text-sm font-medium">Needs Response</p>
+                      <p className="text-2xl font-bold text-orange-900">
+                        {checkInsToReview.filter(ci => !ci.coachResponded).length}
+                      </p>
+                      <p className="text-xs text-orange-700 mt-1">Awaiting your feedback</p>
                     </div>
                     <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
                       <svg className="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                     </div>
                   </div>
@@ -852,36 +861,69 @@ export default function DashboardPage() {
                           </div>
                         ) : (
                           <div className="space-y-4">
-                            {checkInsToReview.map((checkIn) => (
-                              <div key={checkIn.id} className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl p-6 border border-gray-200 hover:shadow-lg transition-all duration-200 hover:border-gray-300">
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center space-x-4">
-                                    <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center shadow-lg">
-                                      <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                      </svg>
+                            {checkInsToReview.map((checkIn) => {
+                              const needsResponse = !checkIn.coachResponded;
+                              const status = checkIn.workflowStatus || 'completed';
+                              
+                              return (
+                                <div 
+                                  key={checkIn.id} 
+                                  className={`rounded-xl p-6 border hover:shadow-lg transition-all duration-200 ${
+                                    needsResponse 
+                                      ? 'bg-gradient-to-r from-yellow-50 to-orange-50 border-yellow-300 hover:border-yellow-400' 
+                                      : 'bg-gradient-to-r from-gray-50 to-gray-100 border-gray-200 hover:border-gray-300'
+                                  }`}
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center space-x-4 flex-1">
+                                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-lg ${
+                                        needsResponse ? 'bg-yellow-100' : 'bg-green-100'
+                                      }`}>
+                                        {needsResponse ? (
+                                          <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                          </svg>
+                                        ) : (
+                                          <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                          </svg>
+                                        )}
+                                      </div>
+                                      <div className="flex-1">
+                                        <div className="flex items-center space-x-2">
+                                          <h3 className="text-lg font-bold text-gray-900">{checkIn.clientName}</h3>
+                                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                            needsResponse 
+                                              ? 'bg-yellow-100 text-yellow-700' 
+                                              : 'bg-green-100 text-green-700'
+                                          }`}>
+                                            {needsResponse ? '⏳ Needs Response' : '✓ Responded'}
+                                          </span>
+                                        </div>
+                                        <p className="text-gray-600">{checkIn.formTitle}</p>
+                                        <p className="text-sm text-gray-700 mt-1">{formatTimeAgo(checkIn.submittedAt)}</p>
+                                      </div>
                                     </div>
-                                    <div>
-                                      <h3 className="text-lg font-bold text-gray-900">{checkIn.clientName}</h3>
-                                      <p className="text-gray-600">{checkIn.formTitle}</p>
-                                      <p className="text-sm text-gray-700 mt-1">{formatTimeAgo(checkIn.submittedAt)}</p>
+                                    <div className="flex items-center space-x-4">
+                                      <div className="text-right">
+                                        <div className="text-2xl font-bold text-gray-900">{checkIn.score}%</div>
+                                        <div className="text-sm text-gray-700">Score</div>
+                                      </div>
+                                      <Link
+                                        href={`/responses/${checkIn.id}`}
+                                        className={`px-4 py-2 rounded-lg hover:opacity-90 transition-colors text-sm font-medium ${
+                                          needsResponse 
+                                            ? 'bg-yellow-600 text-white hover:bg-yellow-700' 
+                                            : 'bg-blue-600 text-white hover:bg-blue-700'
+                                        }`}
+                                      >
+                                        {needsResponse ? 'Respond' : 'View'}
+                                      </Link>
                                     </div>
-                                  </div>
-                                  <div className="flex items-center space-x-4">
-                                    <div className="text-right">
-                                      <div className="text-2xl font-bold text-gray-900">{checkIn.score}%</div>
-                                      <div className="text-sm text-gray-700">Score</div>
-                                    </div>
-                                    <Link
-                                      href={`/responses/${checkIn.id}`}
-                                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
-                                    >
-                                      Review
-                                    </Link>
                                   </div>
                                 </div>
-                              </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         )}
                       </>

@@ -38,6 +38,7 @@ export async function GET(request: NextRequest) {
         estimatedTime: data.estimatedTime,
         isStandard: data.isStandard || false,
         isActive: data.isActive !== undefined ? data.isActive : true, // Default to true if not set
+        isArchived: data.isArchived || false,
         createdAt: data.createdAt?.toDate?.()?.toISOString() || data.createdAt,
         updatedAt: data.updatedAt?.toDate?.()?.toISOString() || data.updatedAt
       };

@@ -113,6 +113,28 @@ export async function GET(request: NextRequest) {
           }
         }
         
+        // Check if coach has responded (has feedback)
+        let coachResponded = false;
+        let workflowStatus = 'completed';
+        if (assignment.responseId) {
+          try {
+            const feedbackSnapshot = await db.collection('coachFeedback')
+              .where('responseId', '==', assignment.responseId)
+              .where('coachId', '==', coachId)
+              .limit(1)
+              .get();
+            
+            coachResponded = !feedbackSnapshot.empty;
+            if (coachResponded) {
+              workflowStatus = 'responded';
+            } else if (assignment.reviewedByCoach) {
+              workflowStatus = 'reviewed';
+            }
+          } catch (error) {
+            console.log('Error checking feedback:', error);
+          }
+        }
+
         return {
           id: assignment.responseId || assignment.id, // Use responseId if available, fallback to assignment ID
           clientId: assignment.clientId,
@@ -125,7 +147,9 @@ export async function GET(request: NextRequest) {
           status: 'completed',
           formId: assignment.formId,
           assignmentId: assignment.id,
-          responseId: assignment.responseId // Include responseId for reference
+          responseId: assignment.responseId, // Include responseId for reference
+          coachResponded: coachResponded || assignment.coachResponded || false,
+          workflowStatus: workflowStatus || assignment.workflowStatus || 'completed'
         };
       }));
 

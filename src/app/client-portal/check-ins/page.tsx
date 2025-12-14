@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase-client';
 import { isWithinCheckInWindow, getCheckInWindowDescription, DEFAULT_CHECK_IN_WINDOW, CheckInWindow } from '@/lib/checkin-window-utils';
+import { getTrafficLightStatus, getDefaultThresholds, convertLegacyThresholds, type ScoringThresholds } from '@/lib/scoring-utils';
 
 interface CheckIn {
   id: string;
@@ -24,6 +25,8 @@ interface CheckIn {
   isRecurring?: boolean;
   recurringWeek?: number;
   totalWeeks?: number;
+  responseId?: string;
+  coachResponded?: boolean;
 }
 
 export default function ClientCheckInsPage() {
@@ -33,6 +36,7 @@ export default function ClientCheckInsPage() {
   const [filter, setFilter] = useState<'needsAction' | 'upcoming' | 'pending' | 'completed' | 'overdue'>('needsAction');
   const [clientId, setClientId] = useState<string | null>(null);
   const [coachTimezone, setCoachTimezone] = useState<string>(Intl.DateTimeFormat().resolvedOptions().timeZone);
+  const [thresholds, setThresholds] = useState<ScoringThresholds>(getDefaultThresholds('lifestyle'));
 
   useEffect(() => {
     fetchClientId();
@@ -41,6 +45,7 @@ export default function ClientCheckInsPage() {
   useEffect(() => {
     if (clientId) {
       fetchCheckIns();
+      fetchScoringConfig();
     }
   }, [clientId]);
 
@@ -86,6 +91,44 @@ export default function ClientCheckInsPage() {
       }
     } catch (error) {
       console.error('Error fetching coach timezone:', error);
+    }
+  };
+
+  const fetchScoringConfig = async () => {
+    try {
+      if (!clientId) return;
+      
+      const scoringDoc = await getDoc(doc(db, 'clientScoring', clientId));
+      if (scoringDoc.exists()) {
+        const scoringData = scoringDoc.data();
+        let clientThresholds: ScoringThresholds;
+
+        // Check if new format (redMax/orangeMax) exists
+        if (scoringData.thresholds?.redMax !== undefined && scoringData.thresholds?.orangeMax !== undefined) {
+          clientThresholds = {
+            redMax: scoringData.thresholds.redMax,
+            orangeMax: scoringData.thresholds.orangeMax
+          };
+        } else if (scoringData.thresholds?.red !== undefined && scoringData.thresholds?.yellow !== undefined) {
+          // Convert legacy format
+          clientThresholds = convertLegacyThresholds(scoringData.thresholds);
+        } else if (scoringData.scoringProfile) {
+          // Use profile defaults
+          clientThresholds = getDefaultThresholds(scoringData.scoringProfile as any);
+        } else {
+          // Default to lifestyle
+          clientThresholds = getDefaultThresholds('lifestyle');
+        }
+
+        setThresholds(clientThresholds);
+      } else {
+        // No scoring config, use default lifestyle thresholds
+        setThresholds(getDefaultThresholds('lifestyle'));
+      }
+    } catch (error) {
+      console.error('Error fetching scoring config:', error);
+      // Use default lifestyle thresholds on error
+      setThresholds(getDefaultThresholds('lifestyle'));
     }
   };
 
@@ -169,6 +212,8 @@ export default function ClientCheckInsPage() {
   };
 
   // Get check-ins that are available now (window is open)
+  // This includes check-ins where the window is currently open, regardless of overdue status
+  // This ensures that if a check-in is overdue but its window is open, it still shows
   const getAvailableCheckins = () => {
     return checkins.filter(checkin => {
       if (checkin.status === 'completed') return false;
@@ -179,11 +224,26 @@ export default function ClientCheckInsPage() {
   };
 
   // Get check-ins that need action (overdue + available now)
+  // This includes:
+  // 1. All overdue check-ins (regardless of window status)
+  // 2. All check-ins with open windows (regardless of overdue status)
+  // 3. All instances of recurring check-ins (each week shown separately)
   const getNeedsActionCheckins = () => {
-    const overdue = checkins.filter(c => c.status === 'overdue');
+    const now = new Date();
+    const overdue = checkins.filter(c => {
+      // Check if overdue by comparing dueDate to now
+      const dueDate = new Date(c.dueDate);
+      const hoursOverdue = (now.getTime() - dueDate.getTime()) / (1000 * 60 * 60);
+      return hoursOverdue > 0 && c.status !== 'completed';
+    });
+    
     const available = getAvailableCheckins();
+    
+    // Combine both lists - each check-in (including different weeks of recurring) should show
+    // Since recurring check-ins have different IDs for each week, no need to deduplicate
     const combined = [...overdue, ...available];
-    // Remove duplicates
+    
+    // Remove duplicates by ID only (in case a check-in is both overdue AND has open window)
     return combined.filter((checkin, index, self) => 
       index === self.findIndex(c => c.id === checkin.id)
     );
@@ -257,11 +317,26 @@ export default function ClientCheckInsPage() {
     return `Due in ${diffDays} days`;
   };
 
-  // Helper function to get card border color based on status and availability
+  // Helper function to get card border color based on status, availability, and score
   const getCardBorderColor = (checkin: CheckIn) => {
     if (checkin.status === 'overdue') return 'border-l-4 border-red-500';
-    if (checkin.status === 'completed') return 'border-l-4 border-green-500';
     
+    // For completed check-ins, use traffic light status based on score
+    if (checkin.status === 'completed' && checkin.score !== undefined) {
+      const trafficLightStatus = getTrafficLightStatus(checkin.score, thresholds);
+      switch (trafficLightStatus) {
+        case 'red':
+          return 'border-l-4 border-red-500';
+        case 'orange':
+          return 'border-l-4 border-orange-500';
+        case 'green':
+          return 'border-l-4 border-green-500';
+        default:
+          return 'border-l-4 border-green-500';
+      }
+    }
+    
+    // For pending check-ins, use window status
     const checkInWindow = checkin.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
     const windowStatus = isWithinCheckInWindow(checkInWindow);
     if (windowStatus.isOpen) return 'border-l-4 border-green-500';
@@ -437,10 +512,25 @@ export default function ClientCheckInsPage() {
                       const isOverdue = checkin.status === 'overdue';
                       const isCompleted = checkin.status === 'completed';
                       
+                      // Determine the best action link for completed check-ins
+                      const getCompletedCheckInLink = () => {
+                        if (checkin.coachResponded && checkin.responseId) {
+                          return `/client-portal/feedback/${checkin.responseId}`;
+                        } else if (checkin.responseId) {
+                          return `/client-portal/check-in/${checkin.id}/success`;
+                        }
+                        return null;
+                      };
+
+                      const completedLink = isCompleted ? getCompletedCheckInLink() : null;
+                      const CardWrapper = completedLink ? Link : 'div';
+                      const cardProps = completedLink ? { href: completedLink } : {};
+
                       return (
-                        <div 
-                          key={checkin.id} 
-                          className={`${getCardBorderColor(checkin)} bg-white/80 backdrop-blur-sm rounded-lg p-4 hover:shadow-md transition-all duration-200 border border-gray-200/60`}
+                        <CardWrapper
+                          key={checkin.id}
+                          {...cardProps}
+                          className={`${getCardBorderColor(checkin)} bg-white/80 backdrop-blur-sm rounded-lg p-4 hover:shadow-md transition-all duration-200 border border-gray-200/60 ${completedLink ? 'cursor-pointer' : ''}`}
                         >
                           <div className="flex items-start justify-between gap-4">
                             {/* Left: Main Content */}
@@ -503,6 +593,16 @@ export default function ClientCheckInsPage() {
                                     </div>
                                   )}
 
+                                  {/* Feedback indicator for completed check-ins */}
+                                  {isCompleted && checkin.coachResponded && (
+                                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-purple-100 text-purple-700 mt-2">
+                                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                      </svg>
+                                      Coach Feedback Available
+                                    </div>
+                                  )}
+
                                   {/* Score for completed with traffic light */}
                                   {isCompleted && checkin.score && (
                                     <div className="inline-flex items-center gap-2 px-2 py-1 rounded text-xs mt-1">
@@ -537,7 +637,7 @@ export default function ClientCheckInsPage() {
                                 </div>
 
                                 {/* Right: Action Button */}
-                                <div className="flex-shrink-0">
+                                <div className="flex-shrink-0" onClick={(e) => completedLink && e.stopPropagation()}>
                                   {isOverdue && (
                                     <Link
                                       href={`/client-portal/check-in/${checkin.id}`}
@@ -564,18 +664,41 @@ export default function ClientCheckInsPage() {
                                     </button>
                                   )}
                                   {isCompleted && (
-                                    <Link
-                                      href={`/client-portal/check-in/${checkin.id}/success`}
-                                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-all duration-200 shadow-sm hover:shadow-md whitespace-nowrap"
-                                    >
-                                      View Results
-                                    </Link>
+                                    <div className="flex flex-col items-end gap-2">
+                                      {checkin.coachResponded && checkin.responseId && (
+                                        <Link
+                                          href={`/client-portal/feedback/${checkin.responseId}`}
+                                          className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-semibold transition-all duration-200 shadow-sm hover:shadow-md whitespace-nowrap flex items-center gap-1.5"
+                                          onClick={(e) => e.stopPropagation()}
+                                        >
+                                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                          </svg>
+                                          View Feedback
+                                        </Link>
+                                      )}
+                                      <Link
+                                        href={`/client-portal/check-in/${checkin.id}/success`}
+                                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-all duration-200 shadow-sm hover:shadow-md whitespace-nowrap flex items-center gap-1.5"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                                        </svg>
+                                        View Results
+                                      </Link>
+                                      {completedLink && (
+                                        <div className="text-xs text-gray-500 mt-1 text-center">
+                                          Click card to view
+                                        </div>
+                                      )}
+                                    </div>
                                   )}
                                 </div>
                               </div>
                             </div>
                           </div>
-                        </div>
+                        </CardWrapper>
                       );
                     })}
                   </div>

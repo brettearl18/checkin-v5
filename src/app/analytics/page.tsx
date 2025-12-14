@@ -111,11 +111,14 @@ export default function AnalyticsPage() {
 
   useEffect(() => {
     const fetchAnalyticsData = async () => {
+      // Wait for userProfile to be loaded
+      if (!userProfile?.uid) {
+        // Don't set loading to false yet - wait for profile to load
+        return;
+      }
+      
       try {
-        if (!userProfile?.uid) {
-          console.error('No user profile found');
-          return;
-        }
+        setIsLoading(true);
         const coachId = userProfile.uid;
         
         const response = await fetch(`/api/analytics/overview?timeRange=${timeRange}&coachId=${coachId}`);

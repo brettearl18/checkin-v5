@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { RoleProtected } from '@/components/ProtectedRoute';
@@ -129,7 +129,10 @@ function SortableQuestionItem({
 
 export default function EditFormPage() {
   const router = useRouter();
+  const [showScoringInfo, setShowScoringInfo] = useState(false);
+  const [previewThresholds, setPreviewThresholds] = useState({ redMax: 33, orangeMax: 80 });
   const params = useParams();
+  const searchParams = useSearchParams();
   const formId = (params?.id as string) || '';
   const { userProfile } = useAuth();
   const [currentStep, setCurrentStep] = useState(1);
@@ -217,6 +220,25 @@ export default function EditFormPage() {
       fetchData();
     }
   }, [userProfile?.uid, formId]);
+
+  // Refresh questions when returning from edit page
+  useEffect(() => {
+    const questionUpdated = searchParams?.get('questionUpdated');
+    if (questionUpdated === 'true' && userProfile?.uid) {
+      // Refresh questions list
+      fetch(`/api/questions?coachId=${userProfile.uid}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            setQuestions(data.questions || []);
+          }
+        })
+        .catch(err => console.error('Error refreshing questions:', err));
+      
+      // Remove the query parameter from URL
+      router.replace(`/forms/${formId}/edit`);
+    }
+  }, [searchParams, userProfile?.uid, formId, router]);
 
   const handleInputChange = (field: string, value: any) => {
     setFormData(prev => ({
@@ -537,12 +559,25 @@ export default function EditFormPage() {
                           <p className="text-sm text-gray-600">{question.description}</p>
                         )}
                       </div>
-                      <input
-                        type="checkbox"
-                        checked={selectedQuestions.includes(question.id)}
-                        onChange={() => toggleQuestionSelection(question.id)}
-                        className="h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300 rounded ml-4"
-                      />
+                      <div className="ml-4 flex items-center gap-2">
+                        <Link
+                          href={`/questions/edit/${question.id}?returnUrl=${encodeURIComponent(`/forms/${formId}/edit`)}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="px-3 py-1.5 text-sm text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 font-medium transition-colors flex items-center gap-1"
+                          title="Edit question"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                          Edit
+                        </Link>
+                        <input
+                          type="checkbox"
+                          checked={selectedQuestions.includes(question.id)}
+                          onChange={() => toggleQuestionSelection(question.id)}
+                          className="h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                        />
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -576,8 +611,290 @@ export default function EditFormPage() {
               </div>
 
               <div>
-                <h4 className="font-semibold text-gray-900 mb-4">Selected Questions:</h4>
-                <p className="text-sm text-gray-500 mb-4">Drag and drop to reorder questions</p>
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h4 className="font-semibold text-gray-900">Selected Questions:</h4>
+                    <p className="text-sm text-gray-500 mt-1">Drag and drop to reorder questions</p>
+                  </div>
+                </div>
+                
+                {/* Scoring Formula & Traffic Light Info */}
+                <div className="bg-gradient-to-br from-purple-50 to-indigo-50 rounded-lg border border-purple-200 p-4 mb-4">
+                  <button
+                    onClick={() => setShowScoringInfo(!showScoringInfo)}
+                    className="w-full flex items-center justify-between text-left"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-lg flex items-center justify-center">
+                        <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <h5 className="text-sm font-bold text-gray-900">How Scoring Works</h5>
+                        <p className="text-xs text-gray-600">Learn about the scoring formula and traffic light system</p>
+                      </div>
+                    </div>
+                    <svg 
+                      className={`w-4 h-4 text-gray-400 transition-transform ${showScoringInfo ? 'rotate-180' : ''}`}
+                      fill="none" 
+                      stroke="currentColor" 
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+
+                  {showScoringInfo && (
+                  <div className="mt-4 pt-4 border-t border-purple-200 space-y-4">
+                    {/* Scoring Formula */}
+                    <div>
+                      <h6 className="text-xs font-bold text-gray-900 mb-2 flex items-center gap-2">
+                        <span>📊</span>
+                        Scoring Formula
+                      </h6>
+                      <div className="bg-white rounded-lg p-3 space-y-2">
+                        <div className="text-xs text-gray-700">
+                          <p className="font-semibold mb-1">Each question contributes to the final score:</p>
+                          <div className="bg-gray-50 rounded p-2 font-mono text-xs border border-gray-200">
+                            <div className="mb-1">weightedScore = questionScore × questionWeight</div>
+                            <div>totalScore = (Σ weightedScores / (Σ weights × 10)) × 100</div>
+                          </div>
+                        </div>
+                        <div className="text-xs text-gray-600 space-y-0.5">
+                          <p>• <strong>Question Weight (1-10):</strong> Importance of the question</p>
+                          <p>• <strong>Question Score (1-10):</strong> Answer converted to a score</p>
+                          <p>• <strong>Final Score (0-100%):</strong> Weighted average</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Answer Scoring */}
+                    <div>
+                      <h6 className="text-xs font-bold text-gray-900 mb-2 flex items-center gap-2">
+                        <span>✅</span>
+                        How Answers Are Scored
+                      </h6>
+                      <div className="grid grid-cols-2 gap-2 text-xs text-gray-700">
+                        <div className="bg-white rounded-lg p-2">
+                          <p className="font-semibold mb-0.5">Scale (1-10):</p>
+                          <p className="text-gray-600">Direct value</p>
+                        </div>
+                        <div className="bg-white rounded-lg p-2">
+                          <p className="font-semibold mb-0.5">Yes/No:</p>
+                          <p className="text-gray-600">Yes = 8/10, No = 3/10</p>
+                        </div>
+                        <div className="bg-white rounded-lg p-2">
+                          <p className="font-semibold mb-0.5">Single/Multiple Choice:</p>
+                          <p className="text-gray-600">Uses option weights</p>
+                        </div>
+                        <div className="bg-white rounded-lg p-2">
+                          <p className="font-semibold mb-0.5">Text Questions:</p>
+                          <p className="text-gray-600">Neutral 5/10</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Form Math Calculation */}
+                    {selectedQuestions.length > 0 && (() => {
+                      const selectedQData = selectedQuestions.map(qId => {
+                        const q = questions.find(q => q.id === qId);
+                        return q;
+                      }).filter(Boolean);
+                      
+                      const totalWeight = selectedQData.reduce((sum, q) => {
+                        const weight = q?.questionWeight || q?.weight || 5;
+                        return sum + weight;
+                      }, 0);
+                      
+                      const maxPossibleScore = totalWeight * 10;
+                      
+                      // Example calculation with average scores
+                      const exampleScores = {
+                        perfect: maxPossibleScore,
+                        good: Math.round(maxPossibleScore * 0.75),
+                        average: Math.round(maxPossibleScore * 0.5),
+                        poor: Math.round(maxPossibleScore * 0.25)
+                      };
+                      
+                      return (
+                        <div>
+                          <h6 className="text-xs font-bold text-gray-900 mb-2 flex items-center gap-2">
+                            <span>🧮</span>
+                            Form Calculation Preview
+                          </h6>
+                          <div className="bg-white rounded-lg p-3 space-y-3">
+                            <div className="grid grid-cols-2 gap-3 text-xs">
+                              <div className="bg-gray-50 rounded p-2">
+                                <p className="font-semibold text-gray-700 mb-1">Total Questions</p>
+                                <p className="text-lg font-bold text-gray-900">{selectedQuestions.length}</p>
+                              </div>
+                              <div className="bg-gray-50 rounded p-2">
+                                <p className="font-semibold text-gray-700 mb-1">Total Weight</p>
+                                <p className="text-lg font-bold text-gray-900">{totalWeight}</p>
+                              </div>
+                              <div className="bg-gray-50 rounded p-2">
+                                <p className="font-semibold text-gray-700 mb-1">Max Possible Score</p>
+                                <p className="text-lg font-bold text-gray-900">{maxPossibleScore}</p>
+                              </div>
+                              <div className="bg-gray-50 rounded p-2">
+                                <p className="font-semibold text-gray-700 mb-1">Formula</p>
+                                <p className="text-xs text-gray-600">Score = (Σ weighted / {maxPossibleScore}) × 100</p>
+                              </div>
+                            </div>
+                            
+                            {/* Question Breakdown */}
+                            <div>
+                              <p className="text-xs font-semibold text-gray-700 mb-2">Question Weights:</p>
+                              <div className="max-h-32 overflow-y-auto space-y-1">
+                                {selectedQData.slice(0, 5).map((q, idx) => {
+                                  const weight = q?.questionWeight || q?.weight || 5;
+                                  const title = q?.text || q?.title || `Question ${idx + 1}`;
+                                  return (
+                                    <div key={q?.id || idx} className="flex items-center justify-between text-xs bg-gray-50 rounded px-2 py-1">
+                                      <span className="text-gray-700 truncate flex-1">{title.substring(0, 40)}{title.length > 40 ? '...' : ''}</span>
+                                      <span className="font-bold text-gray-900 ml-2">Weight: {weight}</span>
+                                    </div>
+                                  );
+                                })}
+                                {selectedQData.length > 5 && (
+                                  <p className="text-xs text-gray-500 italic">+ {selectedQData.length - 5} more questions</p>
+                                )}
+                              </div>
+                            </div>
+                            
+                            {/* Example Scores */}
+                            <div>
+                              <p className="text-xs font-semibold text-gray-700 mb-2">Example Score Calculations:</p>
+                              <div className="space-y-1.5">
+                                {[
+                                  { label: 'Perfect (all 10s)', score: exampleScores.perfect, color: 'green' },
+                                  { label: 'Good (avg 7.5)', score: exampleScores.good, color: 'orange' },
+                                  { label: 'Average (avg 5)', score: exampleScores.average, color: 'orange' },
+                                  { label: 'Poor (avg 2.5)', score: exampleScores.poor, color: 'red' }
+                                ].map((example, idx) => {
+                                  const percentage = Math.round((example.score / maxPossibleScore) * 100);
+                                  const status = percentage <= previewThresholds.redMax ? 'red' : 
+                                                percentage <= previewThresholds.orangeMax ? 'orange' : 'green';
+                                  return (
+                                    <div key={idx} className="flex items-center justify-between text-xs bg-gray-50 rounded px-2 py-1.5">
+                                      <span className="text-gray-700">{example.label}:</span>
+                                      <div className="flex items-center gap-2">
+                                        <span className="font-bold text-gray-900">{example.score}/{maxPossibleScore}</span>
+                                        <span className="font-bold text-gray-900">= {percentage}%</span>
+                                        <span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${
+                                          status === 'red' ? 'bg-red-100 text-red-700' :
+                                          status === 'orange' ? 'bg-orange-100 text-orange-700' :
+                                          'bg-green-100 text-green-700'
+                                        }`}>
+                                          {status === 'red' ? '🔴' : status === 'orange' ? '🟠' : '🟢'}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Traffic Light Thresholds - Adjustable */}
+                    <div>
+                      <h6 className="text-xs font-bold text-gray-900 mb-2 flex items-center gap-2">
+                        <span>🚦</span>
+                        Traffic Light Zones (Adjustable)
+                      </h6>
+                      <div className="bg-white rounded-lg p-3 space-y-3">
+                        <div className="grid grid-cols-3 gap-2">
+                          <div className="bg-red-50 rounded p-2 border border-red-200">
+                            <div className="flex items-center gap-1 mb-1">
+                              <span className="text-sm">🔴</span>
+                              <span className="font-bold text-red-700 text-xs">Red Zone</span>
+                            </div>
+                            <div className="flex items-center gap-1 mb-0.5">
+                              <input
+                                type="number"
+                                min="0"
+                                max="99"
+                                value={previewThresholds.redMax}
+                                onChange={(e) => {
+                                  const val = parseInt(e.target.value) || 0;
+                                  if (val < previewThresholds.orangeMax) {
+                                    setPreviewThresholds({ ...previewThresholds, redMax: val });
+                                  }
+                                }}
+                                className="w-12 px-1 py-0.5 text-xs border border-red-300 rounded text-gray-900"
+                              />
+                              <span className="text-xs text-gray-600">% max</span>
+                            </div>
+                            <p className="text-xs font-semibold text-gray-900">0 - {previewThresholds.redMax}%</p>
+                            <p className="text-xs text-gray-600">Needs Attention</p>
+                          </div>
+                          <div className="bg-orange-50 rounded p-2 border border-orange-200">
+                            <div className="flex items-center gap-1 mb-1">
+                              <span className="text-sm">🟠</span>
+                              <span className="font-bold text-orange-700 text-xs">Orange Zone</span>
+                            </div>
+                            <div className="flex items-center gap-1 mb-0.5">
+                              <input
+                                type="number"
+                                min={previewThresholds.redMax + 1}
+                                max="99"
+                                value={previewThresholds.orangeMax}
+                                onChange={(e) => {
+                                  const val = parseInt(e.target.value) || 80;
+                                  if (val > previewThresholds.redMax && val <= 99) {
+                                    setPreviewThresholds({ ...previewThresholds, orangeMax: val });
+                                  }
+                                }}
+                                className="w-12 px-1 py-0.5 text-xs border border-orange-300 rounded text-gray-900"
+                              />
+                              <span className="text-xs text-gray-600">% max</span>
+                            </div>
+                            <p className="text-xs font-semibold text-gray-900">{previewThresholds.redMax + 1} - {previewThresholds.orangeMax}%</p>
+                            <p className="text-xs text-gray-600">On Track</p>
+                          </div>
+                          <div className="bg-green-50 rounded p-2 border border-green-200">
+                            <div className="flex items-center gap-1 mb-1">
+                              <span className="text-sm">🟢</span>
+                              <span className="font-bold text-green-700 text-xs">Green Zone</span>
+                            </div>
+                            <p className="text-xs font-semibold text-gray-900 mb-1">{previewThresholds.orangeMax + 1} - 100%</p>
+                            <p className="text-xs text-gray-600">Excellent</p>
+                          </div>
+                        </div>
+                        <div className="pt-2 border-t border-gray-200">
+                          <p className="text-xs text-gray-600 italic mb-2">
+                            Adjust thresholds to preview how scores will be categorized. These are defaults - actual thresholds are set per client profile.
+                          </p>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => setPreviewThresholds({ redMax: 33, orangeMax: 80 })}
+                              className="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded text-gray-700"
+                            >
+                              Lifestyle
+                            </button>
+                            <button
+                              onClick={() => setPreviewThresholds({ redMax: 75, orangeMax: 89 })}
+                              className="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded text-gray-700"
+                            >
+                              High Performance
+                            </button>
+                            <button
+                              onClick={() => setPreviewThresholds({ redMax: 60, orangeMax: 85 })}
+                              className="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded text-gray-700"
+                            >
+                              Moderate
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  )}
+                </div>
                 <DndContext
                   sensors={sensors}
                   collisionDetection={closestCenter}

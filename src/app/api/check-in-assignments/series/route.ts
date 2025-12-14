@@ -3,15 +3,23 @@ import { getDb } from '@/lib/firebase-server';
 
 // DELETE - Delete check-in series for a client and form
 // Option to preserve completed history or delete everything
+// SECURITY: Only coaches can delete check-in series. Clients cannot delete their own check-ins.
 export async function DELETE(request: NextRequest) {
   try {
-    const { clientId, formId, preserveHistory = true } = await request.json();
+    const { clientId, formId, preserveHistory = true, coachId } = await request.json();
     
     if (!clientId || !formId) {
       return NextResponse.json({
         success: false,
         message: 'Missing required fields: clientId, formId'
       }, { status: 400 });
+    }
+    
+    if (!coachId) {
+      return NextResponse.json({
+        success: false,
+        message: 'Coach ID is required. Only coaches can delete check-in series.'
+      }, { status: 403 });
     }
 
     const db = getDb();
@@ -27,6 +35,20 @@ export async function DELETE(request: NextRequest) {
         success: false,
         message: 'No check-in assignments found for this client and form'
       }, { status: 404 });
+    }
+    
+    // SECURITY: Verify that all assignments belong to the coach making the request
+    // This prevents clients or other coaches from deleting check-ins they don't own
+    const unauthorizedAssignments = assignmentsSnapshot.docs.filter(doc => {
+      const data = doc.data();
+      return data.coachId && data.coachId !== coachId;
+    });
+    
+    if (unauthorizedAssignments.length > 0) {
+      return NextResponse.json({
+        success: false,
+        message: 'You do not have permission to delete these check-in assignments. Some assignments belong to a different coach.'
+      }, { status: 403 });
     }
 
     const batch = db.batch();

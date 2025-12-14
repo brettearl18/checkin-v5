@@ -60,7 +60,7 @@ export default function ClientFeedbackPage() {
           console.error('No user profile found');
           return;
         }
-        const responseRes = await fetch(`/api/responses/${responseId}?coachId=${userProfile.uid}`);
+        const responseRes = await fetch(`/api/responses/${responseId}?clientId=${userProfile.uid}`);
         
         if (!responseRes.ok) {
           throw new Error('Failed to fetch response data');
@@ -92,7 +92,8 @@ export default function ClientFeedbackPage() {
 
   const fetchFeedback = async () => {
     try {
-      const feedbackRes = await fetch(`/api/coach-feedback?responseId=${responseId}&coachId=${userProfile?.uid}`);
+      // For clients, fetch feedback by responseId and clientId
+      const feedbackRes = await fetch(`/api/coach-feedback?responseId=${responseId}&clientId=${userProfile?.uid}`);
       if (feedbackRes.ok) {
         const feedbackData = await feedbackRes.json();
         if (feedbackData.success) {

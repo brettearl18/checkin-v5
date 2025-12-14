@@ -2,7 +2,7 @@ import { getDb } from './firebase-server';
 
 export interface NotificationData {
   userId: string;
-  type: 'check_in_due' | 'message_received' | 'goal_achieved' | 'check_in_completed' | 'form_assigned' | 'coach_message' | 'system_alert' | 'coach_feedback_ready';
+  type: 'check_in_due' | 'message_received' | 'goal_achieved' | 'check_in_completed' | 'form_assigned' | 'coach_message' | 'system_alert' | 'coach_feedback_ready' | 'coach_feedback_available';
   title: string;
   message: string;
   actionUrl?: string;

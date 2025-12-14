@@ -39,6 +39,7 @@ interface FormResponse {
     question: string;
     answer: string | number | boolean;
     type: string;
+    comment?: string; // Optional comment/notes for the answer
   }>;
   status: string;
 }
@@ -50,6 +51,7 @@ export default function EditCheckInPage() {
   const [formResponse, setFormResponse] = useState<FormResponse | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [responses, setResponses] = useState<{ [key: string]: any }>({});
+  const [comments, setComments] = useState<{ [key: string]: string }>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -107,10 +109,15 @@ export default function EditCheckInPage() {
 
       // Initialize responses with existing answers
       const initialResponses: { [key: string]: any } = {};
+      const initialComments: { [key: string]: string } = {};
       responseData.responses.forEach(response => {
         initialResponses[response.questionId] = response.answer;
+        if (response.comment) {
+          initialComments[response.questionId] = response.comment;
+        }
       });
       setResponses(initialResponses);
+      setComments(initialComments);
 
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -124,6 +131,13 @@ export default function EditCheckInPage() {
     setResponses(prev => ({
       ...prev,
       [questionId]: answer
+    }));
+  };
+
+  const handleCommentChange = (questionId: string, comment: string) => {
+    setComments(prev => ({
+      ...prev,
+      [questionId]: comment
     }));
   };
 
@@ -151,7 +165,8 @@ export default function EditCheckInPage() {
       // Update the responses array
       const updatedResponses = formResponse.responses.map(response => ({
         ...response,
-        answer: responses[response.questionId] !== undefined ? responses[response.questionId] : response.answer
+        answer: responses[response.questionId] !== undefined ? responses[response.questionId] : response.answer,
+        comment: comments[response.questionId] || response.comment || ''
       }));
 
       // Calculate score based on answer quality with question weights
@@ -225,9 +240,23 @@ export default function EditCheckInPage() {
             break;
             
           case 'text':
-          case 'textarea':
             const textValue = String(response.answer).trim();
             if (textValue.length > 0) {
+              questionScore = 5;
+            }
+            break;
+            
+          case 'textarea':
+            // For textarea questions, map the selected option to a score
+            const textareaAnswer = String(response.answer).trim().toLowerCase();
+            if (textareaAnswer === 'great') {
+              questionScore = 9; // Great = 9/10
+            } else if (textareaAnswer === 'average') {
+              questionScore = 5; // Average = 5/10
+            } else if (textareaAnswer === 'poor') {
+              questionScore = 2; // Poor = 2/10
+            } else if (textareaAnswer.length > 0) {
+              // Fallback: if somehow a different value, give neutral
               questionScore = 5;
             }
             break;
@@ -279,6 +308,56 @@ export default function EditCheckInPage() {
             rows={4}
             placeholder="Enter your answer..."
           />
+        );
+
+      case 'textarea':
+        // For textarea questions, show a 3-option selector for scoring
+        const textareaValue = typeof answer === 'string' ? answer : '';
+        const isGreat = textareaValue === 'Great' || textareaValue === 'great';
+        const isAverage = textareaValue === 'Average' || textareaValue === 'average';
+        const isPoor = textareaValue === 'Poor' || textareaValue === 'poor';
+        
+        return (
+          <div className="space-y-3">
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => handleAnswerChange(question.id, 'Great')}
+                className={`flex-1 px-4 py-3 rounded-lg font-medium transition-all ${
+                  isGreat
+                    ? 'bg-green-600 text-white shadow-md'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                Great
+              </button>
+              <button
+                type="button"
+                onClick={() => handleAnswerChange(question.id, 'Average')}
+                className={`flex-1 px-4 py-3 rounded-lg font-medium transition-all ${
+                  isAverage
+                    ? 'bg-yellow-500 text-white shadow-md'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                Average
+              </button>
+              <button
+                type="button"
+                onClick={() => handleAnswerChange(question.id, 'Poor')}
+                className={`flex-1 px-4 py-3 rounded-lg font-medium transition-all ${
+                  isPoor
+                    ? 'bg-red-600 text-white shadow-md'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                Poor
+              </button>
+            </div>
+            <p className="text-xs text-gray-500 text-center">
+              Select how you would rate this
+            </p>
+          </div>
         );
 
       case 'number':
@@ -460,6 +539,25 @@ export default function EditCheckInPage() {
                 <div className="mb-8">
                   {renderQuestion(currentQ)}
                 </div>
+
+                {/* Comment/Notes Section - Only for boolean and multiple_choice questions */}
+                {(currentQ.type === 'boolean' || currentQ.type === 'multiple_choice') && (
+                  <div className="mt-6 pt-6 border-t border-gray-200">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Additional Notes (Optional)
+                    </label>
+                    <textarea
+                      value={comments[currentQ.id] || ''}
+                      onChange={(e) => handleCommentChange(currentQ.id, e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                      rows={3}
+                      placeholder="Add any additional notes or context about your answer..."
+                    />
+                    <p className="mt-1 text-xs text-gray-500">
+                      Use this space to provide more context or details about your response
+                    </p>
+                  </div>
+                )}
 
                 {/* Navigation */}
                 <div className="flex justify-between">

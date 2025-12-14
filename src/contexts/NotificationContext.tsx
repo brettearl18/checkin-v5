@@ -53,15 +53,38 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
   const [unreadCount, setUnreadCount] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [isMounted, setIsMounted] = useState(true);
 
   // Fetch notifications from API
   const fetchNotifications = useCallback(async () => {
-    if (!userProfile?.uid) return;
+    if (!userProfile?.uid || !isMounted) return;
 
     setLoading(true);
     try {
-      const response = await fetch(`/api/notifications?userId=${userProfile.uid}&limit=50`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      
+      const response = await fetch(`/api/notifications?userId=${userProfile.uid}&limit=50`, {
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      
+      // Check if response is ok before parsing
+      if (!response.ok) {
+        console.error('Failed to fetch notifications:', response.status, response.statusText);
+        // Don't throw, just log and return empty state only if it's a client error
+        if (response.status >= 400 && response.status < 500) {
+          setNotifications([]);
+          setUnreadCount(0);
+          setTotalCount(0);
+        }
+        return;
+      }
+
       const data = await response.json();
+
+      if (!isMounted) return; // Check again after async operation
 
       if (data.success) {
         setNotifications(data.notifications || []);
@@ -69,13 +92,36 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
         setTotalCount(data.totalCount || 0);
       } else {
         console.error('Failed to fetch notifications:', data.message);
+        // Set empty state on failure
+        setNotifications([]);
+        setUnreadCount(0);
+        setTotalCount(0);
       }
-    } catch (error) {
-      console.error('Error fetching notifications:', error);
+    } catch (error: any) {
+      // Handle network errors gracefully
+      if (error.name === 'AbortError') {
+        console.warn('Notification fetch aborted (timeout or component unmounted)');
+        return;
+      }
+      
+      if (error instanceof TypeError && error.message === 'Failed to fetch') {
+        // Network error - don't clear existing notifications, just log
+        console.warn('Network error fetching notifications - will retry on next interval');
+      } else {
+        console.error('Error fetching notifications:', error);
+        // Only clear on non-network errors
+        if (isMounted) {
+          setNotifications([]);
+          setUnreadCount(0);
+          setTotalCount(0);
+        }
+      }
     } finally {
-      setLoading(false);
+      if (isMounted) {
+        setLoading(false);
+      }
     }
-  }, [userProfile?.uid]);
+  }, [userProfile?.uid, isMounted]);
 
   // Mark notification as read
   const markAsRead = useCallback(async (notificationId: string) => {
@@ -173,11 +219,19 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     if (!userProfile?.uid) return;
 
     const interval = setInterval(() => {
-      fetchNotifications();
+      if (isMounted) {
+        fetchNotifications();
+      }
     }, 120000); // 2 minutes instead of 30 seconds
 
     return () => clearInterval(interval);
-  }, [userProfile?.uid, fetchNotifications]);
+  }, [userProfile?.uid, fetchNotifications, isMounted]);
+
+  // Track mount status
+  useEffect(() => {
+    setIsMounted(true);
+    return () => setIsMounted(false);
+  }, []);
 
   const value: NotificationContextType = {
     notifications,

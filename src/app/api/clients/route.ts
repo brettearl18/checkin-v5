@@ -52,10 +52,37 @@ export async function GET(request: NextRequest) {
     }
 
     const snapshot = await query.get();
-    const clients = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
+    const now = new Date();
+    
+    const clients = snapshot.docs.map(doc => {
+      const data = doc.data();
+      
+      // Check if pausedUntil date has passed - auto-reactivate if so
+      if (data.status === 'paused' && data.pausedUntil) {
+        const pausedUntilDate = data.pausedUntil?.toDate ? data.pausedUntil.toDate() : new Date(data.pausedUntil);
+        
+        // If pausedUntil date has passed, automatically reactivate
+        if (pausedUntilDate <= now) {
+          // Update the client in the background
+          db.collection('clients').doc(doc.id).update({
+            status: 'active',
+            pausedUntil: null
+          }).catch(err => console.error('Error auto-reactivating client:', err));
+          
+          return {
+            id: doc.id,
+            ...data,
+            status: 'active',
+            pausedUntil: null
+          };
+        }
+      }
+      
+      return {
+        id: doc.id,
+        ...data
+      };
+    });
 
     return NextResponse.json({
       success: true,

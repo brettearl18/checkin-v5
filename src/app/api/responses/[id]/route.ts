@@ -9,11 +9,13 @@ export async function GET(
     const { id } = await params;
     const { searchParams } = new URL(request.url);
     const coachId = searchParams.get('coachId');
+    const clientId = searchParams.get('clientId');
 
-    if (!coachId) {
+    // Allow either coachId or clientId for authentication
+    if (!coachId && !clientId) {
       return NextResponse.json({
         success: false,
-        message: 'Coach ID is required'
+        message: 'Coach ID or Client ID is required'
       }, { status: 400 });
     }
 
@@ -96,8 +98,16 @@ export async function GET(
       }, { status: 404 });
     }
 
-    // Check if the response belongs to the coach
-    if (responseData?.coachId && responseData.coachId !== coachId) {
+    // Check if the response belongs to the coach or client
+    if (coachId && responseData?.coachId && responseData.coachId !== coachId) {
+      return NextResponse.json({
+        success: false,
+        message: 'You do not have permission to view this response'
+      }, { status: 403 });
+    }
+    
+    // If clientId is provided, verify the response belongs to this client
+    if (clientId && responseData?.clientId && responseData.clientId !== clientId) {
       return NextResponse.json({
         success: false,
         message: 'You do not have permission to view this response'
@@ -158,6 +168,48 @@ export async function GET(
       }
     }
 
+    // Check if coach has responded (has feedback)
+    let coachResponded = false;
+    let coachRespondedAt = null;
+    let feedbackCount = 0;
+    try {
+      // If coachId is provided, filter by coachId; otherwise get all feedback for this response
+      let feedbackQuery = db.collection('coachFeedback')
+        .where('responseId', '==', responseDoc.id);
+      
+      if (coachId) {
+        feedbackQuery = feedbackQuery.where('coachId', '==', coachId);
+      }
+      
+      const feedbackSnapshot = await feedbackQuery.get();
+      
+      feedbackCount = feedbackSnapshot.size;
+      coachResponded = feedbackCount > 0;
+      
+      if (coachResponded && feedbackSnapshot.docs.length > 0) {
+        // Get the earliest feedback creation date
+        const dates = feedbackSnapshot.docs.map(doc => {
+          const data = doc.data();
+          return data.createdAt?.toDate?.() || data.createdAt || null;
+        }).filter(d => d !== null);
+        
+        if (dates.length > 0) {
+          coachRespondedAt = new Date(Math.min(...dates.map(d => new Date(d).getTime()))).toISOString();
+        }
+      }
+    } catch (error) {
+      console.log('Error checking feedback:', error);
+    }
+
+    // Determine workflow status
+    let workflowStatus = 'completed'; // Default: completed but not reviewed
+    if (responseData?.reviewedByCoach) {
+      workflowStatus = 'reviewed';
+    }
+    if (coachResponded) {
+      workflowStatus = 'responded';
+    }
+
     // Format the response
     const formattedResponse = {
       id: responseDoc.id,
@@ -172,7 +224,11 @@ export async function GET(
       status: responseData?.status || 'completed',
       reviewedByCoach: responseData?.reviewedByCoach || false,
       reviewedAt: responseData?.reviewedAt?.toDate?.()?.toISOString() || responseData?.reviewedAt || null,
-      reviewedBy: responseData?.reviewedBy || null
+      reviewedBy: responseData?.reviewedBy || null,
+      coachResponded: coachResponded || responseData?.coachResponded || false,
+      coachRespondedAt: coachRespondedAt || responseData?.coachRespondedAt?.toDate?.()?.toISOString() || responseData?.coachRespondedAt || null,
+      feedbackCount: feedbackCount,
+      workflowStatus: workflowStatus
     };
 
     return NextResponse.json({

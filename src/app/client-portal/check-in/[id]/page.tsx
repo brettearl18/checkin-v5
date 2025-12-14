@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { AuthenticatedOnly } from '@/components/ProtectedRoute';
+import { RoleProtected, AuthenticatedOnly } from '@/components/ProtectedRoute';
 import { doc, getDoc, addDoc, collection, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase-client';
 import Link from 'next/link';
@@ -56,12 +56,14 @@ export default function CheckInCompletionPage() {
   const router = useRouter();
   const { userProfile } = useAuth();
   const [assignment, setAssignment] = useState<CheckInAssignment | null>(null);
+  const [assignmentDocId, setAssignmentDocId] = useState<string | null>(null); // Store the actual Firestore document ID
   const [questions, setQuestions] = useState<Question[]>([]);
   const [responses, setResponses] = useState<FormResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [error, setError] = useState('');
+  const [unansweredQuestionIndices, setUnansweredQuestionIndices] = useState<number[]>([]);
   const [windowStatus, setWindowStatus] = useState<{ isOpen: boolean; message: string; nextOpenTime?: Date } | null>(null);
 
   const assignmentId = params.id as string;
@@ -72,15 +74,95 @@ export default function CheckInCompletionPage() {
 
   const fetchAssignmentData = async () => {
     try {
-      // Fetch assignment
-      const assignmentDoc = await getDoc(doc(db, 'check_in_assignments', assignmentId));
+      if (!userProfile?.uid) {
+        setError('User not authenticated');
+        setLoading(false);
+        return;
+      }
+
+      // Try to fetch assignment using API endpoint first (handles both doc.id and id field)
+      try {
+        const response = await fetch(`/api/check-in-assignments/${assignmentId}`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.assignment) {
+            const assignmentData = data.assignment as CheckInAssignment;
+            
+            // Verify the assignment belongs to the current user
+            if (assignmentData.clientId !== userProfile.uid) {
+              setError('You do not have permission to access this check-in');
+              setLoading(false);
+              return;
+            }
+            
+            // Store the actual Firestore document ID from the API response
+            if (data.documentId) {
+              setAssignmentDocId(data.documentId);
+            } else if (assignmentData.id) {
+              // Fallback: use the id from assignment data
+              setAssignmentDocId(assignmentData.id);
+            }
+            
+            // Continue with the assignment data
+            await loadFormAndQuestions(assignmentData);
+            return;
+          }
+        }
+      } catch (apiError) {
+        console.log('API fetch failed, trying direct Firestore query:', apiError);
+      }
+
+      // Fallback: Try direct Firestore query by document ID
+      let assignmentDoc = await getDoc(doc(db, 'check_in_assignments', assignmentId));
+      
+      // If not found, try querying by the 'id' field
+      if (!assignmentDoc.exists()) {
+        const { collection, query, where, getDocs } = await import('firebase/firestore');
+        const assignmentsQuery = query(
+          collection(db, 'check_in_assignments'),
+          where('id', '==', assignmentId),
+          where('clientId', '==', userProfile.uid)
+        );
+        const querySnapshot = await getDocs(assignmentsQuery);
+        
+        if (!querySnapshot.empty) {
+          assignmentDoc = querySnapshot.docs[0];
+          // Store the actual document ID
+          setAssignmentDocId(assignmentDoc.id);
+        } else {
+          setError('Check-in assignment not found');
+          setLoading(false);
+          return;
+        }
+      }
+
       if (!assignmentDoc.exists()) {
         setError('Check-in assignment not found');
         setLoading(false);
         return;
       }
 
+      // Store the actual Firestore document ID
+      setAssignmentDocId(assignmentDoc.id);
       const assignmentData = assignmentDoc.data() as CheckInAssignment;
+      
+      // Verify the assignment belongs to the current user
+      if (assignmentData.clientId !== userProfile.uid) {
+        setError('You do not have permission to access this check-in');
+        setLoading(false);
+        return;
+      }
+      
+      await loadFormAndQuestions(assignmentData);
+    } catch (error) {
+      console.error('Error fetching assignment data:', error);
+      setError('Failed to load check-in data');
+      setLoading(false);
+    }
+  };
+
+  const loadFormAndQuestions = async (assignmentData: CheckInAssignment) => {
+    try {
       
       // Fetch form questions and get form title if missing
       const formDoc = await getDoc(doc(db, 'forms', assignmentData.formId));
@@ -141,41 +223,49 @@ export default function CheckInCompletionPage() {
   };
 
   const handleAnswerChange = (questionIndex: number, answer: string | number | boolean) => {
+    const question = questions[questionIndex];
+    if (!question) return;
+    
     const updatedResponses = [...responses];
-    if (updatedResponses[questionIndex]) {
-      updatedResponses[questionIndex].answer = answer;
+    // Find existing response by questionId (not by array index)
+    const existingResponseIndex = updatedResponses.findIndex(r => r.questionId === question.id);
+    
+    if (existingResponseIndex >= 0) {
+      // Update existing response
+      updatedResponses[existingResponseIndex].answer = answer;
     } else {
-      // If response doesn't exist, create it
-      const question = questions[questionIndex];
-      if (question) {
-        updatedResponses[questionIndex] = {
-          questionId: question.id,
-          question: question.text,
-          answer: answer,
-          type: question.type,
-          comment: ''
-        };
-      }
+      // Create new response
+      updatedResponses.push({
+        questionId: question.id,
+        question: question.text,
+        answer: answer,
+        type: question.type,
+        comment: ''
+      });
     }
     setResponses(updatedResponses);
   };
 
   const handleCommentChange = (questionIndex: number, comment: string) => {
+    const question = questions[questionIndex];
+    if (!question) return;
+    
     const updatedResponses = [...responses];
-    if (updatedResponses[questionIndex]) {
-      updatedResponses[questionIndex].comment = comment;
+    // Find existing response by questionId (not by array index)
+    const existingResponseIndex = updatedResponses.findIndex(r => r.questionId === question.id);
+    
+    if (existingResponseIndex >= 0) {
+      // Update existing response comment
+      updatedResponses[existingResponseIndex].comment = comment;
     } else {
-      // If response doesn't exist, create it
-      const question = questions[questionIndex];
-      if (question) {
-        updatedResponses[questionIndex] = {
-          questionId: question.id,
-          question: question.text,
-          answer: '',
-          type: question.type,
-          comment: comment
-        };
-      }
+      // Create new response with comment (but no answer yet)
+      updatedResponses.push({
+        questionId: question.id,
+        question: question.text,
+        answer: '', // Empty answer, just adding comment
+        type: question.type,
+        comment: comment
+      });
     }
     setResponses(updatedResponses);
   };
@@ -208,16 +298,43 @@ export default function CheckInCompletionPage() {
     setSubmitting(true);
     try {
       // Validate that all questions are answered
-      const unansweredQuestions = questions.filter((_, index) => {
-        const response = responses[index];
-        return !response || !response.answer || response.answer === '';
+      const unansweredIndices: number[] = [];
+      questions.forEach((question, index) => {
+        const response = responses.find(r => r.questionId === question.id);
+        // Check if answer is missing, empty string, null, or undefined
+        // But allow false (for boolean "No" answers)
+        const hasAnswer = response && 
+          response.answer !== undefined && 
+          response.answer !== null && 
+          response.answer !== '';
+        
+        if (!hasAnswer) {
+          unansweredIndices.push(index);
+        }
       });
 
-      if (unansweredQuestions.length > 0) {
-        setError(`Please answer all questions before submitting.`);
+      if (unansweredIndices.length > 0) {
+        setUnansweredQuestionIndices(unansweredIndices);
+        const unansweredNumbers = unansweredIndices.map(i => i + 1).join(', ');
+        setError(`Please answer all questions before submitting. Missing answers for questions: ${unansweredNumbers}`);
         setSubmitting(false);
+        
+        // Scroll to first unanswered question
+        setCurrentQuestion(unansweredIndices[0]);
+        
+        // Scroll to top of question card
+        setTimeout(() => {
+          const questionCard = document.querySelector('.question-card');
+          if (questionCard) {
+            questionCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        }, 100);
+        
         return;
       }
+      
+      // Clear any previous unanswered question indicators
+      setUnansweredQuestionIndices([]);
 
       // Calculate score based on answer quality with question weights
       let totalWeightedScore = 0;
@@ -261,22 +378,33 @@ export default function CheckInCompletionPage() {
             
           case 'multiple_choice':
           case 'select':
-            // For multiple choice, check if options have weights
+            // For multiple choice/select, check if options have weights
             if (question.options && Array.isArray(question.options)) {
+              // Helper to get option text/value for comparison
+              const getOptionMatchValue = (opt: any) => {
+                if (typeof opt === 'string') return opt;
+                if (typeof opt === 'object' && opt.value) return opt.value;
+                if (typeof opt === 'object' && opt.text) return opt.text;
+                return String(opt);
+              };
+              
               // Check if options have weight property
-              const optionWithWeight = question.options.find((opt: any) => 
-                (typeof opt === 'object' && opt.text === String(response.answer)) ||
-                (typeof opt === 'string' && opt === String(response.answer))
-              );
+              const optionWithWeight = question.options.find((opt: any) => {
+                const optValue = getOptionMatchValue(opt);
+                const optText = typeof opt === 'object' && opt.text ? opt.text : optValue;
+                return optValue === String(response.answer) || optText === String(response.answer);
+              });
               
               if (optionWithWeight && typeof optionWithWeight === 'object' && optionWithWeight.weight) {
                 // Use the weight from the option (1-10)
                 questionScore = optionWithWeight.weight;
               } else {
                 // Fallback: score based on option position
-                const selectedIndex = question.options.findIndex((opt: any) => 
-                  (typeof opt === 'object' ? opt.text : opt) === String(response.answer)
-                );
+                const selectedIndex = question.options.findIndex((opt: any) => {
+                  const optValue = getOptionMatchValue(opt);
+                  const optText = typeof opt === 'object' && opt.text ? opt.text : optValue;
+                  return optValue === String(response.answer) || optText === String(response.answer);
+                });
                 if (selectedIndex >= 0) {
                   const numOptions = question.options.length;
                   if (numOptions === 1) {
@@ -304,11 +432,25 @@ export default function CheckInCompletionPage() {
             break;
             
           case 'text':
-          case 'textarea':
             // For text questions, give a neutral score
             const textValue = String(response.answer).trim();
             if (textValue.length > 0) {
               questionScore = 5; // Neutral score for text answers
+            }
+            break;
+            
+          case 'textarea':
+            // For textarea questions, map the selected option to a score
+            const textareaAnswer = String(response.answer).trim().toLowerCase();
+            if (textareaAnswer === 'great') {
+              questionScore = 9; // Great = 9/10
+            } else if (textareaAnswer === 'average') {
+              questionScore = 5; // Average = 5/10
+            } else if (textareaAnswer === 'poor') {
+              questionScore = 2; // Poor = 2/10
+            } else if (textareaAnswer.length > 0) {
+              // Fallback: if somehow a different value, give neutral
+              questionScore = 5;
             }
             break;
             
@@ -370,7 +512,75 @@ export default function CheckInCompletionPage() {
       const responseRef = await addDoc(collection(db, 'formResponses'), responseData);
 
       // Update assignment status with score and response details
-      await updateDoc(doc(db, 'check_in_assignments', assignmentId), {
+      // Use the actual Firestore document ID, not the URL parameter
+      let docIdToUpdate = assignmentDocId;
+      
+      console.log('Attempting to update assignment:', {
+        assignmentDocId,
+        assignmentId,
+        docIdToUpdate,
+        assignment: assignment?.id
+      });
+      
+      // If we don't have the document ID, try to find it
+      if (!docIdToUpdate) {
+        console.log('No assignmentDocId stored, querying for document...');
+        const { collection, query, where, getDocs } = await import('firebase/firestore');
+        const assignmentsQuery = query(
+          collection(db, 'check_in_assignments'),
+          where('id', '==', assignmentId),
+          where('clientId', '==', userProfile.uid)
+        );
+        const querySnapshot = await getDocs(assignmentsQuery);
+        
+        if (!querySnapshot.empty) {
+          docIdToUpdate = querySnapshot.docs[0].id;
+          console.log('Found document by id field, using document ID:', docIdToUpdate);
+          setAssignmentDocId(docIdToUpdate); // Store it for future use
+        } else {
+          // Last resort: try using assignmentId as document ID
+          console.log('Trying assignmentId as document ID:', assignmentId);
+          const testDoc = await getDoc(doc(db, 'check_in_assignments', assignmentId));
+          if (testDoc.exists()) {
+            docIdToUpdate = assignmentId;
+            setAssignmentDocId(assignmentId);
+          } else {
+            throw new Error(`Check-in assignment not found. Tried id field: ${assignmentId}`);
+          }
+        }
+      }
+      
+      if (!docIdToUpdate) {
+        throw new Error('Assignment document ID not found');
+      }
+      
+      // Verify the document exists before updating
+      const docRef = doc(db, 'check_in_assignments', docIdToUpdate);
+      const docSnapshot = await getDoc(docRef);
+      
+      if (!docSnapshot.exists()) {
+        // Document doesn't exist, try querying by 'id' field one more time
+        console.log('Document not found with stored ID, querying by id field:', docIdToUpdate);
+        const { collection, query, where, getDocs } = await import('firebase/firestore');
+        const assignmentsQuery = query(
+          collection(db, 'check_in_assignments'),
+          where('id', '==', assignmentId),
+          where('clientId', '==', userProfile.uid)
+        );
+        const querySnapshot = await getDocs(assignmentsQuery);
+        
+        if (!querySnapshot.empty) {
+          docIdToUpdate = querySnapshot.docs[0].id;
+          console.log('Found document by id field, using document ID:', docIdToUpdate);
+          setAssignmentDocId(docIdToUpdate);
+        } else {
+          throw new Error(`Check-in assignment not found. Tried document ID: ${docIdToUpdate} and id field: ${assignmentId}`);
+        }
+      }
+      
+      // Now update with the correct document ID
+      console.log('Updating document with ID:', docIdToUpdate);
+      await updateDoc(doc(db, 'check_in_assignments', docIdToUpdate), {
         status: 'completed',
         completedAt: new Date(),
         responseId: responseRef.id,
@@ -378,6 +588,7 @@ export default function CheckInCompletionPage() {
         totalQuestions: questions.length, // Save total questions
         answeredQuestions: answeredCount // Save answered questions count
       });
+      console.log('Successfully updated assignment document');
 
       // Create notification for coach
       try {
@@ -417,18 +628,66 @@ export default function CheckInCompletionPage() {
 
   const renderQuestion = (question: Question, index: number) => {
     const response = responses.find(r => r.questionId === question.id);
-    const answer = response?.answer || '';
+    const answer = response?.answer !== undefined ? response.answer : '';
 
     switch (question.type) {
       case 'text':
         return (
-          <textarea
+          <input
+            type="text"
             value={answer as string}
             onChange={(e) => handleAnswerChange(index, e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
-            rows={4}
+            className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-gray-900 text-lg transition-all"
             placeholder="Enter your answer..."
           />
+        );
+
+      case 'textarea':
+        // For textarea questions, show a 3-option selector for scoring
+        // Store the selected option as the answer (Great/Average/Poor)
+        const textareaValue = typeof answer === 'string' ? answer : '';
+        const isGreat = textareaValue === 'Great' || textareaValue === 'great';
+        const isAverage = textareaValue === 'Average' || textareaValue === 'average';
+        const isPoor = textareaValue === 'Poor' || textareaValue === 'poor';
+        
+        return (
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <button
+                type="button"
+                onClick={() => handleAnswerChange(index, 'Great')}
+                className={`px-6 py-4 rounded-xl font-semibold text-base transition-all transform hover:scale-105 shadow-md ${
+                  isGreat
+                    ? 'bg-gradient-to-br from-green-500 to-emerald-600 text-white shadow-lg scale-105'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                ✨ Great
+              </button>
+              <button
+                type="button"
+                onClick={() => handleAnswerChange(index, 'Average')}
+                className={`px-6 py-4 rounded-xl font-semibold text-base transition-all transform hover:scale-105 shadow-md ${
+                  isAverage
+                    ? 'bg-gradient-to-br from-yellow-400 to-orange-500 text-white shadow-lg scale-105'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                ⚖️ Average
+              </button>
+              <button
+                type="button"
+                onClick={() => handleAnswerChange(index, 'Poor')}
+                className={`px-6 py-4 rounded-xl font-semibold text-base transition-all transform hover:scale-105 shadow-md ${
+                  isPoor
+                    ? 'bg-gradient-to-br from-red-500 to-pink-600 text-white shadow-lg scale-105'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                ⚠️ Poor
+              </button>
+            </div>
+          </div>
         );
 
       case 'number':
@@ -437,7 +696,7 @@ export default function CheckInCompletionPage() {
             type="number"
             value={answer as string}
             onChange={(e) => handleAnswerChange(index, Number(e.target.value))}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+            className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-gray-900 text-lg transition-all"
             placeholder="Enter a number..."
           />
         );
@@ -465,10 +724,10 @@ export default function CheckInCompletionPage() {
 
       case 'scale':
         return (
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm text-gray-500">
-              <span>1</span>
-              <span>10</span>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
+              <span className="font-medium">1 (Low)</span>
+              <span className="font-medium">10 (High)</span>
             </div>
             <input
               type="range"
@@ -476,58 +735,146 @@ export default function CheckInCompletionPage() {
               max="10"
               value={answer as string}
               onChange={(e) => handleAnswerChange(index, Number(e.target.value))}
-              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+              className="w-full h-3 bg-gradient-to-r from-red-200 via-yellow-200 to-green-200 rounded-lg appearance-none cursor-pointer slider"
             />
-            <div className="text-center text-lg font-semibold text-blue-600">
-              {answer || '5'}
+            <div className="text-center">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white text-2xl font-bold shadow-lg">
+                {answer || '5'}
+              </div>
             </div>
           </div>
         );
 
       case 'boolean':
         return (
-          <div className="space-y-2">
-            <label className="flex items-center text-gray-900">
+          <div className="grid grid-cols-2 gap-4">
+            <label className={`flex items-center justify-center p-6 rounded-xl border-2 transition-all cursor-pointer group ${
+              answer === true || answer === 'yes' || answer === 'Yes'
+                ? 'border-green-500 bg-green-50 shadow-md'
+                : 'border-gray-200 hover:border-green-300 hover:bg-green-50'
+            }`}>
               <input
                 type="radio"
                 name={`question-${question.id}`}
                 value="yes"
-                checked={answer === true || answer === 'yes'}
+                checked={answer === true || answer === 'yes' || answer === 'Yes'}
                 onChange={() => handleAnswerChange(index, true)}
-                className="mr-2"
+                className="h-5 w-5 text-green-600 focus:ring-green-500 border-gray-300"
               />
-              Yes
+              <span className={`ml-3 text-lg font-semibold ${
+                answer === true || answer === 'yes' || answer === 'Yes'
+                  ? 'text-green-700'
+                  : 'text-gray-700 group-hover:text-green-700'
+              }`}>
+                ✅ Yes
+              </span>
             </label>
-            <label className="flex items-center text-gray-900">
+            <label className={`flex items-center justify-center p-6 rounded-xl border-2 transition-all cursor-pointer group ${
+              answer === false || answer === 'no' || answer === 'No'
+                ? 'border-red-500 bg-red-50 shadow-md'
+                : 'border-gray-200 hover:border-red-300 hover:bg-red-50'
+            }`}>
               <input
                 type="radio"
                 name={`question-${question.id}`}
                 value="no"
-                checked={answer === false || answer === 'no'}
+                checked={answer === false || answer === 'no' || answer === 'No'}
                 onChange={() => handleAnswerChange(index, false)}
-                className="mr-2"
+                className="h-5 w-5 text-red-600 focus:ring-red-500 border-gray-300"
               />
-              No
+              <span className={`ml-3 text-lg font-semibold ${
+                answer === false || answer === 'no' || answer === 'No'
+                  ? 'text-red-700'
+                  : 'text-gray-700 group-hover:text-red-700'
+              }`}>
+                ❌ No
+              </span>
             </label>
           </div>
         );
 
       case 'multiple_choice':
         return (
-          <div className="space-y-2">
-            {question.options?.map((option, optionIndex) => (
-              <label key={optionIndex} className="flex items-center text-gray-900">
-                <input
-                  type="radio"
-                  name={`question-${question.id}`}
-                  value={option}
-                  checked={answer === option}
-                  onChange={() => handleAnswerChange(index, option)}
-                  className="mr-2"
-                />
-                {option}
-              </label>
-            ))}
+          <div className="space-y-3">
+            {question.options?.map((option, optionIndex) => {
+              const optionText = typeof option === 'string' ? option : (option?.text || String(option));
+              const isSelected = answer === option || answer === optionText;
+              
+              return (
+                <label 
+                  key={optionIndex} 
+                  className={`flex items-center p-4 rounded-xl border-2 transition-all cursor-pointer group ${
+                    isSelected
+                      ? 'border-blue-500 bg-blue-50 shadow-md'
+                      : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name={`question-${question.id}`}
+                    value={optionText}
+                    checked={isSelected}
+                    onChange={() => handleAnswerChange(index, optionText)}
+                    className="h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300"
+                  />
+                  <span className={`ml-4 text-base font-medium ${
+                    isSelected ? 'text-blue-700' : 'text-gray-900 group-hover:text-blue-700'
+                  }`}>
+                    {optionText}
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+        );
+
+      case 'select':
+        // Handle both string array and object array options
+        const selectOptions = question.options || [];
+        const getOptionText = (option: any) => {
+          if (typeof option === 'string') return option;
+          if (typeof option === 'object' && option.text) return option.text;
+          return String(option);
+        };
+        const getOptionValue = (option: any) => {
+          if (typeof option === 'string') return option;
+          if (typeof option === 'object' && option.value) return option.value;
+          if (typeof option === 'object' && option.text) return option.text;
+          return String(option);
+        };
+        
+        return (
+          <div className="space-y-3">
+            {selectOptions.map((option, optionIndex) => {
+              const optionText = getOptionText(option);
+              const optionValue = getOptionValue(option);
+              const isSelected = answer === optionValue || answer === optionText;
+              
+              return (
+                <label 
+                  key={optionIndex} 
+                  className={`flex items-center p-4 rounded-xl border-2 transition-all cursor-pointer group ${
+                    isSelected
+                      ? 'border-blue-500 bg-blue-50 shadow-md'
+                      : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name={`question-${question.id}`}
+                    value={optionValue}
+                    checked={isSelected}
+                    onChange={() => handleAnswerChange(index, optionValue)}
+                    className="h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300"
+                  />
+                  <span className={`ml-4 text-base font-medium ${
+                    isSelected ? 'text-blue-700' : 'text-gray-900 group-hover:text-blue-700'
+                  }`}>
+                    {optionText}
+                  </span>
+                </label>
+              );
+            })}
           </div>
         );
 
@@ -546,38 +893,37 @@ export default function CheckInCompletionPage() {
 
   if (loading) {
     return (
-      <AuthenticatedOnly>
-        <div className="min-h-screen bg-gray-50 py-8">
-          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="animate-pulse">
-              <div className="h-8 bg-gray-200 rounded w-1/4 mb-6"></div>
-              <div className="h-64 bg-gray-200 rounded mb-6"></div>
-              <div className="h-12 bg-gray-200 rounded"></div>
+      <RoleProtected requiredRole="client">
+        <AuthenticatedOnly>
+          <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-indigo-100 flex items-center justify-center p-4">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-16 w-16 border-4 border-purple-600 border-t-transparent mx-auto"></div>
+              <p className="mt-6 text-gray-700 text-lg font-medium">Loading check-in...</p>
             </div>
           </div>
-        </div>
-      </AuthenticatedOnly>
+        </AuthenticatedOnly>
+      </RoleProtected>
     );
   }
 
   if (error || !assignment) {
     return (
-      <AuthenticatedOnly>
-        <div className="min-h-screen bg-gray-50 py-8">
-          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center">
+      <RoleProtected requiredRole="client">
+        <AuthenticatedOnly>
+          <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-indigo-100 flex items-center justify-center p-4">
+            <div className="text-center bg-white rounded-2xl shadow-xl p-8 max-w-md">
               <h1 className="text-2xl font-bold text-gray-900 mb-4">Error</h1>
               <p className="text-gray-600 mb-6">{error || 'Check-in not found'}</p>
               <Link
                 href="/client-portal"
-                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md font-medium"
+                className="inline-block bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-6 py-3 rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all"
               >
                 Back to Dashboard
               </Link>
             </div>
           </div>
-        </div>
-      </AuthenticatedOnly>
+        </AuthenticatedOnly>
+      </RoleProtected>
     );
   }
 
@@ -586,44 +932,45 @@ export default function CheckInCompletionPage() {
 
   return (
     <AuthenticatedOnly>
-      <div className="min-h-screen bg-gray-50 py-8">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-indigo-100 py-8">
+        <div className="max-w-3xl mx-auto p-4 sm:p-6 lg:p-8">
           {/* Header */}
-          <div className="mb-8">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900">{assignment.formTitle}</h1>
-                <p className="text-gray-600 mt-2">Complete your assigned check-in</p>
-              </div>
+          <div className="mb-10 text-center">
+            <div className="flex items-center justify-between mb-6">
               <Link
                 href="/client-portal"
-                className="text-gray-600 hover:text-gray-900 font-medium"
+                className="text-gray-700 hover:text-gray-900 font-medium flex items-center gap-2 transition-colors"
               >
-                ← Back to Dashboard
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+                Back to Dashboard
               </Link>
             </div>
+            <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-3">{assignment.formTitle}</h1>
+            <p className="text-lg text-gray-700 font-medium">Complete your assigned check-in</p>
 
             {/* Check-in Window Status */}
             {windowStatus && (
-              <div className={`mb-4 p-4 rounded-lg border ${
+              <div className={`mt-6 p-5 rounded-2xl shadow-lg border-2 ${
                 windowStatus.isOpen 
-                  ? 'bg-green-50 border-green-200' 
-                  : 'bg-yellow-50 border-yellow-200'
+                  ? 'bg-gradient-to-r from-green-50 to-emerald-50 border-green-300' 
+                  : 'bg-gradient-to-r from-yellow-50 to-amber-50 border-yellow-300'
               }`}>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className={`font-medium ${
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div className="flex-1">
+                    <p className={`text-lg font-bold mb-2 ${
                       windowStatus.isOpen ? 'text-green-800' : 'text-yellow-800'
                     }`}>
                       {windowStatus.isOpen ? '✅ Check-in window is open' : '⏰ Check-in window is closed'}
                     </p>
-                    <p className={`text-sm mt-1 ${
+                    <p className={`text-base ${
                       windowStatus.isOpen ? 'text-green-700' : 'text-yellow-700'
                     }`}>
                       {windowStatus.message}
                     </p>
                     {windowStatus.nextOpenTime && (
-                      <p className="text-sm mt-1 text-yellow-700">
+                      <p className="text-sm mt-2 text-yellow-700 font-medium">
                         Next available: {windowStatus.nextOpenTime.toLocaleString('en-US', {
                           weekday: 'long',
                           month: 'short',
@@ -634,7 +981,7 @@ export default function CheckInCompletionPage() {
                       </p>
                     )}
                   </div>
-                  <div className="text-sm text-gray-600">
+                  <div className="text-sm text-gray-700 font-semibold bg-white/60 px-4 py-2 rounded-xl">
                     Window: {getCheckInWindowDescription(assignment.checkInWindow || DEFAULT_CHECK_IN_WINDOW)}
                   </div>
                 </div>
@@ -642,27 +989,36 @@ export default function CheckInCompletionPage() {
             )}
 
             {/* Progress Bar */}
-            <div className="w-full bg-gray-200 rounded-full h-2 mb-4">
-              <div 
-                className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
-                style={{ width: `${progress}%` }}
-              ></div>
+            <div className="mt-6 mb-4">
+              <div className="w-full bg-white/60 backdrop-blur-sm rounded-full h-3 shadow-inner border border-gray-200">
+                <div 
+                  className="bg-gradient-to-r from-blue-500 via-purple-500 to-indigo-600 h-3 rounded-full transition-all duration-500 shadow-lg" 
+                  style={{ width: `${progress}%` }}
+                ></div>
+              </div>
+              <p className="text-center mt-3 text-base font-semibold text-gray-900">
+                Question {currentQuestion + 1} of {questions.length}
+              </p>
             </div>
-            <p className="text-sm text-gray-500">
-              Question {currentQuestion + 1} of {questions.length}
-            </p>
           </div>
 
           {/* Question Card */}
-          <div className="bg-white rounded-lg shadow-lg p-8 mb-8">
+          <div className={`bg-white rounded-2xl shadow-xl p-6 md:p-8 border-2 transition-all duration-200 hover:shadow-2xl mb-8 question-card ${
+            unansweredQuestionIndices.includes(currentQuestion) 
+              ? 'border-red-400 bg-red-50/30' 
+              : 'border-gray-100'
+          }`}>
             {currentQ && (
               <div>
-                <div className="mb-6">
-                  <h2 className="text-xl font-semibold text-gray-900 mb-2">
+                <div className="mb-8">
+                  <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mb-3">
                     {currentQ.text}
                   </h2>
                   {currentQ.category && (
-                    <p className="text-gray-600">Category: {currentQ.category}</p>
+                    <div className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-100 to-indigo-100 rounded-full">
+                      <span className="text-sm font-semibold text-purple-700">Category:</span>
+                      <span className="text-sm font-bold text-gray-900">{currentQ.category}</span>
+                    </div>
                   )}
                 </div>
 
@@ -670,29 +1026,31 @@ export default function CheckInCompletionPage() {
                   {renderQuestion(currentQ, currentQuestion)}
                 </div>
 
-                {/* Comment/Notes Section */}
-                <div className="mt-6 pt-6 border-t border-gray-200">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Additional Notes (Optional)
-                  </label>
-                  <textarea
-                    value={responses[currentQuestion]?.comment || ''}
-                    onChange={(e) => handleCommentChange(currentQuestion, e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
-                    rows={3}
-                    placeholder="Add any additional notes or context about your answer..."
-                  />
-                  <p className="mt-1 text-xs text-gray-500">
-                    Use this space to provide more context or details about your response
-                  </p>
-                </div>
+                {/* Comment/Notes Section - Only for boolean, multiple_choice, and select questions */}
+                {(currentQ.type === 'boolean' || currentQ.type === 'multiple_choice' || currentQ.type === 'select') && (
+                  <div className="mt-8 pt-8 border-t-2 border-gray-200">
+                    <label className="block text-base font-bold text-gray-900 mb-3">
+                      Additional Notes (Optional)
+                    </label>
+                    <textarea
+                      value={responses[currentQuestion]?.comment || ''}
+                      onChange={(e) => handleCommentChange(currentQuestion, e.target.value)}
+                      className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-gray-900 transition-all"
+                      rows={4}
+                      placeholder="Add any additional notes or context about your answer..."
+                    />
+                    <p className="mt-2 text-sm text-gray-600">
+                      Use this space to provide more context or details about your response
+                    </p>
+                  </div>
+                )}
 
                 {/* Navigation */}
-                <div className="flex justify-between">
+                <div className="flex justify-between items-center mt-8 pt-6 border-t-2 border-gray-200">
                   <button
                     onClick={handlePrevious}
                     disabled={currentQuestion === 0}
-                    className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-6 py-3 border-2 border-gray-300 rounded-xl text-gray-700 font-semibold hover:bg-gray-50 hover:border-gray-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                   >
                     Previous
                   </button>
@@ -700,17 +1058,17 @@ export default function CheckInCompletionPage() {
                   {currentQuestion < questions.length - 1 ? (
                     <button
                       onClick={handleNext}
-                      className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                      className="px-8 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-bold hover:from-blue-700 hover:to-indigo-700 shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-0.5"
                     >
-                      Next
+                      Next →
                     </button>
                   ) : (
                     <button
                       onClick={handleSubmit}
                       disabled={submitting}
-                      className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50"
+                      className="px-8 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl font-bold hover:from-green-700 hover:to-emerald-700 shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
                     >
-                      {submitting ? 'Submitting...' : 'Submit Check-in'}
+                      {submitting ? 'Submitting...' : 'Submit Check-in ✓'}
                     </button>
                   )}
                 </div>
@@ -720,8 +1078,55 @@ export default function CheckInCompletionPage() {
 
           {/* Error Message */}
           {error && (
-            <div className="bg-red-50 border border-red-200 rounded-md p-4 mb-6">
-              <p className="text-red-800">{error}</p>
+            <div className="bg-red-50 border-2 border-red-400 rounded-xl p-5 mb-6 shadow-lg">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0">
+                  <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-lg font-bold text-red-900 mb-2">Please Complete All Questions</h3>
+                  <p className="text-red-800 mb-3">{error}</p>
+                  {unansweredQuestionIndices.length > 0 && (
+                    <div className="mt-3">
+                      <p className="text-sm font-semibold text-red-900 mb-2">Unanswered Questions:</p>
+                      <div className="flex flex-wrap gap-2">
+                        {unansweredQuestionIndices.map((idx) => (
+                          <button
+                            key={idx}
+                            onClick={() => {
+                              setCurrentQuestion(idx);
+                              setError(null);
+                              setUnansweredQuestionIndices([]);
+                              setTimeout(() => {
+                                const questionCard = document.querySelector('.question-card');
+                                if (questionCard) {
+                                  questionCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                }
+                              }, 100);
+                            }}
+                            className="px-3 py-1 bg-red-100 hover:bg-red-200 border border-red-300 rounded-lg text-sm font-semibold text-red-800 transition-colors"
+                          >
+                            Question {idx + 1}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={() => {
+                    setError(null);
+                    setUnansweredQuestionIndices([]);
+                  }}
+                  className="flex-shrink-0 text-red-600 hover:text-red-800"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
             </div>
           )}
 
@@ -729,21 +1134,36 @@ export default function CheckInCompletionPage() {
           <div className="bg-white rounded-lg shadow p-6">
             <h3 className="text-lg font-medium text-gray-900 mb-4">Question Navigation</h3>
             <div className="grid grid-cols-5 gap-2">
-              {questions.map((question, index) => (
+              {questions.map((question, index) => {
+                const response = responses.find(r => r.questionId === question.id);
+                const hasAnswer = response && 
+                  response.answer !== undefined && 
+                  response.answer !== null && 
+                  response.answer !== '';
+                const isUnanswered = unansweredQuestionIndices.includes(index);
+                
+                return (
                 <button
                   key={question.id}
-                  onClick={() => setCurrentQuestion(index)}
+                  onClick={() => {
+                    setCurrentQuestion(index);
+                    setError(null);
+                    setUnansweredQuestionIndices([]);
+                  }}
                   className={`p-3 rounded-md text-sm font-medium transition-colors ${
                     index === currentQuestion
                       ? 'bg-blue-600 text-white'
-                      : responses[index]?.answer
+                      : isUnanswered
+                      ? 'bg-red-100 text-red-800 border-2 border-red-400'
+                      : hasAnswer
                       ? 'bg-green-100 text-green-800'
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
                 >
                   {index + 1}
                 </button>
-              ))}
+                );
+              })}
             </div>
             <div className="mt-4 flex items-center space-x-4 text-sm text-gray-500">
               <div className="flex items-center">

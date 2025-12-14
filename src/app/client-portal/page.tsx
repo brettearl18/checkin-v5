@@ -18,6 +18,11 @@ import {
   type ScoringThresholds,
   type TrafficLightStatus
 } from '@/lib/scoring-utils';
+import {
+  isWithinCheckInWindow,
+  DEFAULT_CHECK_IN_WINDOW,
+  type CheckInWindow
+} from '@/lib/checkin-window-utils';
 
 interface ClientStats {
   overallProgress: number;
@@ -32,6 +37,7 @@ interface CheckIn {
   dueDate: string;
   status: 'pending' | 'completed' | 'overdue';
   formId: string;
+  checkInWindow?: CheckInWindow;
 }
 
 interface RecentResponse {
@@ -196,6 +202,7 @@ export default function ClientPortalPage() {
   const [thresholds, setThresholds] = useState<ScoringThresholds>(getDefaultThresholds('lifestyle'));
   const [averageTrafficLight, setAverageTrafficLight] = useState<TrafficLightStatus>('orange');
   const [clientId, setClientId] = useState<string | null>(null);
+  const [showScoringInfo, setShowScoringInfo] = useState(false);
 
   useEffect(() => {
     if (userProfile?.email) {
@@ -275,7 +282,8 @@ export default function ClientPortalPage() {
       }
       
       // Fetch real data from API using email
-      const response = await fetch(`/api/client-portal?clientEmail=${encodeURIComponent(clientEmail)}`);
+      // Try fetching by email first, but also pass user UID as fallback
+      const response = await fetch(`/api/client-portal?clientEmail=${encodeURIComponent(clientEmail)}${userProfile?.uid ? `&userUid=${encodeURIComponent(userProfile.uid)}` : ''}`);
       
       if (response.ok) {
         const data = await response.json();
@@ -306,7 +314,9 @@ export default function ClientPortalPage() {
           };
           
           // Set recent responses if available
-          if (summary.recentResponses) {
+          console.log('Dashboard - summary.recentResponses:', summary.recentResponses);
+          if (summary.recentResponses && Array.isArray(summary.recentResponses)) {
+            console.log('Dashboard - Setting recent responses:', summary.recentResponses.length);
             setRecentResponses(summary.recentResponses.map((r: any) => ({
               id: r.id || '',
               checkInTitle: r.formTitle || 'Check-in',
@@ -315,6 +325,9 @@ export default function ClientPortalPage() {
               status: 'completed' as const,
               formTitle: r.formTitle || 'Check-in'
             })));
+          } else {
+            console.log('Dashboard - No recent responses in summary or not an array');
+            setRecentResponses([]);
           }
           
           // Transform check-in assignments to match expected structure
@@ -352,7 +365,8 @@ export default function ClientPortalPage() {
               title: assignment.formTitle || assignment.title || 'Check-in Assignment',
               dueDate: convertDate(assignment.dueDate),
               status: assignment.status || 'pending',
-              formId: assignment.formId || ''
+              formId: assignment.formId || '',
+              checkInWindow: assignment.checkInWindow || DEFAULT_CHECK_IN_WINDOW
             };
           });
           
@@ -409,6 +423,140 @@ export default function ClientPortalPage() {
       day: 'numeric',
       year: 'numeric'
     });
+  };
+
+  /**
+   * Calculate the window closing time for a check-in based on its dueDate and checkInWindow
+   * The window closes on the endDay at endTime, relative to the dueDate's week
+   * 
+   * For a typical weekly check-in (Friday 10 AM to Monday 10 PM):
+   * - If due date is Friday Dec 6, window closes Monday Dec 9 at 10 PM
+   * - This is the closing time for THAT check-in's window, not the current week
+   */
+  const getWindowClosingTime = (dueDate: string, window?: CheckInWindow): Date | null => {
+    if (!window || !window.enabled) {
+      return null; // No window restriction
+    }
+
+    const due = new Date(dueDate);
+    const endDay = window.endDay.toLowerCase();
+    const { hours: endHours, minutes: endMinutes } = (() => {
+      const [h, m] = window.endTime.split(':').map(Number);
+      return { hours: h || 0, minutes: m || 0 };
+    })();
+
+    // Get day of week number (0 = Sunday, 1 = Monday, ..., 6 = Saturday)
+    const dayMap: { [key: string]: number } = {
+      'sunday': 0, 'monday': 1, 'tuesday': 2, 'wednesday': 3,
+      'thursday': 4, 'friday': 5, 'saturday': 6
+    };
+    const endDayNum = dayMap[endDay] ?? 1;
+    const startDayNum = dayMap[window.startDay.toLowerCase()] ?? 5;
+
+    // Calculate the closing time for the week containing the due date
+    const closingTime = new Date(due);
+    const dueDay = due.getDay();
+    
+    // Calculate days from due date to end day
+    let daysUntilEnd = (endDayNum - dueDay + 7) % 7;
+    
+    // Special case: If window spans across week boundary (e.g., Friday to Monday)
+    // and the due date is on or after the start day, the end day is in the same week
+    // If the due date is before the start day, we need to find the end day of the previous week's window
+    if (endDayNum < startDayNum) {
+      // Window spans across week (e.g., Friday to Monday)
+      if (dueDay >= startDayNum) {
+        // Due date is on or after start day (Friday-Sunday), end day is in same week (Monday)
+        daysUntilEnd = (endDayNum - dueDay + 7) % 7;
+        if (daysUntilEnd === 0) {
+          daysUntilEnd = 7; // If same day but past time, go to next week
+        }
+      } else {
+        // Due date is before start day (Mon-Thu), end day is the previous Monday
+        // We need to go back to find the Monday that closed the previous window
+        daysUntilEnd = (endDayNum - dueDay - 7) % 7;
+        if (daysUntilEnd >= 0) {
+          daysUntilEnd -= 7; // Go back a week
+        }
+      }
+    } else {
+      // Normal case: end day is after start day (e.g., Monday to Friday)
+      daysUntilEnd = (endDayNum - dueDay + 7) % 7;
+    }
+    
+    closingTime.setDate(due.getDate() + daysUntilEnd);
+    closingTime.setHours(endHours, endMinutes, 0, 0);
+    closingTime.setSeconds(0, 0);
+    
+    return closingTime;
+  };
+
+  /**
+   * Get the color status for a check-in based on window timing
+   * 
+   * Logic:
+   * - GREEN: Window closes more than 24 hours from now (due soon, plenty of time)
+   * - ORANGE: Window closes within 24 hours OR window just closed less than 24 hours ago (1 day from closing)
+   * - RED: Window closed more than 24 hours ago (overdue by 24+ hours)
+   */
+  const getCheckInColorStatus = (checkIn: CheckIn): 'green' | 'orange' | 'red' => {
+    const window = checkIn.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
+    const now = new Date();
+    const dueDate = new Date(checkIn.dueDate);
+    
+    // First, check if the check-in is overdue based on dueDate (fallback check)
+    const hoursOverdue = (now.getTime() - dueDate.getTime()) / (1000 * 60 * 60);
+    
+    // If check-in is overdue by more than 24 hours, it should be RED regardless of window
+    // This ensures that check-ins that are 7+ days overdue are always red
+    if (hoursOverdue >= 24) {
+      // Calculate window closing time to verify
+      const closingTime = getWindowClosingTime(checkIn.dueDate, window);
+      if (closingTime) {
+        const hoursSinceClose = (now.getTime() - closingTime.getTime()) / (1000 * 60 * 60);
+        // If window also closed more than 24 hours ago, definitely red
+        if (hoursSinceClose >= 24) {
+          return 'red';
+        }
+        // If window closed less than 24 hours ago but dueDate is overdue by 24+ hours,
+        // still red (the check-in itself is overdue)
+        return 'red';
+      }
+      // No window, but overdue by 24+ hours = red
+      return 'red';
+    }
+    
+    // Calculate window closing time for this specific check-in
+    const closingTime = getWindowClosingTime(checkIn.dueDate, window);
+    
+    if (!closingTime) {
+      // No window restriction - use simple overdue logic based on dueDate
+      if (hoursOverdue > 0) {
+        return 'orange'; // Just overdue, less than 24 hours
+      }
+      return 'green'; // Not yet due
+    }
+    
+    // Calculate hours until/since window closing
+    // Positive = window closes in the future (hours until close)
+    // Negative = window closed in the past (hours since close)
+    const hoursUntilClose = (closingTime.getTime() - now.getTime()) / (1000 * 60 * 60);
+    
+    // RED: Window closed more than 24 hours ago (overdue by 24+ hours)
+    // Example: If window closed 7 days ago (168 hours), hoursUntilClose = -168, which is < -24
+    if (hoursUntilClose < -24) {
+      return 'red';
+    }
+    
+    // ORANGE: Window closes within 24 hours OR just closed less than 24 hours ago
+    // Example: Window closes in 12 hours OR closed 12 hours ago
+    if (hoursUntilClose >= -24 && hoursUntilClose <= 24) {
+      return 'orange';
+    }
+    
+    // GREEN: Window closes more than 24 hours from now (due soon, plenty of time)
+    // Example: Window closes in 3 days (72 hours)
+    return 'green';
   };
 
   const getStatusColor = (status: string) => {
@@ -557,6 +705,147 @@ export default function ClientPortalPage() {
             </div>
           </div>
 
+          {/* Scoring Formula & Traffic Light Info */}
+          <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200/60 p-5 mb-6">
+            <button
+              onClick={() => setShowScoringInfo(!showScoringInfo)}
+              className="w-full flex items-center justify-between text-left"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-lg flex items-center justify-center">
+                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-gray-900">Understanding Your Scores</h3>
+                  <p className="text-xs text-gray-600">Learn how scores are calculated and what they mean</p>
+                </div>
+              </div>
+              <svg 
+                className={`w-5 h-5 text-gray-400 transition-transform ${showScoringInfo ? 'rotate-180' : ''}`}
+                fill="none" 
+                stroke="currentColor" 
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+
+            {showScoringInfo && (
+              <div className="mt-6 pt-6 border-t border-gray-200 space-y-6">
+                {/* Scoring Formula */}
+                <div>
+                  <h4 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
+                    <span className="text-blue-600">📊</span>
+                    Scoring Formula
+                  </h4>
+                  <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+                    <div className="text-sm text-gray-700">
+                      <p className="font-semibold mb-2">Each question contributes to your score:</p>
+                      <div className="bg-white rounded p-3 font-mono text-xs border border-gray-200">
+                        <div className="mb-2">weightedScore = questionScore × questionWeight</div>
+                        <div className="mb-2">totalScore = (Σ weightedScores / (Σ weights × 10)) × 100</div>
+                      </div>
+                    </div>
+                    <div className="text-xs text-gray-600 space-y-1">
+                      <p>• <strong>Question Weight (1-10):</strong> How important the question is</p>
+                      <p>• <strong>Question Score (1-10):</strong> Your answer converted to a score</p>
+                      <p>• <strong>Final Score (0-100%):</strong> Weighted average of all questions</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Answer Scoring */}
+                <div>
+                  <h4 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
+                    <span className="text-green-600">✅</span>
+                    How Answers Are Scored
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-gray-700">
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <p className="font-semibold mb-1">Scale (1-10):</p>
+                      <p>Direct value (e.g., 7 = 7/10)</p>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <p className="font-semibold mb-1">Yes/No:</p>
+                      <p>Yes = 8/10, No = 3/10</p>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <p className="font-semibold mb-1">Single/Multiple Choice:</p>
+                      <p>Uses option weights if set</p>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <p className="font-semibold mb-1">Text Questions:</p>
+                      <p>Neutral score of 5/10</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Traffic Light Thresholds */}
+                <div>
+                  <h4 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
+                    <span className="text-yellow-600">🚦</span>
+                    Your Traffic Light Thresholds
+                  </h4>
+                  <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg p-4">
+                    <div className="grid grid-cols-3 gap-3 mb-3">
+                      <div className="bg-white rounded-lg p-3 border-2 border-red-200">
+                        <div className="flex items-center gap-1 mb-1">
+                          <span className="text-lg">🔴</span>
+                          <span className="font-bold text-red-700 text-xs">Red Zone</span>
+                        </div>
+                        <p className="text-xs font-semibold text-gray-900">0 - {thresholds.redMax}%</p>
+                        <p className="text-xs text-gray-600 mt-1">Needs Attention</p>
+                      </div>
+                      <div className="bg-white rounded-lg p-3 border-2 border-orange-200">
+                        <div className="flex items-center gap-1 mb-1">
+                          <span className="text-lg">🟠</span>
+                          <span className="font-bold text-orange-700 text-xs">Orange Zone</span>
+                        </div>
+                        <p className="text-xs font-semibold text-gray-900">{thresholds.redMax + 1} - {thresholds.orangeMax}%</p>
+                        <p className="text-xs text-gray-600 mt-1">On Track</p>
+                      </div>
+                      <div className="bg-white rounded-lg p-3 border-2 border-green-200">
+                        <div className="flex items-center gap-1 mb-1">
+                          <span className="text-lg">🟢</span>
+                          <span className="font-bold text-green-700 text-xs">Green Zone</span>
+                        </div>
+                        <p className="text-xs font-semibold text-gray-900">{thresholds.orangeMax + 1} - 100%</p>
+                        <p className="text-xs text-gray-600 mt-1">Excellent</p>
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-600 italic">
+                      These thresholds are personalized based on your client profile and goals.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Example Calculation */}
+                <div>
+                  <h4 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
+                    <span className="text-purple-600">💡</span>
+                    Example Calculation
+                  </h4>
+                  <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                    <div className="text-xs text-gray-700 space-y-2">
+                      <p><strong>3 Questions:</strong></p>
+                      <ul className="list-disc list-inside space-y-1 ml-2">
+                        <li>Q1: Sleep (Weight 8) → Answer: 7 → Score: 7 × 8 = 56</li>
+                        <li>Q2: Exercise (Weight 5) → Answer: Yes → Score: 8 × 5 = 40</li>
+                        <li>Q3: Notes (Weight 2) → Answer: Text → Score: 5 × 2 = 10</li>
+                      </ul>
+                      <div className="mt-3 pt-3 border-t border-blue-200">
+                        <p><strong>Total:</strong> (56 + 40 + 10) / (15 × 10) × 100 = <strong>71%</strong></p>
+                        <p className="mt-1 text-orange-700 font-semibold">→ 🟠 Orange Zone (On Track)</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Upcoming Check-ins Section - Front and Centre */}
           <div className="mb-8">
             <div className="bg-gradient-to-r from-amber-50 via-orange-50 to-red-50 rounded-2xl shadow-xl border border-orange-200 overflow-hidden">
@@ -569,18 +858,19 @@ export default function ClientPortalPage() {
                       </svg>
                     </div>
                     <div>
-                      <h2 className="text-2xl font-bold text-white">This Week's Check-ins</h2>
-                      <p className="text-orange-100 text-sm">Complete these to stay on track with your wellness journey</p>
+                      <h2 className="text-2xl font-bold text-white">Check-ins Requiring Attention</h2>
+                      <p className="text-orange-100 text-sm">Complete overdue and upcoming check-ins to stay on track</p>
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="text-white text-sm font-medium">Due This Week</div>
+                    <div className="text-white text-sm font-medium">Needs Action</div>
                     <div className="text-2xl font-bold text-white">
                       {assignedCheckins.filter(checkIn => {
                         const dueDate = new Date(checkIn.dueDate);
                         const now = new Date();
                         const daysDiff = Math.floor((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-                        return daysDiff >= 0 && daysDiff <= 7 && checkIn.status === 'pending';
+                        // Include ALL overdue check-ins (any number of days) and upcoming (next 7 days) check-ins
+                        return (daysDiff < 0 || (daysDiff >= 0 && daysDiff <= 7)) && checkIn.status === 'pending';
                       }).length}
                     </div>
                   </div>
@@ -592,8 +882,21 @@ export default function ClientPortalPage() {
                     const dueDate = new Date(checkIn.dueDate);
                     const now = new Date();
                     const daysDiff = Math.floor((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-                    return daysDiff >= 0 && daysDiff <= 7 && checkIn.status === 'pending';
-                  }).sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+                    // Include ALL overdue check-ins (any number of days overdue) and upcoming (next 7 days) check-ins
+                    return (daysDiff < 0 || (daysDiff >= 0 && daysDiff <= 7)) && checkIn.status === 'pending';
+                  }).sort((a, b) => {
+                    // Sort: overdue check-ins first (most overdue first), then upcoming check-ins (earliest first)
+                    const aDue = new Date(a.dueDate).getTime();
+                    const bDue = new Date(b.dueDate).getTime();
+                    const now = new Date().getTime();
+                    const aIsOverdue = aDue < now;
+                    const bIsOverdue = bDue < now;
+                    
+                    if (aIsOverdue && !bIsOverdue) return -1; // a is overdue, b is not - a comes first
+                    if (!aIsOverdue && bIsOverdue) return 1;  // b is overdue, a is not - b comes first
+                    if (aIsOverdue && bIsOverdue) return aDue - bDue; // Both overdue - most overdue first
+                    return aDue - bDue; // Both upcoming - earliest first
+                  });
 
                   if (upcomingCheckins.length === 0) {
                     return (
@@ -617,36 +920,60 @@ export default function ClientPortalPage() {
                         const daysDiff = Math.floor((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
                         const isToday = daysDiff === 0;
                         const isTomorrow = daysDiff === 1;
-                        const isUrgent = daysDiff <= 2;
+                        const isOverdue = daysDiff < 0;
+                        
+                        // Get color status based on window timing
+                        const colorStatus = getCheckInColorStatus(checkIn);
+                        
+                        // Determine colors based on status
+                        const borderColor = colorStatus === 'red' ? 'border-red-300 bg-red-50' :
+                                          colorStatus === 'orange' ? 'border-orange-300 bg-orange-50' :
+                                          'border-green-300 bg-green-50';
+                        const iconBg = colorStatus === 'red' ? 'bg-red-100' :
+                                      colorStatus === 'orange' ? 'bg-orange-100' :
+                                      'bg-green-100';
+                        const iconColor = colorStatus === 'red' ? 'text-red-600' :
+                                        colorStatus === 'orange' ? 'text-orange-600' :
+                                        'text-green-600';
+                        const textColor = colorStatus === 'red' ? 'text-red-600' :
+                                        colorStatus === 'orange' ? 'text-orange-600' :
+                                        'text-green-600';
+                        const badgeBg = colorStatus === 'red' ? 'bg-red-100 text-red-700' :
+                                       colorStatus === 'orange' ? 'bg-orange-100 text-orange-700' :
+                                       'bg-green-100 text-green-700';
+                        const buttonBg = colorStatus === 'red' ? 'bg-red-600 hover:bg-red-700' :
+                                        colorStatus === 'orange' ? 'bg-orange-600 hover:bg-orange-700' :
+                                        'bg-green-600 hover:bg-green-700';
+                        const statusLabel = colorStatus === 'red' ? 'Overdue' :
+                                          colorStatus === 'orange' ? 'Closing Soon' :
+                                          'Due Soon';
+                        const buttonText = colorStatus === 'red' ? 'Complete Now' :
+                                         colorStatus === 'orange' ? 'Complete Soon' :
+                                         'Start Check-in';
 
                         return (
                           <div 
                             key={checkIn.id} 
-                            className={`bg-white rounded-xl p-6 border-2 transition-all duration-200 hover:shadow-lg ${
-                              isUrgent ? 'border-red-300 bg-red-50' : 'border-orange-200 hover:border-orange-300'
-                            }`}
+                            className={`bg-white rounded-xl p-6 border-2 transition-all duration-200 hover:shadow-lg ${borderColor}`}
                           >
                             <div className="flex items-center justify-between">
                               <div className="flex-1">
                                 <div className="flex items-center space-x-3 mb-2">
-                                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                                    isUrgent ? 'bg-red-100' : 'bg-orange-100'
-                                  }`}>
-                                    <svg className={`w-4 h-4 ${isUrgent ? 'text-red-600' : 'text-orange-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${iconBg}`}>
+                                    <svg className={`w-4 h-4 ${iconColor}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                     </svg>
                                   </div>
                                   <h3 className="text-lg font-semibold text-gray-900">{checkIn.title}</h3>
                                 </div>
                                 <div className="flex items-center space-x-4 text-sm">
-                                  <div className={`flex items-center space-x-1 ${
-                                    isUrgent ? 'text-red-600' : 'text-orange-600'
-                                  }`}>
+                                  <div className={`flex items-center space-x-1 ${textColor}`}>
                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                                     </svg>
                                     <span className="font-medium">
-                                      {isToday ? 'Due Today!' : 
+                                      {isOverdue ? `${Math.abs(daysDiff)} day${Math.abs(daysDiff) !== 1 ? 's' : ''} overdue` :
+                                       isToday ? 'Due Today!' : 
                                        isTomorrow ? 'Due Tomorrow' : 
                                        `Due in ${daysDiff} days`}
                                     </span>
@@ -661,20 +988,14 @@ export default function ClientPortalPage() {
                                 </div>
                               </div>
                               <div className="flex items-center space-x-3">
-                                <div className={`px-3 py-1 rounded-full text-xs font-medium ${
-                                  isUrgent ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'
-                                }`}>
-                                  {isUrgent ? 'Urgent' : 'Upcoming'}
+                                <div className={`px-3 py-1 rounded-full text-xs font-medium ${badgeBg}`}>
+                                  {statusLabel}
                                 </div>
                                 <Link
                                   href={`/client-portal/check-in/${checkIn.id}`}
-                                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                                    isUrgent 
-                                      ? 'bg-red-600 hover:bg-red-700 text-white shadow-lg hover:shadow-xl' 
-                                      : 'bg-orange-600 hover:bg-orange-700 text-white shadow-md hover:shadow-lg'
-                                  }`}
+                                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 text-white shadow-md hover:shadow-lg ${buttonBg}`}
                                 >
-                                  {isUrgent ? 'Complete Now' : 'Start Check-in'}
+                                  {buttonText}
                                 </Link>
                               </div>
                             </div>
@@ -714,8 +1035,23 @@ export default function ClientPortalPage() {
               {/* Recent Responses */}
               <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden mb-8">
                 <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-8 py-6 border-b border-gray-100">
-                  <h2 className="text-2xl font-bold text-gray-900">Recent Responses</h2>
-                  <p className="text-gray-900 mt-1">Your latest check-in responses and feedback</p>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h2 className="text-2xl font-bold text-gray-900">Recent Responses</h2>
+                      <p className="text-gray-900 mt-1">Your latest check-in responses and feedback</p>
+                    </div>
+                    {recentResponses.length > 0 && (
+                      <Link
+                        href="/client-portal/check-ins?filter=completed"
+                        className="text-sm font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+                      >
+                        View All
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </Link>
+                    )}
+                  </div>
                 </div>
                 <div className="p-8">
                   {recentResponses.length === 0 ? (
@@ -730,22 +1066,36 @@ export default function ClientPortalPage() {
                     </div>
                   ) : (
                     <div className="space-y-4">
-                      {recentResponses.map((response) => (
-                        <div key={response.id} className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl p-6 border border-gray-200 hover:shadow-lg transition-all duration-200 hover:border-gray-300">
-                          <div className="flex items-center justify-between mb-4">
-                            <div className="flex items-center space-x-4">
-                              <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
+                      {recentResponses.map((response: any) => (
+                        <Link
+                          key={response.id}
+                          href={response.hasFeedback ? `/client-portal/feedback/${response.id}` : `/client-portal/check-in/${response.id}/success?score=${response.score}`}
+                          className="block bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl p-6 border-2 border-transparent hover:border-indigo-300 hover:shadow-lg transition-all duration-200 group"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-4 flex-1">
+                              <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
                                 <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                 </svg>
                               </div>
-                              <div>
-                                <h3 className="text-lg font-bold text-gray-900">{response.formTitle}</h3>
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <h3 className="text-lg font-bold text-gray-900 group-hover:text-indigo-600 transition-colors">{response.formTitle}</h3>
+                                  {response.hasFeedback && (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-800 rounded-full text-xs font-semibold animate-pulse">
+                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                      </svg>
+                                      Coach Feedback
+                                    </span>
+                                  )}
+                                </div>
                                 <p className="text-gray-900 text-sm">Submitted {new Date(response.submittedAt).toLocaleDateString()}</p>
                               </div>
                             </div>
-                            <div className="text-right">
-                              <div className="flex flex-col items-end gap-1">
+                            <div className="flex items-center gap-4">
+                              <div className="text-right">
                                 <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold ${(() => {
                                   const status = getTrafficLightStatus(response.score, thresholds);
                                   return getTrafficLightColor(status);
@@ -753,13 +1103,18 @@ export default function ClientPortalPage() {
                                   <span>{getTrafficLightIcon(getTrafficLightStatus(response.score, thresholds))}</span>
                                   <span>{response.score}%</span>
                                 </div>
-                                <div className="text-xs text-gray-900 font-medium">
+                                <div className="text-xs text-gray-900 font-medium mt-1">
                                   {getTrafficLightLabel(getTrafficLightStatus(response.score, thresholds))}
                                 </div>
                               </div>
+                              <div className="flex items-center text-indigo-600 group-hover:text-indigo-800 transition-colors">
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                </svg>
+                              </div>
                             </div>
                           </div>
-                        </div>
+                        </Link>
                       ))}
                     </div>
                   )}
@@ -769,44 +1124,35 @@ export default function ClientPortalPage() {
 
             {/* Sidebar */}
             <div className="space-y-8">
-              {/* Coach Information */}
-              <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-                <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-6 py-4 border-b border-gray-100">
-                  <h3 className="text-lg font-bold text-gray-900">Your Coach</h3>
+              {/* Coach Information - Compact */}
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-4 py-3 border-b border-gray-200">
+                  <h3 className="text-sm font-bold text-gray-900">Your Coach</h3>
                 </div>
-                <div className="p-6">
+                <div className="p-4">
                   {coach ? (
                     <div className="text-center">
-                      <div className="w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
-                        <span className="text-white font-bold text-xl">
+                      <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-3 shadow-md">
+                        <span className="text-white font-bold text-base">
                           {coach.firstName?.charAt(0) || 'C'}
                         </span>
                       </div>
-                      <h4 className="text-lg font-semibold text-gray-900 mb-1">
+                      <h4 className="text-sm font-semibold text-gray-900 mb-1">
                         {coach.firstName} {coach.lastName}
                       </h4>
-                      <p className="text-gray-900 text-sm mb-3">{coach.email}</p>
+                      <p className="text-gray-900 text-xs">{coach.email}</p>
                       {coach.specialization && (
-                        <p className="text-gray-900 text-xs mb-4">{coach.specialization}</p>
+                        <p className="text-gray-900 text-xs mt-1">{coach.specialization}</p>
                       )}
-                      <Link
-                        href="/client-portal/messages"
-                        className="inline-flex items-center justify-center w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
-                      >
-                        <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                        </svg>
-                        Message Coach
-                      </Link>
                     </div>
                   ) : (
-                    <div className="text-center py-4">
-                      <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="text-center py-3">
+                      <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                         </svg>
                       </div>
-                      <p className="text-gray-900 text-sm mb-3">No coach assigned</p>
+                      <p className="text-gray-900 text-xs mb-2">No coach assigned</p>
                       <p className="text-gray-900 text-xs">Contact support to get assigned to a coach</p>
                     </div>
                   )}
@@ -814,26 +1160,37 @@ export default function ClientPortalPage() {
               </div>
 
               {/* Quick Actions */}
-              <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-6 py-4 border-b border-gray-100">
-                  <h3 className="text-lg font-bold text-gray-900">Quick Actions</h3>
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-4 py-3 border-b border-gray-200">
+                  <h3 className="text-sm font-bold text-gray-900">Quick Actions</h3>
                 </div>
-                <div className="p-6 space-y-3">
+                <div className="p-4 space-y-2">
+                  {coach && (
+                    <Link
+                      href="/client-portal/messages"
+                      className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white px-3 py-2 rounded-lg text-xs font-medium text-center transition-all duration-200 shadow-sm hover:shadow flex items-center justify-center"
+                    >
+                      <svg className="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                      </svg>
+                      Message Coach
+                    </Link>
+                  )}
                   <Link
                     href="/client-portal/check-ins"
-                    className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-4 py-3 rounded-xl text-sm font-medium text-center transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 block"
+                    className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-3 py-2 rounded-lg text-xs font-medium text-center transition-all duration-200 shadow-sm hover:shadow block"
                   >
                     View Check-ins
                   </Link>
                   <Link
                     href="/client-portal/progress"
-                    className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white px-4 py-3 rounded-xl text-sm font-medium text-center transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 block"
+                    className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white px-3 py-2 rounded-lg text-xs font-medium text-center transition-all duration-200 shadow-sm hover:shadow block"
                   >
                     View Progress
                   </Link>
                   <Link
                     href="/client-portal/profile"
-                    className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white px-4 py-3 rounded-xl text-sm font-medium text-center transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 block"
+                    className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white px-3 py-2 rounded-lg text-xs font-medium text-center transition-all duration-200 shadow-sm hover:shadow block"
                   >
                     Update Profile
                   </Link>

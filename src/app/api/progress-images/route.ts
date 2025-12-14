@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
       query = db.collection('progress_images')
         .where('coachId', '==', coachId)
         .orderBy('uploadedAt', 'desc')
-        .limit(limit);
+        .limit(limit * 2); // Fetch more to filter out invalid ones
     } else {
       return NextResponse.json({
         success: false,
@@ -54,11 +54,11 @@ export async function GET(request: NextRequest) {
       if (clientId) {
         query = db.collection('progress_images')
           .where('clientId', '==', clientId)
-          .limit(limit);
+          .limit(limit * 2);
       } else {
         query = db.collection('progress_images')
           .where('coachId', '==', coachId)
-          .limit(limit);
+          .limit(limit * 2);
       }
       snapshot = await query.get();
     }
@@ -77,6 +77,42 @@ export async function GET(request: NextRequest) {
       console.log('Image data:', { id: imageData.id, clientId: imageData.clientId, imageUrl: imageData.imageUrl?.substring(0, 50) });
       return imageData;
     });
+    
+    // Filter out images from invalid/deleted clients
+    if (coachId) {
+      // Get all active clients for this coach
+      const clientsSnapshot = await db.collection('clients')
+        .where('coachId', '==', coachId)
+        .get();
+      
+      const validClientIds = new Set(clientsSnapshot.docs.map(doc => doc.id));
+      
+      // Filter images to only include those from valid clients
+      images = images.filter(img => {
+        // Check if clientId exists and is valid
+        if (!img.clientId || !validClientIds.has(img.clientId)) {
+          console.log(`Filtering out image ${img.id} - invalid clientId: ${img.clientId}`);
+          return false;
+        }
+        
+        // Check if imageType is valid
+        if (!img.imageType || !['profile', 'before', 'after', 'progress'].includes(img.imageType)) {
+          console.log(`Filtering out image ${img.id} - invalid imageType: ${img.imageType}`);
+          return false;
+        }
+        
+        // Check if imageUrl exists and is valid
+        if (!img.imageUrl || typeof img.imageUrl !== 'string' || img.imageUrl.length < 10) {
+          console.log(`Filtering out image ${img.id} - invalid imageUrl`);
+          return false;
+        }
+        
+        return true;
+      });
+      
+      // Limit to requested number after filtering
+      images = images.slice(0, limit);
+    }
     
     // Sort manually if orderBy wasn't used (fallback case)
     if (images.length > 0) {

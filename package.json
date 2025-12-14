@@ -9,7 +9,11 @@
     "lint": "next lint",
     "setup-indexes": "node scripts/deploy-indexes.js",
     "test-indexes": "curl http://localhost:3000/api/setup-indexes",
-    "setup-data": "curl -X POST http://localhost:3000/api/setup-indexes -H 'Content-Type: application/json' -d '{\"action\":\"create-sample-data\"}'"
+    "setup-data": "curl -X POST http://localhost:3000/api/setup-indexes -H 'Content-Type: application/json' -d '{\"action\":\"create-sample-data\"}'",
+    "build:firebase": "npm run build && bash scripts/build-firebase.sh",
+    "prebuild:firebase": "echo 'Building Next.js for Firebase Hosting...'",
+    "deploy:firebase": "npm run build:firebase && firebase deploy --only hosting",
+    "deploy:all": "npm run build:firebase && firebase deploy"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

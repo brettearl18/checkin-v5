@@ -50,6 +50,10 @@ export default function ClientProfilePage() {
   const [isRecurring, setIsRecurring] = useState(false);
   const [progressImages, setProgressImages] = useState<any[]>([]);
   const [loadingImages, setLoadingImages] = useState(false);
+  const [filterOrientation, setFilterOrientation] = useState<'all' | 'front' | 'back' | 'side'>('all');
+  const [filterDate, setFilterDate] = useState<'all' | string>('all');
+  const [comparisonMode, setComparisonMode] = useState(false);
+  const [selectedForComparison, setSelectedForComparison] = useState<string[]>([]);
   const [onboardingData, setOnboardingData] = useState<any>(null);
   const [loadingOnboarding, setLoadingOnboarding] = useState(false);
   const [measurementHistory, setMeasurementHistory] = useState<any[]>([]);
@@ -65,9 +69,17 @@ export default function ClientProfilePage() {
   const [allocatingCheckIn, setAllocatingCheckIn] = useState(false);
   const [selectedAllocateForm, setSelectedAllocateForm] = useState('');
   const [allocateStartDate, setAllocateStartDate] = useState('');
+  const [allocateFirstCheckInDate, setAllocateFirstCheckInDate] = useState('');
   const [allocateDuration, setAllocateDuration] = useState(4);
   const [allocateFrequency, setAllocateFrequency] = useState('weekly');
   const [allocateDueTime, setAllocateDueTime] = useState('09:00');
+  const [allocateCheckInWindow, setAllocateCheckInWindow] = useState({
+    enabled: true,
+    startDay: 'friday',
+    startTime: '10:00',
+    endDay: 'monday',
+    endTime: '22:00'
+  });
   const [showCheckInManagementModal, setShowCheckInManagementModal] = useState(false);
   const [selectedCheckIn, setSelectedCheckIn] = useState<any>(null);
   const [deletingCheckIn, setDeletingCheckIn] = useState(false);
@@ -434,6 +446,7 @@ export default function ClientProfilePage() {
   const openAllocateModal = () => {
     setSelectedAllocateForm('');
     setAllocateStartDate('');
+    setAllocateFirstCheckInDate('');
     setAllocateDuration(4);
     setAllocateFrequency('weekly');
     setAllocateDueTime('09:00');
@@ -460,7 +473,9 @@ export default function ClientProfilePage() {
           frequency: allocateFrequency,
           duration: allocateDuration,
           startDate: allocateStartDate,
+          firstCheckInDate: allocateFirstCheckInDate || allocateStartDate,
           dueTime: allocateDueTime,
+          checkInWindow: allocateCheckInWindow.enabled ? allocateCheckInWindow : null,
           status: 'pending'
         }),
       });
@@ -470,9 +485,17 @@ export default function ClientProfilePage() {
         setShowAllocateModal(false);
         setSelectedAllocateForm('');
         setAllocateStartDate('');
+        setAllocateFirstCheckInDate('');
         setAllocateDuration(4);
         setAllocateFrequency('weekly');
         setAllocateDueTime('09:00');
+        setAllocateCheckInWindow({
+          enabled: true,
+          startDay: 'friday',
+          startTime: '10:00',
+          endDay: 'monday',
+          endTime: '22:00'
+        });
         
         // Refresh check-ins
         setHasLoadedCheckIns(false);
@@ -497,7 +520,13 @@ export default function ClientProfilePage() {
 
     setDeletingCheckIn(true);
     try {
-      const response = await fetch(`/api/check-in-assignments/${checkInId}`, {
+      if (!userProfile?.uid) {
+        alert('You must be logged in as a coach to delete check-ins.');
+        setDeletingCheckIn(false);
+        return;
+      }
+      
+      const response = await fetch(`/api/check-in-assignments/${checkInId}?coachId=${userProfile.uid}`, {
         method: 'DELETE',
       });
 
@@ -565,6 +594,12 @@ export default function ClientProfilePage() {
 
     setDeletingSeries(true);
     try {
+      if (!userProfile?.uid) {
+        alert('You must be logged in as a coach to delete check-in series.');
+        setDeletingSeries(false);
+        return;
+      }
+      
       const response = await fetch('/api/check-in-assignments/series', {
         method: 'DELETE',
         headers: {
@@ -573,7 +608,8 @@ export default function ClientProfilePage() {
         body: JSON.stringify({
           clientId: clientId,
           formId: formId,
-          preserveHistory: preserveHistory
+          preserveHistory: preserveHistory,
+          coachId: userProfile.uid // SECURITY: Required for authorization
         }),
       });
 
@@ -997,219 +1033,119 @@ export default function ClientProfilePage() {
 
   return (
     <RoleProtected requiredRole="coach">
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 p-6">
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 p-4">
         <div className="max-w-7xl mx-auto">
-          {/* Modern Header */}
-          <div className="mb-8">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center space-x-4">
-                <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg">
-                  <span className="text-white font-bold text-2xl">
+          {/* Compact Header */}
+          <div className="mb-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <Link
+                  href="/clients"
+                  className="p-2 text-gray-600 hover:text-gray-900 hover:bg-white rounded-lg transition-colors"
+                  title="Back to Clients"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                  </svg>
+                </Link>
+                <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-md">
+                  <span className="text-white font-bold text-lg">
                     {client.firstName.charAt(0)}{client.lastName.charAt(0)}
                   </span>
                 </div>
                 <div>
-                  <h1 className="text-4xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
+                  <h1 className="text-2xl font-bold text-gray-900">
                     {client.firstName} {client.lastName}
                   </h1>
-                  <p className="text-gray-600 mt-1 text-lg">Client Profile & Progress</p>
+                  <div className="flex items-center space-x-3 mt-1">
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                      client.status === 'active' ? 'bg-green-100 text-green-700' :
+                      client.status === 'inactive' ? 'bg-gray-100 text-gray-700' :
+                      client.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                      client.status === 'at-risk' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'
+                    }`}>
+                      {client.status}
+                    </span>
+                    {client.email && (
+                      <span className="text-xs text-gray-600">{client.email}</span>
+                    )}
+                  </div>
                 </div>
               </div>
-              <div className="flex space-x-3">
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => openStatusModal(client.status)}
+                  className="px-3 py-1.5 text-sm text-gray-700 hover:text-gray-900 hover:bg-white rounded-lg border border-gray-200 transition-colors"
+                  title="Update Status"
+                >
+                  <svg className="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                  Status
+                </button>
                 <Link
                   href={`/clients/${clientId}/edit`}
-                  className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-6 py-3 rounded-xl font-medium transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                  className="px-4 py-1.5 text-sm bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-lg font-medium transition-all duration-200 shadow-sm"
                 >
                   Edit Profile
                 </Link>
-                <Link
-                  href="/clients"
-                  className="text-gray-700 hover:text-gray-900 font-medium px-6 py-3 rounded-xl border-2 border-gray-200 hover:border-gray-300 transition-all duration-200"
-                >
-                  ← Back to Clients
-                </Link>
-              </div>
-            </div>
-
-            {/* Status Cards */}
-            <div className="flex items-center space-x-6">
-              <div className={`flex items-center space-x-2 bg-white rounded-xl px-4 py-2 shadow-sm border ${
-                client.status === 'active' ? 'border-green-100' :
-                client.status === 'inactive' ? 'border-gray-100' :
-                client.status === 'pending' ? 'border-yellow-100' :
-                client.status === 'at-risk' ? 'border-red-100' : 'border-gray-100'
-              }`}>
-                <div className={`w-3 h-3 rounded-full animate-pulse ${
-                  client.status === 'active' ? 'bg-green-500' :
-                  client.status === 'inactive' ? 'bg-gray-500' :
-                  client.status === 'pending' ? 'bg-yellow-500' :
-                  client.status === 'at-risk' ? 'bg-red-500' : 'bg-gray-500'
-                }`}></div>
-                <span className={`font-medium ${
-                  client.status === 'active' ? 'text-green-700' :
-                  client.status === 'inactive' ? 'text-gray-700' :
-                  client.status === 'pending' ? 'text-yellow-700' :
-                  client.status === 'at-risk' ? 'text-red-700' : 'text-gray-700'
-                }`}>{client.status}</span>
-                <button
-                  onClick={() => openStatusModal(client.status)}
-                  className="ml-2 p-1 text-gray-400 hover:text-gray-600 transition-colors"
-                  title="Update Status"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                  </svg>
-                </button>
               </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             {/* Main Content */}
-            <div className="lg:col-span-2 space-y-8">
-              {/* Modern Client Overview Card */}
-              <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-8 py-6 border-b border-gray-100">
-                  <h2 className="text-2xl font-bold text-gray-900">Client Overview</h2>
-                </div>
-                <div className="p-8">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                    {/* Contact Info */}
-                    <div className="space-y-3">
-                      <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Contact</h3>
-                      <div className="space-y-2">
-                        <div className="flex items-center space-x-2">
-                          <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                            <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                            </svg>
-                          </div>
-                          <span className="text-gray-900 font-medium">{client.email}</span>
-                        </div>
-                        {client.phone && (
-                          <div className="flex items-center space-x-2">
-                            <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
-                              <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                              </svg>
-                            </div>
-                            <span className="text-gray-900 font-medium">{client.phone}</span>
-                          </div>
-                        )}
+            <div className="lg:col-span-3 space-y-6">
+              {/* Compact Overview & Progress Combined */}
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div className="p-5">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {/* Progress Score - Compact */}
+                    <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-lg p-4 border border-emerald-100">
+                      <div className="text-xs font-medium text-gray-600 mb-1">Progress Score</div>
+                      <div className={`text-3xl font-bold mb-2 ${
+                        (client.progressScore || 0) >= 80 ? 'text-green-600' :
+                        (client.progressScore || 0) >= 60 ? 'text-yellow-600' : 'text-red-600'
+                      }`}>
+                        {client.progressScore || 0}%
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
+                        <div 
+                          className={`h-full rounded-full transition-all ${
+                            (client.progressScore || 0) >= 80 ? 'bg-green-500' :
+                            (client.progressScore || 0) >= 60 ? 'bg-yellow-500' : 'bg-red-500'
+                          }`}
+                          style={{ width: `${Math.min(client.progressScore || 0, 100)}%` }}
+                        ></div>
                       </div>
                     </div>
 
-                    {/* Status */}
-                    <div className="space-y-3">
-                      <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Status</h3>
-                      <div className="flex items-center space-x-2">
-                        <span className={`px-4 py-2 text-sm font-medium rounded-full ${getStatusColor(client.status)}`}>
-                          {client.status}
-                        </span>
-                        <button
-                          onClick={() => openStatusModal(client.status)}
-                          className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
-                          title="Update Status"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                          </svg>
-                        </button>
-                      </div>
+                    {/* Total Check-ins */}
+                    <div className="bg-blue-50 rounded-lg p-4 border border-blue-100">
+                      <div className="text-xs font-medium text-gray-600 mb-1">Check-ins</div>
+                      <div className="text-3xl font-bold text-gray-900">{client.totalCheckIns || 0}</div>
+                      <div className="text-xs text-gray-500 mt-1">Total completed</div>
+                    </div>
+
+                    {/* Completion Rate */}
+                    <div className="bg-purple-50 rounded-lg p-4 border border-purple-100">
+                      <div className="text-xs font-medium text-gray-600 mb-1">Completion</div>
+                      <div className="text-3xl font-bold text-gray-900">{client.completionRate || 0}%</div>
+                      <div className="text-xs text-gray-500 mt-1">Rate</div>
                     </div>
 
                     {/* Last Activity */}
-                    <div className="space-y-3">
-                      <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Last Activity</h3>
-                      <div className="flex items-center space-x-2">
-                        <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
-                          <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                        </div>
-                        <span className="text-gray-900 font-medium">
-                          {client.lastCheckIn ? 
-                            formatDate(client.lastCheckIn) : 
-                            'No activity'
-                          }
-                        </span>
+                    <div className="bg-orange-50 rounded-lg p-4 border border-orange-100">
+                      <div className="text-xs font-medium text-gray-600 mb-1">Last Activity</div>
+                      <div className="text-sm font-bold text-gray-900">
+                        {client.lastCheckIn ? 
+                          formatDate(client.lastCheckIn) : 
+                          'Never'
+                        }
                       </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Progress Score Card - Replacing Profile Information */}
-              <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-                <div className="bg-gradient-to-r from-emerald-50 to-teal-50 px-8 py-6 border-b border-gray-100">
-                  <h2 className="text-2xl font-bold text-gray-900">Progress Overview</h2>
-                </div>
-                <div className="p-8">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    {/* Progress Score */}
-                    <div className="space-y-6">
-                      <div>
-                        <h3 className="text-lg font-semibold text-gray-700 mb-4">Current Progress Score</h3>
-                        <div className="space-y-4">
-                          <div className="text-5xl font-bold text-gray-900">
-                            {client.progressScore || 0}%
-                          </div>
-                          <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
-                            <div 
-                              className="h-full bg-gradient-to-r from-emerald-500 to-teal-600 rounded-full transition-all duration-500 ease-out"
-                              style={{ width: `${client.progressScore || 0}%` }}
-                            ></div>
-                          </div>
-                          <div className="text-lg text-gray-600 font-medium">
-                            {client.progressScore >= 80 ? '🎉 Excellent Progress' : 
-                             client.progressScore >= 60 ? '👍 Good Progress' : '⚠️ Needs Attention'}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Progress Stats */}
-                    <div className="space-y-6">
-                      <h3 className="text-lg font-semibold text-gray-700 mb-4">Progress Statistics</h3>
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
-                          <div className="flex items-center space-x-3">
-                            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                              <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                              </svg>
-                            </div>
-                            <span className="text-gray-700 font-medium">Total Check-ins</span>
-                          </div>
-                          <span className="text-2xl font-bold text-gray-900">{client.totalCheckIns || 0}</span>
-                        </div>
-                        
-                        <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
-                          <div className="flex items-center space-x-3">
-                            <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                              <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                              </svg>
-                            </div>
-                            <span className="text-gray-700 font-medium">Average Score</span>
-                          </div>
-                          <span className="text-2xl font-bold text-gray-900">
-                            {client.progressScore || 0}%
-                          </span>
-                        </div>
-                        
-                        <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
-                          <div className="flex items-center space-x-3">
-                            <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                              <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                              </svg>
-                            </div>
-                            <span className="text-gray-700 font-medium">Completion Rate</span>
-                          </div>
-                          <span className="text-2xl font-bold text-gray-900">100%</span>
-                        </div>
-                      </div>
+                      {client.phone && (
+                        <div className="text-xs text-gray-500 mt-1">{client.phone}</div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1225,9 +1161,9 @@ export default function ClientProfilePage() {
                   <div className="p-8">
                     {/* Before Images */}
                     {(onboardingData.beforeImages?.front || onboardingData.beforeImages?.back || onboardingData.beforeImages?.side) && (
-                      <div className="mb-8">
-                        <h3 className="text-lg font-semibold text-gray-700 mb-4">Before Photos</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="mb-6">
+                        <h3 className="text-sm font-semibold text-gray-700 mb-3">Before Photos</h3>
+                        <div className="grid grid-cols-3 gap-3">
                           {onboardingData.beforeImages.front && (
                             <div className="space-y-2">
                               <label className="block text-sm font-medium text-gray-600">Front View</label>
@@ -1269,16 +1205,16 @@ export default function ClientProfilePage() {
                     )}
 
                     {/* Body Weight and Measurements */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {/* Body Weight */}
                       {onboardingData.bodyWeight && (
                         <div>
-                          <h3 className="text-lg font-semibold text-gray-700 mb-4">Starting Weight</h3>
-                          <div className="bg-gray-50 rounded-xl p-6">
-                            <div className="text-4xl font-bold text-gray-900 mb-2">
+                          <h3 className="text-sm font-semibold text-gray-700 mb-2">Starting Weight</h3>
+                          <div className="bg-gray-50 rounded-lg p-4">
+                            <div className="text-2xl font-bold text-gray-900 mb-1">
                               {onboardingData.bodyWeight} kg
                             </div>
-                            <p className="text-sm text-gray-500">Baseline weight</p>
+                            <p className="text-xs text-gray-500">Baseline weight</p>
                           </div>
                         </div>
                       )}
@@ -1286,8 +1222,8 @@ export default function ClientProfilePage() {
                       {/* Measurements */}
                       {onboardingData.measurements && Object.keys(onboardingData.measurements).length > 0 && (
                         <div>
-                          <h3 className="text-lg font-semibold text-gray-700 mb-4">Starting Measurements</h3>
-                          <div className="bg-gray-50 rounded-xl p-6 space-y-3">
+                          <h3 className="text-sm font-semibold text-gray-700 mb-2">Starting Measurements</h3>
+                          <div className="bg-gray-50 rounded-lg p-4 space-y-2">
                             {Object.entries(onboardingData.measurements).map(([key, value]) => {
                               if (!value) return null;
                               return (
@@ -1316,86 +1252,366 @@ export default function ClientProfilePage() {
 
               {/* Progress Images */}
               <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-                <div className="bg-gradient-to-r from-pink-50 to-rose-50 px-8 py-6 border-b border-gray-100 flex items-center justify-between">
-                  <h2 className="text-2xl font-bold text-gray-900">Progress Images</h2>
+                <div className="bg-gradient-to-r from-pink-50 to-rose-50 px-8 py-6 border-b border-gray-100">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-2xl font-bold text-gray-900">Progress Images</h2>
+                    {progressImages.length > 0 && (
+                      <button
+                        onClick={() => {
+                          setComparisonMode(!comparisonMode);
+                          if (comparisonMode) {
+                            setSelectedForComparison([]);
+                          }
+                        }}
+                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                          comparisonMode
+                            ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white shadow-md'
+                            : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
+                        }`}
+                      >
+                        {comparisonMode ? 'Exit Compare' : 'Select to Compare'}
+                      </button>
+                    )}
+                  </div>
+                  
+                  {/* Filters and Comparison Controls */}
+                  {progressImages.length > 0 && (
+                    <div className="space-y-2 mt-3">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center space-x-2 flex-wrap">
+                          <span className="text-xs font-medium text-gray-900">Filter by view:</span>
+                          <button
+                            onClick={() => setFilterOrientation('all')}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                              filterOrientation === 'all'
+                                ? 'bg-gradient-to-r from-pink-600 to-rose-600 text-white shadow-md'
+                                : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
+                            }`}
+                          >
+                            All
+                          </button>
+                          <button
+                            onClick={() => setFilterOrientation('front')}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                              filterOrientation === 'front'
+                                ? 'bg-gradient-to-r from-pink-600 to-rose-600 text-white shadow-md'
+                                : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
+                            }`}
+                          >
+                            Front
+                          </button>
+                          <button
+                            onClick={() => setFilterOrientation('back')}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                              filterOrientation === 'back'
+                                ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-md'
+                                : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
+                            }`}
+                          >
+                            Back
+                          </button>
+                          <button
+                            onClick={() => setFilterOrientation('side')}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                              filterOrientation === 'side'
+                                ? 'bg-gradient-to-r from-teal-600 to-cyan-600 text-white shadow-md'
+                                : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
+                            }`}
+                          >
+                            Side
+                          </button>
+                        </div>
+                        
+                        {selectedForComparison.length > 0 && (
+                          <div className="flex items-center space-x-2">
+                            <span className="text-xs text-gray-900 font-medium">
+                              {selectedForComparison.length} selected
+                            </span>
+                            <button
+                              onClick={() => {
+                                setSelectedForComparison([]);
+                                setComparisonMode(false);
+                              }}
+                              className="px-3 py-1.5 bg-white hover:bg-gray-50 text-gray-700 rounded-lg text-xs font-medium border border-gray-300"
+                            >
+                              Clear
+                            </button>
+                            <button
+                              onClick={() => setComparisonMode(true)}
+                              className="px-3 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-lg text-xs font-medium shadow-md"
+                            >
+                              Compare ({selectedForComparison.length})
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Date Filter */}
+                      <div className="flex items-center space-x-2">
+                        <span className="text-xs font-medium text-gray-900">Filter by date:</span>
+                        <select
+                          value={filterDate}
+                          onChange={(e) => setFilterDate(e.target.value)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-medium bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-pink-500"
+                        >
+                          <option value="all">All Dates</option>
+                          {(() => {
+                            const dates = progressImages.map(img => {
+                              const date = new Date(img.uploadedAt);
+                              return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+                            });
+                            return Array.from(new Set(dates)).sort((a, b) => {
+                              return new Date(b).getTime() - new Date(a).getTime();
+                            }).map(date => (
+                              <option key={date} value={date}>{date}</option>
+                            ));
+                          })()}
+                        </select>
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <div className="p-8">
+                <div className="p-5">
                   {loadingImages ? (
-                    <div className="text-center py-12">
-                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pink-600 mx-auto mb-4"></div>
-                      <p className="text-gray-500 text-lg">Loading images...</p>
+                    <div className="text-center py-8">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-pink-600 mx-auto mb-3"></div>
+                      <p className="text-gray-500 text-sm">Loading images...</p>
                     </div>
                   ) : progressImages.length === 0 ? (
-                    <div className="text-center py-12">
-                      <div className="w-16 h-16 bg-pink-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <svg className="w-8 h-8 text-pink-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="text-center py-8">
+                      <div className="w-12 h-12 bg-pink-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <svg className="w-6 h-6 text-pink-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                         </svg>
                       </div>
-                      <p className="text-gray-500 text-lg mb-2">No progress images yet</p>
-                      <p className="text-gray-400 text-sm">Client photos will appear here as they're uploaded</p>
+                      <p className="text-gray-500 text-sm mb-1">No progress images yet</p>
+                      <p className="text-gray-400 text-xs">Client photos will appear here as they're uploaded</p>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                      {progressImages.slice(0, 8).map((image) => (
-                        <div key={image.id} className="group relative aspect-square rounded-xl overflow-hidden border border-gray-200 hover:border-pink-300 transition-all duration-200 hover:shadow-lg">
-                          <img
-                            src={image.imageUrl}
-                            alt={image.caption || image.imageType}
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).src = `data:image/svg+xml,${encodeURIComponent(`
-                                <svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
-                                  <rect width="200" height="200" fill="#f3f4f6"/>
-                                  <text x="50%" y="50%" font-family="Arial" font-size="14" fill="#9ca3af" text-anchor="middle" dy=".3em">Image</text>
-                                </svg>
-                              `)}`;
-                            }}
-                          />
-                          <div className="absolute top-2 left-2 flex flex-col gap-1">
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                              image.imageType === 'profile' ? 'bg-blue-100 text-blue-800' :
-                              image.imageType === 'before' ? 'bg-orange-100 text-orange-800' :
-                              image.imageType === 'after' ? 'bg-green-100 text-green-800' :
-                              'bg-purple-100 text-purple-800'
-                            }`}>
-                              {image.imageType === 'profile' ? 'Profile' :
-                               image.imageType === 'before' ? 'Before' :
-                               image.imageType === 'after' ? 'After' :
-                               'Progress'}
-                            </span>
-                            {image.orientation && (
-                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                image.orientation === 'front' ? 'bg-pink-100 text-pink-800' :
-                                image.orientation === 'back' ? 'bg-indigo-100 text-indigo-800' :
-                                'bg-teal-100 text-teal-800'
-                              }`}>
-                                {image.orientation.charAt(0).toUpperCase() + image.orientation.slice(1)}
-                              </span>
-                            )}
+                    <>
+                      {/* Comparison View */}
+                      {comparisonMode && selectedForComparison.length > 0 && (
+                        <div className="mb-6 bg-gray-50 rounded-xl border-2 border-blue-200 p-5">
+                          <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-lg font-bold text-gray-900">Side-by-Side Comparison</h3>
+                            <button
+                              onClick={() => {
+                                setSelectedForComparison([]);
+                                setComparisonMode(false);
+                              }}
+                              className="px-3 py-1.5 bg-white hover:bg-gray-50 text-gray-700 rounded-lg text-xs font-medium border border-gray-300"
+                            >
+                              Close Comparison
+                            </button>
                           </div>
-                          <div className="absolute bottom-2 right-2">
-                            <span className="px-2 py-1 rounded-full text-xs font-medium bg-black bg-opacity-50 text-white">
-                              {new Date(image.uploadedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                            </span>
+                          <div className={`grid gap-4 ${
+                            selectedForComparison.length === 1 ? 'grid-cols-1' :
+                            selectedForComparison.length === 2 ? 'grid-cols-2' :
+                            selectedForComparison.length === 3 ? 'grid-cols-3' :
+                            'grid-cols-2 md:grid-cols-4'
+                          }`}>
+                            {progressImages.filter(img => selectedForComparison.includes(img.id)).map((image) => (
+                              <div key={image.id} className="bg-white rounded-xl border-2 border-blue-400 shadow-lg overflow-hidden">
+                                <div className="aspect-square relative">
+                                  <img
+                                    src={image.imageUrl}
+                                    alt={image.caption || image.imageType}
+                                    className="w-full h-full object-cover"
+                                    onError={(e) => {
+                                      (e.target as HTMLImageElement).src = `data:image/svg+xml,${encodeURIComponent(`
+                                        <svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
+                                          <rect width="200" height="200" fill="#f3f4f6"/>
+                                          <text x="50%" y="50%" font-family="Arial" font-size="14" fill="#9ca3af" text-anchor="middle" dy=".3em">Image</text>
+                                        </svg>
+                                      `)}`;
+                                    }}
+                                  />
+                                  <div className="absolute top-2 left-2 flex flex-col gap-1">
+                                    <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                      image.imageType === 'profile' ? 'bg-blue-100 text-blue-800' :
+                                      image.imageType === 'before' ? 'bg-orange-100 text-orange-800' :
+                                      image.imageType === 'after' ? 'bg-green-100 text-green-800' :
+                                      'bg-purple-100 text-purple-800'
+                                    }`}>
+                                      {image.imageType === 'profile' ? 'Profile' :
+                                       image.imageType === 'before' ? 'Before' :
+                                       image.imageType === 'after' ? 'After' :
+                                       'Progress'}
+                                    </span>
+                                    {image.orientation && (
+                                      <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                        image.orientation === 'front' ? 'bg-pink-100 text-pink-800' :
+                                        image.orientation === 'back' ? 'bg-indigo-100 text-indigo-800' :
+                                        'bg-teal-100 text-teal-800'
+                                      }`}>
+                                        {image.orientation.charAt(0).toUpperCase() + image.orientation.slice(1)}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="absolute bottom-2 left-2 right-2">
+                                    <div className="bg-black/70 backdrop-blur-sm rounded-lg px-3 py-2">
+                                      <p className="text-white text-xs font-medium">
+                                        {new Date(image.uploadedAt).toLocaleDateString('en-US', { 
+                                          year: 'numeric', 
+                                          month: 'short', 
+                                          day: 'numeric' 
+                                        })}
+                                      </p>
+                                      {image.caption && (
+                                        <p className="text-white/90 text-xs mt-1">{image.caption}</p>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
                           </div>
-                          {image.caption && (
-                            <div className="absolute bottom-2 left-2 right-2">
-                              <p className="px-2 py-1 rounded text-xs font-medium bg-black bg-opacity-50 text-white truncate">
-                                {image.caption}
-                              </p>
-                            </div>
-                          )}
                         </div>
-                      ))}
-                    </div>
-                  )}
-                  {progressImages.length > 8 && (
-                    <div className="text-center pt-6">
-                      <p className="text-gray-500 text-sm">
-                        Showing 8 of {progressImages.length} images
-                      </p>
-                    </div>
+                      )}
+
+                      {/* Filtered Images Grid */}
+                      {(() => {
+                        const filteredImages = progressImages.filter(img => {
+                          const orientationMatch = filterOrientation === 'all' || img.orientation === filterOrientation;
+                          if (filterDate === 'all') return orientationMatch;
+                          
+                          const imgDate = new Date(img.uploadedAt);
+                          const imgDateKey = imgDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+                          return orientationMatch && imgDateKey === filterDate;
+                        });
+
+                        if (filteredImages.length === 0) {
+                          return (
+                            <div className="text-center py-12">
+                              <p className="text-gray-500 text-sm">No {filterOrientation !== 'all' ? filterOrientation : ''} images found for the selected date</p>
+                            </div>
+                          );
+                        }
+
+                        // Group by date
+                        const groupedImages: { [key: string]: any[] } = {};
+                        filteredImages.forEach(img => {
+                          const date = new Date(img.uploadedAt);
+                          const dateKey = date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+                          if (!groupedImages[dateKey]) {
+                            groupedImages[dateKey] = [];
+                          }
+                          groupedImages[dateKey].push(img);
+                        });
+                        const sortedDateKeys = Object.keys(groupedImages).sort((a, b) => {
+                          return new Date(b).getTime() - new Date(a).getTime();
+                        });
+
+                        return (
+                          <>
+                            {sortedDateKeys.map((dateKey) => (
+                              <div key={dateKey} className="mb-6">
+                                <div className="flex items-center justify-between mb-3">
+                                  <h3 className="text-base font-bold text-gray-900 flex items-center">
+                                    <svg className="w-4 h-4 mr-2 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                    </svg>
+                                    {dateKey}
+                                    <span className="ml-2 text-xs font-normal text-gray-700">
+                                      ({groupedImages[dateKey].length} {groupedImages[dateKey].length === 1 ? 'image' : 'images'})
+                                    </span>
+                                  </h3>
+                                </div>
+                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                                  {groupedImages[dateKey].map((image) => {
+                                    const isSelected = selectedForComparison.includes(image.id);
+                                    return (
+                                      <div 
+                                        key={image.id} 
+                                        className={`group relative aspect-square rounded-xl overflow-hidden border transition-all duration-300 hover:shadow-lg bg-white cursor-pointer ${
+                                          comparisonMode 
+                                            ? isSelected 
+                                              ? 'border-blue-500 ring-2 ring-blue-200 shadow-md' 
+                                              : 'border-gray-200 hover:border-blue-300'
+                                            : 'border-gray-200 hover:border-pink-300'
+                                        }`}
+                                        onClick={() => {
+                                          if (comparisonMode) {
+                                            if (isSelected) {
+                                              setSelectedForComparison(selectedForComparison.filter(id => id !== image.id));
+                                            } else {
+                                              if (selectedForComparison.length < 4) {
+                                                setSelectedForComparison([...selectedForComparison, image.id]);
+                                              }
+                                            }
+                                          }
+                                        }}
+                                      >
+                                        {comparisonMode && (
+                                          <div className={`absolute top-2 right-2 z-10 w-6 h-6 rounded-full flex items-center justify-center transition-all ${
+                                            isSelected 
+                                              ? 'bg-blue-600 text-white shadow-lg' 
+                                              : 'bg-white/80 backdrop-blur-sm border-2 border-gray-300'
+                                          }`}>
+                                            {isSelected && (
+                                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                              </svg>
+                                            )}
+                                          </div>
+                                        )}
+                                        <img
+                                          src={image.imageUrl}
+                                          alt={image.caption || image.imageType}
+                                          className="w-full h-full object-cover"
+                                          onError={(e) => {
+                                            (e.target as HTMLImageElement).src = `data:image/svg+xml,${encodeURIComponent(`
+                                              <svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
+                                                <rect width="200" height="200" fill="#f3f4f6"/>
+                                                <text x="50%" y="50%" font-family="Arial" font-size="14" fill="#9ca3af" text-anchor="middle" dy=".3em">Image</text>
+                                              </svg>
+                                            `)}`;
+                                          }}
+                                        />
+                                        <div className="absolute top-2 left-2 flex flex-col gap-1">
+                                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                            image.imageType === 'profile' ? 'bg-blue-100 text-blue-800' :
+                                            image.imageType === 'before' ? 'bg-orange-100 text-orange-800' :
+                                            image.imageType === 'after' ? 'bg-green-100 text-green-800' :
+                                            'bg-purple-100 text-purple-800'
+                                          }`}>
+                                            {image.imageType === 'profile' ? 'Profile' :
+                                             image.imageType === 'before' ? 'Before' :
+                                             image.imageType === 'after' ? 'After' :
+                                             'Progress'}
+                                          </span>
+                                          {image.orientation && (
+                                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                              image.orientation === 'front' ? 'bg-pink-100 text-pink-800' :
+                                              image.orientation === 'back' ? 'bg-indigo-100 text-indigo-800' :
+                                              'bg-teal-100 text-teal-800'
+                                            }`}>
+                                              {image.orientation.charAt(0).toUpperCase() + image.orientation.slice(1)}
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div className="absolute bottom-2 right-2">
+                                          <span className="px-2 py-1 rounded-full text-xs font-medium bg-black bg-opacity-50 text-white">
+                                            {new Date(image.uploadedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                          </span>
+                                        </div>
+                                        {image.caption && (
+                                          <div className="absolute bottom-2 left-2 right-2">
+                                            <p className="px-2 py-1 rounded text-xs font-medium bg-black bg-opacity-50 text-white truncate">
+                                              {image.caption}
+                                            </p>
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            ))}
+                          </>
+                        );
+                      })()}
+                    </>
                   )}
                 </div>
               </div>
@@ -1905,105 +2121,77 @@ export default function ClientProfilePage() {
               </div>
             </div>
 
-            {/* Sidebar */}
-            <div className="space-y-8">
-              {/* Quick Stats */}
-              <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-                <div className="bg-gradient-to-r from-emerald-50 to-teal-50 px-6 py-4 border-b border-gray-100">
-                  <h3 className="text-lg font-bold text-gray-900">Quick Stats</h3>
+            {/* Compact Sidebar */}
+            <div className="space-y-4">
+              {/* Quick Actions - Compact */}
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div className="px-4 py-3 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-200">
+                  <h3 className="text-sm font-bold text-gray-900">Quick Actions</h3>
                 </div>
-                <div className="p-6 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-600">Total Check-ins</span>
-                    <span className="font-bold text-gray-900">{client.totalCheckIns || 0}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-600">Average Score</span>
-                    <span className="font-bold text-gray-900">
-                      {allocatedCheckIns.length > 0 
-                        ? Math.round(allocatedCheckIns.reduce((sum, c) => sum + c.score, 0) / allocatedCheckIns.length)
-                        : 0}%
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-600">Completion Rate</span>
-                    <span className="font-bold text-gray-900">100%</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Quick Actions */}
-              <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-6 py-4 border-b border-gray-100">
-                  <h3 className="text-lg font-bold text-gray-900">Quick Actions</h3>
-                </div>
-                <div className="p-6 space-y-3">
+                <div className="p-4 space-y-2">
                   <button
                     onClick={openQuickSendModal}
-                    className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-4 py-3 rounded-xl text-sm font-medium text-center transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                    className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 shadow-sm"
                   >
                     Send Check-in
                   </button>
                   <button
                     onClick={openAllocateModal}
-                    className="w-full bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-700 hover:to-cyan-700 text-white px-4 py-3 rounded-xl text-sm font-medium text-center transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                    className="w-full bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-700 hover:to-cyan-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 shadow-sm"
                   >
                     Allocate Check-in
                   </button>
                   <Link
                     href={`/clients/${clientId}/progress`}
-                    className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white px-4 py-3 rounded-xl text-sm font-medium text-center transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 block"
+                    className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white px-3 py-2 rounded-lg text-sm font-medium text-center transition-all duration-200 shadow-sm block"
                   >
                     View Progress
                   </Link>
                   <Link
                     href={`/clients/${clientId}/forms`}
-                    className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white px-4 py-3 rounded-xl text-sm font-medium text-center transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 block"
+                    className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white px-3 py-2 rounded-lg text-sm font-medium text-center transition-all duration-200 shadow-sm block"
                   >
                     Form Responses
                   </Link>
                   <button
                     onClick={() => {
-                      // Scroll to check-ins section
                       const checkInsSection = document.getElementById('check-ins-section');
                       if (checkInsSection) {
                         checkInsSection.scrollIntoView({ behavior: 'smooth' });
                       }
                     }}
-                    className="w-full bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 text-white px-4 py-3 rounded-xl text-sm font-medium text-center transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                    className="w-full bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 shadow-sm"
                   >
                     Manage Check-ins
                   </button>
                 </div>
               </div>
 
-              {/* Recent Activity */}
-              <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-                <div className="bg-gradient-to-r from-orange-50 to-red-50 px-6 py-4 border-b border-gray-100">
-                  <h3 className="text-lg font-bold text-gray-900">Recent Activity</h3>
+              {/* Recent Activity - Compact */}
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div className="px-4 py-3 bg-gradient-to-r from-orange-50 to-red-50 border-b border-gray-200">
+                  <h3 className="text-sm font-bold text-gray-900">Recent Activity</h3>
                 </div>
-                <div className="p-6">
-                  <div className="space-y-3">
-                    {client.lastCheckIn ? (
-                      <div className="flex items-center space-x-3">
-                        <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                        <div>
-                          <p className="text-gray-900 font-medium">Last check-in</p>
-                          <p className="text-gray-500 text-sm">
-                            {formatDate(client.lastCheckIn)}
-                          </p>
-                        </div>
+                <div className="p-4">
+                  {client.lastCheckIn ? (
+                    <div className="flex items-center space-x-2">
+                      <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">Last check-in</p>
+                        <p className="text-xs text-gray-500">
+                          {formatDate(client.lastCheckIn)}
+                        </p>
                       </div>
-                    ) : (
-                      <div className="flex items-center space-x-3">
-                        <div className="w-3 h-3 bg-gray-400 rounded-full"></div>
-                        <div>
-                          <p className="text-gray-900 font-medium">No check-ins yet</p>
-                          <p className="text-gray-500 text-sm">Send first check-in</p>
-                        </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center space-x-2">
+                      <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">No check-ins yet</p>
+                        <p className="text-xs text-gray-500">Send first check-in</p>
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -2045,14 +2233,43 @@ export default function ClientProfilePage() {
               {/* Start Date */}
               <div>
                 <label className="block text-sm font-medium text-gray-900 mb-2">
-                  Start Date *
+                  Program Start Date *
                 </label>
                 <input
                   type="date"
                   value={allocateStartDate}
-                  onChange={(e) => setAllocateStartDate(e.target.value)}
+                  onChange={(e) => {
+                    setAllocateStartDate(e.target.value);
+                    // Auto-calculate first check-in date (1 week after start date)
+                    if (e.target.value) {
+                      const startDate = new Date(e.target.value);
+                      const firstCheckInDate = new Date(startDate);
+                      firstCheckInDate.setDate(startDate.getDate() + 7); // Add 7 days
+                      setAllocateFirstCheckInDate(firstCheckInDate.toISOString().split('T')[0]);
+                    }
+                  }}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                 />
+                <p className="mt-1 text-xs text-gray-500">The week the program begins</p>
+              </div>
+
+              {/* First Check-in Date */}
+              <div>
+                <label className="block text-sm font-medium text-gray-900 mb-2">
+                  First Check-in Date *
+                </label>
+                <input
+                  type="date"
+                  value={allocateFirstCheckInDate}
+                  onChange={(e) => setAllocateFirstCheckInDate(e.target.value)}
+                  min={allocateStartDate ? (() => {
+                    const startDate = new Date(allocateStartDate);
+                    startDate.setDate(startDate.getDate() + 7);
+                    return startDate.toISOString().split('T')[0];
+                  })() : undefined}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                />
+                <p className="mt-1 text-xs text-gray-500">When is their first check-in? (typically 1 week after start date)</p>
               </div>
 
               {/* Frequency */}
@@ -2100,6 +2317,99 @@ export default function ClientProfilePage() {
                 />
               </div>
 
+              {/* Check-in Window */}
+              <div className="border-t border-gray-200 pt-4">
+                <label className="block text-sm font-medium text-gray-900 mb-3">
+                  Check-in Window
+                </label>
+                
+                <div className="mb-3">
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={allocateCheckInWindow.enabled}
+                      onChange={(e) => setAllocateCheckInWindow({
+                        ...allocateCheckInWindow,
+                        enabled: e.target.checked
+                      })}
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className="ml-2 text-sm text-gray-700">Enable check-in window</span>
+                  </label>
+                </div>
+
+                {allocateCheckInWindow.enabled && (
+                  <div className="space-y-3 pl-6 border-l-2 border-gray-200">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Start Day</label>
+                        <select
+                          value={allocateCheckInWindow.startDay}
+                          onChange={(e) => setAllocateCheckInWindow({
+                            ...allocateCheckInWindow,
+                            startDay: e.target.value
+                          })}
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="monday">Monday</option>
+                          <option value="tuesday">Tuesday</option>
+                          <option value="wednesday">Wednesday</option>
+                          <option value="thursday">Thursday</option>
+                          <option value="friday">Friday</option>
+                          <option value="saturday">Saturday</option>
+                          <option value="sunday">Sunday</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Start Time</label>
+                        <input
+                          type="time"
+                          value={allocateCheckInWindow.startTime}
+                          onChange={(e) => setAllocateCheckInWindow({
+                            ...allocateCheckInWindow,
+                            startTime: e.target.value
+                          })}
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">End Day</label>
+                        <select
+                          value={allocateCheckInWindow.endDay}
+                          onChange={(e) => setAllocateCheckInWindow({
+                            ...allocateCheckInWindow,
+                            endDay: e.target.value
+                          })}
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="monday">Monday</option>
+                          <option value="tuesday">Tuesday</option>
+                          <option value="wednesday">Wednesday</option>
+                          <option value="thursday">Thursday</option>
+                          <option value="friday">Friday</option>
+                          <option value="saturday">Saturday</option>
+                          <option value="sunday">Sunday</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">End Time</label>
+                        <input
+                          type="time"
+                          value={allocateCheckInWindow.endTime}
+                          onChange={(e) => setAllocateCheckInWindow({
+                            ...allocateCheckInWindow,
+                            endTime: e.target.value
+                          })}
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* Action Buttons */}
               <div className="flex space-x-3 pt-4">
                 <button
@@ -2110,7 +2420,7 @@ export default function ClientProfilePage() {
                 </button>
                 <button
                   onClick={handleAllocateCheckIn}
-                  disabled={!selectedAllocateForm || !allocateStartDate || allocatingCheckIn}
+                  disabled={!selectedAllocateForm || !allocateStartDate || !allocateFirstCheckInDate || allocatingCheckIn}
                   className="flex-1 px-4 py-2 bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-700 hover:to-cyan-700 text-white rounded-lg font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {allocatingCheckIn ? 'Allocating...' : 'Allocate Check-in'}
@@ -2122,14 +2432,24 @@ export default function ClientProfilePage() {
       )}
 
       {/* Check-in Management Modal */}
+      {/* Note: Editing here only affects this specific client's assignment.
+          The master form template (default frequency, window, etc.) remains unchanged.
+          This allows flexibility to customize check-ins per client. */}
       {showCheckInManagementModal && selectedCheckIn && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
             <div className="px-6 py-4 border-b border-gray-200">
               <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-gray-900">
-                  Manage Check-in
-                </h3>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Manage Check-in
+                  </h3>
+                  {client && (
+                    <p className="text-sm text-gray-600 mt-1">
+                      For: <span className="font-medium text-gray-900">{client.firstName} {client.lastName}</span>
+                    </p>
+                  )}
+                </div>
                 <button
                   onClick={() => setShowCheckInManagementModal(false)}
                   className="text-gray-400 hover:text-gray-600"
@@ -2154,26 +2474,191 @@ export default function ClientProfilePage() {
                   Status
                 </label>
                 <select
-                  value={selectedCheckIn.status}
-                  onChange={(e) => setSelectedCheckIn({...selectedCheckIn, status: e.target.value})}
+                  value={selectedCheckIn.status === 'active' || selectedCheckIn.status === 'inactive' ? selectedCheckIn.status : (selectedCheckIn.status === 'completed' ? 'completed' : 'active')}
+                  onChange={(e) => {
+                    const newStatus = e.target.value;
+                    setSelectedCheckIn({
+                      ...selectedCheckIn, 
+                      status: newStatus,
+                      // Clear pausedUntil if switching to active
+                      pausedUntil: newStatus === 'active' ? undefined : selectedCheckIn.pausedUntil
+                    });
+                  }}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value="pending">Pending</option>
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive (Paused)</option>
                   <option value="completed">Completed</option>
-                  <option value="overdue">Overdue</option>
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Set to "Inactive" to pause notifications when client is on holiday
+                </p>
+              </div>
+
+              {/* Paused Until - Only show when status is inactive */}
+              {selectedCheckIn.status === 'inactive' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-900 mb-2">
+                    Paused Until
+                  </label>
+                  <input
+                    type="date"
+                    value={selectedCheckIn.pausedUntil ? (typeof selectedCheckIn.pausedUntil === 'string' ? selectedCheckIn.pausedUntil.split('T')[0] : new Date(selectedCheckIn.pausedUntil).toISOString().split('T')[0]) : ''}
+                    onChange={(e) => setSelectedCheckIn({...selectedCheckIn, pausedUntil: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Check-in will automatically resume on this date
+                  </p>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-900 mb-2">
+                  Frequency
+                </label>
+                <select
+                  value={selectedCheckIn.frequency || 'weekly'}
+                  onChange={(e) => setSelectedCheckIn({...selectedCheckIn, frequency: e.target.value, isRecurring: e.target.value !== 'once'})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="once">Once</option>
+                  <option value="weekly">Weekly</option>
+                  <option value="monthly">Monthly</option>
                 </select>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-900 mb-2">
-                  Due Date
+                  Start Date
                 </label>
                 <input
                   type="date"
-                  value={selectedCheckIn.dueDate ? new Date(selectedCheckIn.dueDate).toISOString().split('T')[0] : ''}
-                  onChange={(e) => setSelectedCheckIn({...selectedCheckIn, dueDate: e.target.value})}
+                  value={selectedCheckIn.startDate ? (typeof selectedCheckIn.startDate === 'string' ? selectedCheckIn.startDate.split('T')[0] : new Date(selectedCheckIn.startDate).toISOString().split('T')[0]) : ''}
+                  onChange={(e) => setSelectedCheckIn({...selectedCheckIn, startDate: e.target.value})}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-900 mb-2">
+                  Duration (Weeks)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  value={selectedCheckIn.totalWeeks || selectedCheckIn.duration || 1}
+                  onChange={(e) => setSelectedCheckIn({...selectedCheckIn, totalWeeks: parseInt(e.target.value) || 1, duration: parseInt(e.target.value) || 1})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* Check-in Window Section */}
+              <div className="border-t pt-4 mt-4">
+                <label className="block text-sm font-medium text-gray-900 mb-3">
+                  Check-in Window
+                </label>
+                
+                <div className="mb-3">
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={selectedCheckIn.checkInWindow?.enabled !== false}
+                      onChange={(e) => setSelectedCheckIn({
+                        ...selectedCheckIn,
+                        checkInWindow: {
+                          ...(selectedCheckIn.checkInWindow || { startDay: 'friday', startTime: '10:00', endDay: 'monday', endTime: '22:00' }),
+                          enabled: e.target.checked
+                        }
+                      })}
+                      className="mr-2"
+                    />
+                    <span className="text-sm text-gray-700">Enable check-in window</span>
+                  </label>
+                </div>
+
+                {selectedCheckIn.checkInWindow?.enabled !== false && (
+                  <div className="space-y-3 pl-6 border-l-2 border-gray-200">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Start Day</label>
+                        <select
+                          value={selectedCheckIn.checkInWindow?.startDay || 'friday'}
+                          onChange={(e) => setSelectedCheckIn({
+                            ...selectedCheckIn,
+                            checkInWindow: {
+                              ...(selectedCheckIn.checkInWindow || { enabled: true, startTime: '10:00', endDay: 'monday', endTime: '22:00' }),
+                              startDay: e.target.value
+                            }
+                          })}
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="monday">Monday</option>
+                          <option value="tuesday">Tuesday</option>
+                          <option value="wednesday">Wednesday</option>
+                          <option value="thursday">Thursday</option>
+                          <option value="friday">Friday</option>
+                          <option value="saturday">Saturday</option>
+                          <option value="sunday">Sunday</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Start Time</label>
+                        <input
+                          type="time"
+                          value={selectedCheckIn.checkInWindow?.startTime || '10:00'}
+                          onChange={(e) => setSelectedCheckIn({
+                            ...selectedCheckIn,
+                            checkInWindow: {
+                              ...(selectedCheckIn.checkInWindow || { enabled: true, startDay: 'friday', endDay: 'monday', endTime: '22:00' }),
+                              startTime: e.target.value
+                            }
+                          })}
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">End Day</label>
+                        <select
+                          value={selectedCheckIn.checkInWindow?.endDay || 'monday'}
+                          onChange={(e) => setSelectedCheckIn({
+                            ...selectedCheckIn,
+                            checkInWindow: {
+                              ...(selectedCheckIn.checkInWindow || { enabled: true, startDay: 'friday', startTime: '10:00', endTime: '22:00' }),
+                              endDay: e.target.value
+                            }
+                          })}
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="monday">Monday</option>
+                          <option value="tuesday">Tuesday</option>
+                          <option value="wednesday">Wednesday</option>
+                          <option value="thursday">Thursday</option>
+                          <option value="friday">Friday</option>
+                          <option value="saturday">Saturday</option>
+                          <option value="sunday">Sunday</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">End Time</label>
+                        <input
+                          type="time"
+                          value={selectedCheckIn.checkInWindow?.endTime || '22:00'}
+                          onChange={(e) => setSelectedCheckIn({
+                            ...selectedCheckIn,
+                            checkInWindow: {
+                              ...(selectedCheckIn.checkInWindow || { enabled: true, startDay: 'friday', startTime: '10:00', endDay: 'monday' }),
+                              endTime: e.target.value
+                            }
+                          })}
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -2200,7 +2685,13 @@ export default function ClientProfilePage() {
                 <button
                   onClick={() => handleUpdateCheckIn(selectedCheckIn.id, {
                     status: selectedCheckIn.status,
-                    dueDate: selectedCheckIn.dueDate,
+                    startDate: selectedCheckIn.startDate,
+                    frequency: selectedCheckIn.frequency,
+                    duration: selectedCheckIn.totalWeeks || selectedCheckIn.duration,
+                    totalWeeks: selectedCheckIn.totalWeeks || selectedCheckIn.duration,
+                    checkInWindow: selectedCheckIn.checkInWindow,
+                    isRecurring: selectedCheckIn.frequency !== 'once',
+                    pausedUntil: selectedCheckIn.pausedUntil,
                     notes: selectedCheckIn.notes
                   })}
                   disabled={updatingCheckIn}

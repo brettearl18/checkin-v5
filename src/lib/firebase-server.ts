@@ -13,7 +13,7 @@ function initializeFirebaseAdmin() {
       // Initialize with default credentials for local development
       try {
         initializeApp({
-          projectId: 'checkinv5',
+          projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'checkinv5',
         });
       } catch (error) {
         console.error('Error initializing Firebase Admin with default config:', error);
@@ -27,7 +27,7 @@ function initializeFirebaseAdmin() {
       
       initializeApp({
         credential: cert(serviceAccount),
-        projectId: 'checkinv5', // Your project ID
+        projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || serviceAccount.project_id || 'checkinv5',
       });
     } catch (error) {
       console.error('Error parsing FIREBASE_SERVICE_ACCOUNT:', error);

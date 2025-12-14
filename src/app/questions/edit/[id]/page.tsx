@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { RoleProtected } from '@/components/ProtectedRoute';
@@ -21,7 +21,12 @@ interface QuestionFormData {
 export default function EditQuestionPage() {
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
   const questionId = params.id as string;
+  const returnUrlParam = searchParams?.get('returnUrl');
+  const [returnUrl] = useState<string | null>(() => {
+    return returnUrlParam ? decodeURIComponent(returnUrlParam) : null;
+  });
   const { userProfile, logout } = useAuth();
   const [formData, setFormData] = useState<QuestionFormData>({
     text: '',
@@ -64,6 +69,15 @@ export default function EditQuestionPage() {
     'Medical History',
     'General'
   ];
+
+  // Log returnUrl for debugging
+  useEffect(() => {
+    if (returnUrl) {
+      console.log('Return URL detected:', returnUrl);
+    } else {
+      console.log('No return URL found in search params');
+    }
+  }, [returnUrl]);
 
   // Fetch question data on mount
   useEffect(() => {
@@ -267,8 +281,14 @@ export default function EditQuestionPage() {
       const data = await response.json();
 
       if (data.success) {
-        // Redirect to question library with success message
-        router.push('/questions/library?success=true&updated=true');
+        // Redirect back to returnUrl if provided, otherwise to question library
+        if (returnUrl) {
+          console.log('Redirecting back to:', returnUrl);
+          router.push(`${returnUrl}?questionUpdated=true`);
+        } else {
+          console.log('No returnUrl found, redirecting to library');
+          router.push('/questions/library?success=true&updated=true');
+        }
       } else {
         console.error('Error updating question:', data.message, data);
         alert('Failed to update question: ' + (data.message || 'Unknown error'));

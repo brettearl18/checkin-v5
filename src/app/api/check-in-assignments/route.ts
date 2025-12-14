@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
     const formData = await request.json();
     
     // Validate required fields
-    const { formId, clientId, coachId, frequency, duration, startDate, dueTime, checkInWindow, status } = formData;
+    const { formId, clientId, coachId, frequency, duration, startDate, firstCheckInDate, dueTime, checkInWindow, status } = formData;
     
     if (!formId || !clientId || !coachId) {
       return NextResponse.json({
@@ -35,6 +35,22 @@ export async function POST(request: NextRequest) {
     // Generate unique assignment ID
     const assignmentId = `assignment-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     
+    // Use firstCheckInDate for calculating dueDate (first check-in is the week after start date)
+    // If firstCheckInDate is not provided, default to startDate + 7 days
+    const startDateValue = startDate || new Date().toISOString().split('T')[0];
+    let firstCheckInDateValue = firstCheckInDate;
+    if (!firstCheckInDateValue && startDateValue) {
+      const start = new Date(startDateValue);
+      start.setDate(start.getDate() + 7); // Add 7 days
+      firstCheckInDateValue = start.toISOString().split('T')[0];
+    }
+    
+    // Calculate dueDate from firstCheckInDate and dueTime
+    const dueTimeValue = dueTime || '09:00';
+    const [hours, minutes] = dueTimeValue.split(':').map(Number);
+    const dueDate = new Date(firstCheckInDateValue || startDateValue);
+    dueDate.setHours(hours, minutes, 0, 0);
+    
     // Create assignment object
     const assignment = {
       id: assignmentId,
@@ -44,10 +60,12 @@ export async function POST(request: NextRequest) {
       coachId,
       frequency: frequency || 'weekly',
       duration: duration || 4,
-      startDate: startDate || new Date().toISOString().split('T')[0],
-      dueTime: dueTime || '09:00',
+      startDate: startDateValue, // Program start date
+      firstCheckInDate: firstCheckInDateValue || startDateValue, // First check-in date (week after start)
+      dueDate: dueDate, // Add calculated dueDate based on first check-in
+      dueTime: dueTimeValue,
       checkInWindow: checkInWindow || DEFAULT_CHECK_IN_WINDOW,
-      status: status || 'pending',
+      status: status || 'active', // Default to 'active' - use 'inactive' to pause notifications
       assignedAt: new Date(),
       completedAt: null,
       score: 0,

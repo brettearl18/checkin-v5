@@ -74,6 +74,17 @@ export default function CheckInSuccessPage() {
   const [score, setScore] = useState(0);
   const [thresholds, setThresholds] = useState<ScoringThresholds>(getDefaultThresholds('lifestyle'));
   const [trafficLightStatus, setTrafficLightStatus] = useState<TrafficLightStatus>('orange');
+  const [showScoringInfo, setShowScoringInfo] = useState(false);
+  const [questions, setQuestions] = useState<any[]>([]);
+  const [questionScores, setQuestionScores] = useState<Array<{
+    questionId: string;
+    question: string;
+    answer: any;
+    questionScore: number;
+    questionWeight: number;
+    weightedScore: number;
+    type: string;
+  }>>([]);
 
   const assignmentId = params.id as string;
   const scoreParam = searchParams.get('score');
@@ -101,6 +112,31 @@ export default function CheckInSuccessPage() {
             setFormResponse(responseData);
             const responseScore = responseData.score || 0;
             setScore(responseScore);
+
+            // Fetch questions from the form to calculate per-question scores
+            try {
+              const formDoc = await getDoc(doc(db, 'forms', assignmentData.formId));
+              if (formDoc.exists()) {
+                const formData = formDoc.data();
+                const questionIds = formData.questions || [];
+                
+                // Fetch all questions
+                const questionsData: any[] = [];
+                for (const questionId of questionIds) {
+                  const questionDoc = await getDoc(doc(db, 'questions', questionId));
+                  if (questionDoc.exists()) {
+                    questionsData.push({ id: questionDoc.id, ...questionDoc.data() });
+                  }
+                }
+                setQuestions(questionsData);
+                
+                // Calculate scores for each question
+                const calculatedScores = calculateQuestionScores(questionsData, responseData.responses);
+                setQuestionScores(calculatedScores);
+              }
+            } catch (error) {
+              console.error('Error fetching questions:', error);
+            }
 
             // Fetch client scoring configuration
             try {
@@ -149,6 +185,123 @@ export default function CheckInSuccessPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Calculate individual question scores
+  const calculateQuestionScores = (questionsData: any[], responses: FormResponse['responses']) => {
+    const scores: Array<{
+      questionId: string;
+      question: string;
+      answer: any;
+      questionScore: number;
+      questionWeight: number;
+      weightedScore: number;
+      type: string;
+    }> = [];
+    
+    responses.forEach((response) => {
+      const question = questionsData.find(q => q.id === response.questionId);
+      if (!question) return;
+      
+      // Get question weight (default to 5 if not set)
+      const questionWeight = question.questionWeight || question.weight || 5;
+      
+      let questionScore = 0; // Score out of 10
+      
+      switch (question.type) {
+        case 'scale':
+        case 'rating':
+          const scaleValue = Number(response.answer);
+          if (!isNaN(scaleValue) && scaleValue >= 1 && scaleValue <= 10) {
+            questionScore = scaleValue;
+          }
+          break;
+          
+        case 'number':
+          const numValue = Number(response.answer);
+          if (!isNaN(numValue)) {
+            if (numValue >= 0 && numValue <= 100) {
+              questionScore = 1 + (numValue / 100) * 9;
+            } else {
+              questionScore = Math.min(10, Math.max(1, numValue / 10));
+            }
+          }
+          break;
+          
+        case 'multiple_choice':
+        case 'select':
+          if (question.options && Array.isArray(question.options)) {
+            const getOptionMatchValue = (opt: any) => {
+              if (typeof opt === 'string') return opt;
+              if (typeof opt === 'object' && opt.value) return opt.value;
+              if (typeof opt === 'object' && opt.text) return opt.text;
+              return String(opt);
+            };
+            
+            const optionWithWeight = question.options.find((opt: any) => {
+              const optValue = getOptionMatchValue(opt);
+              const optText = typeof opt === 'object' && opt.text ? opt.text : optValue;
+              return optValue === String(response.answer) || optText === String(response.answer);
+            });
+            
+            if (optionWithWeight && typeof optionWithWeight === 'object' && optionWithWeight.weight) {
+              questionScore = optionWithWeight.weight;
+            } else {
+              const selectedIndex = question.options.findIndex((opt: any) => {
+                const optValue = getOptionMatchValue(opt);
+                const optText = typeof opt === 'object' && opt.text ? opt.text : optValue;
+                return optValue === String(response.answer) || optText === String(response.answer);
+              });
+              if (selectedIndex >= 0) {
+                const numOptions = question.options.length;
+                questionScore = numOptions === 1 ? 5 : 1 + (selectedIndex / (numOptions - 1)) * 9;
+              }
+            }
+          }
+          break;
+          
+        case 'boolean':
+          const yesIsPositive = question.yesIsPositive !== undefined ? question.yesIsPositive : true;
+          const isYes = response.answer === true || response.answer === 'yes' || response.answer === 'Yes';
+          questionScore = yesIsPositive ? (isYes ? 8 : 3) : (isYes ? 3 : 8);
+          break;
+          
+        case 'text':
+          questionScore = 5; // Neutral score for text
+          break;
+          
+        case 'textarea':
+          const textareaAnswer = String(response.answer).trim().toLowerCase();
+          if (textareaAnswer === 'great') {
+            questionScore = 9;
+          } else if (textareaAnswer === 'average') {
+            questionScore = 5;
+          } else if (textareaAnswer === 'poor') {
+            questionScore = 2;
+          } else {
+            questionScore = 5;
+          }
+          break;
+          
+        default:
+          questionScore = 5;
+          break;
+      }
+      
+      const weightedScore = questionScore * questionWeight;
+      
+      scores.push({
+        questionId: question.id,
+        question: response.question,
+        answer: response.answer,
+        questionScore,
+        questionWeight,
+        weightedScore,
+        type: question.type
+      });
+    });
+    
+    return scores;
   };
 
   // Use traffic light system instead of hardcoded thresholds
@@ -316,6 +469,147 @@ export default function CheckInSuccessPage() {
               </div>
             </div>
 
+            {/* Scoring Formula & Traffic Light Info */}
+            <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200/60 p-5 mb-6">
+              <button
+                onClick={() => setShowScoringInfo(!showScoringInfo)}
+                className="w-full flex items-center justify-between text-left"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-lg flex items-center justify-center">
+                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-gray-900">How Your Score is Calculated</h3>
+                    <p className="text-xs text-gray-600">Learn about the scoring formula and traffic light system</p>
+                  </div>
+                </div>
+                <svg 
+                  className={`w-5 h-5 text-gray-400 transition-transform ${showScoringInfo ? 'rotate-180' : ''}`}
+                  fill="none" 
+                  stroke="currentColor" 
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              {showScoringInfo && (
+                <div className="mt-6 pt-6 border-t border-gray-200 space-y-6">
+                  {/* Scoring Formula */}
+                  <div>
+                    <h4 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
+                      <span className="text-blue-600">📊</span>
+                      Scoring Formula
+                    </h4>
+                    <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+                      <div className="text-sm text-gray-700">
+                        <p className="font-semibold mb-2">Each question contributes to your score:</p>
+                        <div className="bg-white rounded p-3 font-mono text-xs border border-gray-200">
+                          <div className="mb-2">weightedScore = questionScore × questionWeight</div>
+                          <div className="mb-2">totalScore = (Σ weightedScores / (Σ weights × 10)) × 100</div>
+                        </div>
+                      </div>
+                      <div className="text-xs text-gray-600 space-y-1">
+                        <p>• <strong>Question Weight (1-10):</strong> How important the question is</p>
+                        <p>• <strong>Question Score (1-10):</strong> Your answer converted to a score</p>
+                        <p>• <strong>Final Score (0-100%):</strong> Weighted average of all questions</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Answer Scoring */}
+                  <div>
+                    <h4 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
+                      <span className="text-green-600">✅</span>
+                      How Answers Are Scored
+                    </h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-gray-700">
+                      <div className="bg-gray-50 rounded-lg p-3">
+                        <p className="font-semibold mb-1">Scale (1-10):</p>
+                        <p>Direct value (e.g., 7 = 7/10)</p>
+                      </div>
+                      <div className="bg-gray-50 rounded-lg p-3">
+                        <p className="font-semibold mb-1">Yes/No:</p>
+                        <p>Yes = 8/10, No = 3/10</p>
+                      </div>
+                      <div className="bg-gray-50 rounded-lg p-3">
+                        <p className="font-semibold mb-1">Single/Multiple Choice:</p>
+                        <p>Uses option weights if set</p>
+                      </div>
+                      <div className="bg-gray-50 rounded-lg p-3">
+                        <p className="font-semibold mb-1">Text Questions:</p>
+                        <p>Neutral score of 5/10</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Traffic Light Thresholds */}
+                  <div>
+                    <h4 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
+                      <span className="text-yellow-600">🚦</span>
+                      Your Traffic Light Thresholds
+                    </h4>
+                    <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg p-4">
+                      <div className="grid grid-cols-3 gap-3 mb-3">
+                        <div className="bg-white rounded-lg p-3 border-2 border-red-200">
+                          <div className="flex items-center gap-1 mb-1">
+                            <span className="text-lg">🔴</span>
+                            <span className="font-bold text-red-700 text-xs">Red Zone</span>
+                          </div>
+                          <p className="text-xs font-semibold text-gray-900">0 - {thresholds.redMax}%</p>
+                          <p className="text-xs text-gray-600 mt-1">Needs Attention</p>
+                        </div>
+                        <div className="bg-white rounded-lg p-3 border-2 border-orange-200">
+                          <div className="flex items-center gap-1 mb-1">
+                            <span className="text-lg">🟠</span>
+                            <span className="font-bold text-orange-700 text-xs">Orange Zone</span>
+                          </div>
+                          <p className="text-xs font-semibold text-gray-900">{thresholds.redMax + 1} - {thresholds.orangeMax}%</p>
+                          <p className="text-xs text-gray-600 mt-1">On Track</p>
+                        </div>
+                        <div className="bg-white rounded-lg p-3 border-2 border-green-200">
+                          <div className="flex items-center gap-1 mb-1">
+                            <span className="text-lg">🟢</span>
+                            <span className="font-bold text-green-700 text-xs">Green Zone</span>
+                          </div>
+                          <p className="text-xs font-semibold text-gray-900">{thresholds.orangeMax + 1} - 100%</p>
+                          <p className="text-xs text-gray-600 mt-1">Excellent</p>
+                        </div>
+                      </div>
+                      <p className="text-xs text-gray-600 italic">
+                        These thresholds are personalized based on your client profile and goals.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Example Calculation */}
+                  <div>
+                    <h4 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
+                      <span className="text-purple-600">💡</span>
+                      Example Calculation
+                    </h4>
+                    <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                      <div className="text-xs text-gray-700 space-y-2">
+                        <p><strong>3 Questions:</strong></p>
+                        <ul className="list-disc list-inside space-y-1 ml-2">
+                          <li>Q1: Sleep (Weight 8) → Answer: 7 → Score: 7 × 8 = 56</li>
+                          <li>Q2: Exercise (Weight 5) → Answer: Yes → Score: 8 × 5 = 40</li>
+                          <li>Q3: Notes (Weight 2) → Answer: Text → Score: 5 × 2 = 10</li>
+                        </ul>
+                        <div className="mt-3 pt-3 border-t border-blue-200">
+                          <p><strong>Total:</strong> (56 + 40 + 10) / (15 × 10) × 100 = <strong>71%</strong></p>
+                          <p className="mt-1 text-orange-700 font-semibold">→ 🟠 Orange Zone (On Track)</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Assignment Details */}
             {assignment && (
               <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200/60 p-5 mb-6">
@@ -396,6 +690,82 @@ export default function CheckInSuccessPage() {
                 </div>
               </div>
             </div>
+
+            {/* Question Score Breakdown */}
+            {questionScores.length > 0 && (
+              <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200/60 p-5 mb-6">
+                <h3 className="text-base font-bold text-gray-900 mb-4">Question Score Breakdown</h3>
+                <div className="space-y-3">
+                  {questionScores.map((item, index) => {
+                    const percentage = item.questionWeight > 0 
+                      ? Math.round((item.weightedScore / (item.questionWeight * 10)) * 100)
+                      : 0;
+                    
+                    return (
+                      <div key={item.questionId} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-sm font-semibold text-gray-700">Q{index + 1}:</span>
+                              <span className="text-sm font-medium text-gray-900">{item.question}</span>
+                            </div>
+                            <div className="text-xs text-gray-600 mt-1">
+                              <span className="font-semibold">Answer:</span> {
+                                typeof item.answer === 'boolean' 
+                                  ? (item.answer ? 'Yes' : 'No')
+                                  : String(item.answer)
+                              }
+                            </div>
+                          </div>
+                          <div className="text-right ml-4">
+                            <div className="text-lg font-bold text-gray-900">{item.questionScore}/10</div>
+                            <div className="text-xs text-gray-600">Score</div>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-3 gap-3 mt-3 pt-3 border-t border-gray-200">
+                          <div className="text-center">
+                            <div className="text-xs text-gray-600 mb-1">Weight</div>
+                            <div className="text-sm font-bold text-gray-900">{item.questionWeight}/10</div>
+                          </div>
+                          <div className="text-center">
+                            <div className="text-xs text-gray-600 mb-1">Weighted</div>
+                            <div className="text-sm font-bold text-gray-900">{item.weightedScore}</div>
+                          </div>
+                          <div className="text-center">
+                            <div className="text-xs text-gray-600 mb-1">Contribution</div>
+                            <div className="text-sm font-bold text-gray-900">{percentage}%</div>
+                          </div>
+                        </div>
+                        <div className="mt-2">
+                          <div className="w-full bg-gray-200 rounded-full h-1.5">
+                            <div 
+                              className={`h-1.5 rounded-full transition-all ${
+                                item.questionScore >= 8 ? 'bg-green-500' :
+                                item.questionScore >= 5 ? 'bg-yellow-500' :
+                                'bg-red-500'
+                              }`}
+                              style={{ width: `${(item.questionScore / 10) * 100}%` }}
+                            ></div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="mt-4 pt-4 border-t border-gray-200 bg-blue-50 rounded-lg p-3">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="font-semibold text-gray-900">Total Weighted Score:</span>
+                    <span className="font-bold text-gray-900">
+                      {questionScores.reduce((sum, item) => sum + item.weightedScore, 0)} / {questionScores.reduce((sum, item) => sum + item.questionWeight * 10, 0)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm mt-2">
+                    <span className="font-semibold text-gray-900">Final Score:</span>
+                    <span className="font-bold text-gray-900">{score}%</span>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Your Responses */}
             {formResponse && formResponse.responses && formResponse.responses.length > 0 && (

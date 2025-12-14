@@ -175,3 +175,4 @@ This provides:
 - **Detailed** status per check-in in Recent Responses
 - **Comprehensive** overview in the sidebar widget
 
+

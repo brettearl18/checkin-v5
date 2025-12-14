@@ -1,0 +1,33 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Progress images - clients can upload their own images
+    match /progress-images/{userId}/{imageId} {
+      // Allow read if user owns the image or is their coach
+      allow read: if request.auth != null && (
+        request.auth.uid == userId || 
+        resource.metadata.coachId == request.auth.uid
+      );
+      
+      // Allow write if user owns the image
+      allow write: if request.auth != null && request.auth.uid == userId;
+      
+      // Allow delete if user owns the image
+      allow delete: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Profile photos
+    match /profile-photos/{userId}/{photoId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == userId;
+      allow delete: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Default: deny all other access
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
+

@@ -168,3 +168,4 @@ export function convertLegacyThresholds(oldThresholds: {
   return scoringProfiles.lifestyle.thresholds;
 }
 
+

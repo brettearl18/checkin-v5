@@ -23,6 +23,7 @@ firebase-debug.log
 firestore-debug.log
 ui-debug.log
 sdk.json
+# Allow specific JSON files
 *.json
 !.firebaserc
 !firebase.json

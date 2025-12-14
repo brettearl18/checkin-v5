@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
         .orderBy('dueDate', 'asc')
         .get();
 
-      allAssignments = assignmentsSnapshot.docs.map(doc => {
+      allAssignments = await Promise.all(assignmentsSnapshot.docs.map(async (doc) => {
         const data = doc.data();
         
         // Helper function to convert date fields
@@ -69,12 +69,32 @@ export async function GET(request: NextRequest) {
           return new Date().toISOString();
         };
 
+        // Check if pausedUntil date has passed - auto-reactivate if so
+        let status = data.status || 'active';
+        let pausedUntil = data.pausedUntil;
+        
+        if (status === 'inactive' && pausedUntil) {
+          const pausedUntilDate = pausedUntil?.toDate ? pausedUntil.toDate() : new Date(pausedUntil);
+          const now = new Date();
+          
+          // If pausedUntil date has passed, automatically reactivate
+          if (pausedUntilDate <= now) {
+            status = 'active';
+            pausedUntil = null;
+            // Update the assignment in the background
+            db.collection('check_in_assignments').doc(doc.id).update({
+              status: 'active',
+              pausedUntil: null
+            }).catch(err => console.error('Error auto-reactivating check-in:', err));
+          }
+        }
+        
         return {
           id: doc.id,
           title: data.formTitle || 'Check-in Assignment',
           description: data.description || 'Complete your assigned check-in',
           dueDate: convertDate(data.dueDate),
-          status: data.status || 'pending',
+          status: status,
           formId: data.formId || '',
           assignedBy: data.assignedBy || 'Coach',
           assignedAt: convertDate(data.assignedAt),
@@ -83,9 +103,33 @@ export async function GET(request: NextRequest) {
           isRecurring: data.isRecurring || false,
           recurringWeek: data.recurringWeek || 1,
           totalWeeks: data.totalWeeks || 1,
-          checkInWindow: data.checkInWindow || DEFAULT_CHECK_IN_WINDOW
+          checkInWindow: data.checkInWindow || DEFAULT_CHECK_IN_WINDOW,
+          pausedUntil: pausedUntil ? (pausedUntil?.toDate ? pausedUntil.toDate().toISOString() : new Date(pausedUntil).toISOString()) : undefined
         };
-      });
+        
+        // Check if coach has responded (has feedback)
+        let coachResponded = false;
+        const responseId = data.responseId;
+        
+        if (responseId) {
+          try {
+            const feedbackSnapshot = await db.collection('coachFeedback')
+              .where('responseId', '==', responseId)
+              .limit(1)
+              .get();
+            
+            coachResponded = !feedbackSnapshot.empty;
+          } catch (error) {
+            console.log('Error checking feedback:', error);
+          }
+        }
+
+        return {
+          ...assignment,
+          responseId: responseId,
+          coachResponded: coachResponded || data.coachResponded || false
+        };
+      }));
     } catch (indexError) {
       console.log('Index error, trying without orderBy:', indexError);
       
@@ -94,7 +138,7 @@ export async function GET(request: NextRequest) {
         .where('clientId', '==', clientId)
         .get();
 
-      allAssignments = assignmentsSnapshot.docs.map(doc => {
+      allAssignments = await Promise.all(assignmentsSnapshot.docs.map(async (doc) => {
         const data = doc.data();
         
         // Helper function to convert date fields
@@ -139,9 +183,32 @@ export async function GET(request: NextRequest) {
           isRecurring: data.isRecurring || false,
           recurringWeek: data.recurringWeek || 1,
           totalWeeks: data.totalWeeks || 1,
-          checkInWindow: data.checkInWindow || DEFAULT_CHECK_IN_WINDOW
+          checkInWindow: data.checkInWindow || DEFAULT_CHECK_IN_WINDOW,
+          responseId: (() => {
+            // Check if coach has responded (has feedback)
+            const responseId = data.responseId;
+            return responseId;
+          })(),
+          coachResponded: (async () => {
+            // Check if coach has responded (has feedback)
+            const responseId = data.responseId;
+            if (responseId) {
+              try {
+                const feedbackSnapshot = await db.collection('coachFeedback')
+                  .where('responseId', '==', responseId)
+                  .limit(1)
+                  .get();
+                
+                return !feedbackSnapshot.empty || data.coachResponded || false;
+              } catch (error) {
+                console.log('Error checking feedback:', error);
+                return data.coachResponded || false;
+              }
+            }
+            return false;
+          })()
         };
-      });
+      }));
 
       // Sort manually by due date
       allAssignments.sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
@@ -186,11 +253,13 @@ export async function GET(request: NextRequest) {
     }).length;
 
     // Check for overdue check-ins and create notifications
+    // Only send notifications for ACTIVE check-ins (not inactive/paused ones)
     const overdueAssignments = allAssignments.filter(assignment => {
       const dueDate = assignment.dueDate?.toDate ? assignment.dueDate.toDate() : new Date(assignment.dueDate);
       const now = new Date();
       const diffDays = Math.floor((now.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
-      return diffDays > 0 && assignment.status === 'pending';
+      // Only notify for active check-ins that are overdue
+      return diffDays > 0 && (assignment.status === 'active' || assignment.status === 'pending');
     });
 
     // Create notifications for overdue check-ins (limit to prevent spam)

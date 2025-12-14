@@ -57,6 +57,9 @@ export default function ResponseDetailPage() {
   const [markingAsReviewed, setMarkingAsReviewed] = useState(false);
   const [checkInsList, setCheckInsList] = useState<any[]>([]);
   const [currentIndex, setCurrentIndex] = useState<number>(-1);
+  const [coachResponded, setCoachResponded] = useState(false);
+  const [workflowStatus, setWorkflowStatus] = useState<'completed' | 'reviewed' | 'responded'>('completed');
+  const [feedbackCount, setFeedbackCount] = useState(0);
 
   useEffect(() => {
     const fetchResponseData = async () => {
@@ -102,6 +105,9 @@ export default function ResponseDetailPage() {
         setResponse(responseData.response);
         setQuestions(responseData.questions || []);
         setIsReviewed(responseData.response?.reviewedByCoach || false);
+        setCoachResponded(responseData.response?.coachResponded || false);
+        setWorkflowStatus(responseData.response?.workflowStatus || 'completed');
+        setFeedbackCount(responseData.response?.feedbackCount || 0);
         
         // Find current check-in index after we have both the list and the response
         if (checkIns.length > 0 && responseData.response) {
@@ -211,8 +217,25 @@ export default function ResponseDetailPage() {
         });
 
         if (res.ok) {
+          const result = await res.json();
           // Refetch feedback using the actual response ID
           await fetchFeedbackForResponse(actualResponseId);
+          
+          // Update workflow status if this was the first feedback
+          if (result.isFirstFeedback) {
+            setCoachResponded(true);
+            setWorkflowStatus('responded');
+            // Refetch response to get updated status
+            const responseRes = await fetch(`/api/responses/${responseId}?coachId=${userProfile?.uid}`);
+            if (responseRes.ok) {
+              const responseData = await responseRes.json();
+              if (responseData.success) {
+                setCoachResponded(responseData.response?.coachResponded || false);
+                setWorkflowStatus(responseData.response?.workflowStatus || 'completed');
+                setFeedbackCount(responseData.response?.feedbackCount || 0);
+              }
+            }
+          }
         } else {
           const errorData = await res.json();
           console.error('Error saving voice feedback:', errorData);
@@ -254,8 +277,25 @@ export default function ResponseDetailPage() {
       });
 
       if (res.ok) {
+        const result = await res.json();
         // Refetch feedback using the actual response ID
         await fetchFeedbackForResponse(actualResponseId);
+        
+        // Update workflow status if this was the first feedback
+        if (result.isFirstFeedback) {
+          setCoachResponded(true);
+          setWorkflowStatus('responded');
+          // Refetch response to get updated status
+          const responseRes = await fetch(`/api/responses/${responseId}?coachId=${userProfile?.uid}`);
+          if (responseRes.ok) {
+            const responseData = await responseRes.json();
+            if (responseData.success) {
+              setCoachResponded(responseData.response?.coachResponded || false);
+              setWorkflowStatus(responseData.response?.workflowStatus || 'completed');
+              setFeedbackCount(responseData.response?.feedbackCount || 0);
+            }
+          }
+        }
       } else {
         const errorData = await res.json();
         console.error('Error saving text feedback:', errorData);
@@ -526,11 +566,41 @@ export default function ResponseDetailPage() {
             </div>
           </div>
 
+          {/* Respond Section - Prominent Call to Action */}
+          {!coachResponded && (
+            <div className="bg-gradient-to-r from-yellow-50 via-orange-50 to-red-50 rounded-2xl shadow-xl border-2 border-yellow-300 overflow-hidden mb-8">
+              <div className="px-8 py-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-4">
+                    <div className="w-12 h-12 bg-yellow-500 rounded-full flex items-center justify-center">
+                      <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h2 className="text-2xl font-bold text-gray-900">Action Required: Provide Feedback</h2>
+                      <p className="text-gray-700 mt-1">Your client is waiting for your feedback. Add voice notes or text feedback below.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Questions and Answers with Coach Feedback */}
           <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden mb-8">
             <div className="bg-gradient-to-r from-green-50 to-emerald-50 px-8 py-6 border-b border-gray-100">
-              <h2 className="text-2xl font-bold text-gray-900">Questions & Answers</h2>
-              <p className="text-gray-600 mt-1">Add voice notes or text feedback for each question</p>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">Questions & Answers</h2>
+                  <p className="text-gray-600 mt-1">Add voice notes or text feedback for each question</p>
+                </div>
+                {coachResponded && (
+                  <div className="px-4 py-2 bg-green-100 text-green-700 rounded-lg font-medium">
+                    ✓ Feedback Provided
+                  </div>
+                )}
+              </div>
             </div>
             <div className="p-8">
               {questions.length === 0 ? (

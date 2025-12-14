@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { RoleProtected } from '@/components/ProtectedRoute';
@@ -129,9 +129,12 @@ function SortableQuestionItem({
 
 export default function CreateFormPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { userProfile, logout } = useAuth();
   const [currentStep, setCurrentStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
+  const [showScoringInfo, setShowScoringInfo] = useState(false);
+  const [previewThresholds, setPreviewThresholds] = useState({ redMax: 33, orangeMax: 80 });
   const [questions, setQuestions] = useState<Question[]>([]);
   const [clients, setCliients] = useState<Client[]>([]);
   const [selectedQuestions, setSelectedQuestions] = useState<string[]>([]);
@@ -139,6 +142,10 @@ export default function CreateFormPage() {
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('all');
   const [selectedTypeFilter, setSelectedTypeFilter] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [isSavingQuestion, setIsSavingQuestion] = useState(false);
+  const [editFormData, setEditFormData] = useState<any>(null);
   
   // Drag and drop sensors
   const sensors = useSensors(
@@ -228,6 +235,25 @@ export default function CreateFormPage() {
     fetchData();
   }, [userProfile?.uid]);
 
+  // Refresh questions when returning from edit page
+  useEffect(() => {
+    const questionUpdated = searchParams?.get('questionUpdated');
+    if (questionUpdated === 'true' && userProfile?.uid) {
+      // Refresh questions list
+      fetch(`/api/questions?coachId=${userProfile.uid}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            setQuestions(data.questions || []);
+          }
+        })
+        .catch(err => console.error('Error refreshing questions:', err));
+      
+      // Remove the query parameter from URL
+      router.replace('/forms/create');
+    }
+  }, [searchParams, userProfile?.uid, router]);
+
   const handleInputChange = (field: string, value: any) => {
     setFormData(prev => ({
       ...prev,
@@ -280,6 +306,197 @@ export default function CreateFormPage() {
         : [...prev, clientId];
       return newSelection;
     });
+  };
+
+  const openEditModal = async (question: Question) => {
+    try {
+      // Fetch full question data
+      const response = await fetch(`/api/questions/${question.id}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.question) {
+          const q = data.question;
+          
+          // Prepare form data similar to question edit page
+          let options: Array<{ text: string; weight: number }> = [];
+          if (q.options && Array.isArray(q.options)) {
+            options = q.options.map((opt: any) => ({
+              text: typeof opt === 'string' ? opt : (opt.text || opt.value || String(opt)),
+              weight: opt.weight || opt.value || 5
+            }));
+          }
+          
+          // For scale questions, ensure we have all 10 options
+          if ((q.type === 'scale' || q.questionType === 'scale') && options.length < 10) {
+            const existingOptions = new Map(options.map(opt => [opt.text, opt.weight]));
+            options = Array.from({ length: 10 }, (_, i) => {
+              const num = String(i + 1);
+              return {
+                text: num,
+                weight: existingOptions.get(num) || (i + 1)
+              };
+            });
+          }
+
+          setEditFormData({
+            text: q.text || q.title || '',
+            type: q.type || q.questionType || 'text',
+            category: q.category || '',
+            options: options,
+            required: q.required || q.isRequired || false,
+            description: q.description || '',
+            hasWeighting: q.hasWeighting !== undefined ? q.hasWeighting : (options.length > 0 && options.some(opt => opt.weight !== undefined && opt.weight !== 5)),
+            questionWeight: q.questionWeight || q.weight || 5,
+            yesIsPositive: q.yesIsPositive !== undefined ? q.yesIsPositive : true
+          });
+          
+          setEditingQuestion(q);
+          setEditModalOpen(true);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading question:', error);
+      alert('Failed to load question data');
+    }
+  };
+
+  const closeEditModal = () => {
+    setEditModalOpen(false);
+    setEditingQuestion(null);
+    setEditFormData(null);
+  };
+
+  const handleSaveOver = async () => {
+    if (!editingQuestion || !editFormData) return;
+    
+    if (!editFormData.text.trim()) {
+      alert('Please enter a question text');
+      return;
+    }
+
+    setIsSavingQuestion(true);
+    try {
+      const questionData: any = {
+        text: editFormData.text.trim(),
+        title: editFormData.text.trim(),
+        type: editFormData.type,
+        questionType: editFormData.type,
+        category: editFormData.category || 'General',
+        required: editFormData.required || false,
+        isRequired: editFormData.required || false,
+        questionWeight: editFormData.questionWeight || 5,
+        weight: editFormData.questionWeight || 5,
+        hasWeighting: editFormData.hasWeighting
+      };
+
+      if (editFormData.description) {
+        questionData.description = editFormData.description;
+      }
+
+      if (editFormData.yesIsPositive !== undefined) {
+        questionData.yesIsPositive = editFormData.yesIsPositive;
+      }
+
+      if (editFormData.options && editFormData.options.length > 0) {
+        questionData.options = editFormData.options;
+      }
+
+      const response = await fetch(`/api/questions/${editingQuestion.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(questionData)
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        // Refresh questions list
+        const questionsResponse = await fetch(`/api/questions?coachId=${userProfile?.uid}`);
+        if (questionsResponse.ok) {
+          const questionsData = await questionsResponse.json();
+          if (questionsData.success) {
+            setQuestions(questionsData.questions || []);
+          }
+        }
+        closeEditModal();
+        alert('Question updated successfully!');
+      } else {
+        alert('Failed to update question: ' + (data.message || 'Unknown error'));
+      }
+    } catch (error) {
+      console.error('Error updating question:', error);
+      alert('Failed to update question. Please try again.');
+    } finally {
+      setIsSavingQuestion(false);
+    }
+  };
+
+  const handleSaveAsNew = async () => {
+    if (!editFormData) return;
+    
+    if (!editFormData.text.trim()) {
+      alert('Please enter a question text');
+      return;
+    }
+
+    setIsSavingQuestion(true);
+    try {
+      const questionData: any = {
+        text: editFormData.text.trim(),
+        title: editFormData.text.trim(),
+        type: editFormData.type,
+        questionType: editFormData.type,
+        category: editFormData.category || 'General',
+        required: editFormData.required || false,
+        isRequired: editFormData.required || false,
+        questionWeight: editFormData.questionWeight || 5,
+        weight: editFormData.questionWeight || 5,
+        hasWeighting: editFormData.hasWeighting,
+        coachId: userProfile?.uid
+      };
+
+      if (editFormData.description) {
+        questionData.description = editFormData.description;
+      }
+
+      if (editFormData.yesIsPositive !== undefined) {
+        questionData.yesIsPositive = editFormData.yesIsPositive;
+      }
+
+      if (editFormData.options && editFormData.options.length > 0) {
+        questionData.options = editFormData.options;
+      }
+
+      const response = await fetch('/api/questions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(questionData)
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        // Refresh questions list
+        const questionsResponse = await fetch(`/api/questions?coachId=${userProfile?.uid}`);
+        if (questionsResponse.ok) {
+          const questionsData = await questionsResponse.json();
+          if (questionsData.success) {
+            setQuestions(questionsData.questions || []);
+            // Auto-select the new question
+            if (data.questionId) {
+              setSelectedQuestions(prev => [...prev, data.questionId]);
+            }
+          }
+        }
+        closeEditModal();
+        alert('New question created successfully!');
+      } else {
+        alert('Failed to create question: ' + (data.message || 'Unknown error'));
+      }
+    } catch (error) {
+      console.error('Error creating question:', error);
+      alert('Failed to create question. Please try again.');
+    } finally {
+      setIsSavingQuestion(false);
+    }
   };
 
   const nextStep = () => {
@@ -538,8 +755,11 @@ export default function CreateFormPage() {
                 </label>
                 <input
                   type="number"
-                  value={formData.estimatedTime}
-                  onChange={(e) => handleInputChange('estimatedTime', parseInt(e.target.value))}
+                  value={formData.estimatedTime || ''}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    handleInputChange('estimatedTime', value === '' ? 5 : parseInt(value) || 5);
+                  }}
                   min="1"
                   max="60"
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
@@ -761,7 +981,18 @@ export default function CreateFormPage() {
                           <p className="text-sm text-gray-600">{question.description}</p>
                         )}
                       </div>
-                      <div className="ml-4">
+                      <div className="ml-4 flex items-center gap-2">
+                        <Link
+                          href={`/questions/edit/${question.id}?returnUrl=${encodeURIComponent('/forms/create')}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="px-3 py-1.5 text-sm text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 font-medium transition-colors flex items-center gap-1"
+                          title="Edit question"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                          Edit
+                        </Link>
                         <input
                           type="checkbox"
                           checked={selectedQuestions.includes(question.id)}
@@ -802,8 +1033,290 @@ export default function CreateFormPage() {
               </div>
 
               <div>
-                <h4 className="font-semibold text-gray-900 mb-4">Selected Questions:</h4>
-                <p className="text-sm text-gray-500 mb-4">Drag and drop to reorder questions</p>
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h4 className="font-semibold text-gray-900">Selected Questions:</h4>
+                    <p className="text-sm text-gray-500 mt-1">Drag and drop to reorder questions</p>
+                  </div>
+                </div>
+                
+                {/* Scoring Formula & Traffic Light Info */}
+                <div className="bg-gradient-to-br from-purple-50 to-indigo-50 rounded-lg border border-purple-200 p-4 mb-4">
+                  <button
+                    onClick={() => setShowScoringInfo(!showScoringInfo)}
+                    className="w-full flex items-center justify-between text-left"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-lg flex items-center justify-center">
+                        <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <h5 className="text-sm font-bold text-gray-900">How Scoring Works</h5>
+                        <p className="text-xs text-gray-600">Learn about the scoring formula and traffic light system</p>
+                      </div>
+                    </div>
+                    <svg 
+                      className={`w-4 h-4 text-gray-400 transition-transform ${showScoringInfo ? 'rotate-180' : ''}`}
+                      fill="none" 
+                      stroke="currentColor" 
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+
+                  {showScoringInfo && (
+                  <div className="mt-4 pt-4 border-t border-purple-200 space-y-4">
+                    {/* Scoring Formula */}
+                    <div>
+                      <h6 className="text-xs font-bold text-gray-900 mb-2 flex items-center gap-2">
+                        <span>📊</span>
+                        Scoring Formula
+                      </h6>
+                      <div className="bg-white rounded-lg p-3 space-y-2">
+                        <div className="text-xs text-gray-700">
+                          <p className="font-semibold mb-1">Each question contributes to the final score:</p>
+                          <div className="bg-gray-50 rounded p-2 font-mono text-xs border border-gray-200">
+                            <div className="mb-1">weightedScore = questionScore × questionWeight</div>
+                            <div>totalScore = (Σ weightedScores / (Σ weights × 10)) × 100</div>
+                          </div>
+                        </div>
+                        <div className="text-xs text-gray-600 space-y-0.5">
+                          <p>• <strong>Question Weight (1-10):</strong> Importance of the question</p>
+                          <p>• <strong>Question Score (1-10):</strong> Answer converted to a score</p>
+                          <p>• <strong>Final Score (0-100%):</strong> Weighted average</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Answer Scoring */}
+                    <div>
+                      <h6 className="text-xs font-bold text-gray-900 mb-2 flex items-center gap-2">
+                        <span>✅</span>
+                        How Answers Are Scored
+                      </h6>
+                      <div className="grid grid-cols-2 gap-2 text-xs text-gray-700">
+                        <div className="bg-white rounded-lg p-2">
+                          <p className="font-semibold mb-0.5">Scale (1-10):</p>
+                          <p className="text-gray-600">Direct value</p>
+                        </div>
+                        <div className="bg-white rounded-lg p-2">
+                          <p className="font-semibold mb-0.5">Yes/No:</p>
+                          <p className="text-gray-600">Yes = 8/10, No = 3/10</p>
+                        </div>
+                        <div className="bg-white rounded-lg p-2">
+                          <p className="font-semibold mb-0.5">Single/Multiple Choice:</p>
+                          <p className="text-gray-600">Uses option weights</p>
+                        </div>
+                        <div className="bg-white rounded-lg p-2">
+                          <p className="font-semibold mb-0.5">Text Questions:</p>
+                          <p className="text-gray-600">Neutral 5/10</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Form Math Calculation */}
+                    {selectedQuestions.length > 0 && (() => {
+                      const selectedQData = selectedQuestions.map(qId => {
+                        const q = questions.find(q => q.id === qId);
+                        return q;
+                      }).filter(Boolean);
+                      
+                      const totalWeight = selectedQData.reduce((sum, q) => {
+                        const weight = q?.questionWeight || q?.weight || 5;
+                        return sum + weight;
+                      }, 0);
+                      
+                      const maxPossibleScore = totalWeight * 10;
+                      
+                      // Example calculation with average scores
+                      const exampleScores = {
+                        perfect: maxPossibleScore,
+                        good: Math.round(maxPossibleScore * 0.75),
+                        average: Math.round(maxPossibleScore * 0.5),
+                        poor: Math.round(maxPossibleScore * 0.25)
+                      };
+                      
+                      return (
+                        <div>
+                          <h6 className="text-xs font-bold text-gray-900 mb-2 flex items-center gap-2">
+                            <span>🧮</span>
+                            Form Calculation Preview
+                          </h6>
+                          <div className="bg-white rounded-lg p-3 space-y-3">
+                            <div className="grid grid-cols-2 gap-3 text-xs">
+                              <div className="bg-gray-50 rounded p-2">
+                                <p className="font-semibold text-gray-700 mb-1">Total Questions</p>
+                                <p className="text-lg font-bold text-gray-900">{selectedQuestions.length}</p>
+                              </div>
+                              <div className="bg-gray-50 rounded p-2">
+                                <p className="font-semibold text-gray-700 mb-1">Total Weight</p>
+                                <p className="text-lg font-bold text-gray-900">{totalWeight}</p>
+                              </div>
+                              <div className="bg-gray-50 rounded p-2">
+                                <p className="font-semibold text-gray-700 mb-1">Max Possible Score</p>
+                                <p className="text-lg font-bold text-gray-900">{maxPossibleScore}</p>
+                              </div>
+                              <div className="bg-gray-50 rounded p-2">
+                                <p className="font-semibold text-gray-700 mb-1">Formula</p>
+                                <p className="text-xs text-gray-600">Score = (Σ weighted / {maxPossibleScore}) × 100</p>
+                              </div>
+                            </div>
+                            
+                            {/* Question Breakdown */}
+                            <div>
+                              <p className="text-xs font-semibold text-gray-700 mb-2">Question Weights:</p>
+                              <div className="max-h-32 overflow-y-auto space-y-1">
+                                {selectedQData.slice(0, 5).map((q, idx) => {
+                                  const weight = q?.questionWeight || q?.weight || 5;
+                                  const title = q?.text || q?.title || `Question ${idx + 1}`;
+                                  return (
+                                    <div key={q?.id || idx} className="flex items-center justify-between text-xs bg-gray-50 rounded px-2 py-1">
+                                      <span className="text-gray-700 truncate flex-1">{title.substring(0, 40)}{title.length > 40 ? '...' : ''}</span>
+                                      <span className="font-bold text-gray-900 ml-2">Weight: {weight}</span>
+                                    </div>
+                                  );
+                                })}
+                                {selectedQData.length > 5 && (
+                                  <p className="text-xs text-gray-500 italic">+ {selectedQData.length - 5} more questions</p>
+                                )}
+                              </div>
+                            </div>
+                            
+                            {/* Example Scores */}
+                            <div>
+                              <p className="text-xs font-semibold text-gray-700 mb-2">Example Score Calculations:</p>
+                              <div className="space-y-1.5">
+                                {[
+                                  { label: 'Perfect (all 10s)', score: exampleScores.perfect, color: 'green' },
+                                  { label: 'Good (avg 7.5)', score: exampleScores.good, color: 'orange' },
+                                  { label: 'Average (avg 5)', score: exampleScores.average, color: 'orange' },
+                                  { label: 'Poor (avg 2.5)', score: exampleScores.poor, color: 'red' }
+                                ].map((example, idx) => {
+                                  const percentage = Math.round((example.score / maxPossibleScore) * 100);
+                                  const status = percentage <= previewThresholds.redMax ? 'red' : 
+                                                percentage <= previewThresholds.orangeMax ? 'orange' : 'green';
+                                  return (
+                                    <div key={idx} className="flex items-center justify-between text-xs bg-gray-50 rounded px-2 py-1.5">
+                                      <span className="text-gray-700">{example.label}:</span>
+                                      <div className="flex items-center gap-2">
+                                        <span className="font-bold text-gray-900">{example.score}/{maxPossibleScore}</span>
+                                        <span className="font-bold text-gray-900">= {percentage}%</span>
+                                        <span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${
+                                          status === 'red' ? 'bg-red-100 text-red-700' :
+                                          status === 'orange' ? 'bg-orange-100 text-orange-700' :
+                                          'bg-green-100 text-green-700'
+                                        }`}>
+                                          {status === 'red' ? '🔴' : status === 'orange' ? '🟠' : '🟢'}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Traffic Light Thresholds - Adjustable */}
+                    <div>
+                      <h6 className="text-xs font-bold text-gray-900 mb-2 flex items-center gap-2">
+                        <span>🚦</span>
+                        Traffic Light Zones (Adjustable)
+                      </h6>
+                      <div className="bg-white rounded-lg p-3 space-y-3">
+                        <div className="grid grid-cols-3 gap-2">
+                          <div className="bg-red-50 rounded p-2 border border-red-200">
+                            <div className="flex items-center gap-1 mb-1">
+                              <span className="text-sm">🔴</span>
+                              <span className="font-bold text-red-700 text-xs">Red Zone</span>
+                            </div>
+                            <div className="flex items-center gap-1 mb-0.5">
+                              <input
+                                type="number"
+                                min="0"
+                                max="99"
+                                value={previewThresholds.redMax}
+                                onChange={(e) => {
+                                  const val = parseInt(e.target.value) || 0;
+                                  if (val < previewThresholds.orangeMax) {
+                                    setPreviewThresholds({ ...previewThresholds, redMax: val });
+                                  }
+                                }}
+                                className="w-12 px-1 py-0.5 text-xs border border-red-300 rounded text-gray-900"
+                              />
+                              <span className="text-xs text-gray-600">% max</span>
+                            </div>
+                            <p className="text-xs font-semibold text-gray-900">0 - {previewThresholds.redMax}%</p>
+                            <p className="text-xs text-gray-600">Needs Attention</p>
+                          </div>
+                          <div className="bg-orange-50 rounded p-2 border border-orange-200">
+                            <div className="flex items-center gap-1 mb-1">
+                              <span className="text-sm">🟠</span>
+                              <span className="font-bold text-orange-700 text-xs">Orange Zone</span>
+                            </div>
+                            <div className="flex items-center gap-1 mb-0.5">
+                              <input
+                                type="number"
+                                min={previewThresholds.redMax + 1}
+                                max="99"
+                                value={previewThresholds.orangeMax}
+                                onChange={(e) => {
+                                  const val = parseInt(e.target.value) || 80;
+                                  if (val > previewThresholds.redMax && val <= 99) {
+                                    setPreviewThresholds({ ...previewThresholds, orangeMax: val });
+                                  }
+                                }}
+                                className="w-12 px-1 py-0.5 text-xs border border-orange-300 rounded text-gray-900"
+                              />
+                              <span className="text-xs text-gray-600">% max</span>
+                            </div>
+                            <p className="text-xs font-semibold text-gray-900">{previewThresholds.redMax + 1} - {previewThresholds.orangeMax}%</p>
+                            <p className="text-xs text-gray-600">On Track</p>
+                          </div>
+                          <div className="bg-green-50 rounded p-2 border border-green-200">
+                            <div className="flex items-center gap-1 mb-1">
+                              <span className="text-sm">🟢</span>
+                              <span className="font-bold text-green-700 text-xs">Green Zone</span>
+                            </div>
+                            <p className="text-xs font-semibold text-gray-900 mb-1">{previewThresholds.orangeMax + 1} - 100%</p>
+                            <p className="text-xs text-gray-600">Excellent</p>
+                          </div>
+                        </div>
+                        <div className="pt-2 border-t border-gray-200">
+                          <p className="text-xs text-gray-600 italic mb-2">
+                            Adjust thresholds to preview how scores will be categorized. These are defaults - actual thresholds are set per client profile.
+                          </p>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => setPreviewThresholds({ redMax: 33, orangeMax: 80 })}
+                              className="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded text-gray-700"
+                            >
+                              Lifestyle
+                            </button>
+                            <button
+                              onClick={() => setPreviewThresholds({ redMax: 75, orangeMax: 89 })}
+                              className="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded text-gray-700"
+                            >
+                              High Performance
+                            </button>
+                            <button
+                              onClick={() => setPreviewThresholds({ redMax: 60, orangeMax: 85 })}
+                              className="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded text-gray-700"
+                            >
+                              Moderate
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  )}
+                </div>
                 <DndContext
                   sensors={sensors}
                   collisionDetection={closestCenter}
@@ -1177,6 +1690,206 @@ export default function CreateFormPage() {
           </div>
         </div>
       </div>
+
+      {/* Edit Question Modal */}
+      {editModalOpen && editFormData && editingQuestion && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-gradient-to-r from-blue-500 to-indigo-600 px-6 py-4 flex items-center justify-between">
+              <h2 className="text-2xl font-bold text-white">Edit Question</h2>
+              <button
+                onClick={closeEditModal}
+                className="text-white hover:text-gray-200 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Question Text */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Question Text *
+                </label>
+                <textarea
+                  value={editFormData.text}
+                  onChange={(e) => setEditFormData(prev => ({ ...prev, text: e.target.value }))}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                  rows={3}
+                  required
+                />
+              </div>
+
+              {/* Question Type */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Question Type
+                </label>
+                <select
+                  value={editFormData.type}
+                  onChange={(e) => setEditFormData(prev => ({ ...prev, type: e.target.value }))}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                  disabled
+                >
+                  <option value="text">Short Text</option>
+                  <option value="textarea">Long Text</option>
+                  <option value="number">Number</option>
+                  <option value="select">Single Choice</option>
+                  <option value="multiple_choice">Multiple Choice</option>
+                  <option value="scale">Scale (1-10)</option>
+                  <option value="boolean">Yes/No</option>
+                </select>
+                <p className="text-xs text-gray-500 mt-1">Question type cannot be changed when editing</p>
+              </div>
+
+              {/* Category */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Category
+                </label>
+                <select
+                  value={editFormData.category}
+                  onChange={(e) => setEditFormData(prev => ({ ...prev, category: e.target.value }))}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                >
+                  <option value="">Select a category</option>
+                  <option value="Health & Wellness">Health & Wellness</option>
+                  <option value="Fitness & Exercise">Fitness & Exercise</option>
+                  <option value="Nutrition & Diet">Nutrition & Diet</option>
+                  <option value="Mental Health">Mental Health</option>
+                  <option value="Sleep & Recovery">Sleep & Recovery</option>
+                  <option value="Stress Management">Stress Management</option>
+                  <option value="Goals & Progress">Goals & Progress</option>
+                  <option value="Lifestyle">Lifestyle</option>
+                  <option value="Medical History">Medical History</option>
+                  <option value="General">General</option>
+                  <option value="Vana Check In">Vana Check In</option>
+                </select>
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Description (Optional)
+                </label>
+                <textarea
+                  value={editFormData.description || ''}
+                  onChange={(e) => setEditFormData(prev => ({ ...prev, description: e.target.value }))}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                  rows={2}
+                />
+              </div>
+
+              {/* Question Weight */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Question Weight: {editFormData.questionWeight}/10
+                </label>
+                <input
+                  type="range"
+                  min="1"
+                  max="10"
+                  value={editFormData.questionWeight}
+                  onChange={(e) => setEditFormData(prev => ({ ...prev, questionWeight: parseInt(e.target.value) }))}
+                  className="w-full"
+                />
+              </div>
+
+              {/* Boolean-specific: Yes is Positive */}
+              {editFormData.type === 'boolean' && (
+                <div>
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={editFormData.yesIsPositive}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, yesIsPositive: e.target.checked }))}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    />
+                    <span className="ml-2 text-sm text-gray-700">Yes is a positive response</span>
+                  </label>
+                </div>
+              )}
+
+              {/* Options for select/multiple_choice/scale */}
+              {(editFormData.type === 'select' || editFormData.type === 'multiple_choice' || editFormData.type === 'scale') && editFormData.options && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Options
+                  </label>
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {editFormData.options.map((option, index) => (
+                      <div key={index} className="flex items-center gap-2 p-2 bg-gray-50 rounded">
+                        <input
+                          type="text"
+                          value={option.text}
+                          onChange={(e) => {
+                            const newOptions = [...editFormData.options];
+                            newOptions[index] = { ...option, text: e.target.value };
+                            setEditFormData(prev => ({ ...prev, options: newOptions }));
+                          }}
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded text-gray-900"
+                        />
+                        <input
+                          type="number"
+                          min="1"
+                          max="10"
+                          value={option.weight}
+                          onChange={(e) => {
+                            const newOptions = [...editFormData.options];
+                            newOptions[index] = { ...option, weight: parseInt(e.target.value) || 5 };
+                            setEditFormData(prev => ({ ...prev, options: newOptions }));
+                          }}
+                          className="w-20 px-3 py-2 border border-gray-300 rounded text-gray-900"
+                          placeholder="Weight"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newOptions = editFormData.options.filter((_, i) => i !== index);
+                            setEditFormData(prev => ({ ...prev, options: newOptions }));
+                          }}
+                          className="px-3 py-2 text-red-600 hover:bg-red-50 rounded"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end gap-4 pt-6 border-t border-gray-200">
+                <button
+                  type="button"
+                  onClick={closeEditModal}
+                  className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveAsNew}
+                  disabled={isSavingQuestion}
+                  className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium disabled:opacity-50"
+                >
+                  {isSavingQuestion ? 'Saving...' : 'Save as New Question'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveOver}
+                  disabled={isSavingQuestion}
+                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium disabled:opacity-50"
+                >
+                  {isSavingQuestion ? 'Saving...' : 'Save Over'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </RoleProtected>
   );
 } 

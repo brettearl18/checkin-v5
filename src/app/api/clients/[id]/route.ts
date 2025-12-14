@@ -67,6 +67,15 @@ export async function PUT(
     // Remove fields that shouldn't be updated
     const { id, createdAt, ...dataToUpdate } = updateData;
     
+    // Handle pausedUntil - convert to Date if provided, or null if clearing
+    if (dataToUpdate.pausedUntil !== undefined) {
+      if (dataToUpdate.pausedUntil === null || dataToUpdate.pausedUntil === '') {
+        dataToUpdate.pausedUntil = null;
+      } else {
+        dataToUpdate.pausedUntil = new Date(dataToUpdate.pausedUntil);
+      }
+    }
+    
     // Add updated timestamp
     dataToUpdate.updatedAt = new Date();
 

@@ -93,15 +93,62 @@ export async function GET(
       // Get form title from the map, or use stored formTitle, or fallback to 'Unknown Form'
       const formTitle = data.formTitle || (data.formId ? formTitlesMap.get(data.formId) : null) || 'Unknown Form';
       
+      // Convert dueDate
+      let dueDate = data.dueDate;
+      if (dueDate?.toDate && typeof dueDate.toDate === 'function') {
+        dueDate = dueDate.toDate().toISOString();
+      } else if (dueDate?._seconds) {
+        dueDate = new Date(dueDate._seconds * 1000).toISOString();
+      } else if (dueDate instanceof Date) {
+        dueDate = dueDate.toISOString();
+      }
+
+      // Convert startDate
+      let startDate = data.startDate;
+      if (startDate?.toDate && typeof startDate.toDate === 'function') {
+        startDate = startDate.toDate().toISOString();
+      } else if (startDate?._seconds) {
+        startDate = new Date(startDate._seconds * 1000).toISOString();
+      } else if (startDate instanceof Date) {
+        startDate = startDate.toISOString();
+      } else if (typeof startDate === 'string') {
+        // Keep as is if it's already a string
+      }
+
+      // Check if pausedUntil date has passed - auto-reactivate if so
+      let status = data.status || 'active';
+      let pausedUntil = data.pausedUntil;
+      
+      if (status === 'inactive' && pausedUntil) {
+        const pausedUntilDate = pausedUntil?.toDate ? pausedUntil.toDate() : new Date(pausedUntil);
+        const now = new Date();
+        
+        // If pausedUntil date has passed, automatically reactivate
+        if (pausedUntilDate <= now) {
+          status = 'active';
+          pausedUntil = null;
+          // Update the assignment in the background
+          db.collection('check_in_assignments').doc(doc.id).update({
+            status: 'active',
+            pausedUntil: null
+          }).catch(err => console.error('Error auto-reactivating check-in:', err));
+        }
+      }
+
       const checkIn: CheckIn = {
         id: doc.id,
         formTitle: formTitle,
+        formId: data.formId || '',
         assignedAt: data.assignedAt?.toDate?.()?.toISOString() || data.assignedAt,
         completedAt: data.completedAt?.toDate?.()?.toISOString() || data.completedAt,
-        status: data.status || 'pending',
+        status: status,
         isRecurring: data.isRecurring || false,
         recurringWeek: data.recurringWeek,
-        totalWeeks: data.totalWeeks,
+        totalWeeks: data.totalWeeks || data.duration,
+        duration: data.duration || data.totalWeeks,
+        frequency: data.frequency || (data.isRecurring ? 'weekly' : 'once'),
+        startDate: startDate || data.startDate,
+        dueDate: dueDate || data.dueDate,
         category: data.category || 'general',
         score: data.score || 0,
         responseCount: data.responseCount || 0,
@@ -111,7 +158,9 @@ export async function GET(
           startTime: '09:00',
           endDay: 'tuesday',
           endTime: '12:00'
-        }
+        },
+        pausedUntil: pausedUntil ? (pausedUntil?.toDate ? pausedUntil.toDate().toISOString() : new Date(pausedUntil).toISOString()) : undefined,
+        notes: data.notes || ''
       };
       
       checkIns.push(checkIn);
