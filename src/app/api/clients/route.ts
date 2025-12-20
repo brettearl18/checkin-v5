@@ -1,22 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/firebase-server';
-import { initializeApp, getApps, cert } from 'firebase-admin/app';
-import { getAuth } from 'firebase-admin/auth';
-import { getFirestore } from 'firebase-admin/firestore';
+import { getDb, getAuthInstance } from '@/lib/firebase-server';
 import crypto from 'crypto';
 
-// Initialize Firebase Admin if not already initialized
-if (!getApps().length) {
-  const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || '{}');
-
-  initializeApp({
-    credential: cert(serviceAccount),
-    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
-  });
-}
-
-const db = getFirestore();
-const auth = getAuth();
+// Force dynamic rendering
+export const dynamic = 'force-dynamic';
 
 // Generate a secure onboarding token
 function generateOnboardingToken(): string {
@@ -40,6 +27,7 @@ async function sendOnboardingEmail(email: string, onboardingToken: string, coach
 }
 
 export async function GET(request: NextRequest) {
+  const db = getDb();
   try {
     const { searchParams } = new URL(request.url);
     const coachId = searchParams.get('coachId');
@@ -102,6 +90,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const db = getDb();
+  const auth = getAuthInstance();
   try {
     const clientData = await request.json();
     const { 
@@ -285,4 +275,4 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-} 
+}

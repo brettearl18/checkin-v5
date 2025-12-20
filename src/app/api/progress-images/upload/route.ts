@@ -1,33 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getStorage } from 'firebase-admin/storage';
-import { getDb } from '@/lib/firebase-server';
-import { initializeApp, getApps, cert } from 'firebase-admin/app';
+import { getDb, getStorageInstance } from '@/lib/firebase-server';
 
-// Initialize Firebase Admin if not already initialized
-function initializeFirebaseAdmin() {
-  if (getApps().length === 0) {
-    const serviceAccountString = process.env.FIREBASE_SERVICE_ACCOUNT;
-    if (serviceAccountString) {
-      try {
-        const serviceAccount = JSON.parse(serviceAccountString);
-        const storageBucket = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || 
-                             `${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'checkinv5'}.appspot.com`;
-        
-        initializeApp({
-          credential: cert(serviceAccount),
-          projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'checkinv5',
-          storageBucket: storageBucket
-        });
-        console.log('Firebase Admin initialized with storage bucket:', storageBucket);
-      } catch (error) {
-        console.error('Error initializing Firebase Admin:', error);
-        throw error;
-      }
-    } else {
-      throw new Error('FIREBASE_SERVICE_ACCOUNT not configured');
-    }
-  }
-}
+// Force dynamic rendering
+export const dynamic = 'force-dynamic';
 
 /**
  * POST /api/progress-images/upload
@@ -40,9 +15,9 @@ function initializeFirebaseAdmin() {
  * - caption?: Optional caption
  */
 export async function POST(request: NextRequest) {
+  const db = getDb();
+  const storage = getStorageInstance();
   try {
-    // Initialize Firebase Admin
-    initializeFirebaseAdmin();
 
     const formData = await request.formData();
     const file = formData.get('file') as File;
@@ -86,9 +61,15 @@ export async function POST(request: NextRequest) {
     let imageUrl: string;
     
     try {
-      const storage = getStorage();
+      // Use the storage instance that was already initialized
+      if (!storage) {
+        throw new Error('Storage instance not available');
+      }
+      
+      // Use the storage bucket from environment or default to the correct bucket name
       const bucketName = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || 
-                        `${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'checkinv5'}.appspot.com`;
+                        process.env.FIREBASE_STORAGE_BUCKET ||
+                        `${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'checkinv5'}.firebasestorage.app`;
       
       console.log('Attempting to get storage bucket:', bucketName);
       
@@ -157,7 +138,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create progress image record in Firestore
-    const db = getDb();
+    // db is already initialized at the top of the function
     
     // Get client name for display
     let clientName = 'Client';

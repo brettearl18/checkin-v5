@@ -218,3 +218,7 @@ This requires significant changes. The Cloud Run approach is recommended.
 3. Set up monitoring and alerts
 4. Configure auto-scaling
 
+
+
+
+

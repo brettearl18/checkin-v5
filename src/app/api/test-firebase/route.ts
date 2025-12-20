@@ -54,4 +54,4 @@ export async function GET() {
       stack: error instanceof Error ? error.stack : undefined
     });
   }
-} 
+}

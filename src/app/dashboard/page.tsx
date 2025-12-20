@@ -119,6 +119,7 @@ export default function DashboardPage() {
   const [allClients, setAllClients] = useState<any[]>([]);
   const [clientTableSortBy, setClientTableSortBy] = useState<string>('name');
   const [clientTableSortOrder, setClientTableSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   // Refresh dashboard data when notifications change
   useEffect(() => {
@@ -440,9 +441,141 @@ export default function DashboardPage() {
 
   return (
     <RoleProtected requiredRole="coach">
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 flex">
-        {/* Modern Sidebar */}
-        <div className="w-64 bg-white shadow-xl border-r border-gray-100">
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 flex flex-col lg:flex-row">
+        {/* Mobile top bar */}
+        <div className="flex items-center justify-between px-4 py-4 bg-white/90 backdrop-blur-sm border-b border-gray-200 shadow-sm lg:hidden">
+          <div className="flex items-center space-x-2">
+            <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center text-white font-semibold">
+              CH
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-gray-900">Coach Hub</p>
+              <p className="text-xs text-gray-500">Dashboard</p>
+            </div>
+          </div>
+          {/* Notification + Hamburger on mobile */}
+          <div className="flex items-center space-x-1">
+            <NotificationBell />
+            <button
+              type="button"
+              onClick={() => setIsMenuOpen(true)}
+              className="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-gray-200 bg-white text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              aria-label="Open navigation menu"
+            >
+              <span className="sr-only">Open menu</span>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        {/* Mobile slide-in navigation */}
+        {isMenuOpen && (
+          <div className="fixed inset-0 z-50 flex lg:hidden">
+            <div className="w-64 bg-white shadow-2xl h-full flex flex-col p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center text-white font-semibold">
+                    CH
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">Coach Hub</p>
+                    <p className="text-xs text-gray-500">Navigation</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsMenuOpen(false)}
+                  className="inline-flex items-center justify-center w-8 h-8 rounded-full text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  aria-label="Close navigation menu"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <nav className="mt-6 space-y-2 flex-1">
+                <Link
+                  href="/dashboard"
+                  onClick={() => setIsMenuOpen(false)}
+                  className="block px-3 py-2 rounded-lg text-sm font-medium text-gray-900 bg-blue-50 border border-blue-100"
+                >
+                  Dashboard
+                </Link>
+                <Link
+                  href="/clients"
+                  onClick={() => setIsMenuOpen(false)}
+                  className="block px-3 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Clients
+                </Link>
+                <Link
+                  href="/check-ins"
+                  onClick={() => setIsMenuOpen(false)}
+                  className="block px-3 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Check-ins
+                </Link>
+                <Link
+                  href="/forms"
+                  onClick={() => setIsMenuOpen(false)}
+                  className="block px-3 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Forms
+                </Link>
+                <Link
+                  href="/analytics"
+                  onClick={() => setIsMenuOpen(false)}
+                  className="block px-3 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Analytics
+                </Link>
+                <Link
+                  href="/settings"
+                  onClick={() => setIsMenuOpen(false)}
+                  className="block px-3 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Settings
+                </Link>
+              </nav>
+
+              {/* Verification code in mobile menu footer */}
+              {coachData?.shortUID && (
+                <div className="mt-4 pt-3 border-t border-gray-100">
+                  <p className="text-xs font-semibold text-gray-500 mb-1">Verification code</p>
+                  <div className="flex items-center justify-between bg-blue-50 rounded-lg px-3 py-2 border border-blue-100">
+                    <p className="text-sm font-mono font-semibold text-blue-700 tracking-widest">
+                      {coachData.shortUID}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(coachData.shortUID);
+                        setCopiedCode(true);
+                        setTimeout(() => setCopiedCode(false), 2000);
+                      }}
+                      className="ml-2 px-2 py-1 text-xs font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700"
+                    >
+                      {copiedCode ? 'Copied' : 'Copy'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+            {/* Backdrop */}
+            <button
+              type="button"
+              className="flex-1 bg-black/30"
+              aria-label="Close navigation menu"
+              onClick={() => setIsMenuOpen(false)}
+            />
+          </div>
+        )}
+
+        {/* Desktop sidebar */}
+        <div className="hidden lg:flex w-64 bg-white shadow-xl border-r border-gray-100 flex-col">
           {/* Sidebar Header */}
           <div className="bg-gradient-to-br from-blue-500 to-indigo-600 px-6 py-8">
             <div className="flex items-center space-x-3">
@@ -617,16 +750,18 @@ export default function DashboardPage() {
         </div>
 
         {/* Main Content */}
-        <div className="flex-1 p-6">
-          <div className="max-w-7xl mx-auto">
+        <div className="flex-1 px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
+          <div className="max-w-6xl mx-auto w-full">
             {/* Modern Header */}
-            <div className="mb-8">
-              <div className="flex items-center justify-between">
+            <div className="mb-4 sm:mb-6">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-                  <p className="text-gray-600 mt-2">Welcome back, {coachData?.firstName || 'Coach'}!</p>
+                  <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">Dashboard</h1>
+                  <p className="text-gray-600 mt-1 text-sm sm:text-base">
+                    Welcome back, {coachData?.firstName || 'Coach'}!
+                  </p>
                 </div>
-                <div className="flex items-center space-x-4">
+                <div className="flex items-center space-x-3">
                   <button
                     onClick={handleManualRefresh}
                     disabled={refreshing}
@@ -635,91 +770,55 @@ export default function DashboardPage() {
                     }`}
                     title="Refresh Dashboard"
                   >
-                    <svg className={`w-6 h-6 ${refreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg
+                      className={`w-6 h-6 ${refreshing ? 'animate-spin' : ''}`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                     </svg>
                   </button>
-                  <NotificationBell />
-                  {coachData?.shortUID && (
-                    <div className="flex items-center space-x-3 bg-blue-50 px-4 py-2 rounded-lg border border-blue-200">
-                      <div className="text-right">
-                        <p className="text-sm text-gray-700">Verification Code</p>
-                        <p className="text-lg font-mono font-semibold text-blue-600 tracking-wider">{coachData.shortUID}</p>
-                      </div>
-                      <button
-                        onClick={() => {
-                          navigator.clipboard.writeText(coachData.shortUID);
-                          setCopiedCode(true);
-                          setTimeout(() => setCopiedCode(false), 2000);
-                        }}
-                        className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm"
-                      >
-                        {copiedCode ? (
-                          <span className="flex items-center">
-                            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                            Copied!
-                          </span>
-                        ) : (
-                          <span className="flex items-center">
-                            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                            </svg>
-                            Copy
-                          </span>
-                        )}
-                      </button>
-                    </div>
-                  )}
+                  {/* Desktop-only bell (mobile uses top bar) */}
+                  <div className="hidden lg:block">
+                    <NotificationBell />
+                  </div>
                 </div>
               </div>
               
-              {/* New Check-ins Notification Alert */}
-              {unreadCount > 0 && (
-                <div className="mt-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
-                      <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-5 5v-5z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                      </svg>
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-blue-900 font-medium">
-                        You have {unreadCount} new notification{unreadCount !== 1 ? 's' : ''} including completed check-ins!
-                      </p>
-                      <p className="text-blue-700 text-sm">Click the notification bell to view details</p>
-                    </div>
-                    <Link
-                      href="/notifications"
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
-                    >
-                      View All
-                    </Link>
-                  </div>
-                </div>
-              )}
-              
-              {/* Refresh Success Message */}
-              {refreshed && (
-                <div className="mt-4 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl p-4">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center">
-                      <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-green-900 font-medium">Dashboard refreshed successfully!</p>
-                      <p className="text-green-700 text-sm">All data has been updated with the latest information</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-              
-              {/* Quick Summary Cards - Optimized */}
-              <div className="mb-8 grid grid-cols-1 md:grid-cols-4 gap-6">
+              {/* Quick Summary – mobile: compact row of 4 buttons */}
+              <div className="mb-6 flex gap-3 overflow-x-auto pb-1 md:hidden">
+                <button className="flex-shrink-0 min-w-[150px] bg-gradient-to-r from-orange-50 to-red-50 border border-orange-200 rounded-xl px-3 py-3 text-left">
+                  <p className="text-xs font-medium text-orange-700">Needs response</p>
+                  <p className="mt-1 text-xl font-bold text-orange-900">
+                    {checkInsToReview.filter(ci => !ci.coachResponded).length}
+                  </p>
+                </button>
+
+                <button className="flex-shrink-0 min-w-[150px] bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl px-3 py-3 text-left">
+                  <p className="text-xs font-medium text-blue-700">Active clients</p>
+                  <p className="mt-1 text-xl font-bold text-blue-900">
+                    {stats.activeClients}
+                  </p>
+                </button>
+
+                <button className="flex-shrink-0 min-w-[150px] bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-xl px-3 py-3 text-left">
+                  <p className="text-xs font-medium text-purple-700">Forms</p>
+                  <p className="mt-1 text-xl font-bold text-purple-900">
+                    {stats.totalForms}
+                  </p>
+                </button>
+
+                <button className="flex-shrink-0 min-w-[150px] bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl px-3 py-3 text-left">
+                  <p className="text-xs font-medium text-green-700">Completed this week</p>
+                  <p className="mt-1 text-xl font-bold text-green-900">
+                    {completedCheckIns.length}
+                  </p>
+                </button>
+              </div>
+
+              {/* Desktop summary – keep rich cards */}
+              <div className="hidden md:grid mb-8 grid-cols-4 gap-6">
                 {/* Priority Actions */}
                 <div className="bg-gradient-to-r from-orange-50 to-red-50 border border-orange-200 rounded-xl p-6">
                   <div className="flex items-center justify-between">
@@ -798,7 +897,7 @@ export default function DashboardPage() {
                       <h2 className="text-2xl font-bold text-gray-900">Check-ins Management</h2>
                       <div className="flex items-center space-x-2">
                         {/* Tab Navigation */}
-                        <div className="flex bg-white rounded-lg p-1 shadow-sm">
+                        <div className="flex bg-white rounded-lg p-1 shadow-sm text-xs md:text-sm">
                           <button
                             onClick={() => setActiveTab('review')}
                             className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
@@ -845,7 +944,7 @@ export default function DashboardPage() {
                     </div>
                   </div>
                   
-                  <div className="p-8">
+                  <div className="p-4 md:p-8">
                     {/* To Review Tab */}
                     {activeTab === 'review' && (
                       <>
@@ -860,58 +959,103 @@ export default function DashboardPage() {
                             <p className="text-gray-600 text-sm">Completed check-ins will appear here for your review</p>
                           </div>
                         ) : (
-                          <div className="space-y-4">
+                          <div className="space-y-3">
                             {checkInsToReview.map((checkIn) => {
                               const needsResponse = !checkIn.coachResponded;
-                              const status = checkIn.workflowStatus || 'completed';
-                              
+                              // consider a check-in overdue if it's older than 24h and still needs a response
+                              const submittedAtDate = checkIn.submittedAt ? new Date(checkIn.submittedAt as any) : null;
+                              const hoursSince =
+                                submittedAtDate ? Math.floor((Date.now() - submittedAtDate.getTime()) / (1000 * 60 * 60)) : 0;
+                              const isOverdue = needsResponse && hoursSince >= 24;
+
                               return (
-                                <div 
-                                  key={checkIn.id} 
-                                  className={`rounded-xl p-6 border hover:shadow-lg transition-all duration-200 ${
+                                <div
+                                  key={checkIn.id}
+                                  className={`rounded-xl p-4 md:p-5 border hover:shadow-md transition-all duration-200 ${
                                     needsResponse 
                                       ? 'bg-gradient-to-r from-yellow-50 to-orange-50 border-yellow-300 hover:border-yellow-400' 
                                       : 'bg-gradient-to-r from-gray-50 to-gray-100 border-gray-200 hover:border-gray-300'
                                   }`}
                                 >
                                   <div className="flex items-center justify-between">
-                                    <div className="flex items-center space-x-4 flex-1">
-                                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-lg ${
-                                        needsResponse ? 'bg-yellow-100' : 'bg-green-100'
-                                      }`}>
-                                        {needsResponse ? (
-                                          <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    <div className="flex items-center space-x-3 md:space-x-4 flex-1">
+                                      <div
+                                        className={`w-9 h-9 md:w-11 md:h-11 rounded-full flex items-center justify-center shadow-md ${
+                                          isOverdue
+                                            ? 'bg-red-100'
+                                            : needsResponse
+                                            ? 'bg-yellow-100'
+                                            : 'bg-green-100'
+                                        }`}
+                                      >
+                                        {isOverdue ? (
+                                          <svg
+                                            className="w-5 h-5 md:w-6 md:h-6 text-red-600"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            viewBox="0 0 24 24"
+                                          >
+                                            <path
+                                              strokeLinecap="round"
+                                              strokeLinejoin="round"
+                                              strokeWidth={2}
+                                              d="M12 9v4m0 4h.01M12 5a7 7 0 00-7 7v0a7 7 0 0014 0v0a7 7 0 00-7-7z"
+                                            />
+                                          </svg>
+                                        ) : needsResponse ? (
+                                          <svg
+                                            className="w-5 h-5 md:w-6 h-6 text-yellow-600"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            viewBox="0 0 24 24"
+                                          >
+                                            <path
+                                              strokeLinecap="round"
+                                              strokeLinejoin="round"
+                                              strokeWidth={2}
+                                              d="M12 8v4l2 2m-2-2H9m3-7a7 7 0 00-7 7v3l-1.5 1.5M19.5 19.5L18 17"
+                                            />
                                           </svg>
                                         ) : (
-                                          <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                          <svg
+                                            className="w-5 h-5 md:w-6 md:h-6 text-green-600"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            viewBox="0 0 24 24"
+                                          >
+                                            <path
+                                              strokeLinecap="round"
+                                              strokeLinejoin="round"
+                                              strokeWidth={2}
+                                              d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                                            />
                                           </svg>
                                         )}
                                       </div>
                                       <div className="flex-1">
                                         <div className="flex items-center space-x-2">
-                                          <h3 className="text-lg font-bold text-gray-900">{checkIn.clientName}</h3>
-                                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                                            needsResponse 
-                                              ? 'bg-yellow-100 text-yellow-700' 
-                                              : 'bg-green-100 text-green-700'
-                                          }`}>
-                                            {needsResponse ? '⏳ Needs Response' : '✓ Responded'}
-                                          </span>
+                                          <h3 className="text-sm md:text-base font-semibold text-gray-900">
+                                            {checkIn.clientName}
+                                          </h3>
                                         </div>
-                                        <p className="text-gray-600">{checkIn.formTitle}</p>
-                                        <p className="text-sm text-gray-700 mt-1">{formatTimeAgo(checkIn.submittedAt)}</p>
+                                        <p className="text-gray-600 text-xs md:text-sm">
+                                          {checkIn.formTitle}
+                                        </p>
+                                        <p className="text-[11px] md:text-xs text-gray-700 mt-1">
+                                          {formatTimeAgo(checkIn.submittedAt)}
+                                        </p>
                                       </div>
                                     </div>
-                                    <div className="flex items-center space-x-4">
+                                    <div className="flex items-center space-x-3 md:space-x-4">
                                       <div className="text-right">
-                                        <div className="text-2xl font-bold text-gray-900">{checkIn.score}%</div>
-                                        <div className="text-sm text-gray-700">Score</div>
+                                        <div className="text-lg md:text-xl font-bold text-gray-900">
+                                          {checkIn.score}%
+                                        </div>
+                                        <div className="text-[11px] md:text-xs text-gray-700">Score</div>
                                       </div>
                                       <Link
                                         href={`/responses/${checkIn.id}`}
-                                        className={`px-4 py-2 rounded-lg hover:opacity-90 transition-colors text-sm font-medium ${
+                                        className={`px-3 py-1.5 md:px-4 md:py-2 rounded-lg hover:opacity-90 transition-colors text-xs md:text-sm font-medium ${
                                           needsResponse 
                                             ? 'bg-yellow-600 text-white hover:bg-yellow-700' 
                                             : 'bg-blue-600 text-white hover:bg-blue-700'

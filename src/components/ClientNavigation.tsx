@@ -129,6 +129,7 @@ const clientNavItems: NavItem[] = [
 
 export default function ClientNavigation() {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const pathname = usePathname();
   const { userProfile, logout } = useAuth();
 
@@ -139,8 +140,136 @@ export default function ClientNavigation() {
     return pathname.startsWith(href);
   };
 
+  // Close menu when route changes
+  const handleLinkClick = () => {
+    setIsMenuOpen(false);
+  };
+
   return (
-    <div className={`w-64 bg-white shadow-xl border-r border-gray-100 transition-all duration-300 h-screen flex flex-col ${isCollapsed ? 'w-16' : 'w-64'}`}>
+    <>
+      {/* Mobile Hamburger Button - Only visible on mobile */}
+      <button
+        onClick={() => setIsMenuOpen(true)}
+        className="lg:hidden fixed top-4 left-4 z-50 inline-flex items-center justify-center w-10 h-10 rounded-lg border border-gray-200 bg-white text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-pink-500"
+        aria-label="Open navigation menu"
+      >
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
+      </button>
+
+      {/* Mobile Slide-in Menu */}
+      {isMenuOpen && (
+        <div className="fixed inset-0 z-50 flex lg:hidden">
+          <div className="w-72 bg-white shadow-2xl h-full flex flex-col">
+            {/* Header */}
+            <div className="bg-gradient-to-br from-pink-500 to-rose-600 px-6 py-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 bg-white bg-opacity-20 rounded-xl flex items-center justify-center">
+                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h1 className="text-white font-bold text-base">Client Portal</h1>
+                    <p className="text-pink-100 text-xs">Wellness journey</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsMenuOpen(false)}
+                  className="p-2 rounded-lg hover:bg-white/20 text-white"
+                  aria-label="Close menu"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {/* Navigation */}
+            <nav className="px-4 py-4 flex-1 overflow-y-auto">
+              <div className="space-y-2">
+                {clientNavItems.map((item) => (
+                  <Link
+                    key={item.name}
+                    href={item.href}
+                    onClick={handleLinkClick}
+                    className={`flex items-center space-x-3 px-4 py-3 rounded-xl font-medium transition-all duration-200 ${
+                      isActive(item.href)
+                        ? 'bg-gradient-to-r from-pink-50 to-rose-50 text-pink-700 shadow-sm border border-pink-100'
+                        : 'text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-pink-50 hover:text-pink-700'
+                    }`}
+                  >
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                      isActive(item.href)
+                        ? 'bg-pink-100'
+                        : 'bg-gray-100'
+                    }`}>
+                      <div className={isActive(item.href) ? 'text-pink-600' : 'text-gray-600'}>
+                        {item.icon}
+                      </div>
+                    </div>
+                    <span>{item.name}</span>
+                  </Link>
+                ))}
+                <Link
+                  href="/notifications"
+                  onClick={handleLinkClick}
+                  className={`flex items-center space-x-3 px-4 py-3 rounded-xl font-medium transition-all duration-200 ${
+                    pathname === '/notifications'
+                      ? 'bg-gradient-to-r from-pink-50 to-rose-50 text-pink-700 shadow-sm border border-pink-100'
+                      : 'text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-pink-50 hover:text-pink-700'
+                  }`}
+                >
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                    pathname === '/notifications'
+                      ? 'bg-pink-100'
+                      : 'bg-gray-100'
+                  }`}>
+                    <svg className={`w-4 h-4 ${pathname === '/notifications' ? 'text-pink-600' : 'text-gray-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                    </svg>
+                  </div>
+                  <span className="flex-1">Notifications</span>
+                  <NotificationBadge className="ml-auto" />
+                </Link>
+              </div>
+            </nav>
+
+            {/* User Section */}
+            <div className="px-4 py-4 border-t border-gray-100 bg-white">
+              <div className="flex items-center space-x-3 mb-3">
+                <div className="w-10 h-10 bg-gradient-to-br from-pink-500 to-rose-600 rounded-full flex items-center justify-center text-white text-sm font-medium shadow-sm">
+                  {userProfile?.firstName?.charAt(0) || 'C'}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-gray-900 truncate">
+                    {userProfile?.firstName} {userProfile?.lastName}
+                  </div>
+                  <div className="text-xs text-gray-700">Client</div>
+                </div>
+              </div>
+              <button
+                onClick={logout}
+                className="w-full px-4 py-2 rounded-lg hover:bg-red-50 hover:text-red-700 transition-all duration-200 text-red-600 text-sm font-medium text-center"
+              >
+                Logout
+              </button>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="flex-1 bg-black/30"
+            aria-label="Close navigation menu"
+            onClick={() => setIsMenuOpen(false)}
+          />
+        </div>
+      )}
+
+      {/* Desktop Sidebar - Hidden on mobile */}
+      <div className={`hidden lg:flex w-64 bg-white shadow-xl border-r border-gray-100 transition-all duration-300 h-screen flex-col ${isCollapsed ? 'w-16' : 'w-64'}`}>
       {/* Sidebar Header */}
       <div className="bg-gradient-to-br from-pink-500 to-rose-600 px-6 py-8">
         <div className="flex items-center space-x-3">
@@ -249,6 +378,7 @@ export default function ClientNavigation() {
           </button>
         </div>
       </div>
-    </div>
+      </div>
+    </>
   );
 } 

@@ -609,12 +609,34 @@ export default function ClientPortalPage() {
 
   return (
     <RoleProtected requiredRole="client">
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/50 flex">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/50 flex flex-col lg:flex-row">
         <ClientNavigation />
         
-        <div className="flex-1 ml-4 p-5">
-          {/* Header */}
-          <div className="mb-6">
+        {/* Mobile Top Bar */}
+        <div className="lg:hidden flex items-center justify-between px-4 py-4 bg-white/90 backdrop-blur-sm border-b border-gray-200 shadow-sm">
+          <div className="flex items-center space-x-2">
+            <div className="w-9 h-9 bg-gradient-to-br from-pink-500 to-rose-600 rounded-xl flex items-center justify-center text-white font-semibold">
+              {userProfile?.firstName?.charAt(0) || 'C'}
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-gray-900">Client Portal</p>
+              <p className="text-xs text-gray-500">Dashboard</p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-2">
+            <NotificationBell />
+            {coach && (
+              <div className="text-right bg-white/60 backdrop-blur-sm px-3 py-1.5 rounded-lg border border-gray-200/50 shadow-sm">
+                <p className="text-[10px] text-gray-600 font-medium">Coach</p>
+                <p className="text-xs font-semibold text-gray-900 truncate max-w-[80px]">{coach.firstName} {coach.lastName}</p>
+              </div>
+            )}
+          </div>
+        </div>
+        
+        <div className="flex-1 lg:ml-4 p-4 lg:p-5 pt-6 lg:pt-5">
+          {/* Header - Hidden on mobile, shown on desktop */}
+          <div className="mb-6 hidden lg:block">
             <div className="flex items-center justify-between">
               <div>
                 <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">Welcome Back!</h1>
@@ -632,75 +654,81 @@ export default function ClientPortalPage() {
             </div>
           </div>
 
-          {/* Stats Overview */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            <div className="group relative bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200/60 overflow-hidden hover:shadow-lg hover:border-blue-300/50 transition-all duration-300 hover:-translate-y-0.5">
+          {/* Mobile Welcome - Shown only on mobile */}
+          <div className="mb-4 lg:hidden">
+            <h1 className="text-xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">Welcome Back!</h1>
+            <p className="text-gray-600 text-xs mt-1">Track your progress and stay connected</p>
+          </div>
+
+          {/* Stats Overview - Mobile: Compact 2x2, Desktop: 4 columns */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4 mb-4 lg:mb-6">
+            <div className="group relative bg-white/80 backdrop-blur-sm rounded-lg lg:rounded-xl shadow-sm border border-gray-200/60 overflow-hidden hover:shadow-lg hover:border-blue-300/50 transition-all duration-300 hover:-translate-y-0.5">
               <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-indigo-500/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-              <div className="relative px-4 py-3">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center shadow-sm">
-                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="relative px-3 py-2.5 lg:px-4 lg:py-3">
+                <div className="flex items-center justify-between mb-1.5 lg:mb-2">
+                  <div className="w-8 h-8 lg:w-10 lg:h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center shadow-sm">
+                    <svg className="w-4 h-4 lg:w-5 lg:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
                   </div>
                 </div>
-                <div className="text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">{stats?.totalCheckins || 0}</div>
-                <div className="text-xs text-gray-900 mt-1 font-medium">Total Check-ins</div>
+                <div className="text-2xl lg:text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">{stats?.totalCheckins || 0}</div>
+                <div className="text-[10px] lg:text-xs text-gray-900 mt-0.5 lg:mt-1 font-medium">Total Check-ins</div>
               </div>
             </div>
 
-            <div className="group relative bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200/60 overflow-hidden hover:shadow-lg hover:border-emerald-300/50 transition-all duration-300 hover:-translate-y-0.5">
+            <div className="group relative bg-white/80 backdrop-blur-sm rounded-lg lg:rounded-xl shadow-sm border border-gray-200/60 overflow-hidden hover:shadow-lg hover:border-emerald-300/50 transition-all duration-300 hover:-translate-y-0.5">
               <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-green-500/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-              <div className="relative px-4 py-3">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-green-600 rounded-lg flex items-center justify-center shadow-sm">
-                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="relative px-3 py-2.5 lg:px-4 lg:py-3">
+                <div className="flex items-center justify-between mb-1.5 lg:mb-2">
+                  <div className="w-8 h-8 lg:w-10 lg:h-10 bg-gradient-to-br from-emerald-500 to-green-600 rounded-lg flex items-center justify-center shadow-sm">
+                    <svg className="w-4 h-4 lg:w-5 lg:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                   </div>
                 </div>
-                <div className="text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">{stats?.completedCheckins || 0}</div>
-                <div className="text-xs text-gray-900 mt-1 font-medium">Completed</div>
+                <div className="text-2xl lg:text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">{stats?.completedCheckins || 0}</div>
+                <div className="text-[10px] lg:text-xs text-gray-900 mt-0.5 lg:mt-1 font-medium">Completed</div>
               </div>
             </div>
 
-            <div className="group relative bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200/60 overflow-hidden hover:shadow-lg hover:border-purple-300/50 transition-all duration-300 hover:-translate-y-0.5">
+            <div className="group relative bg-white/80 backdrop-blur-sm rounded-lg lg:rounded-xl shadow-sm border border-gray-200/60 overflow-hidden hover:shadow-lg hover:border-purple-300/50 transition-all duration-300 hover:-translate-y-0.5">
               <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-pink-500/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-              <div className="relative px-4 py-3">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-lg flex items-center justify-center shadow-sm">
-                    <span className="text-xl">{getTrafficLightIcon(averageTrafficLight)}</span>
+              <div className="relative px-3 py-2.5 lg:px-4 lg:py-3">
+                <div className="flex items-center justify-between mb-1.5 lg:mb-2">
+                  <div className="w-8 h-8 lg:w-10 lg:h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-lg flex items-center justify-center shadow-sm">
+                    <span className="text-base lg:text-xl">{getTrafficLightIcon(averageTrafficLight)}</span>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 mb-1">
-                  <div className="text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">{stats?.averageScore || 0}%</div>
+                <div className="flex items-center gap-1.5 lg:gap-2 mb-0.5 lg:mb-1">
+                  <div className="text-2xl lg:text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">{stats?.averageScore || 0}%</div>
                   {stats?.averageScore > 0 && (
-                    <span className="text-xs font-semibold text-gray-900">
+                    <span className="text-[10px] lg:text-xs font-semibold text-gray-900">
                       {getTrafficLightLabel(averageTrafficLight)}
                     </span>
                   )}
                 </div>
-                <div className="text-xs text-gray-900 mt-1 font-medium">Average Score</div>
+                <div className="text-[10px] lg:text-xs text-gray-900 mt-0.5 lg:mt-1 font-medium">Average Score</div>
                 {stats?.averageScore > 0 && recentResponses.length > 0 && (
-                  <div className="text-xs text-gray-900 mt-0.5">Based on {recentResponses.length} check-in{recentResponses.length !== 1 ? 's' : ''}</div>
+                  <div className="text-[9px] lg:text-xs text-gray-900 mt-0.5">Based on {recentResponses.length} check-in{recentResponses.length !== 1 ? 's' : ''}</div>
                 )}
               </div>
             </div>
 
-            <div className="group relative bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200/60 overflow-hidden hover:shadow-lg hover:border-amber-300/50 transition-all duration-300 hover:-translate-y-0.5">
+            <div className="group relative bg-white/80 backdrop-blur-sm rounded-lg lg:rounded-xl shadow-sm border border-gray-200/60 overflow-hidden hover:shadow-lg hover:border-amber-300/50 transition-all duration-300 hover:-translate-y-0.5">
               <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 to-orange-500/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-              <div className="relative px-4 py-3">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="w-10 h-10 bg-gradient-to-br from-amber-500 to-orange-600 rounded-lg flex items-center justify-center shadow-sm">
-                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="relative px-3 py-2.5 lg:px-4 lg:py-3">
+                <div className="flex items-center justify-between mb-1.5 lg:mb-2">
+                  <div className="w-8 h-8 lg:w-10 lg:h-10 bg-gradient-to-br from-amber-500 to-orange-600 rounded-lg flex items-center justify-center shadow-sm">
+                    <svg className="w-4 h-4 lg:w-5 lg:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                   </div>
                 </div>
-                <div className="text-xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
+                <div className="text-lg lg:text-xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
                   {stats?.lastActivity ? new Date(stats.lastActivity).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'N/A'}
                 </div>
-                <div className="text-xs text-gray-900 mt-1 font-medium">Last Activity</div>
+                <div className="text-[10px] lg:text-xs text-gray-900 mt-0.5 lg:mt-1 font-medium">Last Activity</div>
               </div>
             </div>
           </div>
@@ -847,24 +875,24 @@ export default function ClientPortalPage() {
           </div>
 
           {/* Upcoming Check-ins Section - Front and Centre */}
-          <div className="mb-8">
-            <div className="bg-gradient-to-r from-amber-50 via-orange-50 to-red-50 rounded-2xl shadow-xl border border-orange-200 overflow-hidden">
-              <div className="bg-gradient-to-r from-amber-500 to-orange-600 px-8 py-6 border-b border-orange-200">
+          <div className="mb-6 lg:mb-8">
+            <div className="bg-gradient-to-r from-amber-50 via-orange-50 to-red-50 rounded-xl lg:rounded-2xl shadow-xl border border-orange-200 overflow-hidden">
+              <div className="bg-gradient-to-r from-amber-500 to-orange-600 px-4 py-4 lg:px-8 lg:py-6 border-b border-orange-200">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-white bg-opacity-20 rounded-lg flex items-center justify-center">
-                      <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="flex items-center space-x-2 lg:space-x-3 flex-1 min-w-0">
+                    <div className="w-8 h-8 lg:w-10 lg:h-10 bg-white bg-opacity-20 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <svg className="w-5 h-5 lg:w-6 lg:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                     </div>
-                    <div>
-                      <h2 className="text-2xl font-bold text-white">Check-ins Requiring Attention</h2>
-                      <p className="text-orange-100 text-sm">Complete overdue and upcoming check-ins to stay on track</p>
+                    <div className="min-w-0 flex-1">
+                      <h2 className="text-lg lg:text-2xl font-bold text-white">Check-ins Requiring Attention</h2>
+                      <p className="text-orange-100 text-xs lg:text-sm hidden sm:block">Complete overdue and upcoming check-ins to stay on track</p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <div className="text-white text-sm font-medium">Needs Action</div>
-                    <div className="text-2xl font-bold text-white">
+                  <div className="text-right flex-shrink-0 ml-2">
+                    <div className="text-white text-xs lg:text-sm font-medium">Needs Action</div>
+                    <div className="text-xl lg:text-2xl font-bold text-white">
                       {assignedCheckins.filter(checkIn => {
                         const dueDate = new Date(checkIn.dueDate);
                         const now = new Date();
@@ -876,7 +904,7 @@ export default function ClientPortalPage() {
                   </div>
                 </div>
               </div>
-              <div className="p-8">
+              <div className="p-4 lg:p-8">
                 {(() => {
                   const upcomingCheckins = assignedCheckins.filter(checkIn => {
                     const dueDate = new Date(checkIn.dueDate);
@@ -954,21 +982,21 @@ export default function ClientPortalPage() {
                         return (
                           <div 
                             key={checkIn.id} 
-                            className={`bg-white rounded-xl p-6 border-2 transition-all duration-200 hover:shadow-lg ${borderColor}`}
+                            className={`bg-white rounded-lg lg:rounded-xl p-4 lg:p-6 border-2 transition-all duration-200 hover:shadow-lg ${borderColor}`}
                           >
-                            <div className="flex items-center justify-between">
-                              <div className="flex-1">
-                                <div className="flex items-center space-x-3 mb-2">
-                                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${iconBg}`}>
-                                    <svg className={`w-4 h-4 ${iconColor}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center space-x-2 lg:space-x-3 mb-2">
+                                  <div className={`w-7 h-7 lg:w-8 lg:h-8 rounded-full flex items-center justify-center flex-shrink-0 ${iconBg}`}>
+                                    <svg className={`w-3.5 h-3.5 lg:w-4 lg:h-4 ${iconColor}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                     </svg>
                                   </div>
-                                  <h3 className="text-lg font-semibold text-gray-900">{checkIn.title}</h3>
+                                  <h3 className="text-base lg:text-lg font-semibold text-gray-900 truncate">{checkIn.title}</h3>
                                 </div>
-                                <div className="flex items-center space-x-4 text-sm">
+                                <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 space-y-1 sm:space-y-0 text-xs lg:text-sm ml-9 lg:ml-11">
                                   <div className={`flex items-center space-x-1 ${textColor}`}>
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <svg className="w-3.5 h-3.5 lg:w-4 lg:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                                     </svg>
                                     <span className="font-medium">
@@ -980,20 +1008,20 @@ export default function ClientPortalPage() {
                                   </div>
                                   <span className="text-gray-700">
                                     {dueDate.toLocaleDateString('en-US', { 
-                                      weekday: 'long', 
+                                      weekday: 'short', 
                                       month: 'short', 
                                       day: 'numeric' 
                                     })}
                                   </span>
                                 </div>
                               </div>
-                              <div className="flex items-center space-x-3">
-                                <div className={`px-3 py-1 rounded-full text-xs font-medium ${badgeBg}`}>
+                              <div className="flex items-center justify-between sm:justify-end space-x-2 sm:space-x-3">
+                                <div className={`px-2.5 py-1 lg:px-3 lg:py-1 rounded-full text-[10px] lg:text-xs font-medium ${badgeBg}`}>
                                   {statusLabel}
                                 </div>
                                 <Link
                                   href={`/client-portal/check-in/${checkIn.id}`}
-                                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 text-white shadow-md hover:shadow-lg ${buttonBg}`}
+                                  className={`px-3 py-1.5 lg:px-4 lg:py-2 rounded-lg text-xs lg:text-sm font-medium transition-all duration-200 text-white shadow-md hover:shadow-lg ${buttonBg}`}
                                 >
                                   {buttonText}
                                 </Link>
@@ -1010,20 +1038,20 @@ export default function ClientPortalPage() {
           </div>
 
           {/* Main Content and Sidebar */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-4">
             {/* Main Content */}
             <div className="lg:col-span-2">
               {/* Progress Images */}
-              <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/60 overflow-hidden mb-6">
-                <div className="px-5 py-4 bg-gradient-to-r from-pink-50/80 to-rose-50/80 border-b border-gray-200/50">
+              <div className="bg-white/80 backdrop-blur-sm rounded-xl lg:rounded-2xl shadow-lg border border-gray-200/60 overflow-hidden mb-4 lg:mb-6">
+                <div className="px-4 py-3 lg:px-5 lg:py-4 bg-gradient-to-r from-pink-50/80 to-rose-50/80 border-b border-gray-200/50">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h2 className="text-lg font-bold text-gray-900">Progress Images</h2>
-                      <p className="text-gray-900 text-xs mt-1 font-medium">Track your transformation</p>
+                      <h2 className="text-base lg:text-lg font-bold text-gray-900">Progress Images</h2>
+                      <p className="text-gray-900 text-[10px] lg:text-xs mt-0.5 lg:mt-1 font-medium">Track your transformation</p>
                     </div>
                     <Link
                       href="/client-portal/progress-images"
-                      className="px-4 py-2 bg-gradient-to-r from-pink-600 to-rose-600 text-white rounded-xl hover:from-pink-700 hover:to-rose-700 transition-all duration-300 text-xs font-bold shadow-md hover:shadow-lg"
+                      className="px-3 py-1.5 lg:px-4 lg:py-2 bg-gradient-to-r from-pink-600 to-rose-600 text-white rounded-lg lg:rounded-xl hover:from-pink-700 hover:to-rose-700 transition-all duration-300 text-[10px] lg:text-xs font-bold shadow-md hover:shadow-lg"
                     >
                       Manage
                     </Link>
@@ -1033,27 +1061,27 @@ export default function ClientPortalPage() {
               </div>
 
               {/* Recent Responses */}
-              <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden mb-8">
-                <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-8 py-6 border-b border-gray-100">
+              <div className="bg-white rounded-xl lg:rounded-2xl shadow-xl border border-gray-100 overflow-hidden mb-6 lg:mb-8">
+                <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-4 py-4 lg:px-8 lg:py-6 border-b border-gray-100">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h2 className="text-2xl font-bold text-gray-900">Recent Responses</h2>
-                      <p className="text-gray-900 mt-1">Your latest check-in responses and feedback</p>
+                      <h2 className="text-lg lg:text-2xl font-bold text-gray-900">Recent Responses</h2>
+                      <p className="text-gray-900 text-xs lg:text-sm mt-0.5 lg:mt-1 hidden sm:block">Your latest check-in responses and feedback</p>
                     </div>
                     {recentResponses.length > 0 && (
                       <Link
                         href="/client-portal/check-ins?filter=completed"
-                        className="text-sm font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+                        className="text-xs lg:text-sm font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
                       >
                         View All
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-3.5 h-3.5 lg:w-4 lg:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                         </svg>
                       </Link>
                     )}
                   </div>
                 </div>
-                <div className="p-8">
+                <div className="p-4 lg:p-8">
                   {recentResponses.length === 0 ? (
                     <div className="text-center py-12">
                       <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -1070,45 +1098,46 @@ export default function ClientPortalPage() {
                         <Link
                           key={response.id}
                           href={response.hasFeedback ? `/client-portal/feedback/${response.id}` : `/client-portal/check-in/${response.id}/success?score=${response.score}`}
-                          className="block bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl p-6 border-2 border-transparent hover:border-indigo-300 hover:shadow-lg transition-all duration-200 group"
+                          className="block bg-gradient-to-r from-gray-50 to-gray-100 rounded-lg lg:rounded-xl p-4 lg:p-6 border-2 border-transparent hover:border-indigo-300 hover:shadow-lg transition-all duration-200 group"
                         >
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center space-x-4 flex-1">
-                              <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
-                                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center space-x-3 lg:space-x-4 flex-1 min-w-0">
+                              <div className="w-10 h-10 lg:w-12 lg:h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg lg:rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform flex-shrink-0">
+                                <svg className="w-5 h-5 lg:w-6 lg:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                 </svg>
                               </div>
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-1">
-                                  <h3 className="text-lg font-bold text-gray-900 group-hover:text-indigo-600 transition-colors">{response.formTitle}</h3>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                  <h3 className="text-sm lg:text-lg font-bold text-gray-900 group-hover:text-indigo-600 transition-colors truncate">{response.formTitle}</h3>
                                   {response.hasFeedback && (
-                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-800 rounded-full text-xs font-semibold animate-pulse">
-                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 lg:px-2 lg:py-0.5 bg-green-100 text-green-800 rounded-full text-[10px] lg:text-xs font-semibold animate-pulse flex-shrink-0">
+                                      <svg className="w-2.5 h-2.5 lg:w-3 lg:h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                       </svg>
-                                      Coach Feedback
+                                      <span className="hidden sm:inline">Coach Feedback</span>
+                                      <span className="sm:hidden">Feedback</span>
                                     </span>
                                   )}
                                 </div>
-                                <p className="text-gray-900 text-sm">Submitted {new Date(response.submittedAt).toLocaleDateString()}</p>
+                                <p className="text-gray-900 text-xs lg:text-sm">Submitted {new Date(response.submittedAt).toLocaleDateString()}</p>
                               </div>
                             </div>
-                            <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-2 lg:gap-4 flex-shrink-0">
                               <div className="text-right">
-                                <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold ${(() => {
+                                <div className={`inline-flex items-center gap-1 lg:gap-1.5 px-2 py-1 lg:px-3 lg:py-1.5 rounded-full text-xs lg:text-sm font-semibold ${(() => {
                                   const status = getTrafficLightStatus(response.score, thresholds);
                                   return getTrafficLightColor(status);
                                 })()}`}>
                                   <span>{getTrafficLightIcon(getTrafficLightStatus(response.score, thresholds))}</span>
                                   <span>{response.score}%</span>
                                 </div>
-                                <div className="text-xs text-gray-900 font-medium mt-1">
+                                <div className="text-[10px] lg:text-xs text-gray-900 font-medium mt-0.5 lg:mt-1 hidden sm:block">
                                   {getTrafficLightLabel(getTrafficLightStatus(response.score, thresholds))}
                                 </div>
                               </div>
                               <div className="flex items-center text-indigo-600 group-hover:text-indigo-800 transition-colors">
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg className="w-4 h-4 lg:w-5 lg:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                                 </svg>
                               </div>

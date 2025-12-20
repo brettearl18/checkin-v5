@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase-server';
 import { notificationService } from '@/lib/notification-service';
 
+// Force dynamic rendering
+export const dynamic = 'force-dynamic';
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -165,4 +168,4 @@ export async function POST(
       { status: 500 }
     );
   }
-} 
+}

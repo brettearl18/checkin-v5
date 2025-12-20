@@ -214,4 +214,4 @@ export async function PATCH(
       error: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
   }
-} 
+}

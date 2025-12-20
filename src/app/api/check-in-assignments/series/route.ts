@@ -109,4 +109,4 @@ export async function DELETE(request: NextRequest) {
       error: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
   }
-} 
+}

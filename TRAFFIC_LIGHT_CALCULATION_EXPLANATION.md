@@ -175,3 +175,7 @@ return 'green';
 - **Client-Specific**: Same score means different things for different client types
 - **Fair**: Accounts for question importance through weights
 
+
+
+
+

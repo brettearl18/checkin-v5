@@ -1,20 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { initializeApp, getApps, cert } from 'firebase-admin/app';
-import { getAuth } from 'firebase-admin/auth';
-import { getFirestore } from 'firebase-admin/firestore';
+import { getDb, getAuthInstance } from '@/lib/firebase-server';
 
-// Initialize Firebase Admin if not already initialized
-if (!getApps().length) {
-  const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || '{}');
-  
-  initializeApp({
-    credential: cert(serviceAccount),
-    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
-  });
-}
+// Force dynamic rendering
+export const dynamic = 'force-dynamic';
 
-const auth = getAuth();
-const db = getFirestore();
 
 // Function to generate a short, readable UID
 function generateShortUID(): string {
@@ -144,7 +133,7 @@ async function createMensHealthQuestions(coachId: string) {
 }
 
 // Function to create standard questions for women's health
-async function createWomensHealthQuestions(coachId: string) {
+async function createWomensHealthQuestions(coachId: string, db: any) {
   const questions = [
     {
       id: `womens-q-${Date.now()}-1`,
@@ -235,12 +224,12 @@ async function createWomensHealthQuestions(coachId: string) {
 }
 
 // Function to create standard forms for new coaches
-async function createStandardForms(coachId: string, coachName: string) {
+async function createStandardForms(coachId: string, coachName: string, db: any) {
   // Create men's health questions
-  const mensQuestions = await createMensHealthQuestions(coachId);
+  const mensQuestions = await createMensHealthQuestions(coachId, db);
   
   // Create women's health questions
-  const womensQuestions = await createWomensHealthQuestions(coachId);
+  const womensQuestions = await createWomensHealthQuestions(coachId, db);
 
   // Create Men's Health Form
   const mensForm = {
@@ -278,6 +267,7 @@ async function createStandardForms(coachId: string, coachName: string) {
 }
 
 export async function POST(request: NextRequest) {
+  const db = getDb();
   try {
     const { email, password, firstName, lastName, role, coachShortUID } = await request.json();
 
@@ -422,7 +412,7 @@ export async function POST(request: NextRequest) {
       await db.collection('coaches').doc(userRecord.uid).set(coachRecord);
 
       // Create standard forms for the new coach
-      await createStandardForms(userRecord.uid, `${firstName} ${lastName}`);
+      await createStandardForms(userRecord.uid, `${firstName} ${lastName}`, db);
 
       return NextResponse.json({
         success: true,
@@ -477,4 +467,4 @@ export async function POST(request: NextRequest) {
       error: error.message
     }, { status: 500 });
   }
-} 
+}

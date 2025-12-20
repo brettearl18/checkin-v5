@@ -1,18 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { initializeApp, getApps, cert } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
-
-// Initialize Firebase Admin if not already initialized
-if (!getApps().length) {
-  const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || '{}');
-  
-  initializeApp({
-    credential: cert(serviceAccount),
-    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
-  });
-}
-
-const db = getFirestore();
+import { getDb } from '@/lib/firebase-server';
 
 interface CheckIn {
   id: string;
@@ -40,6 +27,7 @@ interface CheckInMetrics {
 }
 
 export async function GET(request: NextRequest) {
+  const db = getDb();
   try {
     const { searchParams } = new URL(request.url);
     const coachId = searchParams.get('coachId');
@@ -219,4 +207,4 @@ async function calculateMetrics(coachId: string): Promise<CheckInMetrics> {
       avgScore: 0
     };
   }
-} 
+}

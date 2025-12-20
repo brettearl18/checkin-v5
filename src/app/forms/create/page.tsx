@@ -1,6 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+export const dynamic = 'force-dynamic';
+
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
@@ -127,7 +129,7 @@ function SortableQuestionItem({
   );
 }
 
-export default function CreateFormPage() {
+function CreateFormPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { userProfile, logout } = useAuth();
@@ -1891,5 +1893,13 @@ export default function CreateFormPage() {
         </div>
       )}
     </RoleProtected>
+  );
+}
+
+export default function CreateFormPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
+      <CreateFormPageContent />
+    </Suspense>
   );
 } 

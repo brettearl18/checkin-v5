@@ -1,18 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { initializeApp, getApps, cert } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
+import { getDb } from '@/lib/firebase-server';
 
-// Initialize Firebase Admin if not already initialized
-if (!getApps().length) {
-  const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || '{}');
-  
-  initializeApp({
-    credential: cert(serviceAccount),
-    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
-  });
-}
-
-const db = getFirestore();
+export const dynamic = 'force-dynamic';
 
 interface CheckIn {
   id: string;
@@ -48,12 +37,99 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const db = getDb();
     const { id: clientId } = await params;
     
+    // First, try to find the client to get all possible IDs
+    // The clientId parameter might be a document ID, authUid, or id field
+    let clientDoc = await db.collection('clients').doc(clientId).get();
+    let clientData = null;
+    let possibleClientIds = [clientId]; // Start with the provided ID
+    
+    // If not found by document ID, try by authUid or id field
+    if (!clientDoc.exists) {
+      try {
+        const queryByAuthUid = await db.collection('clients')
+          .where('authUid', '==', clientId)
+          .limit(1)
+          .get();
+        
+        if (!queryByAuthUid.empty) {
+          clientDoc = queryByAuthUid.docs[0];
+          clientData = clientDoc.data();
+          possibleClientIds.push(clientDoc.id); // Add document ID
+          if (clientData?.authUid) {
+            possibleClientIds.push(clientData.authUid); // Add authUid
+          }
+        } else {
+          const queryById = await db.collection('clients')
+            .where('id', '==', clientId)
+            .limit(1)
+            .get();
+          
+          if (!queryById.empty) {
+            clientDoc = queryById.docs[0];
+            clientData = clientDoc.data();
+            possibleClientIds.push(clientDoc.id); // Add document ID
+            if (clientData?.authUid) {
+              possibleClientIds.push(clientData.authUid); // Add authUid
+            }
+          }
+        }
+      } catch (queryError) {
+        console.log('Error querying client:', queryError);
+      }
+    } else {
+      clientData = clientDoc.data();
+      // If found by document ID, also check for authUid
+      if (clientData?.authUid && clientData.authUid !== clientId) {
+        possibleClientIds.push(clientData.authUid);
+      }
+    }
+    
+    // Remove duplicates
+    possibleClientIds = [...new Set(possibleClientIds)];
+    
     // Fetch check-in assignments for this client
-    const assignmentsSnapshot = await db.collection('check_in_assignments')
-      .where('clientId', '==', clientId)
-      .get();
+    // Try querying with all possible client IDs
+    let allAssignments: any[] = [];
+    const seenIds = new Set<string>();
+    
+    try {
+      for (const idToTry of possibleClientIds) {
+        try {
+          const snapshot = await db.collection('check_in_assignments')
+            .where('clientId', '==', idToTry)
+            .get();
+          
+          if (snapshot && snapshot.docs) {
+            snapshot.docs.forEach((doc: any) => {
+              // Avoid duplicates by document ID
+              if (doc && doc.id && !seenIds.has(doc.id)) {
+                seenIds.add(doc.id);
+                allAssignments.push(doc);
+              }
+            });
+          }
+        } catch (queryError: any) {
+          console.log(`Error querying assignments for ${idToTry}:`, queryError?.message || queryError);
+          // Continue with other IDs
+        }
+      }
+    } catch (error: any) {
+      console.error('Error in assignment query loop:', error?.message || error);
+      // Continue with empty array - better to return empty than fail
+    }
+    
+    // Create a proper snapshot-like object that matches Firestore QuerySnapshot interface
+    const assignmentsSnapshot = {
+      docs: allAssignments,
+      empty: allAssignments.length === 0,
+      size: allAssignments.length,
+      forEach: (callback: (doc: any) => void) => {
+        allAssignments.forEach(callback);
+      }
+    } as any;
     
     const checkIns: CheckIn[] = [];
     const completedCheckIns: CheckIn[] = [];
@@ -214,12 +290,14 @@ export async function GET(
 
   } catch (error: any) {
     console.error('Error fetching client check-ins:', error);
+    console.error('Error stack:', error.stack);
     return NextResponse.json(
       { 
         success: false, 
-        error: error.message 
+        error: error.message || 'Unknown error',
+        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
       },
       { status: 500 }
     );
   }
-} 
+}

@@ -1,24 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { initializeApp, getApps, cert } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
 import { getDb } from '@/lib/firebase-server';
 import { notificationService } from '@/lib/notification-service';
 import { DEFAULT_CHECK_IN_WINDOW } from '@/lib/checkin-window-utils';
 
-// Initialize Firebase Admin if not already initialized
-if (!getApps().length) {
-  const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || '{}');
-  
-  initializeApp({
-    credential: cert(serviceAccount),
-    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
-  });
-}
+export const dynamic = 'force-dynamic';
 
-const db = getFirestore();
+
 
 export async function GET(request: NextRequest) {
   try {
+    const db = getDb();
     const { searchParams } = new URL(request.url);
     const clientId = searchParams.get('clientId');
 
@@ -299,4 +290,4 @@ export async function GET(request: NextRequest) {
       error: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
   }
-} 
+}

@@ -378,13 +378,26 @@ export default function ClientCheckInsPage() {
 
   return (
     <RoleProtected requiredRole="client">
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/50 flex">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/50 flex flex-col lg:flex-row">
         <ClientNavigation />
         
-        <div className="flex-1 ml-4 p-5">
+        {/* Mobile Top Bar */}
+        <div className="lg:hidden flex items-center justify-between px-4 py-4 bg-white/90 backdrop-blur-sm border-b border-gray-200 shadow-sm">
+          <div className="flex items-center space-x-2">
+            <div className="w-9 h-9 bg-gradient-to-br from-pink-500 to-rose-600 rounded-xl flex items-center justify-center text-white font-semibold">
+              {userProfile?.firstName?.charAt(0) || 'C'}
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-gray-900">My Check-ins</p>
+              <p className="text-xs text-gray-500">Track your progress</p>
+            </div>
+          </div>
+        </div>
+        
+        <div className="flex-1 lg:ml-4 p-4 lg:p-5 pt-6 lg:pt-5">
           <div className="max-w-7xl">
-            {/* Header */}
-            <div className="mb-6">
+            {/* Header - Hidden on mobile, shown on desktop */}
+            <div className="mb-4 lg:mb-6 hidden lg:block">
               <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
                 My Check-ins
               </h1>
@@ -393,71 +406,81 @@ export default function ClientCheckInsPage() {
               </p>
             </div>
 
+            {/* Mobile Header */}
+            <div className="mb-4 lg:hidden">
+              <h1 className="text-xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
+                My Check-ins
+              </h1>
+              <p className="text-gray-600 text-xs mt-0.5">
+                Complete your assigned check-ins
+              </p>
+            </div>
+
             {/* Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-              <div className="group relative bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200/60 overflow-hidden hover:shadow-lg hover:border-red-300/50 transition-all duration-300 hover:-translate-y-0.5">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4 mb-4 lg:mb-6">
+              <div className="group relative bg-white/80 backdrop-blur-sm rounded-lg lg:rounded-xl shadow-sm border border-gray-200/60 overflow-hidden hover:shadow-lg hover:border-red-300/50 transition-all duration-300 hover:-translate-y-0.5">
                 <div className="absolute inset-0 bg-gradient-to-br from-red-500/5 to-pink-500/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                <div className="relative px-4 py-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="w-10 h-10 bg-gradient-to-br from-red-500 to-red-600 rounded-lg flex items-center justify-center shadow-sm">
-                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="relative px-3 py-2.5 lg:px-4 lg:py-3">
+                  <div className="flex items-center justify-between mb-1.5 lg:mb-2">
+                    <div className="w-8 h-8 lg:w-10 lg:h-10 bg-gradient-to-br from-red-500 to-red-600 rounded-lg flex items-center justify-center shadow-sm">
+                      <svg className="w-4 h-4 lg:w-5 lg:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                       </svg>
                     </div>
                   </div>
-                  <div className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">{stats.needsAction}</div>
-                  <div className="text-xs text-gray-900 mt-1 font-medium">Needs Action</div>
+                  <div className="text-xl lg:text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">{stats.needsAction}</div>
+                  <div className="text-[10px] lg:text-xs text-gray-900 mt-0.5 lg:mt-1 font-medium">Needs Action</div>
                 </div>
               </div>
 
-              <div className="group relative bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200/60 overflow-hidden hover:shadow-lg hover:border-blue-300/50 transition-all duration-300 hover:-translate-y-0.5">
+              <div className="group relative bg-white/80 backdrop-blur-sm rounded-lg lg:rounded-xl shadow-sm border border-gray-200/60 overflow-hidden hover:shadow-lg hover:border-blue-300/50 transition-all duration-300 hover:-translate-y-0.5">
                 <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-indigo-500/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                <div className="relative px-4 py-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center shadow-sm">
-                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="relative px-3 py-2.5 lg:px-4 lg:py-3">
+                  <div className="flex items-center justify-between mb-1.5 lg:mb-2">
+                    <div className="w-8 h-8 lg:w-10 lg:h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center shadow-sm">
+                      <svg className="w-4 h-4 lg:w-5 lg:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                       </svg>
                     </div>
                   </div>
-                  <div className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">{stats.upcoming}</div>
-                  <div className="text-xs text-gray-900 mt-1 font-medium">This Week</div>
+                  <div className="text-xl lg:text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">{stats.upcoming}</div>
+                  <div className="text-[10px] lg:text-xs text-gray-900 mt-0.5 lg:mt-1 font-medium">This Week</div>
                 </div>
               </div>
 
-              <div className="group relative bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200/60 overflow-hidden hover:shadow-lg hover:border-green-300/50 transition-all duration-300 hover:-translate-y-0.5">
+              <div className="group relative bg-white/80 backdrop-blur-sm rounded-lg lg:rounded-xl shadow-sm border border-gray-200/60 overflow-hidden hover:shadow-lg hover:border-green-300/50 transition-all duration-300 hover:-translate-y-0.5">
                 <div className="absolute inset-0 bg-gradient-to-br from-green-500/5 to-emerald-500/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                <div className="relative px-4 py-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-green-600 rounded-lg flex items-center justify-center shadow-sm">
-                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="relative px-3 py-2.5 lg:px-4 lg:py-3">
+                  <div className="flex items-center justify-between mb-1.5 lg:mb-2">
+                    <div className="w-8 h-8 lg:w-10 lg:h-10 bg-gradient-to-br from-green-500 to-green-600 rounded-lg flex items-center justify-center shadow-sm">
+                      <svg className="w-4 h-4 lg:w-5 lg:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                     </div>
                   </div>
-                  <div className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">{stats.completed}</div>
-                  <div className="text-xs text-gray-900 mt-1 font-medium">Completed</div>
+                  <div className="text-xl lg:text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">{stats.completed}</div>
+                  <div className="text-[10px] lg:text-xs text-gray-900 mt-0.5 lg:mt-1 font-medium">Completed</div>
                 </div>
               </div>
 
-              <div className="group relative bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200/60 overflow-hidden hover:shadow-lg hover:border-yellow-300/50 transition-all duration-300 hover:-translate-y-0.5">
+              <div className="group relative bg-white/80 backdrop-blur-sm rounded-lg lg:rounded-xl shadow-sm border border-gray-200/60 overflow-hidden hover:shadow-lg hover:border-yellow-300/50 transition-all duration-300 hover:-translate-y-0.5">
                 <div className="absolute inset-0 bg-gradient-to-br from-yellow-500/5 to-orange-500/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                <div className="relative px-4 py-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="w-10 h-10 bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-lg flex items-center justify-center shadow-sm">
-                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="relative px-3 py-2.5 lg:px-4 lg:py-3">
+                  <div className="flex items-center justify-between mb-1.5 lg:mb-2">
+                    <div className="w-8 h-8 lg:w-10 lg:h-10 bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-lg flex items-center justify-center shadow-sm">
+                      <svg className="w-4 h-4 lg:w-5 lg:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                     </div>
                   </div>
-                  <div className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">{stats.pending}</div>
-                  <div className="text-xs text-gray-900 mt-1 font-medium">Pending</div>
+                  <div className="text-xl lg:text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">{stats.pending}</div>
+                  <div className="text-[10px] lg:text-xs text-gray-900 mt-0.5 lg:mt-1 font-medium">Pending</div>
                 </div>
               </div>
             </div>
 
             {/* Filters */}
-            <div className="mb-6">
+            <div className="mb-4 lg:mb-6">
               <div className="flex flex-wrap gap-2">
                 {[
                   { key: 'needsAction', label: 'Needs Action', count: stats.needsAction, color: 'red' },
@@ -469,7 +492,7 @@ export default function ClientCheckInsPage() {
                   <button
                     key={filterOption.key}
                     onClick={() => setFilter(filterOption.key as any)}
-                    className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+                    className={`px-3 py-2 lg:px-5 lg:py-2.5 rounded-lg text-xs lg:text-sm font-medium transition-all duration-200 min-h-[36px] ${
                       filter === filterOption.key
                         ? filterOption.color === 'red'
                           ? 'bg-red-600 text-white shadow-lg'
@@ -481,7 +504,9 @@ export default function ClientCheckInsPage() {
                         : 'bg-white/80 backdrop-blur-sm text-gray-900 hover:bg-white border border-gray-200/60 hover:shadow-md'
                     }`}
                   >
-                    {filterOption.label} {filterOption.count > 0 && `(${filterOption.count})`}
+                    <span className="hidden sm:inline">{filterOption.label}</span>
+                    <span className="sm:hidden">{filterOption.label.split(' ')[0]}</span>
+                    {filterOption.count > 0 && <span className="ml-1">({filterOption.count})</span>}
                   </button>
                 ))}
               </div>
@@ -489,20 +514,20 @@ export default function ClientCheckInsPage() {
 
             {/* Check-ins List */}
             <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200/60 overflow-hidden">
-              <div className="p-5 border-b border-gray-200/60 bg-gradient-to-r from-gray-50/50 to-white/50">
-                <h2 className="text-xl font-bold text-gray-900">
+              <div className="p-4 lg:p-5 border-b border-gray-200/60 bg-gradient-to-r from-gray-50/50 to-white/50">
+                <h2 className="text-lg lg:text-xl font-bold text-gray-900">
                   {filter === 'needsAction' ? '🔴 Needs Your Action' : 
                    filter === 'upcoming' ? '📅 This Week\'s Check-ins' : 
                    filter === 'overdue' ? '⚠️ Overdue Check-ins' :
                    filter === 'completed' ? '✅ Completed Check-ins' :
                    `${filter.charAt(0).toUpperCase() + filter.slice(1)} Check-ins`}
                 </h2>
-                <p className="text-gray-900 text-sm mt-1">
+                <p className="text-gray-900 text-xs lg:text-sm mt-0.5 lg:mt-1">
                   {filteredCheckins.length} check-in{filteredCheckins.length !== 1 ? 's' : ''} found
                 </p>
               </div>
               
-              <div className="p-5">
+              <div className="p-4 lg:p-5">
                 {filteredCheckins.length > 0 ? (
                   <div className="space-y-3">
                     {filteredCheckins.map((checkin) => {
@@ -530,34 +555,34 @@ export default function ClientCheckInsPage() {
                         <CardWrapper
                           key={checkin.id}
                           {...cardProps}
-                          className={`${getCardBorderColor(checkin)} bg-white/80 backdrop-blur-sm rounded-lg p-4 hover:shadow-md transition-all duration-200 border border-gray-200/60 ${completedLink ? 'cursor-pointer' : ''}`}
+                          className={`${getCardBorderColor(checkin)} bg-white/80 backdrop-blur-sm rounded-lg p-3 lg:p-4 hover:shadow-md transition-all duration-200 border border-gray-200/60 ${completedLink ? 'cursor-pointer' : ''}`}
                         >
-                          <div className="flex items-start justify-between gap-4">
+                          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                             {/* Left: Main Content */}
                             <div className="flex-1 min-w-0">
-                              <div className="flex items-start justify-between gap-3 mb-2">
+                              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-3 mb-2">
                                 <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 mb-1">
-                                    <h3 className="text-base font-bold text-gray-900 truncate">{checkin.title}</h3>
+                                  <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                    <h3 className="text-sm lg:text-base font-bold text-gray-900 truncate">{checkin.title}</h3>
                                     {checkin.status === 'overdue' && (
-                                      <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 flex-shrink-0">
+                                      <span className="px-1.5 py-0.5 rounded-full text-[10px] lg:text-xs font-medium bg-red-100 text-red-800 flex-shrink-0">
                                         Overdue
                                       </span>
                                     )}
                                     {isAvailable && !isOverdue && (
-                                      <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 flex-shrink-0">
+                                      <span className="px-1.5 py-0.5 rounded-full text-[10px] lg:text-xs font-medium bg-green-100 text-green-800 flex-shrink-0">
                                         Available Now
                                       </span>
                                     )}
                                     {!windowStatus.isOpen && !isOverdue && !isCompleted && (
-                                      <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 flex-shrink-0">
+                                      <span className="px-1.5 py-0.5 rounded-full text-[10px] lg:text-xs font-medium bg-yellow-100 text-yellow-800 flex-shrink-0">
                                         Window Closed
                                       </span>
                                     )}
                                   </div>
                                   
                                   {/* Time indicator */}
-                                  <p className="text-xs text-gray-900 mb-2">
+                                  <p className="text-[10px] lg:text-xs text-gray-900 mb-1.5 lg:mb-2">
                                     {isOverdue 
                                       ? getTimeUntilDue(checkin.dueDate)
                                       : isCompleted
@@ -568,12 +593,12 @@ export default function ClientCheckInsPage() {
 
                                   {/* Window status for pending check-ins */}
                                   {!isCompleted && !isOverdue && (
-                                    <div className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs ${
+                                    <div className={`inline-flex items-center gap-1 px-2 py-0.5 lg:py-1 rounded text-[10px] lg:text-xs ${
                                       windowStatus.isOpen 
                                         ? 'bg-green-50 text-green-800' 
                                         : 'bg-yellow-50 text-yellow-800'
                                     }`}>
-                                      {windowStatus.isOpen ? '✅' : '⏰'} {windowStatus.message}
+                                      {windowStatus.isOpen ? '✅' : '⏰'} <span className="hidden sm:inline">{windowStatus.message}</span>
                                     </div>
                                   )}
 
@@ -637,11 +662,11 @@ export default function ClientCheckInsPage() {
                                 </div>
 
                                 {/* Right: Action Button */}
-                                <div className="flex-shrink-0" onClick={(e) => completedLink && e.stopPropagation()}>
+                                <div className="flex-shrink-0 w-full sm:w-auto" onClick={(e) => completedLink && e.stopPropagation()}>
                                   {isOverdue && (
                                     <Link
                                       href={`/client-portal/check-in/${checkin.id}`}
-                                      className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-semibold transition-all duration-200 shadow-sm hover:shadow-md whitespace-nowrap"
+                                      className="w-full sm:w-auto inline-block px-3 py-2 lg:px-4 lg:py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs lg:text-sm font-semibold transition-all duration-200 shadow-sm hover:shadow-md text-center min-h-[36px] flex items-center justify-center"
                                     >
                                       Complete Now
                                     </Link>
@@ -649,7 +674,7 @@ export default function ClientCheckInsPage() {
                                   {isAvailable && !isOverdue && (
                                     <Link
                                       href={`/client-portal/check-in/${checkin.id}`}
-                                      className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-semibold transition-all duration-200 shadow-sm hover:shadow-md whitespace-nowrap"
+                                      className="w-full sm:w-auto inline-block px-3 py-2 lg:px-4 lg:py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs lg:text-sm font-semibold transition-all duration-200 shadow-sm hover:shadow-md text-center min-h-[36px] flex items-center justify-center"
                                     >
                                       Start Check-in
                                     </Link>
@@ -657,41 +682,38 @@ export default function ClientCheckInsPage() {
                                   {!windowStatus.isOpen && !isOverdue && !isCompleted && (
                                     <button
                                       disabled
-                                      className="px-4 py-2 bg-gray-300 text-gray-600 rounded-lg text-sm font-semibold cursor-not-allowed whitespace-nowrap"
+                                      className="w-full sm:w-auto px-3 py-2 lg:px-4 lg:py-2 bg-gray-300 text-gray-600 rounded-lg text-xs lg:text-sm font-semibold cursor-not-allowed min-h-[36px]"
                                       title={getCheckInWindowDescription(checkInWindow)}
                                     >
                                       Window Closed
                                     </button>
                                   )}
                                   {isCompleted && (
-                                    <div className="flex flex-col items-end gap-2">
+                                    <div className="flex flex-col sm:flex-row sm:items-end gap-2 w-full sm:w-auto">
                                       {checkin.coachResponded && checkin.responseId && (
                                         <Link
                                           href={`/client-portal/feedback/${checkin.responseId}`}
-                                          className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-semibold transition-all duration-200 shadow-sm hover:shadow-md whitespace-nowrap flex items-center gap-1.5"
+                                          className="w-full sm:w-auto px-3 py-2 lg:px-4 lg:py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs lg:text-sm font-semibold transition-all duration-200 shadow-sm hover:shadow-md flex items-center justify-center gap-1.5 min-h-[36px]"
                                           onClick={(e) => e.stopPropagation()}
                                         >
-                                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <svg className="w-3.5 h-3.5 lg:w-4 lg:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                           </svg>
-                                          View Feedback
+                                          <span className="hidden sm:inline">View Feedback</span>
+                                          <span className="sm:hidden">Feedback</span>
                                         </Link>
                                       )}
                                       <Link
                                         href={`/client-portal/check-in/${checkin.id}/success`}
-                                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-all duration-200 shadow-sm hover:shadow-md whitespace-nowrap flex items-center gap-1.5"
+                                        className="w-full sm:w-auto px-3 py-2 lg:px-4 lg:py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs lg:text-sm font-semibold transition-all duration-200 shadow-sm hover:shadow-md flex items-center justify-center gap-1.5 min-h-[36px]"
                                         onClick={(e) => e.stopPropagation()}
                                       >
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <svg className="w-3.5 h-3.5 lg:w-4 lg:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                                         </svg>
-                                        View Results
+                                        <span className="hidden sm:inline">View Results</span>
+                                        <span className="sm:hidden">Results</span>
                                       </Link>
-                                      {completedLink && (
-                                        <div className="text-xs text-gray-500 mt-1 text-center">
-                                          Click card to view
-                                        </div>
-                                      )}
                                     </div>
                                   )}
                                 </div>

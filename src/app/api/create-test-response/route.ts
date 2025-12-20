@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '@/lib/firebase-client';
+import { getDb } from '@/lib/firebase-server';
+export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
+  const db = getDb();
   try {
     let body = {};
     try {
@@ -27,10 +28,10 @@ export async function POST(request: Request) {
       score: body.score || 82,
       totalQuestions: body.totalQuestions || 7,
       answeredQuestions: body.answeredQuestions || 7,
-      submittedAt: serverTimestamp()
+      submittedAt: new Date()
     };
 
-    const docRef = await addDoc(collection(db, 'form_responses'), responseData);
+    const docRef = await db.collection('form_responses').add(responseData);
     
     return NextResponse.json({
       success: true,
@@ -46,4 +47,4 @@ export async function POST(request: Request) {
       error: (error as Error).message
     }, { status: 500 });
   }
-} 
+}

@@ -1,27 +1,45 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { initializeApp, getApps, cert } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
+import { getDb } from '@/lib/firebase-server';
 
-// Initialize Firebase Admin if not already initialized
-if (!getApps().length) {
-  const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || '{}');
-  
-  initializeApp({
-    credential: cert(serviceAccount),
-    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
-  });
-}
-
-const db = getFirestore();
+export const dynamic = 'force-dynamic';
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const db = getDb();
     const { id: clientId } = await params;
     
-    const docRef = await db.collection('clients').doc(clientId).get();
+    // First, try to get by document ID
+    let docRef = await db.collection('clients').doc(clientId).get();
+    
+    // If not found by document ID, try to find by authUid or id field
+    if (!docRef.exists) {
+      try {
+        // Try finding by authUid field
+        const queryByAuthUid = await db.collection('clients')
+          .where('authUid', '==', clientId)
+          .limit(1)
+          .get();
+        
+        if (!queryByAuthUid.empty) {
+          docRef = queryByAuthUid.docs[0];
+        } else {
+          // Try finding by id field (some clients have id stored as a field)
+          const queryById = await db.collection('clients')
+            .where('id', '==', clientId)
+            .limit(1)
+            .get();
+          
+          if (!queryById.empty) {
+            docRef = queryById.docs[0];
+          }
+        }
+      } catch (queryError) {
+        console.log('Error querying by authUid or id:', queryError);
+      }
+    }
     
     if (!docRef.exists) {
       return NextResponse.json(
@@ -61,6 +79,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const db = getDb();
     const { id: clientId } = await params;
     const updateData = await request.json();
 
@@ -103,6 +122,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const db = getDb();
     const { id: clientId } = await params;
     
     await db.collection('clients').doc(clientId).delete();
@@ -122,4 +142,4 @@ export async function DELETE(
       { status: 500 }
     );
   }
-} 
+}

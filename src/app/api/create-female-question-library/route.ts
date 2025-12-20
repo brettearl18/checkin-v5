@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+
+// Force dynamic rendering
+export const dynamic = 'force-dynamic';
 import { getDb } from '@/lib/firebase-server';
 
 interface QuestionData {
@@ -760,4 +763,3 @@ export async function POST(request: NextRequest) {
     }, { status: 500 });
   }
 }
-

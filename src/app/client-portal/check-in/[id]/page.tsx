@@ -637,7 +637,7 @@ export default function CheckInCompletionPage() {
             type="text"
             value={answer as string}
             onChange={(e) => handleAnswerChange(index, e.target.value)}
-            className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-gray-900 text-lg transition-all"
+            className="w-full px-4 py-3.5 lg:py-3 border-2 border-gray-300 rounded-lg lg:rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-gray-900 text-base lg:text-lg transition-all min-h-[44px]"
             placeholder="Enter your answer..."
           />
         );
@@ -696,7 +696,7 @@ export default function CheckInCompletionPage() {
             type="number"
             value={answer as string}
             onChange={(e) => handleAnswerChange(index, Number(e.target.value))}
-            className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-gray-900 text-lg transition-all"
+            className="w-full px-4 py-3.5 lg:py-3 border-2 border-gray-300 rounded-lg lg:rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-gray-900 text-base lg:text-lg transition-all min-h-[44px]"
             placeholder="Enter a number..."
           />
         );
@@ -747,8 +747,8 @@ export default function CheckInCompletionPage() {
 
       case 'boolean':
         return (
-          <div className="grid grid-cols-2 gap-4">
-            <label className={`flex items-center justify-center p-6 rounded-xl border-2 transition-all cursor-pointer group ${
+          <div className="grid grid-cols-2 gap-3 lg:gap-4">
+            <label className={`flex items-center justify-center p-4 lg:p-6 rounded-lg lg:rounded-xl border-2 transition-all cursor-pointer group min-h-[60px] lg:min-h-[80px] ${
               answer === true || answer === 'yes' || answer === 'Yes'
                 ? 'border-green-500 bg-green-50 shadow-md'
                 : 'border-gray-200 hover:border-green-300 hover:bg-green-50'
@@ -761,7 +761,7 @@ export default function CheckInCompletionPage() {
                 onChange={() => handleAnswerChange(index, true)}
                 className="h-5 w-5 text-green-600 focus:ring-green-500 border-gray-300"
               />
-              <span className={`ml-3 text-lg font-semibold ${
+              <span className={`ml-2 lg:ml-3 text-base lg:text-lg font-semibold ${
                 answer === true || answer === 'yes' || answer === 'Yes'
                   ? 'text-green-700'
                   : 'text-gray-700 group-hover:text-green-700'
@@ -769,7 +769,7 @@ export default function CheckInCompletionPage() {
                 ✅ Yes
               </span>
             </label>
-            <label className={`flex items-center justify-center p-6 rounded-xl border-2 transition-all cursor-pointer group ${
+            <label className={`flex items-center justify-center p-4 lg:p-6 rounded-lg lg:rounded-xl border-2 transition-all cursor-pointer group min-h-[60px] lg:min-h-[80px] ${
               answer === false || answer === 'no' || answer === 'No'
                 ? 'border-red-500 bg-red-50 shadow-md'
                 : 'border-gray-200 hover:border-red-300 hover:bg-red-50'
@@ -782,7 +782,7 @@ export default function CheckInCompletionPage() {
                 onChange={() => handleAnswerChange(index, false)}
                 className="h-5 w-5 text-red-600 focus:ring-red-500 border-gray-300"
               />
-              <span className={`ml-3 text-lg font-semibold ${
+              <span className={`ml-2 lg:ml-3 text-base lg:text-lg font-semibold ${
                 answer === false || answer === 'no' || answer === 'No'
                   ? 'text-red-700'
                   : 'text-gray-700 group-hover:text-red-700'
@@ -795,7 +795,7 @@ export default function CheckInCompletionPage() {
 
       case 'multiple_choice':
         return (
-          <div className="space-y-3">
+          <div className="space-y-2.5 lg:space-y-3">
             {question.options?.map((option, optionIndex) => {
               const optionText = typeof option === 'string' ? option : (option?.text || String(option));
               const isSelected = answer === option || answer === optionText;
@@ -803,7 +803,7 @@ export default function CheckInCompletionPage() {
               return (
                 <label 
                   key={optionIndex} 
-                  className={`flex items-center p-4 rounded-xl border-2 transition-all cursor-pointer group ${
+                  className={`flex items-center p-3.5 lg:p-4 rounded-lg lg:rounded-xl border-2 transition-all cursor-pointer group min-h-[52px] ${
                     isSelected
                       ? 'border-blue-500 bg-blue-50 shadow-md'
                       : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50'
@@ -815,9 +815,9 @@ export default function CheckInCompletionPage() {
                     value={optionText}
                     checked={isSelected}
                     onChange={() => handleAnswerChange(index, optionText)}
-                    className="h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300"
+                    className="h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300 flex-shrink-0"
                   />
-                  <span className={`ml-4 text-base font-medium ${
+                  <span className={`ml-3 lg:ml-4 text-sm lg:text-base font-medium ${
                     isSelected ? 'text-blue-700' : 'text-gray-900 group-hover:text-blue-700'
                   }`}>
                     {optionText}
@@ -844,7 +844,7 @@ export default function CheckInCompletionPage() {
         };
         
         return (
-          <div className="space-y-3">
+          <div className="space-y-2.5 lg:space-y-3">
             {selectOptions.map((option, optionIndex) => {
               const optionText = getOptionText(option);
               const optionValue = getOptionValue(option);
@@ -853,7 +853,7 @@ export default function CheckInCompletionPage() {
               return (
                 <label 
                   key={optionIndex} 
-                  className={`flex items-center p-4 rounded-xl border-2 transition-all cursor-pointer group ${
+                  className={`flex items-center p-3.5 lg:p-4 rounded-lg lg:rounded-xl border-2 transition-all cursor-pointer group min-h-[52px] ${
                     isSelected
                       ? 'border-blue-500 bg-blue-50 shadow-md'
                       : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50'
@@ -865,9 +865,9 @@ export default function CheckInCompletionPage() {
                     value={optionValue}
                     checked={isSelected}
                     onChange={() => handleAnswerChange(index, optionValue)}
-                    className="h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300"
+                    className="h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300 flex-shrink-0"
                   />
-                  <span className={`ml-4 text-base font-medium ${
+                  <span className={`ml-3 lg:ml-4 text-sm lg:text-base font-medium ${
                     isSelected ? 'text-blue-700' : 'text-gray-900 group-hover:text-blue-700'
                   }`}>
                     {optionText}
@@ -932,47 +932,50 @@ export default function CheckInCompletionPage() {
 
   return (
     <AuthenticatedOnly>
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-indigo-100 py-8">
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-indigo-100 py-4 lg:py-8">
         <div className="max-w-3xl mx-auto p-4 sm:p-6 lg:p-8">
           {/* Header */}
-          <div className="mb-10 text-center">
-            <div className="flex items-center justify-between mb-6">
+          <div className="mb-6 lg:mb-10">
+            <div className="flex items-center justify-between mb-4 lg:mb-6">
               <Link
                 href="/client-portal"
-                className="text-gray-700 hover:text-gray-900 font-medium flex items-center gap-2 transition-colors"
+                className="text-gray-700 hover:text-gray-900 font-medium flex items-center gap-2 transition-colors text-sm lg:text-base"
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 lg:w-5 lg:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                 </svg>
-                Back to Dashboard
+                <span className="hidden sm:inline">Back to Dashboard</span>
+                <span className="sm:hidden">Back</span>
               </Link>
             </div>
-            <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-3">{assignment.formTitle}</h1>
-            <p className="text-lg text-gray-700 font-medium">Complete your assigned check-in</p>
+            <div className="text-center">
+              <h1 className="text-2xl sm:text-3xl lg:text-4xl xl:text-5xl font-bold text-gray-900 mb-2 lg:mb-3">{assignment.formTitle}</h1>
+              <p className="text-sm lg:text-lg text-gray-700 font-medium">Complete your assigned check-in</p>
+            </div>
 
             {/* Check-in Window Status */}
             {windowStatus && (
-              <div className={`mt-6 p-5 rounded-2xl shadow-lg border-2 ${
+              <div className={`mt-4 lg:mt-6 p-4 lg:p-5 rounded-xl lg:rounded-2xl shadow-lg border-2 ${
                 windowStatus.isOpen 
                   ? 'bg-gradient-to-r from-green-50 to-emerald-50 border-green-300' 
                   : 'bg-gradient-to-r from-yellow-50 to-amber-50 border-yellow-300'
               }`}>
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 lg:gap-4">
                   <div className="flex-1">
-                    <p className={`text-lg font-bold mb-2 ${
+                    <p className={`text-base lg:text-lg font-bold mb-1.5 lg:mb-2 ${
                       windowStatus.isOpen ? 'text-green-800' : 'text-yellow-800'
                     }`}>
                       {windowStatus.isOpen ? '✅ Check-in window is open' : '⏰ Check-in window is closed'}
                     </p>
-                    <p className={`text-base ${
+                    <p className={`text-sm lg:text-base ${
                       windowStatus.isOpen ? 'text-green-700' : 'text-yellow-700'
                     }`}>
                       {windowStatus.message}
                     </p>
                     {windowStatus.nextOpenTime && (
-                      <p className="text-sm mt-2 text-yellow-700 font-medium">
+                      <p className="text-xs lg:text-sm mt-2 text-yellow-700 font-medium">
                         Next available: {windowStatus.nextOpenTime.toLocaleString('en-US', {
-                          weekday: 'long',
+                          weekday: 'short',
                           month: 'short',
                           day: 'numeric',
                           hour: '2-digit',
@@ -981,76 +984,77 @@ export default function CheckInCompletionPage() {
                       </p>
                     )}
                   </div>
-                  <div className="text-sm text-gray-700 font-semibold bg-white/60 px-4 py-2 rounded-xl">
-                    Window: {getCheckInWindowDescription(assignment.checkInWindow || DEFAULT_CHECK_IN_WINDOW)}
+                  <div className="text-xs lg:text-sm text-gray-700 font-semibold bg-white/60 px-3 py-1.5 lg:px-4 lg:py-2 rounded-lg lg:rounded-xl">
+                    <span className="hidden sm:inline">Window: </span>
+                    {getCheckInWindowDescription(assignment.checkInWindow || DEFAULT_CHECK_IN_WINDOW)}
                   </div>
                 </div>
               </div>
             )}
 
             {/* Progress Bar */}
-            <div className="mt-6 mb-4">
-              <div className="w-full bg-white/60 backdrop-blur-sm rounded-full h-3 shadow-inner border border-gray-200">
+            <div className="mt-4 lg:mt-6 mb-3 lg:mb-4">
+              <div className="w-full bg-white/60 backdrop-blur-sm rounded-full h-2.5 lg:h-3 shadow-inner border border-gray-200">
                 <div 
-                  className="bg-gradient-to-r from-blue-500 via-purple-500 to-indigo-600 h-3 rounded-full transition-all duration-500 shadow-lg" 
+                  className="bg-gradient-to-r from-blue-500 via-purple-500 to-indigo-600 h-2.5 lg:h-3 rounded-full transition-all duration-500 shadow-lg" 
                   style={{ width: `${progress}%` }}
                 ></div>
               </div>
-              <p className="text-center mt-3 text-base font-semibold text-gray-900">
+              <p className="text-center mt-2 lg:mt-3 text-sm lg:text-base font-semibold text-gray-900">
                 Question {currentQuestion + 1} of {questions.length}
               </p>
             </div>
           </div>
 
           {/* Question Card */}
-          <div className={`bg-white rounded-2xl shadow-xl p-6 md:p-8 border-2 transition-all duration-200 hover:shadow-2xl mb-8 question-card ${
+          <div className={`bg-white rounded-xl lg:rounded-2xl shadow-xl p-4 sm:p-6 lg:p-8 border-2 transition-all duration-200 hover:shadow-2xl mb-6 lg:mb-8 question-card ${
             unansweredQuestionIndices.includes(currentQuestion) 
               ? 'border-red-400 bg-red-50/30' 
               : 'border-gray-100'
           }`}>
             {currentQ && (
               <div>
-                <div className="mb-8">
-                  <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mb-3">
+                <div className="mb-6 lg:mb-8">
+                  <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 mb-2 lg:mb-3">
                     {currentQ.text}
                   </h2>
                   {currentQ.category && (
-                    <div className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-100 to-indigo-100 rounded-full">
-                      <span className="text-sm font-semibold text-purple-700">Category:</span>
-                      <span className="text-sm font-bold text-gray-900">{currentQ.category}</span>
+                    <div className="inline-flex items-center gap-2 px-3 py-1.5 lg:px-4 lg:py-2 bg-gradient-to-r from-purple-100 to-indigo-100 rounded-full">
+                      <span className="text-xs lg:text-sm font-semibold text-purple-700">Category:</span>
+                      <span className="text-xs lg:text-sm font-bold text-gray-900">{currentQ.category}</span>
                     </div>
                   )}
                 </div>
 
-                <div className="mb-8">
+                <div className="mb-6 lg:mb-8">
                   {renderQuestion(currentQ, currentQuestion)}
                 </div>
 
                 {/* Comment/Notes Section - Only for boolean, multiple_choice, and select questions */}
                 {(currentQ.type === 'boolean' || currentQ.type === 'multiple_choice' || currentQ.type === 'select') && (
-                  <div className="mt-8 pt-8 border-t-2 border-gray-200">
-                    <label className="block text-base font-bold text-gray-900 mb-3">
+                  <div className="mt-6 lg:mt-8 pt-6 lg:pt-8 border-t-2 border-gray-200">
+                    <label className="block text-sm lg:text-base font-bold text-gray-900 mb-2 lg:mb-3">
                       Additional Notes (Optional)
                     </label>
                     <textarea
                       value={responses[currentQuestion]?.comment || ''}
                       onChange={(e) => handleCommentChange(currentQuestion, e.target.value)}
-                      className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-gray-900 transition-all"
+                      className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg lg:rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-gray-900 text-base transition-all"
                       rows={4}
                       placeholder="Add any additional notes or context about your answer..."
                     />
-                    <p className="mt-2 text-sm text-gray-600">
+                    <p className="mt-2 text-xs lg:text-sm text-gray-600">
                       Use this space to provide more context or details about your response
                     </p>
                   </div>
                 )}
 
                 {/* Navigation */}
-                <div className="flex justify-between items-center mt-8 pt-6 border-t-2 border-gray-200">
+                <div className="flex justify-between items-center gap-3 mt-6 lg:mt-8 pt-6 lg:pt-6 border-t-2 border-gray-200">
                   <button
                     onClick={handlePrevious}
                     disabled={currentQuestion === 0}
-                    className="px-6 py-3 border-2 border-gray-300 rounded-xl text-gray-700 font-semibold hover:bg-gray-50 hover:border-gray-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                    className="px-4 py-3 lg:px-6 lg:py-3 border-2 border-gray-300 rounded-lg lg:rounded-xl text-gray-700 font-semibold text-sm lg:text-base hover:bg-gray-50 hover:border-gray-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all min-h-[44px]"
                   >
                     Previous
                   </button>
@@ -1058,7 +1062,7 @@ export default function CheckInCompletionPage() {
                   {currentQuestion < questions.length - 1 ? (
                     <button
                       onClick={handleNext}
-                      className="px-8 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-bold hover:from-blue-700 hover:to-indigo-700 shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-0.5"
+                      className="px-6 py-3 lg:px-8 lg:py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg lg:rounded-xl font-bold text-sm lg:text-base hover:from-blue-700 hover:to-indigo-700 shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-0.5 min-h-[44px]"
                     >
                       Next →
                     </button>
@@ -1066,9 +1070,9 @@ export default function CheckInCompletionPage() {
                     <button
                       onClick={handleSubmit}
                       disabled={submitting}
-                      className="px-8 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl font-bold hover:from-green-700 hover:to-emerald-700 shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                      className="px-6 py-3 lg:px-8 lg:py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg lg:rounded-xl font-bold text-sm lg:text-base hover:from-green-700 hover:to-emerald-700 shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none min-h-[44px]"
                     >
-                      {submitting ? 'Submitting...' : 'Submit Check-in ✓'}
+                      {submitting ? 'Submitting...' : 'Submit ✓'}
                     </button>
                   )}
                 </div>
@@ -1131,9 +1135,9 @@ export default function CheckInCompletionPage() {
           )}
 
           {/* Question Navigation */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Question Navigation</h3>
-            <div className="grid grid-cols-5 gap-2">
+          <div className="bg-white rounded-lg shadow p-4 lg:p-6">
+            <h3 className="text-base lg:text-lg font-medium text-gray-900 mb-3 lg:mb-4">Question Navigation</h3>
+            <div className="grid grid-cols-5 sm:grid-cols-6 lg:grid-cols-5 gap-2">
               {questions.map((question, index) => {
                 const response = responses.find(r => r.questionId === question.id);
                 const hasAnswer = response && 
@@ -1150,7 +1154,7 @@ export default function CheckInCompletionPage() {
                     setError(null);
                     setUnansweredQuestionIndices([]);
                   }}
-                  className={`p-3 rounded-md text-sm font-medium transition-colors ${
+                  className={`p-2.5 lg:p-3 rounded-md text-xs lg:text-sm font-medium transition-colors min-h-[44px] ${
                     index === currentQuestion
                       ? 'bg-blue-600 text-white'
                       : isUnanswered
@@ -1165,17 +1169,17 @@ export default function CheckInCompletionPage() {
                 );
               })}
             </div>
-            <div className="mt-4 flex items-center space-x-4 text-sm text-gray-500">
+            <div className="mt-3 lg:mt-4 flex items-center flex-wrap gap-3 lg:gap-4 text-xs lg:text-sm text-gray-500">
               <div className="flex items-center">
-                <div className="w-3 h-3 bg-blue-600 rounded mr-2"></div>
+                <div className="w-2.5 h-2.5 lg:w-3 lg:h-3 bg-blue-600 rounded mr-1.5 lg:mr-2"></div>
                 Current
               </div>
               <div className="flex items-center">
-                <div className="w-3 h-3 bg-green-100 rounded mr-2"></div>
+                <div className="w-2.5 h-2.5 lg:w-3 lg:h-3 bg-green-100 rounded mr-1.5 lg:mr-2"></div>
                 Answered
               </div>
               <div className="flex items-center">
-                <div className="w-3 h-3 bg-gray-100 rounded mr-2"></div>
+                <div className="w-2.5 h-2.5 lg:w-3 lg:h-3 bg-gray-100 rounded mr-1.5 lg:mr-2"></div>
                 Unanswered
               </div>
             </div>

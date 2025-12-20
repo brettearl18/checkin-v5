@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '@/lib/firebase-client';
+import { getDb } from '@/lib/firebase-server';
+export const dynamic = 'force-dynamic';
 
 const sampleUsers = [
   {
@@ -28,6 +28,7 @@ const sampleUsers = [
 ];
 
 export async function POST() {
+  const db = getDb();
   try {
     const createdUsers = [];
 
@@ -39,8 +40,8 @@ export async function POST() {
         role: userData.role,
         name: userData.name,
         isActive: userData.isActive,
-        createdAt: serverTimestamp(),
-        lastLogin: serverTimestamp()
+        createdAt: new Date(),
+        lastLogin: new Date()
       };
 
       // Only add coachId if it exists
@@ -54,7 +55,7 @@ export async function POST() {
       }
 
       // Add to users collection
-      const userRef = await addDoc(collection(db, 'users'), userProfile);
+      const userRef = await db.collection('users').add(userProfile);
       
       createdUsers.push({
         id: userRef.id,
@@ -76,4 +77,4 @@ export async function POST() {
       error: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
   }
-} 
+}

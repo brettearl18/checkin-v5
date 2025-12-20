@@ -48,8 +48,6 @@ const defaultCategories = [
   'Lifestyle'
 ];
 
-import { scoringProfiles as defaultScoringProfiles, getDefaultThresholds, type ScoringProfile } from '@/lib/scoring-utils';
-
 const scoringProfiles = {
   'high-performance': {
     name: 'High Performance',

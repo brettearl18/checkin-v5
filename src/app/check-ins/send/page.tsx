@@ -1,6 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+export const dynamic = 'force-dynamic';
+
+import { useState, useEffect, Suspense } from 'react';
 import { collection, getDocs, query, orderBy, doc, getDoc, addDoc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase-client';
 import Link from 'next/link';
@@ -42,7 +44,7 @@ interface CheckInAssignment {
   responseId?: string;
 }
 
-export default function SendCheckInPage() {
+function SendCheckInPageContent() {
   const [forms, setForms] = useState<Form[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [selectedForm, setSelectedForm] = useState<string>('');
@@ -385,5 +387,13 @@ export default function SendCheckInPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function SendCheckInPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
+      <SendCheckInPageContent />
+    </Suspense>
   );
 } 

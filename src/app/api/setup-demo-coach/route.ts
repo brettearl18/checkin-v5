@@ -1,22 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { initializeApp, getApps, cert } from 'firebase-admin/app';
-import { getAuth } from 'firebase-admin/auth';
-import { getFirestore } from 'firebase-admin/firestore';
+import { getDb, getAuthInstance } from '@/lib/firebase-server';
 
-// Initialize Firebase Admin if not already initialized
-if (!getApps().length) {
-  const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || '{}');
-  
-  initializeApp({
-    credential: cert(serviceAccount),
-    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
-  });
-}
-
-const auth = getAuth();
-const db = getFirestore();
+// Force dynamic rendering
+export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
+  const db = getDb();
+  const auth = getAuthInstance();
   try {
     const demoCoachEmail = 'demo@coach.com';
     const demoCoachPassword = 'demo123';
@@ -119,4 +109,4 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-} 
+}

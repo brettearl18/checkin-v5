@@ -1,24 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/firebase-server';
-import { initializeApp, getApps, cert } from 'firebase-admin/app';
-import { getAuth } from 'firebase-admin/auth';
-import { getFirestore } from 'firebase-admin/firestore';
+import { getDb, getAuthInstance } from '@/lib/firebase-server';
 import { notificationService } from '@/lib/notification-service';
 
+// Force dynamic rendering - API routes should not be pre-rendered
+export const dynamic = 'force-dynamic';
+
 // Initialize Firebase Admin if not already initialized
-if (!getApps().length) {
-  const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || '{}');
 
-  initializeApp({
-    credential: cert(serviceAccount),
-    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
-  });
-}
 
-const auth = getAuth();
-const db = getFirestore();
+
 
 export async function POST(request: NextRequest) {
+  const db = getDb();
+  const auth = getAuthInstance();
   try {
     const { token, email, password } = await request.json();
 

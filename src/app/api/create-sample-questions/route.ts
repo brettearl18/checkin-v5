@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '@/lib/firebase-client';
+import { getDb } from '@/lib/firebase-server';
+
+// Force dynamic rendering
+export const dynamic = 'force-dynamic';
 
 const sampleQuestions = [
   {
@@ -84,20 +86,23 @@ const sampleQuestions = [
 ];
 
 export async function POST() {
+  const db = getDb();
   try {
     const createdQuestions = [];
     
     for (const question of sampleQuestions) {
       const questionData = {
         ...question,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
+        createdAt: new Date(),
+        updatedAt: new Date()
       };
       
-      const docRef = await addDoc(collection(db, 'questions'), questionData);
+      const docRef = await db.collection('questions').add(questionData);
       createdQuestions.push({
         id: docRef.id,
-        ...questionData
+        ...questionData,
+        createdAt: questionData.createdAt.toISOString(),
+        updatedAt: questionData.updatedAt.toISOString()
       });
     }
     
@@ -114,4 +119,4 @@ export async function POST() {
       error: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
   }
-} 
+}

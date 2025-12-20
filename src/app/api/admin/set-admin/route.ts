@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb, getAuthInstance } from '@/lib/firebase-server';
 
+// Force dynamic rendering
+export const dynamic = 'force-dynamic';
 /**
  * Sets a user as admin and coach by:
  * 1. Updating their role in Firestore users collection (supports multiple roles)
@@ -168,4 +170,3 @@ export async function POST(request: NextRequest) {
     }, { status: 500 });
   }
 }
-

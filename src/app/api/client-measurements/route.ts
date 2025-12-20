@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase-server';
 
+export const dynamic = 'force-dynamic';
 /**
  * GET /api/client-measurements
  * Fetch measurement history for a client

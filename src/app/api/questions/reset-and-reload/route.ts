@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase-server';
 import { femaleFocusedQuestions } from '@/app/api/create-female-question-library/route';
-import { vanaCheckInQuestions } from '@/app/api/create-vana-checkin-questions/route';
+export const dynamic = 'force-dynamic';
+import { vanaCheckInQuestions } from '@/lib/vana-checkin-questions';
 
 export async function POST(request: NextRequest) {
   try {
@@ -161,4 +162,3 @@ export async function POST(request: NextRequest) {
     }, { status: 500 });
   }
 }
-

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
@@ -10,7 +10,7 @@ interface OnboardingData {
   clientData?: any;
 }
 
-export default function ClientOnboardingPage() {
+function ClientOnboardingContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [onboardingData, setOnboardingData] = useState<OnboardingData | null>(null);
@@ -240,5 +240,13 @@ export default function ClientOnboardingPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ClientOnboardingPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
+      <ClientOnboardingContent />
+    </Suspense>
   );
 } 

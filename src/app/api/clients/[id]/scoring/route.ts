@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { getDb } from '@/lib/firebase-server';
+export const dynamic = 'force-dynamic';
 
 // Helper function to remove undefined values
 function removeUndefined(obj: any): any {
@@ -28,10 +28,9 @@ export async function GET(
   try {
     const clientId = await params.id;
     const db = getDb();
-    const scoringRef = doc(db, 'clientScoring', clientId);
-    const scoringDoc = await getDoc(scoringRef);
+    const scoringDoc = await db.collection('clientScoring').doc(clientId).get();
     
-    if (!scoringDoc.exists()) {
+    if (!scoringDoc.exists) {
       return NextResponse.json(
         { success: false, message: 'Scoring configuration not found' },
         { status: 404 }
@@ -73,18 +72,16 @@ export async function POST(
     const configData = {
       ...cleanedData,
       clientId,
-      updatedAt: serverTimestamp()
+      updatedAt: new Date()
     };
     
     // If this is a new config, add createdAt
     if (!cleanedData.createdAt) {
-      configData.createdAt = serverTimestamp();
+      configData.createdAt = new Date();
     }
     
     // Save to Firestore
-    const db = getDb();
-    const scoringRef = doc(db, 'clientScoring', clientId);
-    await setDoc(scoringRef, configData, { merge: true });
+    await db.collection('clientScoring').doc(clientId).set(configData, { merge: true });
     
     return NextResponse.json({
       success: true,
@@ -99,4 +96,4 @@ export async function POST(
       { status: 500 }
     );
   }
-} 
+}

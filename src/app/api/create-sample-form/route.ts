@@ -1,15 +1,16 @@
 import { NextResponse } from 'next/server';
-import { collection, addDoc, serverTimestamp, getDocs, query, where } from 'firebase/firestore';
-import { db } from '@/lib/firebase-client';
+import { getDb } from '@/lib/firebase-server';
+
+// Force dynamic rendering
+export const dynamic = 'force-dynamic';
 
 export async function POST() {
+  const db = getDb();
   try {
     // Get the questions we just created
-    const questionsQuery = query(
-      collection(db, 'questions'),
-      where('isActive', '==', true)
-    );
-    const questionsSnapshot = await getDocs(questionsQuery);
+    const questionsSnapshot = await db.collection('questions')
+      .where('isActive', '==', true)
+      .get();
     
     const questionIds = questionsSnapshot.docs.map(doc => doc.id);
     
@@ -28,11 +29,11 @@ export async function POST() {
       totalQuestions: questionIds.length,
       estimatedTime: 5,
       isActive: true,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
+      createdAt: new Date(),
+      updatedAt: new Date()
     };
     
-    const docRef = await addDoc(collection(db, 'forms'), formData);
+    const docRef = await db.collection('forms').add(formData);
     
     return NextResponse.json({
       success: true,
@@ -51,4 +52,4 @@ export async function POST() {
       error: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
   }
-} 
+}

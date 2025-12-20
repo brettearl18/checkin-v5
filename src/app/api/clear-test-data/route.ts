@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase-server';
 
+// Force dynamic rendering
+export const dynamic = 'force-dynamic';
 /**
  * Clears all test/demo data from the database
  * This includes:
@@ -190,4 +192,3 @@ export async function POST(request: NextRequest) {
     }, { status: 500 });
   }
 }
-

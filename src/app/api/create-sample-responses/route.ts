@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '@/lib/firebase-client';
+import { getDb } from '@/lib/firebase-server';
+export const dynamic = 'force-dynamic';
 
 const sampleResponses = [
   {
@@ -18,7 +18,7 @@ const sampleResponses = [
     score: 85,
     totalQuestions: 6,
     answeredQuestions: 6,
-    submittedAt: serverTimestamp()
+    submittedAt: new Date()
   },
   {
     formId: 'MZH4petHjWBnNPrNZo0V',
@@ -35,7 +35,7 @@ const sampleResponses = [
     score: 45,
     totalQuestions: 6,
     answeredQuestions: 6,
-    submittedAt: serverTimestamp()
+    submittedAt: new Date()
   },
   {
     formId: 'MZH4petHjWBnNPrNZo0V',
@@ -52,21 +52,22 @@ const sampleResponses = [
     score: 92,
     totalQuestions: 6,
     answeredQuestions: 6,
-    submittedAt: serverTimestamp()
+    submittedAt: new Date()
   }
 ];
 
 export async function POST() {
+  const db = getDb();
   try {
     const createdResponses = [];
     
     for (const response of sampleResponses) {
       const responseData = {
         ...response,
-        submittedAt: serverTimestamp()
+        submittedAt: new Date()
       };
       
-      const docRef = await addDoc(collection(db, 'form_responses'), responseData);
+      const docRef = await db.collection('form_responses').add(responseData);
       createdResponses.push({
         id: docRef.id,
         ...responseData
@@ -86,4 +87,4 @@ export async function POST() {
       error: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
   }
-} 
+}

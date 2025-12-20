@@ -8,12 +8,11 @@
     ],
     "rewrites": [
       {
-        "source": "/api/**",
-        "destination": "/api/**"
-      },
-      {
         "source": "**",
-        "destination": "/index.html"
+        "run": {
+          "serviceId": "checkinv5",
+          "region": "australia-southeast2"
+        }
       }
     ],
     "headers": [

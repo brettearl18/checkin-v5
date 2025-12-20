@@ -1,13 +1,14 @@
 import { NextResponse } from 'next/server';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase-client';
+import { getDb } from '@/lib/firebase-server';
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
+  const db = getDb();
   try {
     // Test accessing a client document
-    const clientDoc = await getDoc(doc(db, 'clients', 'client-mockup-001'));
+    const clientDoc = await db.collection('clients').doc('client-mockup-001').get();
     
-    if (clientDoc.exists()) {
+    if (clientDoc.exists) {
       return NextResponse.json({
         success: true,
         message: 'Client data access successful',
@@ -28,4 +29,4 @@ export async function GET() {
       error: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
   }
-} 
+}

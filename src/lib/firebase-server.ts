@@ -6,6 +6,12 @@ import { getStorage } from 'firebase-admin/storage';
 // Initialize Firebase Admin SDK
 function initializeFirebaseAdmin() {
   if (getApps().length === 0) {
+    // Skip initialization during build time
+    if (process.env.NEXT_PHASE === 'phase-production-build') {
+      console.warn('Skipping Firebase Admin initialization during build phase');
+      return;
+    }
+
     const serviceAccountString = process.env.FIREBASE_SERVICE_ACCOUNT;
     
     if (!serviceAccountString) {
@@ -16,6 +22,11 @@ function initializeFirebaseAdmin() {
           projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'checkinv5',
         });
       } catch (error) {
+        // During build, this might fail - that's okay
+        if (process.env.NODE_ENV === 'production' && !process.env.FIREBASE_SERVICE_ACCOUNT) {
+          console.warn('Firebase Admin initialization skipped during build');
+          return;
+        }
         console.error('Error initializing Firebase Admin with default config:', error);
         throw new Error('Failed to initialize Firebase Admin SDK');
       }
@@ -25,12 +36,22 @@ function initializeFirebaseAdmin() {
     try {
       const serviceAccount = JSON.parse(serviceAccountString);
       
+      // Validate service account has required fields
+      if (!serviceAccount.project_id && !process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) {
+        throw new Error('Service account must contain project_id or NEXT_PUBLIC_FIREBASE_PROJECT_ID must be set');
+      }
+      
       initializeApp({
         credential: cert(serviceAccount),
         projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || serviceAccount.project_id || 'checkinv5',
       });
     } catch (error) {
       console.error('Error parsing FIREBASE_SERVICE_ACCOUNT:', error);
+      // During build, allow this to fail gracefully
+      if (process.env.NEXT_PHASE === 'phase-production-build') {
+        console.warn('Firebase Admin initialization failed during build - this is expected');
+        return;
+      }
       throw new Error('Invalid FIREBASE_SERVICE_ACCOUNT configuration');
     }
   }
@@ -40,12 +61,60 @@ function initializeFirebaseAdmin() {
 export function getDb() {
   try {
     initializeFirebaseAdmin();
+    // If initialization was skipped (during build), return a mock
+    if (getApps().length === 0) {
+      const isBuildPhase = process.env.NEXT_PHASE === 'phase-production-build' || 
+                           process.env.NEXT_PHASE === 'phase-export' ||
+                           (process.env.NODE_ENV === 'production' && !process.env.FIREBASE_SERVICE_ACCOUNT);
+      
+      if (isBuildPhase) {
+        // Return a mock that allows the build to complete
+        // It will throw when actually used, but that's fine for build-time
+        return {
+          collection: () => ({
+            doc: () => ({
+              get: () => Promise.reject(new Error('Database not available during build')),
+              set: () => Promise.reject(new Error('Database not available during build')),
+              update: () => Promise.reject(new Error('Database not available during build')),
+              delete: () => Promise.reject(new Error('Database not available during build')),
+            }),
+            where: () => ({
+              get: () => Promise.reject(new Error('Database not available during build')),
+            }),
+            get: () => Promise.reject(new Error('Database not available during build')),
+            add: () => Promise.reject(new Error('Database not available during build')),
+          }),
+        } as any;
+      }
+    }
     const db = getFirestore();
     if (!db) {
       throw new Error('Failed to get Firestore instance');
     }
     return db;
-  } catch (error) {
+  } catch (error: any) {
+    // During build, return a mock instead of throwing
+    const isBuildPhase = process.env.NEXT_PHASE === 'phase-production-build' || 
+                         process.env.NEXT_PHASE === 'phase-export' ||
+                         (process.env.NODE_ENV === 'production' && !process.env.FIREBASE_SERVICE_ACCOUNT);
+    
+    if (isBuildPhase) {
+      return {
+        collection: () => ({
+          doc: () => ({
+            get: () => Promise.reject(new Error('Database not available during build')),
+            set: () => Promise.reject(new Error('Database not available during build')),
+            update: () => Promise.reject(new Error('Database not available during build')),
+            delete: () => Promise.reject(new Error('Database not available during build')),
+          }),
+          where: () => ({
+            get: () => Promise.reject(new Error('Database not available during build')),
+          }),
+          get: () => Promise.reject(new Error('Database not available during build')),
+          add: () => Promise.reject(new Error('Database not available during build')),
+        }),
+      } as any;
+    }
     console.error('Error getting Firestore instance:', error);
     throw new Error('Database connection failed');
   }
@@ -55,8 +124,34 @@ export function getDb() {
 export function getAuthInstance() {
   try {
     initializeFirebaseAdmin();
+    // If initialization was skipped (during build), return a mock
+    if (getApps().length === 0) {
+      const isBuildPhase = process.env.NEXT_PHASE === 'phase-production-build' || 
+                           process.env.NEXT_PHASE === 'phase-export' ||
+                           (process.env.NODE_ENV === 'production' && !process.env.FIREBASE_SERVICE_ACCOUNT);
+      
+      if (isBuildPhase) {
+        return {
+          createUser: () => Promise.reject(new Error('Auth not available during build')),
+          setCustomUserClaims: () => Promise.reject(new Error('Auth not available during build')),
+          getUser: () => Promise.reject(new Error('Auth not available during build')),
+        } as any;
+      }
+    }
     return getAuth();
   } catch (error) {
+    // During build, return a mock instead of throwing
+    const isBuildPhase = process.env.NEXT_PHASE === 'phase-production-build' || 
+                         process.env.NEXT_PHASE === 'phase-export' ||
+                         (process.env.NODE_ENV === 'production' && !process.env.FIREBASE_SERVICE_ACCOUNT);
+    
+    if (isBuildPhase) {
+      return {
+        createUser: () => Promise.reject(new Error('Auth not available during build')),
+        setCustomUserClaims: () => Promise.reject(new Error('Auth not available during build')),
+        getUser: () => Promise.reject(new Error('Auth not available during build')),
+      } as any;
+    }
     console.error('Error getting Auth instance:', error);
     throw new Error('Auth connection failed');
   }
@@ -66,8 +161,40 @@ export function getAuthInstance() {
 export function getStorageInstance() {
   try {
     initializeFirebaseAdmin();
+    // If initialization was skipped (during build), return a mock
+    if (getApps().length === 0) {
+      const isBuildPhase = process.env.NEXT_PHASE === 'phase-production-build' || 
+                           process.env.NEXT_PHASE === 'phase-export' ||
+                           (process.env.NODE_ENV === 'production' && !process.env.FIREBASE_SERVICE_ACCOUNT);
+      
+      if (isBuildPhase) {
+        return {
+          bucket: () => ({
+            file: () => ({
+              save: () => Promise.reject(new Error('Storage not available during build')),
+              delete: () => Promise.reject(new Error('Storage not available during build')),
+            }),
+          }),
+        } as any;
+      }
+    }
     return getStorage();
   } catch (error) {
+    // During build, return a mock instead of throwing
+    const isBuildPhase = process.env.NEXT_PHASE === 'phase-production-build' || 
+                         process.env.NEXT_PHASE === 'phase-export' ||
+                         (process.env.NODE_ENV === 'production' && !process.env.FIREBASE_SERVICE_ACCOUNT);
+    
+    if (isBuildPhase) {
+      return {
+        bucket: () => ({
+          file: () => ({
+            save: () => Promise.reject(new Error('Storage not available during build')),
+            delete: () => Promise.reject(new Error('Storage not available during build')),
+          }),
+        }),
+      } as any;
+    }
     console.error('Error getting Storage instance:', error);
     throw new Error('Storage connection failed');
   }

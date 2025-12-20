@@ -1,19 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { initializeApp, getApps, cert } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
+import { getDb } from '@/lib/firebase-server';
 import { notificationService } from '@/lib/notification-service';
 
-// Initialize Firebase Admin if not already initialized
-if (!getApps().length) {
-  const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || '{}');
-  
-  initializeApp({
-    credential: cert(serviceAccount),
-    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
-  });
-}
-
-const db = getFirestore();
+// Force dynamic rendering
+export const dynamic = 'force-dynamic';
 
 interface CoachFeedback {
   id?: string;
@@ -28,6 +18,7 @@ interface CoachFeedback {
 }
 
 export async function POST(request: NextRequest) {
+  const db = getDb();
   try {
     const body = await request.json();
     const { responseId, coachId, clientId, questionId, feedbackType, content } = body;
@@ -177,6 +168,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
+  const db = getDb();
   try {
     const { searchParams } = new URL(request.url);
     let responseId = searchParams.get('responseId');
@@ -310,6 +302,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
+  const db = getDb();
   try {
     const body = await request.json();
     const { feedbackId, content } = body;
@@ -343,6 +336,7 @@ export async function PUT(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+  const db = getDb();
   try {
     const { searchParams } = new URL(request.url);
     const feedbackId = searchParams.get('feedbackId');
@@ -370,4 +364,4 @@ export async function DELETE(request: NextRequest) {
       error: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
   }
-} 
+}
