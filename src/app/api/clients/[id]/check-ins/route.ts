@@ -271,14 +271,18 @@ export async function GET(
     const totalCheckIns = checkIns.length;
     const completedCount = completedCheckIns.length;
     const averageScore = completedCount > 0 ? Math.round(totalScore / completedCount) : 0;
-    const progressScore = totalCheckIns > 0 ? Math.round((completedCount / totalCheckIns) * 100) : 0;
+    const completionRate = totalCheckIns > 0 ? Math.round((completedCount / totalCheckIns) * 100) : 0;
+    
+    // Progress Score should be the average score of completed check-ins
+    // This represents how well the client is performing, not just completion rate
+    const progressScore = averageScore;
     
     const metrics: ClientMetrics = {
       totalCheckIns,
       completedCheckIns: completedCount,
       averageScore,
       lastActivity,
-      progressScore
+      progressScore // Now represents average score, not completion rate
     };
     
     return NextResponse.json({

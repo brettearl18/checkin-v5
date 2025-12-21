@@ -617,16 +617,22 @@ export default function ResponseDetailPage() {
                   {questions.map((question, index) => {
                     // Find the corresponding answer for this question
                     let answer = null;
+                    let questionScore: number | null = null;
+                    let questionResponse: any = null;
                     if (response?.responses && Array.isArray(response.responses)) {
                       // Try to find answer by questionId first
-                      const questionResponse = response.responses.find((r: any) => 
+                      questionResponse = response.responses.find((r: any) => 
                         r.questionId === question.id || r.question === question.text
                       );
                       if (questionResponse) {
                         answer = questionResponse.answer;
+                        questionScore = questionResponse.score !== undefined ? questionResponse.score : null;
                       } else {
                         // Fallback to index-based matching
-                        answer = response.responses[index]?.answer || response.responses[index];
+                        const fallbackResponse = response.responses[index];
+                        questionResponse = fallbackResponse;
+                        answer = fallbackResponse?.answer || fallbackResponse;
+                        questionScore = fallbackResponse?.score !== undefined ? fallbackResponse.score : null;
                       }
                     }
                     
@@ -646,7 +652,23 @@ export default function ResponseDetailPage() {
                               {question.text}
                             </h3>
                             <div className="mt-4 mb-6">
-                              <h4 className="text-sm font-medium text-gray-500 mb-2">Answer:</h4>
+                              <div className="flex items-center justify-between mb-2">
+                                <h4 className="text-sm font-medium text-gray-500">Answer:</h4>
+                                {questionScore !== null && (
+                                  <div className="flex items-center space-x-2">
+                                    <span className="text-xs text-gray-500">Score:</span>
+                                    <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                                      questionScore >= 7 
+                                        ? 'bg-green-100 text-green-700' 
+                                        : questionScore >= 4 
+                                        ? 'bg-orange-100 text-orange-700' 
+                                        : 'bg-red-100 text-red-700'
+                                    }`}>
+                                      {questionScore}/10
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
                               {renderAnswer(question, answer)}
                             </div>
                             

@@ -3,82 +3,117 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useAuth } from '@/contexts/AuthContext';
 import NotificationBadge from './NotificationBadge';
 
 interface NavItem {
   name: string;
   href: string;
-  icon: string;
+  icon: React.ReactNode;
   description: string;
 }
+
+const getPageTitle = (pathname: string): string => {
+  if (pathname === '/dashboard') return 'Dashboard';
+  if (pathname.startsWith('/clients')) return 'My Clients';
+  if (pathname.startsWith('/messages')) return 'Messages';
+  if (pathname.startsWith('/analytics')) return 'Analytics';
+  if (pathname.startsWith('/forms')) return 'Forms';
+  if (pathname.startsWith('/questions')) return 'Questions Library';
+  if (pathname.startsWith('/check-ins')) return 'Check-ins';
+  if (pathname.startsWith('/responses')) return 'Responses';
+  if (pathname.startsWith('/questions')) return 'Questions Library';
+  return 'Coach Portal';
+};
 
 const coachNavItems: NavItem[] = [
   {
     name: 'Dashboard',
     href: '/dashboard',
-    icon: '📊',
+    icon: (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5a2 2 0 012-2h4a2 2 0 012 2v2H8V5z" />
+      </svg>
+    ),
     description: 'Overview of your business'
   },
   {
     name: 'My Clients',
     href: '/clients',
-    icon: '👥',
+    icon: (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
+      </svg>
+    ),
     description: 'Manage client profiles'
   },
   {
     name: 'Messages',
     href: '/messages',
-    icon: '💬',
+    icon: (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+      </svg>
+    ),
     description: 'Communicate with clients'
+  },
+  {
+    name: 'Check-ins',
+    href: '/check-ins',
+    icon: (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+    ),
+    description: 'View check-ins & responses'
+  },
+  {
+    name: 'Responses',
+    href: '/responses',
+    icon: (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+      </svg>
+    ),
+    description: 'View client responses'
   },
   {
     name: 'Analytics',
     href: '/analytics',
-    icon: '📈',
+    icon: (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+      </svg>
+    ),
     description: 'View progress reports'
   },
   {
-    name: 'Forms & Check-ins',
+    name: 'Forms',
     href: '/forms',
-    icon: '📝',
+    icon: (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+    ),
     description: 'Create and manage forms'
   },
   {
     name: 'Questions Library',
     href: '/questions/library',
-    icon: '❓',
+    icon: (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    ),
     description: 'Manage question templates'
-  },
-  {
-    name: 'Check-ins',
-    href: '/check-ins',
-    icon: '✅',
-    description: 'View check-ins & responses'
-  },
-  {
-    name: 'Responses',
-    href: '/check-ins',
-    icon: '📋',
-    description: 'Redirects to Check-ins'
-  },
-  {
-    name: 'Audit',
-    href: '/audit',
-    icon: '🔍',
-    description: 'System audit logs'
-  },
-  {
-    name: 'Settings',
-    href: '/settings',
-    icon: '⚙️',
-    description: 'Account preferences and timezone'
   }
 ];
 
 export default function CoachNavigation() {
   const [isOpen, setIsOpen] = useState(false);
-  const [isCollapsed, setIsCollapsed] = useState(false);
   const pathname = usePathname();
+  const { userProfile, logout } = useAuth();
 
   const isActive = (href: string) => {
     if (href === '/dashboard') {
@@ -86,6 +121,8 @@ export default function CoachNavigation() {
     }
     return pathname.startsWith(href);
   };
+
+  const currentPageTitle = getPageTitle(pathname);
 
   return (
     <div className="relative">
@@ -107,127 +144,125 @@ export default function CoachNavigation() {
         ${isOpen ? 'translate-x-0' : '-translate-x-full'}
         lg:translate-x-0
         fixed lg:static inset-y-0 left-0 z-50
-        ${isCollapsed ? 'w-16 lg:w-16' : 'w-80 lg:w-64'}
-        bg-white border-r border-gray-200
+        w-64
+        bg-white shadow-xl border-r border-gray-100
         transform transition-all duration-300 ease-in-out
-        overflow-y-auto
+        overflow-y-auto flex flex-col
       `}>
-        <div className="p-6">
-          {/* Header */}
-          <div className="mb-8">
-            <div className="flex items-center justify-between">
-              {!isCollapsed && (
-                <>
-                  <h2 className="text-xl font-bold text-gray-900">Coach Portal</h2>
-                  <button
-                    onClick={() => setIsCollapsed(true)}
-                    className="lg:block hidden text-gray-400 hover:text-gray-600"
-                  >
-                    <span className="text-xl">◀</span>
-                  </button>
-                </>
-              )}
-              {isCollapsed && (
-                <button
-                  onClick={() => setIsCollapsed(false)}
-                  className="lg:block hidden text-gray-400 hover:text-gray-600 mx-auto"
-                >
-                  <span className="text-xl">▶</span>
-                </button>
-              )}
+        {/* Sidebar Header */}
+        <div className="bg-gradient-to-br from-blue-500 to-indigo-600 px-6 py-8">
+          <div className="flex items-center space-x-3">
+            <div className="w-12 h-12 bg-white bg-opacity-20 rounded-xl flex items-center justify-center">
+              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
             </div>
-            {!isCollapsed && (
-              <p className="text-sm text-gray-600">Manage your coaching business</p>
-            )}
+            <div>
+              <h1 className="text-white font-bold text-lg">Coach Hub</h1>
+              <p className="text-blue-100 text-sm">{currentPageTitle}</p>
+            </div>
           </div>
+        </div>
 
-          {/* Navigation Items */}
-          <nav className="space-y-2">
+        {/* Navigation Menu */}
+        <nav className="px-4 py-6 flex-1">
+          <div className="space-y-2">
             {coachNavItems.map((item) => (
               <Link
-                key={item.href}
+                key={item.name}
                 href={item.href}
                 onClick={() => setIsOpen(false)}
                 className={`
-                  flex items-center p-3 rounded-lg transition-colors
+                  flex items-center space-x-3 px-4 py-3 rounded-xl font-medium transition-all duration-200
                   ${isActive(item.href)
-                    ? 'bg-blue-50 border border-blue-200 text-blue-900'
-                    : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                    ? 'bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700 shadow-sm border border-blue-100'
+                    : 'text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-blue-50 hover:text-blue-700'
                   }
                 `}
-                title={isCollapsed ? item.name : undefined}
               >
-                <span className="text-xl mr-3">{item.icon}</span>
-                {!isCollapsed && (
-                  <div className="flex-1">
-                    <div className="font-medium">{item.name}</div>
-                    <div className="text-xs text-gray-500">{item.description}</div>
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                  isActive(item.href) ? 'bg-blue-100' : 'bg-gray-100'
+                }`}>
+                  <div className={isActive(item.href) ? 'text-blue-600' : 'text-gray-600'}>
+                    {item.icon}
                   </div>
-                )}
-                {!isCollapsed && isActive(item.href) && (
-                  <div className="w-2 h-2 bg-blue-600 rounded-full"></div>
-                )}
+                </div>
+                <span>{item.name}</span>
               </Link>
             ))}
-            <Link
-              href="/notifications"
-              className={`flex items-center px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                pathname === '/notifications'
-                  ? 'bg-blue-100 text-blue-700'
-                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-              }`}
-            >
-              <svg className="mr-3 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-5 5v-5z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-              </svg>
-              Notifications
-              <NotificationBadge className="ml-auto" />
-            </Link>
-          </nav>
+          </div>
+
+          {/* Divider */}
+          <div className="my-6 border-t border-gray-200"></div>
 
           {/* Quick Actions */}
-          {!isCollapsed && (
-            <div className="mt-8 pt-6 border-t border-gray-200">
-              <h3 className="text-sm font-medium text-gray-900 mb-3">Quick Actions</h3>
-              <div className="space-y-2">
-                <Link
-                  href="/clients/new"
-                  onClick={() => setIsOpen(false)}
-                  className="flex items-center p-2 text-sm text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
-                >
-                  <span className="mr-2">➕</span>
-                  Add New Client
-                </Link>
-                <Link
-                  href="/forms/create"
-                  onClick={() => setIsOpen(false)}
-                  className="flex items-center p-2 text-sm text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
-                >
-                  <span className="mr-2">📝</span>
-                  Create New Form
-                </Link>
-                <Link
-                  href="/questions/create"
-                  onClick={() => setIsOpen(false)}
-                  className="flex items-center p-2 text-sm text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
-                >
-                  <span className="mr-2">❓</span>
-                  Add New Question
-                </Link>
+          <div className="space-y-2">
+            <h3 className="px-4 text-sm font-semibold text-gray-700 uppercase tracking-wider">Quick Actions</h3>
+            
+            <Link
+              href="/clients/create"
+              onClick={() => setIsOpen(false)}
+              className="flex items-center space-x-3 px-4 py-3 text-gray-700 hover:bg-gradient-to-r hover:from-green-50 hover:to-emerald-50 hover:text-green-700 rounded-xl font-medium transition-all duration-200"
+            >
+              <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
+                <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
               </div>
-            </div>
-          )}
+              <span>Add Client</span>
+            </Link>
 
-          {/* Close button for mobile */}
-          <button
-            onClick={() => setIsOpen(false)}
-            className="lg:hidden absolute top-4 right-4 text-gray-400 hover:text-gray-600"
-          >
-            <span className="text-xl">✕</span>
-          </button>
-        </div>
+            <Link
+              href="/forms/create"
+              onClick={() => setIsOpen(false)}
+              className="flex items-center space-x-3 px-4 py-3 text-gray-700 hover:bg-gradient-to-r hover:from-purple-50 hover:to-pink-50 hover:text-purple-700 rounded-xl font-medium transition-all duration-200"
+            >
+              <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
+                <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+              </div>
+              <span>Create Form</span>
+            </Link>
+          </div>
+
+          {/* Divider */}
+          <div className="my-6 border-t border-gray-200"></div>
+
+          {/* User Profile */}
+          <div className="px-4">
+            <div className="flex items-center space-x-3 p-3 bg-gradient-to-r from-gray-50 to-blue-50 rounded-xl border border-gray-200">
+              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center">
+                <span className="text-white font-bold text-sm">
+                  {userProfile?.firstName?.charAt(0) || 'C'}
+                </span>
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-900">
+                  {userProfile?.firstName} {userProfile?.lastName}
+                </p>
+                <p className="text-xs text-gray-700">Coach</p>
+              </div>
+              <button
+                onClick={logout}
+                className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center hover:bg-red-200 transition-colors"
+              >
+                <svg className="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </nav>
+
+        {/* Close button for mobile */}
+        <button
+          onClick={() => setIsOpen(false)}
+          className="lg:hidden absolute top-4 right-4 text-gray-400 hover:text-gray-600 z-10"
+        >
+          <span className="text-xl">✕</span>
+        </button>
       </div>
     </div>
   );
-} 
+}

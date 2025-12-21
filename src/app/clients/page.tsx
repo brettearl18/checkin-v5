@@ -4,6 +4,14 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { RoleProtected } from '@/components/ProtectedRoute';
 import Link from 'next/link';
+import {
+  getTrafficLightStatus,
+  getTrafficLightIcon,
+  getTrafficLightColor,
+  getDefaultThresholds,
+  type ScoringThresholds,
+  type TrafficLightStatus
+} from '@/lib/scoring-utils';
 
 interface Client {
   id: string;
@@ -15,6 +23,9 @@ interface Client {
   assignedCoach: string;
   lastCheckIn?: string;
   progressScore?: number;
+  completionRate?: number;
+  totalCheckIns?: number;
+  completedCheckIns?: number;
   goals?: string[];
   createdAt: string;
   pausedUntil?: string;
@@ -25,6 +36,9 @@ interface Client {
     healthGoals?: string[];
     medicalHistory?: string[];
   };
+  scoringThresholds?: ScoringThresholds;
+  overdueCheckIns?: number;
+  daysSinceLastCheckIn?: number;
 }
 
 export default function ClientsPage() {
@@ -32,11 +46,12 @@ export default function ClientsPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'pending'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'pending' | 'needsAttention'>('all');
   const [clientTableSortBy, setClientTableSortBy] = useState<string>('name');
   const [clientTableSortOrder, setClientTableSortOrder] = useState<'asc' | 'desc'>('asc');
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
   const [statusModal, setStatusModal] = useState<{ clientId: string; status: string; pausedUntil?: string } | null>(null);
+  const [clientsWithMetrics, setClientsWithMetrics] = useState<Client[]>([]);
 
   useEffect(() => {
     if (userProfile?.uid) {
@@ -57,7 +72,62 @@ export default function ClientsPage() {
       const response = await fetch(`/api/clients?coachId=${userProfile.uid}`);
       if (response.ok) {
         const data = await response.json();
-        setClients(data.clients || []);
+        const clientsData = data.clients || [];
+        setClients(clientsData);
+        
+        // Fetch additional metrics for each client
+        const clientsWithMetricsData = await Promise.all(
+          clientsData.map(async (client: Client) => {
+            try {
+              // Fetch check-ins for this client
+              const checkInsResponse = await fetch(`/api/clients/${client.id}/check-ins`);
+              if (checkInsResponse.ok) {
+                const checkInsData = await checkInsResponse.json();
+                const checkIns = checkInsData.checkIns || [];
+                
+                // Calculate overdue check-ins
+                const now = new Date();
+                const overdueCount = checkIns.filter((ci: any) => {
+                  if (ci.status === 'completed') return false;
+                  if (!ci.dueDate) return false;
+                  const dueDate = new Date(ci.dueDate);
+                  return dueDate < now;
+                }).length;
+                
+                // Calculate days since last check-in
+                let daysSinceLastCheckIn: number | undefined;
+                if (client.lastCheckIn) {
+                  const lastCheckInDate = new Date(client.lastCheckIn);
+                  const diffTime = now.getTime() - lastCheckInDate.getTime();
+                  daysSinceLastCheckIn = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+                }
+                
+                // Get scoring thresholds (default to lifestyle for now)
+                const thresholds = getDefaultThresholds('lifestyle');
+                
+                return {
+                  ...client,
+                  overdueCheckIns: overdueCount,
+                  daysSinceLastCheckIn,
+                  scoringThresholds: thresholds,
+                  ...checkInsData.metrics
+                };
+              }
+            } catch (error) {
+              console.error(`Error fetching metrics for client ${client.id}:`, error);
+            }
+            
+            // Return client with default values if fetch fails
+            return {
+              ...client,
+              overdueCheckIns: 0,
+              daysSinceLastCheckIn: client.lastCheckIn ? Math.floor((Date.now() - new Date(client.lastCheckIn).getTime()) / (1000 * 60 * 60 * 24)) : undefined,
+              scoringThresholds: getDefaultThresholds('lifestyle')
+            };
+          })
+        );
+        
+        setClientsWithMetrics(clientsWithMetricsData);
       }
     } catch (error) {
       console.error('Error fetching clients:', error);
@@ -81,10 +151,25 @@ export default function ClientsPage() {
     }
   };
 
-  const filteredClients = clients.filter(client => {
+  const filteredClients = (clientsWithMetrics.length > 0 ? clientsWithMetrics : clients).filter(client => {
     const matchesSearch = (client.firstName?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
                          (client.lastName?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
                          (client.email?.toLowerCase() || '').includes(searchTerm.toLowerCase());
+    
+    if (statusFilter === 'needsAttention') {
+      // Filter for clients that need attention
+      const hasOverdue = (client.overdueCheckIns || 0) > 0;
+      const lowScore = client.progressScore !== undefined && client.progressScore < 60;
+      const noActivity = client.daysSinceLastCheckIn !== undefined && client.daysSinceLastCheckIn > 7;
+      const lowCompletion = (client.completionRate || 0) < 50;
+      const trafficLight = client.progressScore !== undefined 
+        ? getTrafficLightStatus(client.progressScore, client.scoringThresholds || getDefaultThresholds('lifestyle'))
+        : null;
+      const isRedOrOrange = trafficLight === 'red' || trafficLight === 'orange';
+      
+      return matchesSearch && (hasOverdue || lowScore || noActivity || lowCompletion || isRedOrOrange);
+    }
+    
     const matchesStatus = statusFilter === 'all' || client.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -343,7 +428,7 @@ export default function ClientsPage() {
             </div>
 
             {/* Stats Overview */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-6 mb-8">
               <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
                 <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-6 py-4 border-b border-gray-100">
                   <div className="flex items-center space-x-3">
@@ -398,6 +483,137 @@ export default function ClientsPage() {
                   <div className="text-sm text-gray-500 mt-1">Awaiting approval</div>
                 </div>
               </div>
+
+              {/* At-Risk Clients Card */}
+              <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+                <div className="bg-gradient-to-r from-red-50 to-pink-50 px-6 py-4 border-b border-gray-100">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
+                      <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                    </div>
+                    <span className="text-sm font-medium text-gray-500">At-Risk</span>
+                  </div>
+                </div>
+                <div className="p-6">
+                  <div className="text-3xl font-bold text-gray-900">
+                    {clientsWithMetrics.filter(c => {
+                      if (!c.progressScore) return false;
+                      const status = getTrafficLightStatus(c.progressScore, c.scoringThresholds || getDefaultThresholds('lifestyle'));
+                      return status === 'red';
+                    }).length}
+                  </div>
+                  <div className="text-sm text-gray-500 mt-1">Red status</div>
+                </div>
+              </div>
+
+              {/* Overdue Check-ins Card */}
+              <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+                <div className="bg-gradient-to-r from-yellow-50 to-amber-50 px-6 py-4 border-b border-gray-100">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center">
+                      <svg className="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <span className="text-sm font-medium text-gray-500">Overdue</span>
+                  </div>
+                </div>
+                <div className="p-6">
+                  <div className="text-3xl font-bold text-gray-900">
+                    {clientsWithMetrics.reduce((sum, c) => sum + (c.overdueCheckIns || 0), 0)}
+                  </div>
+                  <div className="text-sm text-gray-500 mt-1">Check-ins overdue</div>
+                </div>
+              </div>
+
+              {/* Avg Progress Score Card */}
+              <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+                <div className="bg-gradient-to-r from-purple-50 to-indigo-50 px-6 py-4 border-b border-gray-100">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                      <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                      </svg>
+                    </div>
+                    <span className="text-sm font-medium text-gray-500">Avg Progress</span>
+                  </div>
+                </div>
+                <div className="p-6">
+                  <div className="text-3xl font-bold text-gray-900">
+                    {clientsWithMetrics.length > 0
+                      ? Math.round(
+                          clientsWithMetrics
+                            .filter(c => c.progressScore !== undefined)
+                            .reduce((sum, c) => sum + (c.progressScore || 0), 0) /
+                            Math.max(1, clientsWithMetrics.filter(c => c.progressScore !== undefined).length)
+                        )
+                      : 0}%
+                  </div>
+                  <div className="text-sm text-gray-500 mt-1">Average score</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Search and Filter Bar */}
+            <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-6 mb-6">
+              <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
+                {/* Search Bar */}
+                <div className="flex-1 w-full md:max-w-md">
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      </svg>
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="Search by name or email..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                    />
+                  </div>
+                </div>
+
+                {/* Filter Buttons */}
+                <div className="flex items-center space-x-2">
+                  <span className="text-sm text-gray-600 font-medium">Filter:</span>
+                  <div className="flex bg-gray-100 rounded-lg p-1">
+                    <button
+                      onClick={() => setStatusFilter('all')}
+                      className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                        statusFilter === 'all'
+                          ? 'bg-white text-indigo-600 shadow-sm'
+                          : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      All
+                    </button>
+                    <button
+                      onClick={() => setStatusFilter('active')}
+                      className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                        statusFilter === 'active'
+                          ? 'bg-white text-green-600 shadow-sm'
+                          : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      Active
+                    </button>
+                    <button
+                      onClick={() => setStatusFilter('needsAttention')}
+                      className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                        statusFilter === 'needsAttention'
+                          ? 'bg-white text-red-600 shadow-sm'
+                          : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      Needs Attention
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Client Inventory Table */}
@@ -406,7 +622,7 @@ export default function ClientsPage() {
                 <div className="flex items-center justify-between">
                   <h2 className="text-2xl font-bold text-gray-900">Client Inventory</h2>
                   <div className="flex items-center space-x-3">
-                    <span className="text-sm text-gray-600">{clients.length} total clients</span>
+                    <span className="text-sm text-gray-600">{filteredClients.length} {statusFilter === 'needsAttention' ? 'need attention' : 'total clients'}</span>
                     <select
                       value={`${clientTableSortBy}-${clientTableSortOrder}`}
                       onChange={(e) => {
@@ -563,15 +779,41 @@ export default function ClientsPage() {
                         const totalCheckIns = typeof client.totalCheckIns === 'number' && !isNaN(client.totalCheckIns) ? client.totalCheckIns : 0;
                         const weeksOnProgram = typeof client.weeksOnProgram === 'number' && !isNaN(client.weeksOnProgram) ? client.weeksOnProgram : 0;
                         
+                        // Get traffic light status
+                        const thresholds = client.scoringThresholds || getDefaultThresholds('lifestyle');
+                        const trafficLightStatus = score > 0 
+                          ? getTrafficLightStatus(score, thresholds)
+                          : null;
+                        
+                        // Determine if client needs attention
+                        const hasOverdue = (client.overdueCheckIns || 0) > 0;
+                        const daysSinceLastCheckIn = client.daysSinceLastCheckIn;
+                        const needsAttention = hasOverdue || 
+                          (daysSinceLastCheckIn !== undefined && daysSinceLastCheckIn > 7) ||
+                          trafficLightStatus === 'red' ||
+                          (completionRate < 50 && totalCheckIns > 0);
+                        
                         return (
-                          <tr key={client.id} className="hover:bg-gray-50 transition-colors">
+                          <tr 
+                            key={client.id} 
+                            className={`hover:bg-gray-50 transition-colors ${
+                              needsAttention ? 'bg-red-50/30' : ''
+                            }`}
+                          >
                             <td className="px-6 py-4 whitespace-nowrap">
                               <div className="flex items-center">
                                 <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center text-white font-semibold text-sm mr-3">
                                   {client.displayName.charAt(0).toUpperCase()}
                                 </div>
                                 <div>
-                                  <div className="text-sm font-medium text-gray-900">{client.displayName}</div>
+                                  <div className="flex items-center space-x-2">
+                                    <div className="text-sm font-medium text-gray-900">{client.displayName}</div>
+                                    {needsAttention && (
+                                      <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-red-100 text-red-700">
+                                        Needs Attention
+                                      </span>
+                                    )}
+                                  </div>
                                   {client.phone && (
                                     <div className="text-xs text-gray-500">{client.phone}</div>
                                   )}
@@ -580,6 +822,23 @@ export default function ClientsPage() {
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
                               <div className="text-sm text-gray-900">{client.email || 'N/A'}</div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-center">
+                              {trafficLightStatus ? (
+                                <div className="flex flex-col items-center">
+                                  <div className="text-2xl mb-1">
+                                    {getTrafficLightIcon(trafficLightStatus)}
+                                  </div>
+                                  <span className={`text-xs font-medium ${
+                                    trafficLightStatus === 'red' ? 'text-red-600' :
+                                    trafficLightStatus === 'orange' ? 'text-orange-600' : 'text-green-600'
+                                  }`}>
+                                    {trafficLightStatus.charAt(0).toUpperCase() + trafficLightStatus.slice(1)}
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="text-gray-400 text-sm">-</span>
+                              )}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
                               <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
@@ -626,12 +885,39 @@ export default function ClientsPage() {
                                   <div className="text-sm text-gray-900">
                                     {client.lastCheckInDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                                   </div>
-                                  <div className="text-xs text-gray-500">
-                                    {formatTimeAgo(client.lastCheckInDate.toISOString())}
+                                  <div className="flex items-center space-x-2 mt-1">
+                                    <span className="text-xs text-gray-500">
+                                      {formatTimeAgo(client.lastCheckInDate.toISOString())}
+                                    </span>
+                                    {daysSinceLastCheckIn !== undefined && (
+                                      <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
+                                        daysSinceLastCheckIn > 14 ? 'bg-red-100 text-red-700' :
+                                        daysSinceLastCheckIn > 7 ? 'bg-orange-100 text-orange-700' :
+                                        'bg-green-100 text-green-700'
+                                      }`}>
+                                        {daysSinceLastCheckIn === 0 ? 'Today' :
+                                         daysSinceLastCheckIn === 1 ? '1 day ago' :
+                                         `${daysSinceLastCheckIn} days ago`}
+                                      </span>
+                                    )}
+                                    {hasOverdue && (
+                                      <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-red-100 text-red-700">
+                                        {client.overdueCheckIns} overdue
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
                               ) : (
-                                <span className="text-sm text-gray-400">Never</span>
+                                <div>
+                                  <span className="text-sm text-gray-400">Never</span>
+                                  {hasOverdue && (
+                                    <div className="mt-1">
+                                      <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-red-100 text-red-700">
+                                        {client.overdueCheckIns} overdue
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
                               )}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-center">
@@ -648,121 +934,6 @@ export default function ClientsPage() {
                     })()}
                   </tbody>
                 </table>
-              </div>
-            </div>
-
-            {/* Clients Grid */}
-            <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-              <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-8 py-6 border-b border-gray-100">
-                <h2 className="text-2xl font-bold text-gray-900">Client Directory</h2>
-              </div>
-              <div className="p-8">
-                {loading ? (
-                  <div className="text-center py-12">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
-                    <p className="text-gray-500 text-lg">Loading clients...</p>
-                  </div>
-                ) : clients.length === 0 ? (
-                  <div className="text-center py-12">
-                    <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
-                      </svg>
-                    </div>
-                    <p className="text-gray-500 text-lg mb-4">No clients yet</p>
-                    <p className="text-gray-400 text-sm mb-6">Start by adding your first client</p>
-                    <Link
-                      href="/clients/create"
-                      className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-6 py-3 rounded-xl font-medium transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 inline-block"
-                    >
-                      Add Your First Client
-                    </Link>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {clients.map((client) => (
-                      <div key={client.id} className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl p-6 border border-gray-200 hover:shadow-lg transition-all duration-200 hover:border-gray-300">
-                        <div className="flex items-center space-x-4 mb-4">
-                          <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
-                            <span className="text-white font-bold text-lg">
-                              {client.firstName.charAt(0)}{client.lastName.charAt(0)}
-                            </span>
-                          </div>
-                          <div className="flex-1">
-                            <h3 className="text-lg font-bold text-gray-900">
-                              {client.firstName} {client.lastName}
-                            </h3>
-                            <p className="text-gray-600 text-sm">{client.email}</p>
-                          </div>
-                        </div>
-                        
-                        <div className="space-y-3">
-                          <div className="space-y-2">
-                            <div className="flex items-center justify-between">
-                              <span className="text-sm text-gray-500">Status</span>
-                              <button
-                                onClick={() => setStatusModal({ 
-                                  clientId: client.id, 
-                                  status: client.status === 'paused' ? 'paused' : client.status,
-                                  pausedUntil: client.pausedUntil 
-                                })}
-                                className={`px-3 py-1 text-xs font-medium rounded-full transition-all hover:shadow-md cursor-pointer ${getStatusColor(client.status)}`}
-                              >
-                                {client.status === 'paused' && client.pausedUntil 
-                                  ? `Paused until ${new Date(client.pausedUntil).toLocaleDateString()}`
-                                  : client.status.charAt(0).toUpperCase() + client.status.slice(1)}
-                              </button>
-                            </div>
-                            {client.status === 'paused' && client.pausedUntil && (
-                              <p className="text-xs text-gray-500 text-right">
-                                Resumes: {new Date(client.pausedUntil).toLocaleDateString()}
-                              </p>
-                            )}
-                          </div>
-                          
-                          {client.progressScore !== undefined && (
-                            <div className="space-y-2">
-                              <div className="flex items-center justify-between">
-                                <span className="text-sm text-gray-500">Progress</span>
-                                <span className="text-sm font-medium text-gray-900">{client.progressScore}%</span>
-                              </div>
-                              <div className="w-full bg-gray-200 rounded-full h-2">
-                                <div 
-                                  className="h-full bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full transition-all duration-500"
-                                  style={{ width: `${client.progressScore}%` }}
-                                ></div>
-                              </div>
-                            </div>
-                          )}
-                          
-                          {client.lastCheckIn && (
-                            <div className="flex items-center justify-between">
-                              <span className="text-sm text-gray-500">Last Activity</span>
-                              <span className="text-sm text-gray-900">
-                                {new Date(client.lastCheckIn).toLocaleDateString()}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                        
-                        <div className="mt-6 flex space-x-2">
-                          <Link
-                            href={`/clients/${client.id}`}
-                            className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium text-center transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
-                          >
-                            View Profile
-                          </Link>
-                          <button
-                            onClick={() => handleDeleteClient(client.id)}
-                            className="px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg text-sm font-medium transition-all duration-200"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
             </div>
           </div>

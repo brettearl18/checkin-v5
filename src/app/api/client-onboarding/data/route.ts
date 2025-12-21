@@ -2,10 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase-server';
 
 export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/client-onboarding/data
  * Fetch onboarding data for a client
  */
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);

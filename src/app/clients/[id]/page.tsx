@@ -5,8 +5,18 @@ import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { RoleProtected } from '@/components/ProtectedRoute';
 import Link from 'next/link';
-import { collection, getDocs, query, orderBy, addDoc, updateDoc, doc } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, addDoc, updateDoc, doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase-client';
+import { 
+  getTrafficLightStatus, 
+  getTrafficLightColor, 
+  getTrafficLightIcon, 
+  getTrafficLightLabel,
+  getDefaultThresholds,
+  convertLegacyThresholds,
+  type ScoringThresholds,
+  type TrafficLightStatus
+} from '@/lib/scoring-utils';
 
 interface Client {
   id: string;
@@ -20,6 +30,7 @@ interface Client {
   progressScore?: number;
   completionRate?: number;
   totalCheckIns?: number;
+  completedCheckIns?: number;
   goals?: string[];
   createdAt: string;
   notes?: string;
@@ -32,6 +43,40 @@ interface Client {
     healthGoals?: string[];
     medicalHistory?: string[];
   };
+}
+
+interface QuestionResponse {
+  questionId: string;
+  question: string;
+  answer: any;
+  type: string;
+  weight?: number;
+  score?: number;
+}
+
+interface FormResponse {
+  id: string;
+  formTitle: string;
+  submittedAt: any;
+  completedAt: any;
+  score?: number;
+  totalQuestions: number;
+  answeredQuestions: number;
+  status: string;
+  responses?: QuestionResponse[];
+}
+
+interface QuestionProgress {
+  questionId: string;
+  questionText: string;
+  weeks: {
+    week: number;
+    date: string;
+    score: number;
+    status: 'red' | 'orange' | 'green';
+    answer: any;
+    type: string;
+  }[];
 }
 
 export default function ClientProfilePage() {
@@ -58,6 +103,18 @@ export default function ClientProfilePage() {
   const [loadingOnboarding, setLoadingOnboarding] = useState(false);
   const [measurementHistory, setMeasurementHistory] = useState<any[]>([]);
   const [loadingMeasurements, setLoadingMeasurements] = useState(false);
+  const [selectedMeasurements, setSelectedMeasurements] = useState<Set<string>>(new Set(['bodyWeight']));
+  const [allMeasurementsData, setAllMeasurementsData] = useState<any[]>([]);
+  const [questionProgress, setQuestionProgress] = useState<any[]>([]);
+  const [loadingQuestionProgress, setLoadingQuestionProgress] = useState(false);
+  const [selectedResponse, setSelectedResponse] = useState<{
+    question: string;
+    answer: any;
+    score: number;
+    date: string;
+    week: number;
+    type: string;
+  } | null>(null);
   const [allocatedCheckIns, setAllocatedCheckIns] = useState<any[]>([]);
   const [loadingCheckIns, setLoadingCheckIns] = useState(false);
   const [hasLoadedCheckIns, setHasLoadedCheckIns] = useState(false);
@@ -85,6 +142,9 @@ export default function ClientProfilePage() {
   const [deletingCheckIn, setDeletingCheckIn] = useState(false);
   const [updatingCheckIn, setUpdatingCheckIn] = useState(false);
   const [deletingSeries, setDeletingSeries] = useState(false);
+  const [scoringThresholds, setScoringThresholds] = useState<ScoringThresholds>(getDefaultThresholds('lifestyle'));
+  const [progressTrafficLight, setProgressTrafficLight] = useState<TrafficLightStatus>('orange');
+  const [checkInTab, setCheckInTab] = useState<'all' | 'completed'>('all');
 
   // Debug forms state changes
   useEffect(() => {
@@ -121,6 +181,25 @@ export default function ClientProfilePage() {
       if (response.ok) {
         const data = await response.json();
         setAllocatedCheckIns(data.checkIns || []);
+        
+        // Update client metrics from the API response
+        if (data.metrics && client) {
+          const totalCheckIns = data.metrics.totalCheckIns || 0;
+          const completedCheckIns = data.metrics.completedCheckIns || 0;
+          const completionRate = totalCheckIns > 0 
+            ? Math.round((completedCheckIns / totalCheckIns) * 100) 
+            : 0;
+          
+          setClient({
+            ...client,
+            totalCheckIns: totalCheckIns,
+            completedCheckIns: completedCheckIns,
+            progressScore: data.metrics.progressScore || 0,
+            completionRate: completionRate,
+            lastCheckIn: data.metrics.lastActivity || null
+          });
+        }
+        
         setHasLoadedCheckIns(true);
       } else {
         console.error('Failed to fetch check-ins');
@@ -147,6 +226,64 @@ export default function ClientProfilePage() {
       fetchAllocatedCheckIns();
     }
   }, [client, hasLoadedCheckIns]);
+
+  // Fetch client scoring configuration for traffic light system
+  useEffect(() => {
+    const fetchScoringConfig = async () => {
+      if (!clientId) return;
+      
+      try {
+        const scoringDoc = await getDoc(doc(db, 'clientScoring', clientId));
+        if (scoringDoc.exists()) {
+          const scoringData = scoringDoc.data();
+          let clientThresholds: ScoringThresholds;
+
+          // Check if new format (redMax/orangeMax) exists
+          if (scoringData.thresholds?.redMax !== undefined && scoringData.thresholds?.orangeMax !== undefined) {
+            clientThresholds = {
+              redMax: scoringData.thresholds.redMax,
+              orangeMax: scoringData.thresholds.orangeMax
+            };
+          } else if (scoringData.thresholds?.red !== undefined && scoringData.thresholds?.yellow !== undefined) {
+            // Convert legacy format
+            clientThresholds = convertLegacyThresholds(scoringData.thresholds);
+          } else if (scoringData.scoringProfile) {
+            // Use profile defaults
+            clientThresholds = getDefaultThresholds(scoringData.scoringProfile as any);
+          } else {
+            // Default to lifestyle
+            clientThresholds = getDefaultThresholds('lifestyle');
+          }
+
+          setScoringThresholds(clientThresholds);
+          
+          // Update traffic light status for progress score
+          if (client?.progressScore !== undefined) {
+            setProgressTrafficLight(getTrafficLightStatus(client.progressScore, clientThresholds));
+          }
+        } else {
+          // No scoring config, use default lifestyle thresholds
+          const defaultThresholds = getDefaultThresholds('lifestyle');
+          setScoringThresholds(defaultThresholds);
+          if (client?.progressScore !== undefined) {
+            setProgressTrafficLight(getTrafficLightStatus(client.progressScore, defaultThresholds));
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching scoring config:', error);
+        // Use default lifestyle thresholds on error
+        const defaultThresholds = getDefaultThresholds('lifestyle');
+        setScoringThresholds(defaultThresholds);
+        if (client?.progressScore !== undefined) {
+          setProgressTrafficLight(getTrafficLightStatus(client.progressScore, defaultThresholds));
+        }
+      }
+    };
+
+    if (clientId) {
+      fetchScoringConfig();
+    }
+  }, [clientId, client?.progressScore]);
 
   // Fetch progress images
   useEffect(() => {
@@ -1100,30 +1237,43 @@ export default function ClientProfilePage() {
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                 <div className="p-5">
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    {/* Progress Score - Compact */}
-                    <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-lg p-4 border border-emerald-100">
-                      <div className="text-xs font-medium text-gray-600 mb-1">Progress Score</div>
+                    {/* Progress Score - Compact with Traffic Light */}
+                    <div className={`rounded-lg p-4 border ${
+                      progressTrafficLight === 'red' ? 'bg-gradient-to-br from-red-50 to-pink-50 border-red-100' :
+                      progressTrafficLight === 'orange' ? 'bg-gradient-to-br from-orange-50 to-amber-50 border-orange-100' :
+                      'bg-gradient-to-br from-emerald-50 to-teal-50 border-emerald-100'
+                    }`}>
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="text-xs font-medium text-gray-600">Progress Score</div>
+                        <div className="text-lg">{getTrafficLightIcon(progressTrafficLight)}</div>
+                      </div>
                       <div className={`text-3xl font-bold mb-2 ${
-                        (client.progressScore || 0) >= 80 ? 'text-green-600' :
-                        (client.progressScore || 0) >= 60 ? 'text-yellow-600' : 'text-red-600'
+                        progressTrafficLight === 'red' ? 'text-red-600' :
+                        progressTrafficLight === 'orange' ? 'text-orange-600' : 'text-green-600'
                       }`}>
                         {client.progressScore || 0}%
                       </div>
                       <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
                         <div 
                           className={`h-full rounded-full transition-all ${
-                            (client.progressScore || 0) >= 80 ? 'bg-green-500' :
-                            (client.progressScore || 0) >= 60 ? 'bg-yellow-500' : 'bg-red-500'
+                            progressTrafficLight === 'red' ? 'bg-red-500' :
+                            progressTrafficLight === 'orange' ? 'bg-orange-500' : 'bg-green-500'
                           }`}
                           style={{ width: `${Math.min(client.progressScore || 0, 100)}%` }}
                         ></div>
+                      </div>
+                      <div className={`text-[10px] font-medium mt-1 ${
+                        progressTrafficLight === 'red' ? 'text-red-700' :
+                        progressTrafficLight === 'orange' ? 'text-orange-700' : 'text-green-700'
+                      }`}>
+                        {getTrafficLightLabel(progressTrafficLight)}
                       </div>
                     </div>
 
                     {/* Total Check-ins */}
                     <div className="bg-blue-50 rounded-lg p-4 border border-blue-100">
                       <div className="text-xs font-medium text-gray-600 mb-1">Check-ins</div>
-                      <div className="text-3xl font-bold text-gray-900">{client.totalCheckIns || 0}</div>
+                      <div className="text-3xl font-bold text-gray-900">{client.completedCheckIns || 0}</div>
                       <div className="text-xs text-gray-500 mt-1">Total completed</div>
                     </div>
 
@@ -1151,102 +1301,103 @@ export default function ClientProfilePage() {
                 </div>
               </div>
 
-              {/* Baseline Data (Onboarding) */}
-              {onboardingData && (onboardingData.beforeImages?.front || onboardingData.beforeImages?.back || onboardingData.beforeImages?.side || onboardingData.bodyWeight || (onboardingData.measurements && Object.keys(onboardingData.measurements).length > 0)) && (
+              {/* Question Progress Grid */}
+              {questionProgress.length > 0 && (
                 <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-                  <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-8 py-6 border-b border-gray-100">
-                    <h2 className="text-2xl font-bold text-gray-900">Baseline Data</h2>
-                    <p className="text-sm text-gray-600 mt-1">Starting measurements and photos</p>
+                  <div className="bg-gradient-to-r from-purple-50 to-pink-50 px-8 py-6 border-b border-gray-100">
+                    <h2 className="text-2xl font-bold text-gray-900">Question Progress Over Time</h2>
+                    <p className="text-sm text-gray-600 mt-1">Track how each question improves week by week</p>
                   </div>
-                  <div className="p-8">
-                    {/* Before Images */}
-                    {(onboardingData.beforeImages?.front || onboardingData.beforeImages?.back || onboardingData.beforeImages?.side) && (
-                      <div className="mb-6">
-                        <h3 className="text-sm font-semibold text-gray-700 mb-3">Before Photos</h3>
-                        <div className="grid grid-cols-3 gap-3">
-                          {onboardingData.beforeImages.front && (
-                            <div className="space-y-2">
-                              <label className="block text-sm font-medium text-gray-600">Front View</label>
-                              <div className="aspect-square rounded-xl overflow-hidden border border-gray-200">
-                                <img
-                                  src={onboardingData.beforeImages.front}
-                                  alt="Front view"
-                                  className="w-full h-full object-cover"
-                                />
-                              </div>
-                            </div>
-                          )}
-                          {onboardingData.beforeImages.back && (
-                            <div className="space-y-2">
-                              <label className="block text-sm font-medium text-gray-600">Back View</label>
-                              <div className="aspect-square rounded-xl overflow-hidden border border-gray-200">
-                                <img
-                                  src={onboardingData.beforeImages.back}
-                                  alt="Back view"
-                                  className="w-full h-full object-cover"
-                                />
-                              </div>
-                            </div>
-                          )}
-                          {onboardingData.beforeImages.side && (
-                            <div className="space-y-2">
-                              <label className="block text-sm font-medium text-gray-600">Side View</label>
-                              <div className="aspect-square rounded-xl overflow-hidden border border-gray-200">
-                                <img
-                                  src={onboardingData.beforeImages.side}
-                                  alt="Side view"
-                                  className="w-full h-full object-cover"
-                                />
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Body Weight and Measurements */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {/* Body Weight */}
-                      {onboardingData.bodyWeight && (
-                        <div>
-                          <h3 className="text-sm font-semibold text-gray-700 mb-2">Starting Weight</h3>
-                          <div className="bg-gray-50 rounded-lg p-4">
-                            <div className="text-2xl font-bold text-gray-900 mb-1">
-                              {onboardingData.bodyWeight} kg
-                            </div>
-                            <p className="text-xs text-gray-500">Baseline weight</p>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Measurements */}
-                      {onboardingData.measurements && Object.keys(onboardingData.measurements).length > 0 && (
-                        <div>
-                          <h3 className="text-sm font-semibold text-gray-700 mb-2">Starting Measurements</h3>
-                          <div className="bg-gray-50 rounded-lg p-4 space-y-2">
-                            {Object.entries(onboardingData.measurements).map(([key, value]) => {
-                              if (!value) return null;
-                              return (
-                                <div key={key} className="flex justify-between items-center py-2 border-b border-gray-200 last:border-0">
-                                  <span className="text-gray-700 font-medium capitalize">{key}</span>
-                                  <span className="text-gray-900 font-semibold">{value} cm</span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
+                  
+                  {/* Legend */}
+                  <div className="flex items-center gap-3 px-6 py-3 bg-gray-50/50 border-b border-gray-100">
+                    <div className="flex items-center gap-1">
+                      <div className="w-2.5 h-2.5 rounded-full bg-green-500"></div>
+                      <span className="text-[10px] text-gray-600 font-medium">Good (7-10)</span>
                     </div>
-
-                    {onboardingData.completed && (
-                      <div className="mt-6 flex items-center text-sm text-green-600">
-                        <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                        Onboarding completed {onboardingData.completedAt ? new Date(onboardingData.completedAt).toLocaleDateString() : ''}
-                      </div>
-                    )}
+                    <div className="flex items-center gap-1">
+                      <div className="w-2.5 h-2.5 rounded-full bg-orange-500"></div>
+                      <span className="text-[10px] text-gray-600 font-medium">Moderate (4-6)</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <div className="w-2.5 h-2.5 rounded-full bg-red-500"></div>
+                      <span className="text-[10px] text-gray-600 font-medium">Needs Attention (0-3)</span>
+                    </div>
                   </div>
+
+                  {/* Progress Grid */}
+                  {loadingQuestionProgress ? (
+                    <div className="p-8 text-center">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto mb-4"></div>
+                      <p className="text-gray-500 text-sm">Loading question progress...</p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
+                      <table className="w-full">
+                        <thead className="sticky top-0 bg-gray-50/95 backdrop-blur-sm z-10">
+                          <tr className="bg-gray-50/30">
+                            <th className="text-left py-1.5 px-3 font-semibold text-[10px] text-gray-600 uppercase tracking-wider sticky left-0 bg-gray-50/95 backdrop-blur-sm z-20 min-w-[160px] border-r border-gray-100">
+                              Question
+                            </th>
+                            {questionProgress[0]?.weeks.map((week: any, index: number) => (
+                              <th
+                                key={index}
+                                className="text-center py-1.5 px-1 font-semibold text-[10px] text-gray-600 uppercase tracking-wider min-w-[60px]"
+                              >
+                                <div className="flex flex-col items-center">
+                                  <span className="text-[9px] text-gray-500 font-medium">W{week.week}</span>
+                                  <span className="text-[9px] text-gray-400">{week.date}</span>
+                                </div>
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {questionProgress.map((question, qIndex) => (
+                            <tr 
+                              key={question.questionId} 
+                              className={`transition-colors hover:bg-gray-50/50 ${
+                                qIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'
+                              }`}
+                            >
+                              <td className="py-1.5 px-3 text-xs font-medium text-gray-900 sticky left-0 bg-inherit z-10 border-r border-gray-100">
+                                <div className="max-w-[160px] line-clamp-2 leading-tight">
+                                  {question.questionText}
+                                </div>
+                              </td>
+                              {question.weeks.map((week: any, wIndex: number) => (
+                                <td
+                                  key={wIndex}
+                                  className="text-center py-1.5 px-1"
+                                >
+                                  <div
+                                    className={`w-6 h-6 rounded-full ${getStatusColor(week.status)} ${getStatusBorder(week.status)} flex items-center justify-center transition-all hover:scale-125 cursor-pointer shadow-sm mx-auto`}
+                                    title={`Week ${week.week}: Score ${week.score}/10 - ${week.date}`}
+                                    onClick={() => setSelectedResponse({
+                                      question: question.questionText,
+                                      answer: week.answer,
+                                      score: week.score,
+                                      date: week.date,
+                                      week: week.week,
+                                      type: week.type
+                                    })}
+                                  >
+                                    <span className="text-white text-[9px] font-bold">{week.score}</span>
+                                  </div>
+                                </td>
+                              ))}
+                              {/* Fill empty weeks if needed */}
+                              {Array.from({ length: Math.max(0, (questionProgress[0]?.weeks.length || 0) - question.weeks.length) }).map((_, emptyIndex) => (
+                                <td key={`empty-${emptyIndex}`} className="text-center py-1.5 px-1">
+                                  <div className="w-6 h-6 rounded-full bg-gray-100 border border-gray-200 mx-auto"></div>
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1617,12 +1768,221 @@ export default function ClientProfilePage() {
               </div>
 
               {/* Measurement History */}
-              {measurementHistory.length > 0 && (
+              {(measurementHistory.length > 0 || allMeasurementsData.length > 0) && (
                 <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
                   <div className="bg-gradient-to-r from-teal-50 to-cyan-50 px-8 py-6 border-b border-gray-100">
                     <h2 className="text-2xl font-bold text-gray-900">Measurement History</h2>
                     <p className="text-sm text-gray-600 mt-1">Track weight and body measurements over time</p>
                   </div>
+                  
+                  {/* Measurements Graph */}
+                  {allMeasurementsData.length > 0 && (
+                    <div className="p-6 border-b border-gray-100">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-4">Measurements Over Time</h3>
+                      
+                      {/* Measurement Toggles */}
+                      {getAvailableMeasurements().length > 0 && (
+                        <div className="mb-4 flex flex-wrap gap-2">
+                          {getAvailableMeasurements().map((measurement, index) => (
+                            <button
+                              key={measurement}
+                              onClick={() => toggleMeasurement(measurement)}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                                selectedMeasurements.has(measurement)
+                                  ? `${getMeasurementColor(index)} text-white`
+                                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                              }`}
+                            >
+                              {getMeasurementLabel(measurement)}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Graph */}
+                      {selectedMeasurements.size > 0 ? (
+                        <div className="relative">
+                          <svg className="w-full h-64" viewBox="0 0 800 256" preserveAspectRatio="none">
+                            {/* Y-axis grid lines */}
+                            {[0, 1, 2, 3, 4].map((i) => {
+                              const y = (i * 64);
+                              return (
+                                <line
+                                  key={i}
+                                  x1="40"
+                                  y1={y}
+                                  x2="800"
+                                  y2={y}
+                                  stroke="#e5e7eb"
+                                  strokeWidth="1"
+                                />
+                              );
+                            })}
+                            
+                            {/* Calculate max value for scaling */}
+                            {(() => {
+                              const maxValue = Math.max(
+                                ...allMeasurementsData.map(m => {
+                                  let max = 0;
+                                  selectedMeasurements.forEach(key => {
+                                    const value = key === 'bodyWeight' 
+                                      ? (m.bodyWeight || 0)
+                                      : (m.measurements?.[key] || 0);
+                                    max = Math.max(max, value);
+                                  });
+                                  return max;
+                                })
+                              );
+                              
+                              const minValue = Math.min(
+                                ...allMeasurementsData.map(m => {
+                                  let min = Infinity;
+                                  selectedMeasurements.forEach(key => {
+                                    const value = key === 'bodyWeight' 
+                                      ? (m.bodyWeight || 0)
+                                      : (m.measurements?.[key] || 0);
+                                    if (value > 0) min = Math.min(min, value);
+                                  });
+                                  return min === Infinity ? 0 : min;
+                                })
+                              );
+                              
+                              const range = maxValue - minValue || 1;
+                              const padding = range * 0.1; // 10% padding
+                              const scaleMin = Math.max(0, minValue - padding);
+                              const scaleMax = maxValue + padding;
+                              const scaleRange = scaleMax - scaleMin;
+                              
+                              // Draw lines for each selected measurement
+                              return Array.from(selectedMeasurements).map((key, keyIndex) => {
+                                const colorMap = [
+                                  '#3b82f6', // blue
+                                  '#10b981', // green
+                                  '#8b5cf6', // purple
+                                  '#f97316', // orange
+                                  '#ec4899', // pink
+                                  '#6366f1', // indigo
+                                  '#ef4444', // red
+                                  '#eab308'  // yellow
+                                ];
+                                const color = colorMap[keyIndex % colorMap.length];
+                                
+                                const points = allMeasurementsData
+                                  .map((m, index) => {
+                                    const value = key === 'bodyWeight' 
+                                      ? (m.bodyWeight || 0)
+                                      : (m.measurements?.[key] || 0);
+                                    
+                                    if (value === 0 || value === null || value === undefined) return null;
+                                    
+                                    const x = 40 + (index / (allMeasurementsData.length - 1 || 1)) * 760;
+                                    const y = 240 - ((value - scaleMin) / scaleRange) * 200;
+                                    
+                                    return { x, y, value, date: m.date, isBaseline: m.isBaseline };
+                                  })
+                                  .filter(p => p !== null) as { x: number; y: number; value: number; date: Date; isBaseline: boolean }[];
+                                
+                                if (points.length === 0) return null;
+                                
+                                // Draw line
+                                const pathData = points.map((p, i) => 
+                                  `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`
+                                ).join(' ');
+                                
+                                return (
+                                  <g key={key}>
+                                    {/* Line */}
+                                    <path
+                                      d={pathData}
+                                      fill="none"
+                                      stroke={color}
+                                      strokeWidth="3"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                    />
+                                    {/* Points */}
+                                    {points.map((p, i) => (
+                                      <circle
+                                        key={i}
+                                        cx={p.x}
+                                        cy={p.y}
+                                        r="4"
+                                        fill={color}
+                                        stroke="white"
+                                        strokeWidth="2"
+                                        className="cursor-pointer hover:r-6 transition-all"
+                                      />
+                                    ))}
+                                  </g>
+                                );
+                              });
+                            })()}
+                          </svg>
+                          
+                          {/* X-axis date labels */}
+                          <div className="flex justify-between mt-2 px-10">
+                            {allMeasurementsData.map((measurement, index) => {
+                              const date = new Date(measurement.date);
+                              return (
+                                <div key={index} className="flex flex-col items-center text-[9px] text-gray-500">
+                                  <span>{date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' })}</span>
+                                  {measurement.isBaseline && (
+                                    <span className="text-[8px] text-blue-600 font-semibold mt-0.5">Baseline</span>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                          
+                          {/* Y-axis labels */}
+                          <div className="absolute left-0 top-0 h-64 flex flex-col justify-between text-[10px] text-gray-500 pr-2">
+                            {(() => {
+                              const maxValue = Math.max(
+                                ...allMeasurementsData.map(m => {
+                                  let max = 0;
+                                  selectedMeasurements.forEach(key => {
+                                    const value = key === 'bodyWeight' 
+                                      ? (m.bodyWeight || 0)
+                                      : (m.measurements?.[key] || 0);
+                                    max = Math.max(max, value);
+                                  });
+                                  return max;
+                                })
+                              );
+                              
+                              const minValue = Math.min(
+                                ...allMeasurementsData.map(m => {
+                                  let min = Infinity;
+                                  selectedMeasurements.forEach(key => {
+                                    const value = key === 'bodyWeight' 
+                                      ? (m.bodyWeight || 0)
+                                      : (m.measurements?.[key] || 0);
+                                    if (value > 0) min = Math.min(min, value);
+                                  });
+                                  return min === Infinity ? 0 : min;
+                                })
+                              );
+                              
+                              const range = maxValue - minValue || 1;
+                              const padding = range * 0.1;
+                              const scaleMin = Math.max(0, minValue - padding);
+                              const scaleMax = maxValue + padding;
+                              
+                              return [scaleMax, scaleMax * 0.75, scaleMax * 0.5, scaleMax * 0.25, scaleMin].map((val, i) => (
+                                <span key={i}>{Math.round(val)}</span>
+                              ));
+                            })()}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-center py-8 text-gray-500">
+                          <p className="text-sm">Select measurements to view on the graph</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  
+                  {/* Measurement Table */}
                   <div className="p-8">
                     {loadingMeasurements ? (
                       <div className="text-center py-12">
@@ -1681,6 +2041,96 @@ export default function ClientProfilePage() {
                         </table>
                       </div>
                     )}
+                  </div>
+                </div>
+              )}
+
+              {/* Answer Detail Modal */}
+              {selectedResponse && (
+                <div 
+                  className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+                  onClick={() => setSelectedResponse(null)}
+                >
+                  <div 
+                    className="bg-white rounded-lg shadow-2xl max-w-md w-full p-6"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-xl font-bold text-gray-900">Question Response</h3>
+                      <button
+                        onClick={() => setSelectedResponse(null)}
+                        className="text-gray-400 hover:text-gray-600 transition-colors"
+                      >
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                    
+                    <div className="space-y-4">
+                      <div>
+                        <p className="text-sm font-medium text-gray-500 mb-1">Question</p>
+                        <p className="text-gray-900">{selectedResponse.question}</p>
+                      </div>
+                      
+                      <div>
+                        <p className="text-sm font-medium text-gray-500 mb-1">Client's Answer</p>
+                        <div className="bg-gray-50 rounded-lg p-3">
+                          {selectedResponse.type === 'boolean' ? (
+                            <p className="text-gray-900 font-medium">
+                              {selectedResponse.answer === true || selectedResponse.answer === 'true' ? 'Yes' : 'No'}
+                            </p>
+                          ) : selectedResponse.type === 'scale' || selectedResponse.type === 'rating' ? (
+                            <p className="text-gray-900 font-medium">
+                              {selectedResponse.answer} / 10
+                            </p>
+                          ) : selectedResponse.type === 'number' ? (
+                            <p className="text-gray-900 font-medium">
+                              {selectedResponse.answer}
+                            </p>
+                          ) : Array.isArray(selectedResponse.answer) ? (
+                            <p className="text-gray-900 font-medium">
+                              {selectedResponse.answer.join(', ')}
+                            </p>
+                          ) : (
+                            <p className="text-gray-900 font-medium">
+                              {String(selectedResponse.answer)}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <p className="text-sm font-medium text-gray-500 mb-1">Score</p>
+                          <div className="flex items-center gap-2">
+                            <div className={`w-6 h-6 rounded-full ${getStatusColor(
+                              selectedResponse.score >= 7 ? 'green' : selectedResponse.score >= 4 ? 'orange' : 'red'
+                            )} ${getStatusBorder(
+                              selectedResponse.score >= 7 ? 'green' : selectedResponse.score >= 4 ? 'orange' : 'red'
+                            )} flex items-center justify-center`}>
+                              <span className="text-white text-xs font-bold">{selectedResponse.score}</span>
+                            </div>
+                            <span className="text-gray-900 font-medium">{selectedResponse.score}/10</span>
+                          </div>
+                        </div>
+                        
+                        <div>
+                          <p className="text-sm font-medium text-gray-500 mb-1">Date</p>
+                          <p className="text-gray-900 font-medium">Week {selectedResponse.week}</p>
+                          <p className="text-sm text-gray-600">{selectedResponse.date}</p>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="mt-6 flex justify-end">
+                      <button
+                        onClick={() => setSelectedResponse(null)}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                      >
+                        Close
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -1783,12 +2233,48 @@ export default function ClientProfilePage() {
                     </div>
                   ) : (
                     <div id="check-ins-section" className="space-y-8">
-                      {/* All Allocated Check-ins Table */}
-                      <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-6 border border-indigo-200">
-                        <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                          <span className="w-2 h-2 bg-indigo-500 rounded-full mr-3"></span>
-                          All Allocated Check-ins ({allocatedCheckIns.length})
-                        </h3>
+                      {/* Tab Navigation */}
+                      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                        <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-6 py-4 border-b border-gray-200">
+                          <div className="flex items-center justify-between">
+                            <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                              <span className="w-2 h-2 bg-indigo-500 rounded-full mr-3"></span>
+                              Check-ins Management
+                            </h3>
+                            <div className="flex bg-white rounded-lg p-1 shadow-sm text-xs md:text-sm">
+                              <button
+                                onClick={() => setCheckInTab('all')}
+                                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                                  checkInTab === 'all'
+                                    ? 'bg-blue-600 text-white shadow-sm'
+                                    : 'text-gray-600 hover:text-gray-900'
+                                }`}
+                              >
+                                All Check-ins ({allocatedCheckIns.length})
+                              </button>
+                              <button
+                                onClick={() => setCheckInTab('completed')}
+                                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                                  checkInTab === 'completed'
+                                    ? 'bg-green-600 text-white shadow-sm'
+                                    : 'text-gray-600 hover:text-gray-900'
+                                }`}
+                              >
+                                Completed ({allocatedCheckIns.filter(c => c.status === 'completed').length})
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* All Check-ins Tab */}
+                        {checkInTab === 'all' && (
+                          <div className="p-6 space-y-6">
+                            {/* All Allocated Check-ins Table */}
+                            <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-6 border border-indigo-200">
+                              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                                <span className="w-2 h-2 bg-indigo-500 rounded-full mr-3"></span>
+                                All Allocated Check-ins ({allocatedCheckIns.length})
+                              </h3>
                         <div className="bg-white rounded-lg overflow-hidden border border-gray-200">
                           <div className="overflow-x-auto">
                             <table className="w-full">
@@ -1955,89 +2441,6 @@ export default function ClientProfilePage() {
                         );
                       })()}
 
-                      {/* Completed Check-ins Section */}
-                      {allocatedCheckIns.filter(c => c.status === 'completed').length > 0 && (
-                        <div>
-                          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                            <span className="w-2 h-2 bg-green-500 rounded-full mr-3"></span>
-                            Completed Check-ins ({allocatedCheckIns.filter(c => c.status === 'completed').length})
-                          </h3>
-                          <div className="space-y-4">
-                            {allocatedCheckIns.filter(c => c.status === 'completed').sort((a, b) => {
-                              const weekA = a.recurringWeek || 0;
-                              const weekB = b.recurringWeek || 0;
-                              return weekA - weekB;
-                            }).map((checkIn, index) => (
-                              <div key={checkIn.id || `completed-${index}`} className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-6 border border-green-200 hover:shadow-lg transition-all duration-200">
-                                <div className="flex items-center justify-between mb-4">
-                                  <div className="flex items-center space-x-4">
-                                    <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center shadow-lg">
-                                      <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                      </svg>
-                                    </div>
-                                    <div>
-                                      <h4 className="text-lg font-bold text-gray-900">{checkIn.formTitle}</h4>
-                                      <p className="text-gray-600">{checkIn.responseCount} questions</p>
-                                    </div>
-                                  </div>
-                                  <div className="text-right">
-                                    <div className="px-4 py-2 text-sm font-medium rounded-full bg-green-100 text-green-800">
-                                      {checkIn.score}%
-                                    </div>
-                                  </div>
-                                </div>
-                                
-                                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                                  <div className="flex items-center space-x-2">
-                                    <span className={`px-3 py-1 text-xs font-medium rounded-full ${getCategoryColor(checkIn.category)}`}>
-                                      {checkIn.category}
-                                    </span>
-                                    {checkIn.isRecurring && (
-                                      <span className="px-2 py-1 text-xs font-medium rounded-full bg-purple-100 text-purple-800">
-                                        Week {checkIn.recurringWeek} of {checkIn.totalWeeks}
-                                      </span>
-                                    )}
-                                  </div>
-                                  <div className="text-sm text-gray-600">
-                                    <span className="font-medium">Assigned:</span> {formatDate(checkIn.assignedAt)}
-                                  </div>
-                                  <div className="text-sm text-gray-600">
-                                    <span className="font-medium">Completed:</span> {formatDate(checkIn.completedAt)}
-                                  </div>
-                                  <div className="flex space-x-2">
-                                    <button className="text-indigo-600 hover:text-indigo-800 font-medium text-sm transition-colors">
-                                      View
-                                    </button>
-                                    <button className="text-gray-600 hover:text-gray-800 font-medium text-sm transition-colors">
-                                      Progress
-                                    </button>
-                                    <div className="flex space-x-1">
-                                      <button 
-                                        onClick={() => handleDeleteSeries(checkIn.formId, checkIn.formTitle, true)}
-                                        disabled={deletingSeries}
-                                        className="text-orange-600 hover:text-orange-800 font-medium text-xs transition-colors disabled:opacity-50"
-                                        title="Delete only pending check-ins, preserve completed history"
-                                      >
-                                        {deletingSeries ? 'Deleting...' : 'Delete Pending'}
-                                      </button>
-                                      <button 
-                                        onClick={() => handleDeleteSeries(checkIn.formId, checkIn.formTitle, false)}
-                                        disabled={deletingSeries}
-                                        className="text-red-600 hover:text-red-800 font-medium text-xs transition-colors disabled:opacity-50"
-                                        title="Delete entire series including all history (cannot be undone)"
-                                      >
-                                        {deletingSeries ? 'Deleting...' : 'Delete All'}
-                                      </button>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
                       {/* Pending Check-ins Section */}
                       {allocatedCheckIns.filter(c => c.status === 'pending').length > 0 && (
                         <div>
@@ -2115,6 +2518,94 @@ export default function ClientProfilePage() {
                           </div>
                         </div>
                       )}
+                          </div>
+                        )}
+
+                        {/* Completed Check-ins Tab */}
+                        {checkInTab === 'completed' && (
+                          <div className="p-6 space-y-6">
+                            {allocatedCheckIns.filter(c => c.status === 'completed').length > 0 ? (
+                              <div>
+                                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                                  <span className="w-2 h-2 bg-green-500 rounded-full mr-3"></span>
+                                  Completed Check-ins ({allocatedCheckIns.filter(c => c.status === 'completed').length})
+                                </h3>
+                                <div className="space-y-4">
+                                  {allocatedCheckIns.filter(c => c.status === 'completed').sort((a, b) => {
+                                    const weekA = a.recurringWeek || 0;
+                                    const weekB = b.recurringWeek || 0;
+                                    return weekA - weekB;
+                                  }).map((checkIn, index) => (
+                                    <div key={checkIn.id || `completed-${index}`} className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-6 border border-green-200 hover:shadow-lg transition-all duration-200">
+                                      <div className="flex items-center justify-between mb-4">
+                                        <div className="flex items-center space-x-4">
+                                          <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center shadow-lg">
+                                            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
+                                          </div>
+                                          <div>
+                                            <h4 className="text-lg font-bold text-gray-900">{checkIn.formTitle}</h4>
+                                            <p className="text-gray-600">{checkIn.responseCount || 0} questions</p>
+                                          </div>
+                                        </div>
+                                        <div className="text-right">
+                                          <div className="px-4 py-2 text-sm font-medium rounded-full bg-green-100 text-green-800">
+                                            {checkIn.score}%
+                                          </div>
+                                        </div>
+                                      </div>
+                                      
+                                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                        <div className="flex items-center space-x-2">
+                                          <span className={`px-3 py-1 text-xs font-medium rounded-full ${getCategoryColor(checkIn.category)}`}>
+                                            {checkIn.category}
+                                          </span>
+                                          {checkIn.isRecurring && (
+                                            <span className="px-2 py-1 text-xs font-medium rounded-full bg-purple-100 text-purple-800">
+                                              Week {checkIn.recurringWeek} of {checkIn.totalWeeks}
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div className="text-sm text-gray-600">
+                                          <span className="font-medium">Assigned:</span> {formatDate(checkIn.assignedAt)}
+                                        </div>
+                                        <div className="text-sm text-gray-600">
+                                          <span className="font-medium">Completed:</span> {formatDate(checkIn.completedAt)}
+                                        </div>
+                                        <div className="flex space-x-2">
+                                          <Link
+                                            href={`/responses/${checkIn.responseId || checkIn.id}`}
+                                            className="text-indigo-600 hover:text-indigo-800 font-medium text-sm transition-colors"
+                                          >
+                                            View
+                                          </Link>
+                                          <Link
+                                            href={`/clients/${clientId}/progress`}
+                                            className="text-gray-600 hover:text-gray-800 font-medium text-sm transition-colors"
+                                          >
+                                            Progress
+                                          </Link>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="text-center py-12">
+                                <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                  <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                  </svg>
+                                </div>
+                                <p className="text-gray-500 text-lg mb-2">No completed check-ins</p>
+                                <p className="text-gray-400 text-sm">Completed check-ins will appear here</p>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
