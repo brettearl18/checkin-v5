@@ -540,9 +540,10 @@ export default function ClientProgressPage() {
       waist: 'Waist (cm)',
       chest: 'Chest (cm)',
       hips: 'Hips (cm)',
-      thigh: 'Thigh (cm)',
-      arm: 'Arm (cm)',
-      neck: 'Neck (cm)'
+      leftThigh: 'Left Thigh (cm)',
+      rightThigh: 'Right Thigh (cm)',
+      leftArm: 'Left Arm (cm)',
+      rightArm: 'Right Arm (cm)'
     };
     return labels[key] || key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, ' $1');
   };
@@ -574,128 +575,130 @@ export default function ClientProgressPage() {
 
   return (
     <AuthenticatedOnly>
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex">
+      <div className="min-h-screen bg-white flex">
         <ClientNavigation />
         
-        <div className="flex-1 ml-8 p-6">
-          {/* Header */}
-          <div className="mb-6">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h1 className="text-4xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">Your Progress</h1>
-                <p className="text-gray-600 mt-2 text-lg">Track your health and wellness journey</p>
-              </div>
-              <Link
-                href="/client-portal"
-                className="text-gray-600 hover:text-gray-900 font-medium"
-              >
-                ← Back to Dashboard
-              </Link>
-            </div>
-
-            {/* Time Range Filter */}
-            <div className="flex space-x-2">
-              {['7d', '30d', '90d', 'all'].map((range) => (
-                <button
-                  key={range}
-                  onClick={() => setTimeRange(range)}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    timeRange === range
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
-                  }`}
+        <div className="flex-1 px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
+          <div className="max-w-7xl mx-auto w-full">
+            {/* Header */}
+            <div className="mb-6">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">Your Progress</h1>
+                  <p className="text-gray-600 mt-1 text-sm">Track your health and wellness journey</p>
+                </div>
+                <Link
+                  href="/client-portal"
+                  className="text-sm text-gray-600 hover:text-gray-900 font-medium transition-colors"
                 >
-                  {range === '7d' ? '7 Days' : range === '30d' ? '30 Days' : range === '90d' ? '90 Days' : 'All Time'}
-                </button>
-              ))}
-            </div>
-          </div>
+                  ← Back to Dashboard
+                </Link>
+              </div>
 
-          {/* Stats Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-6">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                    <span className="text-blue-600 text-lg">📊</span>
-                  </div>
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-500">Average Score</p>
-                  <p className="text-2xl font-bold text-gray-900">{stats.averageScore}%</p>
-                </div>
+              {/* Time Range Filter */}
+              <div className="flex flex-wrap gap-2">
+                {['7d', '30d', '90d', 'all'].map((range) => (
+                  <button
+                    key={range}
+                    onClick={() => setTimeRange(range)}
+                    className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                      timeRange === range
+                        ? 'text-white shadow-md'
+                        : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
+                    }`}
+                    style={timeRange === range ? { backgroundColor: '#daa450' } : {}}
+                  >
+                    {range === '7d' ? '7 Days' : range === '30d' ? '30 Days' : range === '90d' ? '90 Days' : 'All Time'}
+                  </button>
+                ))}
               </div>
             </div>
 
-            <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-6">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                    <span className="text-green-600 text-lg">🏆</span>
-                  </div>
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-500">Best Score</p>
-                  <p className="text-2xl font-bold text-gray-900">{stats.bestScore}%</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-6">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                    <span className="text-purple-600 text-lg">📈</span>
-                  </div>
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-500">Improvement</p>
-                  <p className={`text-2xl font-bold ${stats.improvement >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {stats.improvement >= 0 ? '+' : ''}{stats.improvement}%
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-6">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
-                    <span className="text-orange-600 text-lg">🔥</span>
-                  </div>
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-500">Current Streak</p>
-                  <p className="text-2xl font-bold text-gray-900">{stats.currentStreak} days</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* Question Progress Grid */}
-            {questionProgress.length > 0 ? (
-              <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                <div className="px-4 py-2.5 bg-gradient-to-r from-gray-50 to-white border-b border-gray-100">
-                  <h2 className="text-base font-bold text-gray-900">Question Progress Over Time</h2>
-                  <p className="text-[10px] text-gray-500 mt-0.5">Track how each question improves week by week</p>
-                </div>
-                
-                {/* Legend */}
-                <div className="flex items-center gap-3 px-4 py-2 bg-gray-50/50 border-b border-gray-100">
-                  <div className="flex items-center gap-1">
-                    <div className="w-2.5 h-2.5 rounded-full bg-green-500"></div>
-                    <span className="text-[10px] text-gray-600 font-medium">Good (7-10)</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="w-2.5 h-2.5 rounded-full bg-orange-500"></div>
-                    <span className="text-[10px] text-gray-600 font-medium">Moderate (4-6)</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="w-2.5 h-2.5 rounded-full bg-red-500"></div>
-                    <span className="text-[10px] text-gray-600 font-medium">Needs Attention (0-3)</span>
-                      </div>
+            {/* Stats Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#fef9e7' }}>
+                      <span className="text-xl">📊</span>
                     </div>
+                  </div>
+                  <div className="ml-4">
+                    <p className="text-xs font-medium text-gray-500">Average Score</p>
+                    <p className="text-2xl font-bold text-gray-900 mt-1">{stats.averageScore}%</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#fef9e7' }}>
+                      <span className="text-xl">🏆</span>
+                    </div>
+                  </div>
+                  <div className="ml-4">
+                    <p className="text-xs font-medium text-gray-500">Best Score</p>
+                    <p className="text-2xl font-bold text-gray-900 mt-1">{stats.bestScore}%</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#fef9e7' }}>
+                      <span className="text-xl">📈</span>
+                    </div>
+                  </div>
+                  <div className="ml-4">
+                    <p className="text-xs font-medium text-gray-500">Improvement</p>
+                    <p className={`text-2xl font-bold mt-1 ${stats.improvement >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {stats.improvement >= 0 ? '+' : ''}{stats.improvement}%
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#fef9e7' }}>
+                      <span className="text-xl">🔥</span>
+                    </div>
+                  </div>
+                  <div className="ml-4">
+                    <p className="text-xs font-medium text-gray-500">Current Streak</p>
+                    <p className="text-2xl font-bold text-gray-900 mt-1">{stats.currentStreak} days</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Question Progress Grid */}
+              {questionProgress.length > 0 ? (
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                  <div className="px-6 py-4 border-b border-gray-100" style={{ backgroundColor: '#fef9e7' }}>
+                    <h2 className="text-lg font-bold text-gray-900">Question Progress Over Time</h2>
+                    <p className="text-sm text-gray-600 mt-1">Track how each question improves week by week</p>
+                  </div>
+                
+                  {/* Legend */}
+                  <div className="flex items-center gap-4 px-6 py-3 bg-gray-50 border-b border-gray-100">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                      <span className="text-xs text-gray-700 font-medium">Good (7-10)</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-orange-500"></div>
+                      <span className="text-xs text-gray-700 font-medium">Moderate (4-6)</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                      <span className="text-xs text-gray-700 font-medium">Needs Attention (0-3)</span>
+                    </div>
+                  </div>
 
                 {/* Progress Grid */}
                 <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
@@ -748,7 +751,6 @@ export default function ClientProgressPage() {
                                   type: week.type
                                 })}
                               >
-                                <span className="text-white text-[9px] font-bold">{week.score}</span>
                               </div>
                             </td>
                           ))}
@@ -764,41 +766,45 @@ export default function ClientProgressPage() {
                   </table>
                 </div>
               </div>
-            ) : (
-              <div className="bg-white rounded-lg shadow p-6">
-                <h2 className="text-lg font-medium text-gray-900 mb-4">Question Progress</h2>
-                <div className="text-center py-12 text-gray-500">
-                  <p className="text-sm">No question-level data available yet.</p>
-                  <p className="text-xs mt-1 text-gray-400">Complete more check-ins to see your progress!</p>
-                </div>
-              </div>
-            )}
-
-            {/* Measurements Graph */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-lg font-medium text-gray-900 mb-4">Measurements Over Time</h2>
-              
-              {/* Measurement Toggles */}
-              {getAvailableMeasurements().length > 0 && (
-                <div className="mb-4 flex flex-wrap gap-2">
-                  {getAvailableMeasurements().map((measurement, index) => (
-                    <button
-                      key={measurement}
-                      onClick={() => toggleMeasurement(measurement)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                        selectedMeasurements.has(measurement)
-                          ? `${getMeasurementColor(index)} text-white`
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
-                    >
-                      {getMeasurementLabel(measurement)}
-                    </button>
-                  ))}
+              ) : (
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                  <h2 className="text-lg font-bold text-gray-900 mb-4">Question Progress</h2>
+                  <div className="text-center py-12 text-gray-500">
+                    <p className="text-sm">No question-level data available yet.</p>
+                    <p className="text-xs mt-1 text-gray-400">Complete more check-ins to see your progress!</p>
+                  </div>
                 </div>
               )}
 
-              {/* Graph */}
-              {measurements.length > 0 && selectedMeasurements.size > 0 ? (
+              {/* Measurements Graph */}
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-100" style={{ backgroundColor: '#fef9e7' }}>
+                  <h2 className="text-lg font-bold text-gray-900">Measurements Over Time</h2>
+                  <p className="text-sm text-gray-600 mt-1">Track your body measurements over time</p>
+                </div>
+                <div className="p-6">
+                  {/* Measurement Toggles */}
+                  {getAvailableMeasurements().length > 0 && (
+                    <div className="mb-6 flex flex-wrap gap-2">
+                      {getAvailableMeasurements().map((measurement, index) => (
+                        <button
+                          key={measurement}
+                          onClick={() => toggleMeasurement(measurement)}
+                          className={`px-3 py-2 rounded-xl text-xs font-medium transition-all ${
+                            selectedMeasurements.has(measurement)
+                              ? 'text-white shadow-sm'
+                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200'
+                          }`}
+                          style={selectedMeasurements.has(measurement) ? { backgroundColor: '#daa450' } : {}}
+                        >
+                          {getMeasurementLabel(measurement)}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Graph */}
+                  {measurements.length > 0 && selectedMeasurements.size > 0 ? (
                 <div className="relative">
                   <svg className="w-full h-64" viewBox="0 0 800 256" preserveAspectRatio="none">
                     {/* Y-axis grid lines */}
@@ -978,12 +984,13 @@ export default function ClientProgressPage() {
                   <p className="text-xs mt-1 text-gray-400">Complete check-ins with measurements to see your progress!</p>
                 </div>
               )}
+                </div>
+              </div>
             </div>
-          </div>
 
           {/* Insights */}
-          <div className="mt-8 bg-white rounded-lg shadow p-6">
-            <h2 className="text-lg font-medium text-gray-900 mb-4">Progress Insights</h2>
+          <div className="mt-8 bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+              <h2 className="text-lg font-bold text-gray-900 mb-4">Progress Insights</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-4">
                 <div className="flex items-start">
@@ -1027,7 +1034,7 @@ export default function ClientProgressPage() {
               </div>
             </div>
           </div>
-
+          </div>
 
           {/* Answer Detail Modal */}
           {selectedResponse && (
@@ -1035,114 +1042,115 @@ export default function ClientProgressPage() {
               className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
               onClick={() => setSelectedResponse(null)}
             >
-              <div 
-                className="bg-white rounded-lg shadow-2xl max-w-md w-full p-6"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-xl font-bold text-gray-900">Question Response</h3>
-                  <button
-                    onClick={() => setSelectedResponse(null)}
-                    className="text-gray-400 hover:text-gray-600 transition-colors"
-                  >
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-                
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-sm font-medium text-gray-500 mb-1">Question</p>
-                    <p className="text-gray-900">{selectedResponse.question}</p>
+                <div 
+                  className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-xl font-bold text-gray-900">Question Response</h3>
+                    <button
+                      onClick={() => setSelectedResponse(null)}
+                      className="text-gray-400 hover:text-gray-600 transition-colors"
+                    >
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
                   </div>
                   
-                  <div>
-                    <p className="text-sm font-medium text-gray-500 mb-1">Your Answer</p>
-                    <div className="bg-gray-50 rounded-lg p-3">
-                      {selectedResponse.type === 'boolean' ? (
-                        <p className="text-gray-900 font-medium">
-                          {selectedResponse.answer === true || selectedResponse.answer === 'true' ? 'Yes' : 'No'}
-                        </p>
-                      ) : selectedResponse.type === 'scale' || selectedResponse.type === 'rating' ? (
-                        <p className="text-gray-900 font-medium">
-                          {selectedResponse.answer} / 10
-                        </p>
-                      ) : selectedResponse.type === 'number' ? (
-                        <p className="text-gray-900 font-medium">
-                          {selectedResponse.answer}
-                        </p>
-                      ) : Array.isArray(selectedResponse.answer) ? (
-                        <p className="text-gray-900 font-medium">
-                          {selectedResponse.answer.join(', ')}
-                        </p>
-                      ) : (
-                        <p className="text-gray-900 font-medium">
-                          {String(selectedResponse.answer)}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-4">
                     <div>
-                      <p className="text-sm font-medium text-gray-500 mb-1">Score</p>
-                      <div className="flex items-center gap-2">
-                        <div className={`w-6 h-6 rounded-full ${getStatusColor(
-                          selectedResponse.score >= 7 ? 'green' : selectedResponse.score >= 4 ? 'orange' : 'red'
-                        )} border-2 ${getStatusBorder(
-                          selectedResponse.score >= 7 ? 'green' : selectedResponse.score >= 4 ? 'orange' : 'red'
-                        )} flex items-center justify-center`}>
-                          <span className="text-white text-xs font-bold">{selectedResponse.score}</span>
-                        </div>
-                        <span className="text-gray-900 font-medium">{selectedResponse.score}/10</span>
-                      </div>
+                      <p className="text-sm font-medium text-gray-500 mb-1">Question</p>
+                      <p className="text-gray-900">{selectedResponse.question}</p>
                     </div>
                     
                     <div>
-                      <p className="text-sm font-medium text-gray-500 mb-1">Date</p>
-                      <p className="text-gray-900 font-medium">Week {selectedResponse.week}</p>
-                      <p className="text-sm text-gray-600">{selectedResponse.date}</p>
+                      <p className="text-sm font-medium text-gray-500 mb-1">Your Answer</p>
+                      <div className="bg-gray-50 rounded-xl p-3">
+                        {selectedResponse.type === 'boolean' ? (
+                          <p className="text-gray-900 font-medium">
+                            {selectedResponse.answer === true || selectedResponse.answer === 'true' ? 'Yes' : 'No'}
+                          </p>
+                        ) : selectedResponse.type === 'scale' || selectedResponse.type === 'rating' ? (
+                          <p className="text-gray-900 font-medium">
+                            {selectedResponse.answer} / 10
+                          </p>
+                        ) : selectedResponse.type === 'number' ? (
+                          <p className="text-gray-900 font-medium">
+                            {selectedResponse.answer}
+                          </p>
+                        ) : Array.isArray(selectedResponse.answer) ? (
+                          <p className="text-gray-900 font-medium">
+                            {selectedResponse.answer.join(', ')}
+                          </p>
+                        ) : (
+                          <p className="text-gray-900 font-medium">
+                            {String(selectedResponse.answer)}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-sm font-medium text-gray-500 mb-1">Score</p>
+                        <div className="flex items-center gap-2">
+                          <div className={`w-6 h-6 rounded-full ${getStatusColor(
+                            selectedResponse.score >= 7 ? 'green' : selectedResponse.score >= 4 ? 'orange' : 'red'
+                          )} border-2 ${getStatusBorder(
+                            selectedResponse.score >= 7 ? 'green' : selectedResponse.score >= 4 ? 'orange' : 'red'
+                          )} flex items-center justify-center`}>
+                            <span className="text-white text-xs font-bold">{selectedResponse.score}</span>
+                          </div>
+                          <span className="text-gray-900 font-medium">{selectedResponse.score}/10</span>
+                        </div>
+                      </div>
+                      
+                      <div>
+                        <p className="text-sm font-medium text-gray-500 mb-1">Date</p>
+                        <p className="text-gray-900 font-medium">Week {selectedResponse.week}</p>
+                        <p className="text-sm text-gray-600">{selectedResponse.date}</p>
+                      </div>
                     </div>
                   </div>
-                </div>
-                
-                <div className="mt-6 flex justify-end">
-                  <button
-                    onClick={() => setSelectedResponse(null)}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                  >
-                    Close
-                  </button>
+                  
+                  <div className="mt-6 flex justify-end">
+                    <button
+                      onClick={() => setSelectedResponse(null)}
+                      className="px-4 py-2 rounded-xl text-white font-medium transition-all shadow-sm hover:opacity-90"
+                      style={{ backgroundColor: '#daa450' }}
+                    >
+                      Close
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
           )}
 
           {/* Recommendations */}
-          <div className="mt-8 bg-blue-50 rounded-lg p-6">
-            <h2 className="text-lg font-medium text-blue-900 mb-4">💡 Recommendations</h2>
+          <div className="mt-8 bg-white rounded-2xl shadow-sm border border-gray-100 p-6" style={{ backgroundColor: '#fef9e7' }}>
+            <h2 className="text-lg font-bold text-gray-900 mb-4">💡 Recommendations</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <p className="font-medium text-blue-900 mb-2">Set Daily Reminders</p>
-                <p className="text-sm text-blue-700">Schedule your check-ins at the same time each day to build consistency</p>
+                <p className="font-semibold text-gray-900 mb-2">Set Daily Reminders</p>
+                <p className="text-sm text-gray-600">Schedule your check-ins at the same time each day to build consistency</p>
               </div>
               <div>
-                <p className="font-medium text-blue-900 mb-2">Track Your Goals</p>
-                <p className="text-sm text-blue-700">Set specific, measurable goals and review your progress weekly</p>
+                <p className="font-semibold text-gray-900 mb-2">Track Your Goals</p>
+                <p className="text-sm text-gray-600">Set specific, measurable goals and review your progress weekly</p>
               </div>
               <div>
-                <p className="font-medium text-blue-900 mb-2">Celebrate Wins</p>
-                <p className="text-sm text-blue-700">Acknowledge your achievements, no matter how small they seem</p>
+                <p className="font-semibold text-gray-900 mb-2">Celebrate Wins</p>
+                <p className="text-sm text-gray-600">Acknowledge your achievements, no matter how small they seem</p>
               </div>
               <div>
-                <p className="font-medium text-blue-900 mb-2">Stay Connected</p>
-                <p className="text-sm text-blue-700">Your coach is here to support you - reach out when you need help</p>
+                <p className="font-semibold text-gray-900 mb-2">Stay Connected</p>
+                <p className="text-sm text-gray-600">Your coach is here to support you - reach out when you need help</p>
               </div>
             </div>
           </div>
+          </div>
         </div>
-      </div>
-    </AuthenticatedOnly>
-  );
-} 
+      </AuthenticatedOnly>
+    );
+}

@@ -251,12 +251,18 @@ export default function EditCheckInPage() {
             break;
             
           case 'textarea':
-            // Check if this is the "Describe Slip up" question - it's not scored (weight = 0)
-            const isDescribeSlipUpQuestion = question.text?.toLowerCase().includes('describe slip up') || 
-                                             question.text?.toLowerCase().includes('slip up') ||
-                                             (question.questionWeight === 0 || question.weight === 0);
+            // Check if this is a free-text explanation question - it's not scored (weight = 0)
+            const questionTextForScoring = (question.text || question.question || '').toLowerCase();
+            const isFreeTextQuestionForScoring = 
+              questionTextForScoring.includes('describe slip up') || 
+              questionTextForScoring.includes('slip up') ||
+              questionTextForScoring.includes('explain') ||
+              questionTextForScoring.includes('please explain') ||
+              questionTextForScoring.includes('tell us more') ||
+              questionTextForScoring.includes('provide details') ||
+              (question.questionWeight === 0 || question.weight === 0);
             
-            if (isDescribeSlipUpQuestion) {
+            if (isFreeTextQuestionForScoring) {
               // This is a free-text question for context only, not scored
               questionScore = 0;
               // Skip adding to weighted score for unscored questions
@@ -332,13 +338,20 @@ export default function EditCheckInPage() {
         );
 
       case 'textarea':
-        // Check if this is a "Describe Slip up" question - it should be a real textarea
+        // Check if this is a free-text explanation question - it should be a real textarea
         // Other textarea questions might be rendered as selectors for scoring
-        const isDescribeSlipUp = question.text?.toLowerCase().includes('describe slip up') || 
-                                  question.text?.toLowerCase().includes('slip up') ||
-                                  question.questionWeight === 0; // Unscored questions should be real textareas
+        const questionText = (question.text || question.question || '').toLowerCase();
+        const isFreeTextQuestion = 
+          questionText.includes('describe slip up') || 
+          questionText.includes('slip up') ||
+          questionText.includes('explain') ||
+          questionText.includes('please explain') ||
+          questionText.includes('tell us more') ||
+          questionText.includes('provide details') ||
+          question.questionWeight === 0 || 
+          question.weight === 0; // Unscored questions should be real textareas
         
-        if (isDescribeSlipUp) {
+        if (isFreeTextQuestion) {
           // Render as actual textarea for free-text responses
           return (
             <textarea

@@ -163,7 +163,7 @@ export default function ClientNavigation() {
         <div className="fixed inset-0 z-50 flex lg:hidden">
           <div className="w-72 bg-white shadow-2xl h-full flex flex-col">
             {/* Header */}
-            <div className="bg-gradient-to-br from-pink-500 to-rose-600 px-6 py-6">
+            <div className="px-6 py-6" style={{ backgroundColor: '#daa450' }}>
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center space-x-3">
                   <div className="w-10 h-10 bg-white bg-opacity-20 rounded-xl flex items-center justify-center">
@@ -173,7 +173,7 @@ export default function ClientNavigation() {
                   </div>
                   <div>
                     <h1 className="text-white font-bold text-base">Client Portal</h1>
-                    <p className="text-pink-100 text-xs">Wellness journey</p>
+                    <p className="text-white text-xs opacity-90">Wellness journey</p>
                   </div>
                 </div>
                 <button
@@ -196,18 +196,21 @@ export default function ClientNavigation() {
                     key={item.name}
                     href={item.href}
                     onClick={handleLinkClick}
-                    className={`flex items-center space-x-3 px-4 py-3 rounded-xl font-medium transition-all duration-200 ${
+                    className={`flex items-center space-x-3 px-4 py-3 rounded-2xl font-medium transition-all duration-200 ${
                       isActive(item.href)
-                        ? 'bg-gradient-to-r from-pink-50 to-rose-50 text-pink-700 shadow-sm border border-pink-100'
-                        : 'text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-pink-50 hover:text-pink-700'
+                        ? 'bg-[#fef9e7] text-gray-900 shadow-sm border-l-4'
+                        : 'text-gray-700 hover:bg-gray-50'
                     }`}
+                    style={isActive(item.href) ? { borderLeftColor: '#daa450' } : {}}
                   >
-                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                    <div className={`w-8 h-8 rounded-2xl flex items-center justify-center ${
                       isActive(item.href)
-                        ? 'bg-pink-100'
+                        ? ''
                         : 'bg-gray-100'
-                    }`}>
-                      <div className={isActive(item.href) ? 'text-pink-600' : 'text-gray-600'}>
+                    }`}
+                    style={isActive(item.href) ? { backgroundColor: '#daa450' } : {}}
+                    >
+                      <div className={isActive(item.href) ? 'text-white' : 'text-gray-600'}>
                         {item.icon}
                       </div>
                     </div>
@@ -217,18 +220,21 @@ export default function ClientNavigation() {
                 <Link
                   href="/notifications"
                   onClick={handleLinkClick}
-                  className={`flex items-center space-x-3 px-4 py-3 rounded-xl font-medium transition-all duration-200 ${
+                  className={`flex items-center space-x-3 px-4 py-3 rounded-2xl font-medium transition-all duration-200 ${
                     pathname === '/notifications'
-                      ? 'bg-gradient-to-r from-pink-50 to-rose-50 text-pink-700 shadow-sm border border-pink-100'
-                      : 'text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-pink-50 hover:text-pink-700'
+                      ? 'bg-[#fef9e7] text-gray-900 shadow-sm border-l-4'
+                      : 'text-gray-700 hover:bg-gray-50'
                   }`}
+                  style={pathname === '/notifications' ? { borderLeftColor: '#daa450' } : {}}
                 >
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                  <div className={`w-8 h-8 rounded-2xl flex items-center justify-center ${
                     pathname === '/notifications'
-                      ? 'bg-pink-100'
+                      ? ''
                       : 'bg-gray-100'
-                  }`}>
-                    <svg className={`w-4 h-4 ${pathname === '/notifications' ? 'text-pink-600' : 'text-gray-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  }`}
+                  style={pathname === '/notifications' ? { backgroundColor: '#daa450' } : {}}
+                  >
+                    <svg className={`w-4 h-4 ${pathname === '/notifications' ? 'text-white' : 'text-gray-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                     </svg>
                   </div>
@@ -241,7 +247,7 @@ export default function ClientNavigation() {
             {/* User Section */}
             <div className="px-4 py-4 border-t border-gray-100 bg-white">
               <div className="flex items-center space-x-3 mb-3">
-                <div className="w-10 h-10 bg-gradient-to-br from-pink-500 to-rose-600 rounded-full flex items-center justify-center text-white text-sm font-medium shadow-sm">
+                <div className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-medium shadow-sm" style={{ backgroundColor: '#daa450' }}>
                   {userProfile?.firstName?.charAt(0) || 'C'}
                 </div>
                 <div className="flex-1 min-w-0">
@@ -269,7 +275,7 @@ export default function ClientNavigation() {
       )}
 
       {/* Desktop Sidebar - Hidden on mobile */}
-      <div className={`hidden lg:flex w-64 bg-white shadow-xl border-r border-gray-100 transition-all duration-300 h-screen flex-col ${isCollapsed ? 'w-16' : 'w-64'}`}>
+      <div className={`hidden lg:flex ${isCollapsed ? 'w-16' : 'w-64'} bg-white shadow-[0_1px_3px_rgba(0,0,0,0.1)] border-r border-gray-100 transition-all duration-300 h-screen flex-col`}>
       {/* Sidebar Header */}
       <div className="bg-gradient-to-br from-pink-500 to-rose-600 px-6 py-8">
         <div className="flex items-center space-x-3">
@@ -281,7 +287,7 @@ export default function ClientNavigation() {
           {!isCollapsed && (
             <div>
               <h1 className="text-white font-bold text-lg">Client Portal</h1>
-              <p className="text-pink-100 text-sm">Wellness journey</p>
+                    <p className="text-white text-sm opacity-90">Wellness journey</p>
             </div>
           )}
         </div>
@@ -294,19 +300,22 @@ export default function ClientNavigation() {
             <Link
               key={item.name}
               href={item.href}
-              className={`flex items-center space-x-3 px-4 py-3 rounded-xl font-medium transition-all duration-200 ${
+              className={`flex items-center space-x-3 px-4 py-3 rounded-2xl font-medium transition-all duration-200 ${
                 isActive(item.href)
-                  ? 'bg-gradient-to-r from-pink-50 to-rose-50 text-pink-700 shadow-sm border border-pink-100'
-                  : 'text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-pink-50 hover:text-pink-700'
+                  ? 'bg-[#fef9e7] text-gray-900 shadow-sm border-l-4'
+                  : 'text-gray-700 hover:bg-gray-50'
               }`}
+              style={isActive(item.href) ? { borderLeftColor: '#daa450' } : {}}
               title={isCollapsed ? item.name : undefined}
             >
-              <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+              <div className={`w-8 h-8 rounded-2xl flex items-center justify-center ${
                 isActive(item.href)
-                  ? 'bg-pink-100'
+                  ? ''
                   : 'bg-gray-100'
-              }`}>
-                <div className={isActive(item.href) ? 'text-pink-600' : 'text-gray-600'}>
+              }`}
+              style={isActive(item.href) ? { backgroundColor: '#daa450' } : {}}
+              >
+                <div className={isActive(item.href) ? 'text-white' : 'text-gray-600'}>
                   {item.icon}
                 </div>
               </div>
@@ -315,18 +324,21 @@ export default function ClientNavigation() {
           ))}
           <Link
             href="/notifications"
-            className={`flex items-center space-x-3 px-4 py-3 rounded-xl font-medium transition-all duration-200 ${
+            className={`flex items-center space-x-3 px-4 py-3 rounded-2xl font-medium transition-all duration-200 ${
               pathname === '/notifications'
-                ? 'bg-gradient-to-r from-pink-50 to-rose-50 text-pink-700 shadow-sm border border-pink-100'
-                : 'text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-pink-50 hover:text-pink-700'
+                ? 'bg-[#fef9e7] text-gray-900 shadow-sm border-l-4'
+                : 'text-gray-700 hover:bg-gray-50'
             }`}
+            style={pathname === '/notifications' ? { borderLeftColor: '#daa450' } : {}}
           >
-            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+            <div className={`w-8 h-8 rounded-2xl flex items-center justify-center ${
               pathname === '/notifications'
-                ? 'bg-pink-100'
+                ? ''
                 : 'bg-gray-100'
-            }`}>
-              <svg className={`w-4 h-4 ${pathname === '/notifications' ? 'text-pink-600' : 'text-gray-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            }`}
+            style={pathname === '/notifications' ? { backgroundColor: '#daa450' } : {}}
+            >
+              <svg className={`w-4 h-4 ${pathname === '/notifications' ? 'text-white' : 'text-gray-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
               </svg>
             </div>

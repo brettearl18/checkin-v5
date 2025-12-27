@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
   try {
     const { clientId, title, description, category, targetValue, unit, deadline } = await request.json();
 
-    if (!clientId || !title || !targetValue || !unit || !deadline) {
+    if (!clientId || !title || targetValue === undefined || targetValue === null || !unit || !deadline) {
       return NextResponse.json({
         success: false,
         message: 'Missing required fields: clientId, title, targetValue, unit, deadline'

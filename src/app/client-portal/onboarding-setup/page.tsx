@@ -17,9 +17,10 @@ interface OnboardingData {
     waist?: number;
     hips?: number;
     chest?: number;
-    neck?: number;
-    thigh?: number;
-    arm?: number;
+    leftThigh?: number;
+    rightThigh?: number;
+    leftArm?: number;
+    rightArm?: number;
     [key: string]: number | undefined;
   };
   completed: boolean;
@@ -423,9 +424,10 @@ export default function OnboardingSetupPage() {
                     { key: 'waist', label: 'Waist (cm)' },
                     { key: 'hips', label: 'Hips (cm)' },
                     { key: 'chest', label: 'Chest (cm)' },
-                    { key: 'neck', label: 'Neck (cm)' },
-                    { key: 'thigh', label: 'Thigh (cm)' },
-                    { key: 'arm', label: 'Arm (cm)' }
+                    { key: 'leftThigh', label: 'Left Thigh (cm)' },
+                    { key: 'rightThigh', label: 'Right Thigh (cm)' },
+                    { key: 'leftArm', label: 'Left Arm (cm)' },
+                    { key: 'rightArm', label: 'Right Arm (cm)' }
                   ].map(({ key, label }) => (
                     <div key={key}>
                       <label className="block text-sm font-medium text-gray-700 mb-2">

@@ -14,9 +14,10 @@ interface MeasurementEntry {
     waist?: number;
     hips?: number;
     chest?: number;
-    neck?: number;
-    thigh?: number;
-    arm?: number;
+    leftThigh?: number;
+    rightThigh?: number;
+    leftArm?: number;
+    rightArm?: number;
     [key: string]: number | undefined;
   };
   createdAt: string;
@@ -29,6 +30,8 @@ export default function MeasurementsPage() {
   const [clientId, setClientId] = useState<string | null>(null);
   const [measurementHistory, setMeasurementHistory] = useState<MeasurementEntry[]>([]);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [editingEntry, setEditingEntry] = useState<MeasurementEntry | null>(null);
+  const [deletingEntry, setDeletingEntry] = useState<string | null>(null);
   
   // Form state
   const [bodyWeight, setBodyWeight] = useState('');
@@ -36,9 +39,10 @@ export default function MeasurementsPage() {
     waist: '',
     hips: '',
     chest: '',
-    neck: '',
-    thigh: '',
-    arm: ''
+    leftThigh: '',
+    rightThigh: '',
+    leftArm: '',
+    rightArm: ''
   });
 
   useEffect(() => {
@@ -92,46 +96,75 @@ export default function MeasurementsPage() {
     setSaving(true);
     try {
       const measurementData: any = {
-        clientId,
-        date: new Date().toISOString(),
         measurements: {}
       };
 
-      if (bodyWeight) {
-        measurementData.bodyWeight = parseFloat(bodyWeight);
-      }
-
-      Object.entries(measurements).forEach(([key, value]) => {
-        if (value) {
-          measurementData.measurements[key] = parseFloat(value);
+      if (editingEntry) {
+        // Update existing entry
+        measurementData.id = editingEntry.id;
+        if (bodyWeight) {
+          measurementData.bodyWeight = parseFloat(bodyWeight);
+        } else {
+          measurementData.bodyWeight = editingEntry.bodyWeight;
         }
-      });
 
-      const response = await fetch('/api/client-measurements', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(measurementData)
-      });
-
-      const data = await response.json();
-      if (data.success) {
-        // Reset form
-        setBodyWeight('');
-        setMeasurements({
-          waist: '',
-          hips: '',
-          chest: '',
-          neck: '',
-          thigh: '',
-          arm: ''
+        Object.entries(measurements).forEach(([key, value]) => {
+          if (value) {
+            measurementData.measurements[key] = parseFloat(value);
+          } else if (editingEntry.measurements[key as keyof typeof editingEntry.measurements]) {
+            measurementData.measurements[key] = editingEntry.measurements[key as keyof typeof editingEntry.measurements];
+          }
         });
-        setShowAddForm(false);
-        await fetchMeasurementHistory();
-        alert('Measurements saved successfully!');
+
+        const response = await fetch('/api/client-measurements', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(measurementData)
+        });
+
+        const data = await response.json();
+        if (data.success) {
+          setEditingEntry(null);
+          resetForm();
+          await fetchMeasurementHistory();
+          alert('Measurements updated successfully!');
+        } else {
+          alert(`Failed to update: ${data.message}`);
+        }
       } else {
-        alert(`Failed to save: ${data.message}`);
+        // Create new entry
+        measurementData.clientId = clientId;
+        measurementData.date = new Date().toISOString();
+
+        if (bodyWeight) {
+          measurementData.bodyWeight = parseFloat(bodyWeight);
+        }
+
+        Object.entries(measurements).forEach(([key, value]) => {
+          if (value) {
+            measurementData.measurements[key] = parseFloat(value);
+          }
+        });
+
+        const response = await fetch('/api/client-measurements', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(measurementData)
+        });
+
+        const data = await response.json();
+        if (data.success) {
+          resetForm();
+          setShowAddForm(false);
+          await fetchMeasurementHistory();
+          alert('Measurements saved successfully!');
+        } else {
+          alert(`Failed to save: ${data.message}`);
+        }
       }
     } catch (error) {
       console.error('Error saving measurements:', error);
@@ -139,6 +172,67 @@ export default function MeasurementsPage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const resetForm = () => {
+    setBodyWeight('');
+    setMeasurements({
+      waist: '',
+      hips: '',
+      chest: '',
+      leftThigh: '',
+      rightThigh: '',
+      leftArm: '',
+      rightArm: ''
+    });
+  };
+
+  const handleEdit = (entry: MeasurementEntry) => {
+    setEditingEntry(entry);
+    setBodyWeight(entry.bodyWeight?.toString() || '');
+    setMeasurements({
+      waist: entry.measurements.waist?.toString() || '',
+      hips: entry.measurements.hips?.toString() || '',
+      chest: entry.measurements.chest?.toString() || '',
+      leftThigh: entry.measurements.leftThigh?.toString() || '',
+      rightThigh: entry.measurements.rightThigh?.toString() || '',
+      leftArm: entry.measurements.leftArm?.toString() || '',
+      rightArm: entry.measurements.rightArm?.toString() || ''
+    });
+    setShowAddForm(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this measurement entry? This action cannot be undone.')) {
+      return;
+    }
+
+    setDeletingEntry(id);
+    try {
+      const response = await fetch(`/api/client-measurements?id=${id}`, {
+        method: 'DELETE'
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        await fetchMeasurementHistory();
+        alert('Measurement deleted successfully!');
+      } else {
+        alert(`Failed to delete: ${data.message}`);
+      }
+    } catch (error) {
+      console.error('Error deleting measurement:', error);
+      alert('Failed to delete measurement. Please try again.');
+    } finally {
+      setDeletingEntry(null);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingEntry(null);
+    resetForm();
+    setShowAddForm(false);
   };
 
   const getLatestMeasurement = (key: string) => {
@@ -187,10 +281,12 @@ export default function MeasurementsPage() {
             </div>
           </div>
 
-          {/* Add New Entry Form */}
+          {/* Add/Edit Entry Form */}
           {showAddForm && (
             <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8 mb-8">
-              <h2 className="text-2xl font-bold text-gray-900 mb-6">Add New Measurement</h2>
+              <h2 className="text-2xl font-bold text-gray-900 mb-6">
+                {editingEntry ? 'Edit Measurement' : 'Add New Measurement'}
+              </h2>
               <form onSubmit={handleSubmit} className="space-y-6">
                 {/* Body Weight */}
                 <div>
@@ -215,9 +311,10 @@ export default function MeasurementsPage() {
                       { key: 'waist', label: 'Waist' },
                       { key: 'hips', label: 'Hips' },
                       { key: 'chest', label: 'Chest' },
-                      { key: 'neck', label: 'Neck' },
-                      { key: 'thigh', label: 'Thigh' },
-                      { key: 'arm', label: 'Arm' }
+                      { key: 'leftThigh', label: 'Left Thigh' },
+                      { key: 'rightThigh', label: 'Right Thigh' },
+                      { key: 'leftArm', label: 'Left Arm' },
+                      { key: 'rightArm', label: 'Right Arm' }
                     ].map(({ key, label }) => (
                       <div key={key}>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -242,18 +339,7 @@ export default function MeasurementsPage() {
                 <div className="flex justify-end space-x-3">
                   <button
                     type="button"
-                    onClick={() => {
-                      setShowAddForm(false);
-                      setBodyWeight('');
-                      setMeasurements({
-                        waist: '',
-                        hips: '',
-                        chest: '',
-                        neck: '',
-                        thigh: '',
-                        arm: ''
-                      });
-                    }}
+                    onClick={handleCancelEdit}
                     className="px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium transition-colors"
                   >
                     Cancel
@@ -263,7 +349,7 @@ export default function MeasurementsPage() {
                     disabled={saving || (!bodyWeight && Object.values(measurements).every(v => !v))}
                     className="px-6 py-3 bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-700 hover:to-rose-700 text-white rounded-lg font-medium transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {saving ? 'Saving...' : 'Save Measurement'}
+                    {saving ? (editingEntry ? 'Updating...' : 'Saving...') : (editingEntry ? 'Update Measurement' : 'Save Measurement')}
                   </button>
                 </div>
               </form>
@@ -342,9 +428,11 @@ export default function MeasurementsPage() {
                         <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Waist (cm)</th>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Hips (cm)</th>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Chest (cm)</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Neck (cm)</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Thigh (cm)</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Arm (cm)</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Left Thigh (cm)</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Right Thigh (cm)</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Left Arm (cm)</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Right Arm (cm)</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200">
@@ -366,13 +454,45 @@ export default function MeasurementsPage() {
                             {entry.measurements.chest ? `${entry.measurements.chest}` : '-'}
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-600">
-                            {entry.measurements.neck ? `${entry.measurements.neck}` : '-'}
+                            {entry.measurements.leftThigh ? `${entry.measurements.leftThigh}` : '-'}
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-600">
-                            {entry.measurements.thigh ? `${entry.measurements.thigh}` : '-'}
+                            {entry.measurements.rightThigh ? `${entry.measurements.rightThigh}` : '-'}
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-600">
-                            {entry.measurements.arm ? `${entry.measurements.arm}` : '-'}
+                            {entry.measurements.leftArm ? `${entry.measurements.leftArm}` : '-'}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-600">
+                            {entry.measurements.rightArm ? `${entry.measurements.rightArm}` : '-'}
+                          </td>
+                          <td className="px-4 py-3 text-sm">
+                            <div className="flex items-center space-x-2">
+                              <button
+                                onClick={() => handleEdit(entry)}
+                                className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                title="Edit measurement"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                </svg>
+                              </button>
+                              <button
+                                onClick={() => handleDelete(entry.id)}
+                                disabled={deletingEntry === entry.id}
+                                className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                title="Delete measurement"
+                              >
+                                {deletingEntry === entry.id ? (
+                                  <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                  </svg>
+                                ) : (
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                  </svg>
+                                )}
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}

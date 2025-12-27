@@ -201,7 +201,7 @@ export default function ClientsPage() {
   if (loading) {
     return (
       <RoleProtected requiredRole="coach">
-        <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 flex">
+        <div className="min-h-screen bg-[#FAFAFA] flex">
           <div className="w-64 bg-white shadow-xl border-r border-gray-100">
             {/* Sidebar loading skeleton */}
             <div className="animate-pulse">
@@ -236,11 +236,11 @@ export default function ClientsPage() {
 
   return (
     <RoleProtected requiredRole="coach">
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 flex">
+      <div className="min-h-screen bg-[#FAFAFA] flex">
         {/* Modern Sidebar */}
-        <div className="w-64 bg-white shadow-xl border-r border-gray-100">
+        <div className="w-64 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.1)] border-r border-gray-100">
           {/* Sidebar Header */}
-          <div className="bg-gradient-to-br from-blue-500 to-indigo-600 px-6 py-8">
+          <div className="bg-gradient-to-br from-orange-500 to-orange-600 px-6 py-8">
             <div className="flex items-center space-x-3">
               <div className="w-12 h-12 bg-white bg-opacity-20 rounded-xl flex items-center justify-center">
                 <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -249,7 +249,7 @@ export default function ClientsPage() {
               </div>
               <div>
                 <h1 className="text-white font-bold text-lg">Coach Hub</h1>
-                <p className="text-blue-100 text-sm">Clients</p>
+                <p className="text-orange-100 text-sm">Clients</p>
               </div>
             </div>
           </div>
@@ -260,7 +260,7 @@ export default function ClientsPage() {
               {/* Dashboard */}
               <Link
                 href="/dashboard"
-                className="flex items-center space-x-3 px-4 py-3 text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-blue-50 hover:text-blue-700 rounded-xl font-medium transition-all duration-200"
+                className="flex items-center space-x-3 px-4 py-3 text-gray-700 hover:bg-orange-50 hover:text-orange-700 rounded-2xl font-medium transition-all duration-200"
               >
                 <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
                   <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -274,10 +274,10 @@ export default function ClientsPage() {
               {/* Clients - HIGHLIGHTED */}
               <Link
                 href="/clients"
-                className="flex items-center space-x-3 px-4 py-3 bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700 rounded-xl font-medium transition-all duration-200 shadow-sm border border-blue-100"
+                className="flex items-center space-x-3 px-4 py-3 bg-orange-50 text-orange-700 rounded-2xl font-medium transition-all duration-200 border-l-4 border-orange-500"
               >
-                <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="w-8 h-8 bg-orange-100 rounded-xl flex items-center justify-center">
+                  <svg className="w-4 h-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
                   </svg>
                 </div>
@@ -287,7 +287,7 @@ export default function ClientsPage() {
               {/* Messages */}
               <Link
                 href="/messages"
-                className="flex items-center space-x-3 px-4 py-3 text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-blue-50 hover:text-blue-700 rounded-xl font-medium transition-all duration-200"
+                className="flex items-center space-x-3 px-4 py-3 text-gray-700 hover:bg-orange-50 hover:text-orange-700 rounded-2xl font-medium transition-all duration-200"
               >
                 <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
                   <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -300,7 +300,7 @@ export default function ClientsPage() {
               {/* Check-ins */}
               <Link
                 href="/check-ins"
-                className="flex items-center space-x-3 px-4 py-3 text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-blue-50 hover:text-blue-700 rounded-xl font-medium transition-all duration-200"
+                className="flex items-center space-x-3 px-4 py-3 text-gray-700 hover:bg-orange-50 hover:text-orange-700 rounded-2xl font-medium transition-all duration-200"
               >
                 <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
                   <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -313,7 +313,7 @@ export default function ClientsPage() {
               {/* Responses */}
               <Link
                 href="/responses"
-                className="flex items-center space-x-3 px-4 py-3 text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-blue-50 hover:text-blue-700 rounded-xl font-medium transition-all duration-200"
+                className="flex items-center space-x-3 px-4 py-3 text-gray-700 hover:bg-orange-50 hover:text-orange-700 rounded-2xl font-medium transition-all duration-200"
               >
                 <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
                   <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -326,7 +326,7 @@ export default function ClientsPage() {
               {/* Analytics */}
               <Link
                 href="/analytics"
-                className="flex items-center space-x-3 px-4 py-3 text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-blue-50 hover:text-blue-700 rounded-xl font-medium transition-all duration-200"
+                className="flex items-center space-x-3 px-4 py-3 text-gray-700 hover:bg-orange-50 hover:text-orange-700 rounded-2xl font-medium transition-all duration-200"
               >
                 <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
                   <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -339,7 +339,7 @@ export default function ClientsPage() {
               {/* Forms */}
               <Link
                 href="/forms"
-                className="flex items-center space-x-3 px-4 py-3 text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-blue-50 hover:text-blue-700 rounded-xl font-medium transition-all duration-200"
+                className="flex items-center space-x-3 px-4 py-3 text-gray-700 hover:bg-orange-50 hover:text-orange-700 rounded-2xl font-medium transition-all duration-200"
               >
                 <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
                   <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -426,7 +426,7 @@ export default function ClientsPage() {
                 </div>
                 <Link
                   href="/clients/create"
-                  className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-6 py-3 rounded-xl font-medium transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                  className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-2xl font-medium transition-all duration-200 shadow-sm hover:shadow-md"
                 >
                   Add New Client
                 </Link>
@@ -435,11 +435,11 @@ export default function ClientsPage() {
 
             {/* Stats Overview */}
             <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-6 mb-8">
-              <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-6 py-4 border-b border-gray-100">
+              <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                <div className="bg-orange-50 px-6 py-4 border-b-2 border-orange-200">
                   <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                      <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center">
+                      <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
                       </svg>
                     </div>
@@ -452,11 +452,11 @@ export default function ClientsPage() {
                 </div>
               </div>
 
-              <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-                <div className="bg-gradient-to-r from-green-50 to-emerald-50 px-6 py-4 border-b border-gray-100">
+              <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                <div className="bg-[#34C759]/10 px-6 py-4 border-b-2 border-[#34C759]/20">
                   <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                      <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="w-10 h-10 bg-[#34C759]/20 rounded-xl flex items-center justify-center">
+                      <svg className="w-5 h-5 text-[#34C759]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                     </div>
@@ -471,10 +471,10 @@ export default function ClientsPage() {
                 </div>
               </div>
 
-              <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-                <div className="bg-gradient-to-r from-orange-50 to-red-50 px-6 py-4 border-b border-gray-100">
+              <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                <div className="bg-orange-50 px-6 py-4 border-b-2 border-orange-200">
                   <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+                    <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center">
                       <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
@@ -491,11 +491,11 @@ export default function ClientsPage() {
               </div>
 
               {/* At-Risk Clients Card */}
-              <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-                <div className="bg-gradient-to-r from-red-50 to-pink-50 px-6 py-4 border-b border-gray-100">
+              <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                <div className="bg-[#FF3B30]/10 px-6 py-4 border-b-2 border-[#FF3B30]/20">
                   <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
-                      <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="w-10 h-10 bg-[#FF3B30]/20 rounded-xl flex items-center justify-center">
+                      <svg className="w-5 h-5 text-[#FF3B30]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                       </svg>
                     </div>
@@ -517,11 +517,11 @@ export default function ClientsPage() {
               </div>
 
               {/* Overdue Check-ins Card */}
-              <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-                <div className="bg-gradient-to-r from-yellow-50 to-amber-50 px-6 py-4 border-b border-gray-100">
+              <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                <div className="bg-[#FF9500]/10 px-6 py-4 border-b-2 border-[#FF9500]/20">
                   <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center">
-                      <svg className="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="w-10 h-10 bg-[#FF9500]/20 rounded-xl flex items-center justify-center">
+                      <svg className="w-5 h-5 text-[#FF9500]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                     </div>
@@ -537,11 +537,11 @@ export default function ClientsPage() {
               </div>
 
               {/* Avg Progress Score Card */}
-              <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-                <div className="bg-gradient-to-r from-purple-50 to-indigo-50 px-6 py-4 border-b border-gray-100">
+              <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                <div className="bg-gray-50 px-6 py-4 border-b-2 border-gray-200">
                   <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                      <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center">
+                      <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                       </svg>
                     </div>
@@ -567,7 +567,7 @@ export default function ClientsPage() {
             </div>
 
             {/* Search and Filter Bar */}
-            <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-6 mb-6">
+            <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 p-8 mb-8">
               <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
                 {/* Search Bar */}
                 <div className="flex-1 w-full md:max-w-md">
@@ -582,7 +582,7 @@ export default function ClientsPage() {
                       placeholder="Search by name or email..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
-                      className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                      className="block w-full pl-10 pr-3 py-3 border border-gray-200 rounded-2xl leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-sm"
                     />
                   </div>
                 </div>
@@ -590,43 +590,43 @@ export default function ClientsPage() {
                 {/* Filter Buttons */}
                 <div className="flex items-center space-x-2">
                   <span className="text-sm text-gray-600 font-medium">Filter:</span>
-                  <div className="flex bg-gray-100 rounded-lg p-1">
+                  <div className="flex bg-gray-100 rounded-2xl p-1">
                     <button
                       onClick={() => setStatusFilter('all')}
-                      className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                      className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
                         statusFilter === 'all'
-                          ? 'bg-white text-indigo-600 shadow-sm'
-                          : 'text-gray-600 hover:text-gray-900'
+                          ? 'bg-white text-orange-600 shadow-sm'
+                          : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                       }`}
                     >
                       All
                     </button>
                     <button
                       onClick={() => setStatusFilter('active')}
-                      className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                      className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
                         statusFilter === 'active'
-                          ? 'bg-white text-green-600 shadow-sm'
-                          : 'text-gray-600 hover:text-gray-900'
+                          ? 'bg-white text-[#34C759] shadow-sm'
+                          : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                       }`}
                     >
                       Active
                     </button>
                     <button
                       onClick={() => setStatusFilter('needsAttention')}
-                      className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                      className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
                         statusFilter === 'needsAttention'
-                          ? 'bg-white text-red-600 shadow-sm'
-                          : 'text-gray-600 hover:text-gray-900'
+                          ? 'bg-white text-[#FF3B30] shadow-sm'
+                          : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                       }`}
                     >
                       Needs Attention
                     </button>
                     <button
                       onClick={() => setStatusFilter('archived')}
-                      className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                      className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
                         statusFilter === 'archived'
-                          ? 'bg-white text-slate-600 shadow-sm'
-                          : 'text-gray-600 hover:text-gray-900'
+                          ? 'bg-white text-gray-600 shadow-sm'
+                          : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                       }`}
                     >
                       Archived
@@ -637,8 +637,8 @@ export default function ClientsPage() {
             </div>
 
             {/* Client Inventory Table */}
-            <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden mb-8">
-              <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-8 py-6 border-b border-gray-100">
+            <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden mb-8">
+              <div className="bg-orange-50 px-10 py-8 border-b-2 border-orange-200">
                 <div className="flex items-center justify-between">
                   <h2 className="text-2xl font-bold text-gray-900">Client Inventory</h2>
                   <div className="flex items-center space-x-3">
@@ -652,7 +652,7 @@ export default function ClientsPage() {
                         setClientTableSortBy(sortBy);
                         setClientTableSortOrder(sortOrder);
                       }}
-                      className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="px-3 py-2 border border-gray-200 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white"
                     >
                       <option value="name-asc">Name A-Z</option>
                       <option value="name-desc">Name Z-A</option>
@@ -824,14 +824,14 @@ export default function ClientsPage() {
                           >
                             <td className="px-6 py-4 whitespace-nowrap">
                               <div className="flex items-center">
-                                <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center text-white font-semibold text-sm mr-3">
+                                <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-orange-600 rounded-2xl flex items-center justify-center text-white font-semibold text-sm mr-3">
                                   {client.displayName.charAt(0).toUpperCase()}
                                 </div>
                                 <div>
                                   <div className="flex items-center space-x-2">
                                     <div className="text-sm font-medium text-gray-900">{client.displayName}</div>
                                     {needsAttention && (
-                                      <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-red-100 text-red-700">
+                                      <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-[#FF3B30]/10 text-[#FF3B30] border border-[#FF3B30]/20">
                                         Needs Attention
                                       </span>
                                     )}
@@ -864,10 +864,10 @@ export default function ClientsPage() {
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
                               <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                                client.status === 'active' ? 'bg-green-100 text-green-800' :
-                                client.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                                client.status === 'at-risk' ? 'bg-red-100 text-red-800' :
-                                'bg-gray-100 text-gray-800'
+                                client.status === 'active' ? 'bg-[#34C759]/10 text-[#34C759] border border-[#34C759]/20' :
+                                client.status === 'pending' ? 'bg-[#FF9500]/10 text-[#FF9500] border border-[#FF9500]/20' :
+                                client.status === 'at-risk' ? 'bg-[#FF3B30]/10 text-[#FF3B30] border border-[#FF3B30]/20' :
+                                'bg-gray-100 text-gray-800 border border-gray-200'
                               }`}>
                                 {client.status ? client.status.charAt(0).toUpperCase() + client.status.slice(1) : 'Unknown'}
                               </span>
@@ -913,9 +913,9 @@ export default function ClientsPage() {
                                     </span>
                                     {daysSinceLastCheckIn !== undefined && (
                                       <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
-                                        daysSinceLastCheckIn > 14 ? 'bg-red-100 text-red-700' :
-                                        daysSinceLastCheckIn > 7 ? 'bg-orange-100 text-orange-700' :
-                                        'bg-green-100 text-green-700'
+                                        daysSinceLastCheckIn > 14 ? 'bg-[#FF3B30]/10 text-[#FF3B30] border border-[#FF3B30]/20' :
+                                        daysSinceLastCheckIn > 7 ? 'bg-orange-100 text-orange-700 border border-orange-200' :
+                                        'bg-[#34C759]/10 text-[#34C759] border border-[#34C759]/20'
                                       }`}>
                                         {daysSinceLastCheckIn === 0 ? 'Today' :
                                          daysSinceLastCheckIn === 1 ? '1 day ago' :
@@ -923,7 +923,7 @@ export default function ClientsPage() {
                                       </span>
                                     )}
                                     {hasOverdue && (
-                                      <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-red-100 text-red-700">
+                                      <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-[#FF3B30]/10 text-[#FF3B30] border border-[#FF3B30]/20">
                                         {client.overdueCheckIns} overdue
                                       </span>
                                     )}
@@ -934,7 +934,7 @@ export default function ClientsPage() {
                                   <span className="text-sm text-gray-400">Never</span>
                                   {hasOverdue && (
                                     <div className="mt-1">
-                                      <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-red-100 text-red-700">
+                                      <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-[#FF3B30]/10 text-[#FF3B30] border border-[#FF3B30]/20">
                                         {client.overdueCheckIns} overdue
                                       </span>
                                     </div>
@@ -945,7 +945,7 @@ export default function ClientsPage() {
                             <td className="px-6 py-4 whitespace-nowrap text-center">
                               <Link
                                 href={`/clients/${client.id}`}
-                                className="text-indigo-600 hover:text-indigo-900 text-sm font-medium"
+                                className="text-orange-600 hover:text-orange-700 text-sm font-medium"
                               >
                                 View →
                               </Link>
@@ -1063,7 +1063,7 @@ export default function ClientsPage() {
                     }
                   }}
                   disabled={updatingStatus === statusModal.clientId || (statusModal.status === 'paused' && !statusModal.pausedUntil)}
-                  className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+                  className="flex-1 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-2xl font-medium transition-all duration-200 shadow-sm disabled:opacity-50"
                 >
                   {updatingStatus === statusModal.clientId ? 'Updating...' : 'Update Status'}
                 </button>

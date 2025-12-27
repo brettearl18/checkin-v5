@@ -139,7 +139,6 @@ export default function ClientProfilePage() {
   const [allocateFirstCheckInDate, setAllocateFirstCheckInDate] = useState('');
   const [allocateDuration, setAllocateDuration] = useState(4);
   const [allocateFrequency, setAllocateFrequency] = useState('weekly');
-  const [allocateDueTime, setAllocateDueTime] = useState('09:00');
   const [allocateCheckInWindow, setAllocateCheckInWindow] = useState({
     enabled: true,
     startDay: 'friday',
@@ -652,9 +651,51 @@ export default function ClientProfilePage() {
     setAllocateFirstCheckInDate('');
     setAllocateDuration(4);
     setAllocateFrequency('weekly');
-    setAllocateDueTime('09:00');
     setShowAllocateModal(true);
     fetchForms(); // Fetch forms when modal opens
+  };
+
+  // Calculate first check-in window start date/time
+  const getFirstCheckInWindowStart = (): { date: string; time: string; displayText: string } | null => {
+    if (!allocateFirstCheckInDate || !allocateCheckInWindow.enabled) {
+      return null;
+    }
+
+    const firstCheckInDate = new Date(allocateFirstCheckInDate);
+    const dayMap: { [key: string]: number } = {
+      'sunday': 0, 'monday': 1, 'tuesday': 2, 'wednesday': 3,
+      'thursday': 4, 'friday': 5, 'saturday': 6
+    };
+    const startDayNum = dayMap[allocateCheckInWindow.startDay.toLowerCase()] ?? 5;
+    const firstCheckInDay = firstCheckInDate.getDay();
+    
+    // Calculate days to go back to get to the start day
+    // If firstCheckInDay >= startDayNum, go back (firstCheckInDay - startDayNum) days
+    // If firstCheckInDay < startDayNum, go back (firstCheckInDay - startDayNum + 7) days (previous week)
+    let daysToStart: number;
+    if (firstCheckInDay >= startDayNum) {
+      daysToStart = firstCheckInDay - startDayNum;
+    } else {
+      daysToStart = firstCheckInDay - startDayNum + 7;
+    }
+    
+    const windowStartDate = new Date(firstCheckInDate);
+    windowStartDate.setDate(firstCheckInDate.getDate() - daysToStart);
+    
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const dayName = dayNames[windowStartDate.getDay()];
+    
+    // Format time for display (convert 24h to 12h)
+    const [hours, minutes] = allocateCheckInWindow.startTime.split(':').map(Number);
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    const displayHours = hours % 12 || 12;
+    const displayTime = `${displayHours}:${minutes.toString().padStart(2, '0')} ${ampm}`;
+    
+    return {
+      date: windowStartDate.toISOString().split('T')[0],
+      time: allocateCheckInWindow.startTime,
+      displayText: `${dayName}, ${windowStartDate.toLocaleDateString()} at ${displayTime}`
+    };
   };
 
   const handleAllocateCheckIn = async () => {
@@ -677,7 +718,7 @@ export default function ClientProfilePage() {
           duration: allocateDuration,
           startDate: allocateStartDate,
           firstCheckInDate: allocateFirstCheckInDate || allocateStartDate,
-          dueTime: allocateDueTime,
+          dueTime: '09:00', // Default due time, no longer user-configurable
           checkInWindow: allocateCheckInWindow.enabled ? allocateCheckInWindow : null,
           status: 'pending'
         }),
@@ -691,7 +732,6 @@ export default function ClientProfilePage() {
         setAllocateFirstCheckInDate('');
         setAllocateDuration(4);
         setAllocateFrequency('weekly');
-        setAllocateDueTime('09:00');
         setAllocateCheckInWindow({
           enabled: true,
           startDay: 'friday',
@@ -840,10 +880,10 @@ export default function ClientProfilePage() {
 
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
-          <div className="px-6 py-4 border-b border-gray-200">
+        <div className="bg-white rounded-3xl shadow-xl max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
+          <div className="px-6 py-4 bg-orange-50 border-b-2 border-orange-200 rounded-t-3xl">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-medium text-gray-900">
+              <h3 className="text-lg font-semibold text-gray-900">
                 Send Check-in to {client?.firstName} {client?.lastName}
               </h3>
               <button
@@ -866,7 +906,7 @@ export default function ClientProfilePage() {
               <select
                 value={selectedForm}
                 onChange={(e) => setSelectedForm(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-orange-500"
               >
                 <option value="">Choose a form...</option>
                 {forms.map((form) => (
@@ -903,7 +943,7 @@ export default function ClientProfilePage() {
                     value={startDate}
                     onChange={(e) => setStartDate(e.target.value)}
                     min={new Date().toISOString().split('T')[0]}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-orange-500"
                   />
                 </div>
                 
@@ -917,7 +957,7 @@ export default function ClientProfilePage() {
                     max="52"
                     value={durationWeeks}
                     onChange={(e) => setDurationWeeks(Number(e.target.value))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-orange-500"
                     placeholder="Enter number of weeks"
                   />
                   <p className="mt-1 text-xs text-gray-500">Enter 1-52 weeks</p>
@@ -942,14 +982,14 @@ export default function ClientProfilePage() {
             <div className="flex space-x-3 pt-4">
               <button
                 onClick={() => setShowQuickSendModal(false)}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-2xl text-sm font-medium text-gray-700 hover:bg-gray-50"
               >
                 Cancel
               </button>
               <button
                 onClick={handleQuickSend}
                 disabled={!selectedForm || isSending || (isRecurring && (!startDate || durationWeeks < 1))}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-md text-sm font-medium"
+                className="flex-1 bg-orange-500 hover:bg-orange-600 disabled:bg-gray-400 text-white px-4 py-2 rounded-2xl text-sm font-medium shadow-sm"
               >
                 {isSending ? 'Sending...' : (isRecurring ? 'Schedule Check-ins' : 'Send Check-in')}
               </button>
@@ -966,10 +1006,10 @@ export default function ClientProfilePage() {
 
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
-          <div className="px-6 py-4 border-b border-gray-200">
+        <div className="bg-white rounded-3xl shadow-xl max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
+          <div className="px-6 py-4 bg-orange-50 border-b-2 border-orange-200 rounded-t-3xl">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-medium text-gray-900">
+              <h3 className="text-lg font-semibold text-gray-900">
                 Update {client?.firstName} {client?.lastName}'s Status
               </h3>
               <button
@@ -992,7 +1032,7 @@ export default function ClientProfilePage() {
               <select
                 value={newStatus}
                 onChange={(e) => setNewStatus(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-orange-500"
               >
                 <option value="">Select status...</option>
                 <option value="active">Active</option>
@@ -1013,7 +1053,7 @@ export default function ClientProfilePage() {
                 onChange={(e) => setStatusReason(e.target.value)}
                 placeholder="Why are you updating this status?"
                 rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-orange-500"
               />
             </div>
 
@@ -1021,14 +1061,14 @@ export default function ClientProfilePage() {
             <div className="flex space-x-3 pt-4">
               <button
                 onClick={() => setShowStatusModal(false)}
-                className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md font-medium transition-colors"
+                className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-2xl font-medium transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleStatusUpdate}
                 disabled={!newStatus || updatingStatus}
-                className="flex-1 px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-md font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-2xl font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
               >
                 {updatingStatus ? 'Updating...' : 'Update Status'}
               </button>
@@ -1071,7 +1111,7 @@ export default function ClientProfilePage() {
               <select
                 value={selectedAllocateForm}
                 onChange={(e) => setSelectedAllocateForm(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-orange-500"
               >
                 <option value="">Choose a form...</option>
                 {forms.map((form) => (
@@ -1108,7 +1148,7 @@ export default function ClientProfilePage() {
                     value={allocateStartDate}
                     onChange={(e) => setAllocateStartDate(e.target.value)}
                     min={new Date().toISOString().split('T')[0]}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-orange-500"
                   />
                 </div>
                 
@@ -1122,7 +1162,7 @@ export default function ClientProfilePage() {
                     max="52"
                     value={allocateDuration}
                     onChange={(e) => setAllocateDuration(Number(e.target.value))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-orange-500"
                     placeholder="Enter number of weeks"
                   />
                   <p className="mt-1 text-xs text-gray-500">Enter 1-52 weeks</p>
@@ -1136,7 +1176,7 @@ export default function ClientProfilePage() {
                   <select
                     value={allocateFrequency}
                     onChange={(e) => setAllocateFrequency(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-orange-500"
                   >
                     <option value="weekly">Weekly</option>
                     <option value="bi-weekly">Bi-weekly</option>
@@ -1144,25 +1184,12 @@ export default function ClientProfilePage() {
                   </select>
                 </div>
 
-                {/* Due Time */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-900 mb-2">
-                    Due Time *
-                  </label>
-                  <input
-                    type="time"
-                    value={allocateDueTime}
-                    onChange={(e) => setAllocateDueTime(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
                 {/* Preview */}
                 {allocateStartDate && allocateDuration > 0 && (
                   <div className="bg-blue-50 p-3 rounded-md">
                     <p className="text-sm text-blue-800">
                       <strong>Schedule Preview:</strong><br />
-                      {isRecurring ? 'Recurring check-in' : 'Single check-in'} scheduled for {new Date(allocateStartDate).toLocaleDateString()} at {allocateDueTime}
+                      {isRecurring ? 'Recurring check-in' : 'Single check-in'} scheduled for {new Date(allocateStartDate).toLocaleDateString()}
                       {isRecurring && (
                         <span>, ending {new Date(new Date(allocateStartDate).getTime() + (allocateDuration - 1) * 7 * 24 * 60 * 60 * 1000).toLocaleDateString()}</span>
                       )}
@@ -1176,14 +1203,14 @@ export default function ClientProfilePage() {
             <div className="flex space-x-3 pt-4">
               <button
                 onClick={() => setShowAllocateModal(false)}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-2xl text-sm font-medium text-gray-700 hover:bg-gray-50"
               >
                 Cancel
               </button>
               <button
                 onClick={handleAllocateCheckIn}
                 disabled={!selectedAllocateForm || !allocateStartDate || allocatingCheckIn}
-                className="flex-1 px-4 py-2 bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-700 hover:to-cyan-700 text-white rounded-lg font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-2xl font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
               >
                 {allocatingCheckIn ? 'Allocating...' : 'Allocate Check-in'}
               </button>
@@ -1252,7 +1279,7 @@ export default function ClientProfilePage() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                   </svg>
                 </Link>
-                <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-md">
+                <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-orange-600 rounded-2xl flex items-center justify-center shadow-sm">
                   <span className="text-white font-bold text-lg">
                     {client.firstName.charAt(0)}{client.lastName.charAt(0)}
                   </span>
@@ -1262,11 +1289,11 @@ export default function ClientProfilePage() {
                     {client.firstName} {client.lastName}
                   </h1>
                   <div className="flex items-center space-x-3 mt-1">
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                      client.status === 'active' ? 'bg-green-100 text-green-700' :
-                      client.status === 'inactive' ? 'bg-gray-100 text-gray-700' :
-                      client.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
-                      client.status === 'at-risk' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${
+                      client.status === 'active' ? 'bg-[#34C759]/10 text-[#34C759] border-[#34C759]/20' :
+                      client.status === 'inactive' ? 'bg-gray-100 text-gray-700 border-gray-200' :
+                      client.status === 'pending' ? 'bg-orange-100 text-orange-700 border-orange-200' :
+                      client.status === 'at-risk' ? 'bg-[#FF3B30]/10 text-[#FF3B30] border-[#FF3B30]/20' : 'bg-gray-100 text-gray-700 border-gray-200'
                     }`}>
                       {client.status}
                     </span>
@@ -1289,7 +1316,7 @@ export default function ClientProfilePage() {
                 </button>
                 <Link
                   href={`/clients/${clientId}/edit`}
-                  className="px-4 py-1.5 text-sm bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-lg font-medium transition-all duration-200 shadow-sm"
+                  className="px-4 py-1.5 text-sm bg-orange-500 hover:bg-orange-600 text-white rounded-2xl font-medium transition-all duration-200 shadow-sm"
                 >
                   Edit Profile
                 </Link>
@@ -1301,58 +1328,58 @@ export default function ClientProfilePage() {
             {/* Main Content */}
             <div className="lg:col-span-3 space-y-6">
               {/* Compact Overview & Progress Combined */}
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+              <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
                 <div className="p-5">
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     {/* Progress Score - Compact with Traffic Light */}
-                    <div className={`rounded-lg p-4 border ${
-                      progressTrafficLight === 'red' ? 'bg-gradient-to-br from-red-50 to-pink-50 border-red-100' :
-                      progressTrafficLight === 'orange' ? 'bg-gradient-to-br from-orange-50 to-amber-50 border-orange-100' :
-                      'bg-gradient-to-br from-emerald-50 to-teal-50 border-emerald-100'
+                    <div className={`rounded-2xl p-4 border ${
+                      progressTrafficLight === 'red' ? 'bg-[#FF3B30]/10 border-[#FF3B30]/20' :
+                      progressTrafficLight === 'orange' ? 'bg-orange-50 border-orange-200' :
+                      'bg-[#34C759]/10 border-[#34C759]/20'
                     }`}>
                       <div className="flex items-center justify-between mb-1">
                         <div className="text-xs font-medium text-gray-600">Progress Score</div>
                         <div className="text-lg">{getTrafficLightIcon(progressTrafficLight)}</div>
                       </div>
                       <div className={`text-3xl font-bold mb-2 ${
-                        progressTrafficLight === 'red' ? 'text-red-600' :
-                        progressTrafficLight === 'orange' ? 'text-orange-600' : 'text-green-600'
+                        progressTrafficLight === 'red' ? 'text-[#FF3B30]' :
+                        progressTrafficLight === 'orange' ? 'text-orange-600' : 'text-[#34C759]'
                       }`}>
                         {client.progressScore || 0}%
                       </div>
                       <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
                         <div 
                           className={`h-full rounded-full transition-all ${
-                            progressTrafficLight === 'red' ? 'bg-red-500' :
-                            progressTrafficLight === 'orange' ? 'bg-orange-500' : 'bg-green-500'
+                            progressTrafficLight === 'red' ? 'bg-[#FF3B30]' :
+                            progressTrafficLight === 'orange' ? 'bg-orange-500' : 'bg-[#34C759]'
                           }`}
                           style={{ width: `${Math.min(client.progressScore || 0, 100)}%` }}
                         ></div>
                       </div>
                       <div className={`text-[10px] font-medium mt-1 ${
-                        progressTrafficLight === 'red' ? 'text-red-700' :
-                        progressTrafficLight === 'orange' ? 'text-orange-700' : 'text-green-700'
+                        progressTrafficLight === 'red' ? 'text-[#FF3B30]' :
+                        progressTrafficLight === 'orange' ? 'text-orange-700' : 'text-[#34C759]'
                       }`}>
                         {getTrafficLightLabel(progressTrafficLight)}
                       </div>
                     </div>
 
                     {/* Total Check-ins */}
-                    <div className="bg-blue-50 rounded-lg p-4 border border-blue-100">
+                    <div className="bg-orange-50 rounded-2xl p-4 border border-orange-200">
                       <div className="text-xs font-medium text-gray-600 mb-1">Check-ins</div>
                       <div className="text-3xl font-bold text-gray-900">{client.completedCheckIns || 0}</div>
-                      <div className="text-xs text-gray-500 mt-1">Total completed</div>
+                      <div className="text-xs text-gray-600 mt-1">Total completed</div>
                     </div>
 
                     {/* Completion Rate */}
-                    <div className="bg-purple-50 rounded-lg p-4 border border-purple-100">
+                    <div className="bg-orange-50 rounded-2xl p-4 border border-orange-200">
                       <div className="text-xs font-medium text-gray-600 mb-1">Completion</div>
                       <div className="text-3xl font-bold text-gray-900">{client.completionRate || 0}%</div>
-                      <div className="text-xs text-gray-500 mt-1">Rate</div>
+                      <div className="text-xs text-gray-600 mt-1">Rate</div>
                     </div>
 
                     {/* Last Activity */}
-                    <div className="bg-orange-50 rounded-lg p-4 border border-orange-100">
+                    <div className="bg-orange-50 rounded-2xl p-4 border border-orange-200">
                       <div className="text-xs font-medium text-gray-600 mb-1">Last Activity</div>
                       <div className="text-sm font-bold text-gray-900">
                         {client.lastCheckIn ? 
@@ -1370,8 +1397,8 @@ export default function ClientProfilePage() {
 
               {/* Question Progress Grid */}
               {questionProgress.length > 0 && (
-                <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-                  <div className="bg-gradient-to-r from-purple-50 to-pink-50 px-8 py-6 border-b border-gray-100">
+                <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                  <div className="bg-orange-50 px-8 py-6 border-b-2 border-orange-200">
                     <h2 className="text-2xl font-bold text-gray-900">Question Progress Over Time</h2>
                     <p className="text-sm text-gray-600 mt-1">Track how each question improves week by week</p>
                   </div>
@@ -1469,8 +1496,8 @@ export default function ClientProfilePage() {
               )}
 
               {/* Progress Images */}
-              <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-                <div className="bg-gradient-to-r from-pink-50 to-rose-50 px-8 py-6 border-b border-gray-100">
+              <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                <div className="bg-orange-50 px-8 py-6 border-b-2 border-orange-200">
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="text-2xl font-bold text-gray-900">Progress Images</h2>
                     {progressImages.length > 0 && (
@@ -1481,9 +1508,9 @@ export default function ClientProfilePage() {
                             setSelectedForComparison([]);
                           }
                         }}
-                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                        className={`px-4 py-2 rounded-2xl text-sm font-medium transition-all duration-200 ${
                           comparisonMode
-                            ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white shadow-md'
+                            ? 'bg-[#34C759] text-white shadow-sm'
                             : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
                         }`}
                       >
@@ -1500,9 +1527,9 @@ export default function ClientProfilePage() {
                           <span className="text-xs font-medium text-gray-900">Filter by view:</span>
                           <button
                             onClick={() => setFilterOrientation('all')}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                            className={`px-3 py-1.5 rounded-2xl text-xs font-medium transition-all ${
                               filterOrientation === 'all'
-                                ? 'bg-gradient-to-r from-pink-600 to-rose-600 text-white shadow-md'
+                                ? 'bg-orange-500 text-white shadow-sm'
                                 : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
                             }`}
                           >
@@ -1510,9 +1537,9 @@ export default function ClientProfilePage() {
                           </button>
                           <button
                             onClick={() => setFilterOrientation('front')}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                            className={`px-3 py-1.5 rounded-2xl text-xs font-medium transition-all ${
                               filterOrientation === 'front'
-                                ? 'bg-gradient-to-r from-pink-600 to-rose-600 text-white shadow-md'
+                                ? 'bg-orange-500 text-white shadow-sm'
                                 : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
                             }`}
                           >
@@ -1520,9 +1547,9 @@ export default function ClientProfilePage() {
                           </button>
                           <button
                             onClick={() => setFilterOrientation('back')}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                            className={`px-3 py-1.5 rounded-2xl text-xs font-medium transition-all ${
                               filterOrientation === 'back'
-                                ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-md'
+                                ? 'bg-orange-500 text-white shadow-sm'
                                 : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
                             }`}
                           >
@@ -1530,9 +1557,9 @@ export default function ClientProfilePage() {
                           </button>
                           <button
                             onClick={() => setFilterOrientation('side')}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                            className={`px-3 py-1.5 rounded-2xl text-xs font-medium transition-all ${
                               filterOrientation === 'side'
-                                ? 'bg-gradient-to-r from-teal-600 to-cyan-600 text-white shadow-md'
+                                ? 'bg-orange-500 text-white shadow-sm'
                                 : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
                             }`}
                           >
@@ -1556,7 +1583,7 @@ export default function ClientProfilePage() {
                             </button>
                             <button
                               onClick={() => setComparisonMode(true)}
-                              className="px-3 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-lg text-xs font-medium shadow-md"
+                              className="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-2xl text-xs font-medium shadow-sm"
                             >
                               Compare ({selectedForComparison.length})
                             </button>
@@ -1570,7 +1597,7 @@ export default function ClientProfilePage() {
                         <select
                           value={filterDate}
                           onChange={(e) => setFilterDate(e.target.value)}
-                          className="px-3 py-1.5 rounded-lg text-xs font-medium bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-pink-500"
+                          className="px-3 py-1.5 rounded-2xl text-xs font-medium bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-orange-500"
                         >
                           <option value="all">All Dates</option>
                           {(() => {
@@ -1592,7 +1619,7 @@ export default function ClientProfilePage() {
                 <div className="p-5">
                   {loadingImages ? (
                     <div className="text-center py-8">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-pink-600 mx-auto mb-3"></div>
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500 mx-auto mb-3"></div>
                       <p className="text-gray-500 text-sm">Loading images...</p>
                     </div>
                   ) : progressImages.length === 0 ? (
@@ -1837,7 +1864,7 @@ export default function ClientProfilePage() {
               {/* Measurement History */}
               {(measurementHistory.length > 0 || allMeasurementsData.length > 0) && (
                 <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-                  <div className="bg-gradient-to-r from-teal-50 to-cyan-50 px-8 py-6 border-b border-gray-100">
+                  <div className="bg-orange-50 px-8 py-6 border-b-2 border-orange-200">
                     <h2 className="text-2xl font-bold text-gray-900">Measurement History</h2>
                     <p className="text-sm text-gray-600 mt-1">Track weight and body measurements over time</p>
                   </div>
@@ -2065,10 +2092,11 @@ export default function ClientProfilePage() {
                               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Weight (kg)</th>
                               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Waist (cm)</th>
                               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Hips (cm)</th>
-                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Chest (cm)</th>
-                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Neck (cm)</th>
-                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Thigh (cm)</th>
-                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Arm (cm)</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Chest (cm)</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Left Thigh (cm)</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Right Thigh (cm)</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Left Arm (cm)</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Right Arm (cm)</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-200">
@@ -2094,13 +2122,16 @@ export default function ClientProfilePage() {
                                   {entry.measurements?.chest ? `${entry.measurements.chest}` : '-'}
                                 </td>
                                 <td className="px-4 py-3 text-sm text-gray-600">
-                                  {entry.measurements?.neck ? `${entry.measurements.neck}` : '-'}
+                                  {entry.measurements?.leftThigh ? `${entry.measurements.leftThigh}` : '-'}
                                 </td>
                                 <td className="px-4 py-3 text-sm text-gray-600">
-                                  {entry.measurements?.thigh ? `${entry.measurements.thigh}` : '-'}
+                                  {entry.measurements?.rightThigh ? `${entry.measurements.rightThigh}` : '-'}
                                 </td>
                                 <td className="px-4 py-3 text-sm text-gray-600">
-                                  {entry.measurements?.arm ? `${entry.measurements.arm}` : '-'}
+                                  {entry.measurements?.leftArm ? `${entry.measurements.leftArm}` : '-'}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-gray-600">
+                                  {entry.measurements?.rightArm ? `${entry.measurements.rightArm}` : '-'}
                                 </td>
                               </tr>
                             ))}
@@ -2255,8 +2286,8 @@ export default function ClientProfilePage() {
               )}
 
               {/* Modern Check-ins Overview */}
-              <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-                <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-8 py-6 border-b border-gray-100">
+              <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                <div className="bg-orange-50 px-8 py-6 border-b-2 border-orange-200">
                   <div className="flex items-center justify-between">
                     <h2 className="text-2xl font-bold text-gray-900">Check-ins Overview</h2>
                     <div className="flex space-x-4">
@@ -2293,7 +2324,7 @@ export default function ClientProfilePage() {
                       <p className="text-gray-500 text-lg mb-4">No check-ins allocated yet</p>
                       <button
                         onClick={openQuickSendModal}
-                        className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white px-6 py-3 rounded-xl font-medium transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                        className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-2xl font-medium transition-all duration-200 shadow-sm"
                       >
                         Send first check-in
                       </button>
@@ -2301,19 +2332,19 @@ export default function ClientProfilePage() {
                   ) : (
                     <div id="check-ins-section" className="space-y-8">
                       {/* Tab Navigation */}
-                      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                        <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-6 py-4 border-b border-gray-200">
+                      <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                        <div className="bg-orange-50 px-6 py-4 border-b-2 border-orange-200">
                           <div className="flex items-center justify-between">
                             <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-                              <span className="w-2 h-2 bg-indigo-500 rounded-full mr-3"></span>
+                              <span className="w-2 h-2 bg-orange-500 rounded-full mr-3"></span>
                               Check-ins Management
                             </h3>
-                            <div className="flex bg-white rounded-lg p-1 shadow-sm text-xs md:text-sm">
+                            <div className="flex bg-white rounded-2xl p-1 shadow-sm text-xs md:text-sm">
                               <button
                                 onClick={() => setCheckInTab('all')}
-                                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                                className={`px-4 py-2 rounded-2xl text-sm font-medium transition-colors ${
                                   checkInTab === 'all'
-                                    ? 'bg-blue-600 text-white shadow-sm'
+                                    ? 'bg-orange-500 text-white shadow-sm'
                                     : 'text-gray-600 hover:text-gray-900'
                                 }`}
                               >
@@ -2321,9 +2352,9 @@ export default function ClientProfilePage() {
                               </button>
                               <button
                                 onClick={() => setCheckInTab('completed')}
-                                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                                className={`px-4 py-2 rounded-2xl text-sm font-medium transition-colors ${
                                   checkInTab === 'completed'
-                                    ? 'bg-green-600 text-white shadow-sm'
+                                    ? 'bg-[#34C759] text-white shadow-sm'
                                     : 'text-gray-600 hover:text-gray-900'
                                 }`}
                               >
@@ -2337,9 +2368,9 @@ export default function ClientProfilePage() {
                         {checkInTab === 'all' && (
                           <div className="p-6 space-y-6">
                             {/* All Allocated Check-ins Table */}
-                            <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-6 border border-indigo-200">
+                            <div className="bg-orange-50 rounded-2xl p-6 border border-orange-200">
                               <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                                <span className="w-2 h-2 bg-indigo-500 rounded-full mr-3"></span>
+                                <span className="w-2 h-2 bg-orange-500 rounded-full mr-3"></span>
                                 All Allocated Check-ins ({allocatedCheckIns.length})
                               </h3>
                         <div className="bg-white rounded-lg overflow-hidden border border-gray-200">
@@ -2371,11 +2402,11 @@ export default function ClientProfilePage() {
                                       )}
                                     </td>
                                     <td className="px-4 py-3 whitespace-nowrap">
-                                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                                        checkIn.status === 'completed' ? 'bg-green-100 text-green-800' :
-                                        checkIn.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                                        checkIn.status === 'overdue' ? 'bg-red-100 text-red-800' :
-                                        'bg-gray-100 text-gray-800'
+                                      <span className={`px-2 py-1 text-xs font-medium rounded-full border ${
+                                        checkIn.status === 'completed' ? 'bg-[#34C759]/10 text-[#34C759] border-[#34C759]/20' :
+                                        checkIn.status === 'pending' ? 'bg-orange-100 text-orange-700 border-orange-200' :
+                                        checkIn.status === 'overdue' ? 'bg-[#FF3B30]/10 text-[#FF3B30] border-[#FF3B30]/20' :
+                                        'bg-gray-100 text-gray-700 border-gray-200'
                                       }`}>
                                         {checkIn.status}
                                       </span>
@@ -2459,9 +2490,9 @@ export default function ClientProfilePage() {
                         if (series.length === 0) return null;
 
                         return (
-                          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-200">
+                          <div className="bg-orange-50 rounded-2xl p-6 border border-orange-200">
                             <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                              <span className="w-2 h-2 bg-blue-500 rounded-full mr-3"></span>
+                              <span className="w-2 h-2 bg-orange-500 rounded-full mr-3"></span>
                               Check-in Series Management
                             </h3>
                             <div className="space-y-3">
@@ -2682,32 +2713,32 @@ export default function ClientProfilePage() {
             {/* Compact Sidebar */}
             <div className="space-y-4">
               {/* Quick Actions - Compact */}
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                <div className="px-4 py-3 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-200">
+              <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                <div className="px-4 py-3 bg-orange-50 border-b-2 border-orange-200">
                   <h3 className="text-sm font-bold text-gray-900">Quick Actions</h3>
                 </div>
                 <div className="p-4 space-y-2">
                   <button
                     onClick={openQuickSendModal}
-                    className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 shadow-sm"
+                    className="w-full bg-orange-500 hover:bg-orange-600 text-white px-3 py-2 rounded-2xl text-sm font-medium transition-all duration-200 shadow-sm"
                   >
                     Send Check-in
                   </button>
                   <button
                     onClick={openAllocateModal}
-                    className="w-full bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-700 hover:to-cyan-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 shadow-sm"
+                    className="w-full bg-orange-500 hover:bg-orange-600 text-white px-3 py-2 rounded-2xl text-sm font-medium transition-all duration-200 shadow-sm"
                   >
                     Allocate Check-in
                   </button>
                   <Link
                     href={`/clients/${clientId}/progress`}
-                    className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white px-3 py-2 rounded-lg text-sm font-medium text-center transition-all duration-200 shadow-sm block"
+                    className="w-full bg-orange-500 hover:bg-orange-600 text-white px-3 py-2 rounded-2xl text-sm font-medium text-center transition-all duration-200 shadow-sm block"
                   >
                     View Progress
                   </Link>
                   <Link
                     href={`/clients/${clientId}/forms`}
-                    className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white px-3 py-2 rounded-lg text-sm font-medium text-center transition-all duration-200 shadow-sm block"
+                    className="w-full bg-orange-500 hover:bg-orange-600 text-white px-3 py-2 rounded-2xl text-sm font-medium text-center transition-all duration-200 shadow-sm block"
                   >
                     Form Responses
                   </Link>
@@ -2718,13 +2749,13 @@ export default function ClientProfilePage() {
                         checkInsSection.scrollIntoView({ behavior: 'smooth' });
                       }
                     }}
-                    className="w-full bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 shadow-sm"
+                    className="w-full bg-orange-500 hover:bg-orange-600 text-white px-3 py-2 rounded-2xl text-sm font-medium transition-all duration-200 shadow-sm"
                   >
                     Manage Check-ins
                   </button>
                   <button
                     onClick={() => setShowSettingsModal(true)}
-                    className="w-full bg-gradient-to-r from-gray-600 to-gray-700 hover:from-gray-700 hover:to-gray-800 text-white px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 shadow-sm"
+                    className="w-full bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-2 rounded-2xl text-sm font-medium transition-all duration-200 shadow-sm"
                   >
                     ⚙️ Settings
                   </button>
@@ -2732,14 +2763,14 @@ export default function ClientProfilePage() {
               </div>
 
               {/* Recent Activity - Compact */}
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                <div className="px-4 py-3 bg-gradient-to-r from-orange-50 to-red-50 border-b border-gray-200">
+              <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                <div className="px-4 py-3 bg-orange-50 border-b-2 border-orange-200">
                   <h3 className="text-sm font-bold text-gray-900">Recent Activity</h3>
                 </div>
                 <div className="p-4">
                   {client.lastCheckIn ? (
                     <div className="flex items-center space-x-2">
-                      <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                      <div className="w-2 h-2 bg-[#34C759] rounded-full"></div>
                       <div>
                         <p className="text-sm font-medium text-gray-900">Last check-in</p>
                         <p className="text-xs text-gray-500">
@@ -2768,8 +2799,8 @@ export default function ClientProfilePage() {
       {/* Allocate Check-in Modal */}
       {showAllocateModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
-            <div className="bg-gradient-to-r from-teal-50 to-cyan-50 px-6 py-4 border-b border-gray-100 rounded-t-2xl">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <div className="bg-orange-50 px-6 py-4 border-b-2 border-orange-200 rounded-t-3xl">
               <h3 className="text-xl font-bold text-gray-900">Allocate Check-in</h3>
               <p className="text-gray-600 mt-1">Assign a check-in form to {client?.firstName}</p>
             </div>
@@ -2783,7 +2814,7 @@ export default function ClientProfilePage() {
                 <select
                   value={selectedAllocateForm}
                   onChange={(e) => setSelectedAllocateForm(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                 >
                   <option value="">Choose a form...</option>
                   {forms.map((form) => (
@@ -2812,7 +2843,7 @@ export default function ClientProfilePage() {
                       setAllocateFirstCheckInDate(firstCheckInDate.toISOString().split('T')[0]);
                     }
                   }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                 />
                 <p className="mt-1 text-xs text-gray-500">The week the program begins</p>
               </div>
@@ -2831,7 +2862,7 @@ export default function ClientProfilePage() {
                     startDate.setDate(startDate.getDate() + 7);
                     return startDate.toISOString().split('T')[0];
                   })() : undefined}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                 />
                 <p className="mt-1 text-xs text-gray-500">When is their first check-in? (typically 1 week after start date)</p>
               </div>
@@ -2844,7 +2875,7 @@ export default function ClientProfilePage() {
                 <select
                   value={allocateFrequency}
                   onChange={(e) => setAllocateFrequency(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                 >
                   <option value="daily">Daily</option>
                   <option value="weekly">Weekly</option>
@@ -2864,22 +2895,44 @@ export default function ClientProfilePage() {
                   max="52"
                   value={allocateDuration}
                   onChange={(e) => setAllocateDuration(parseInt(e.target.value))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                 />
               </div>
 
-              {/* Due Time */}
-              <div>
-                <label className="block text-sm font-medium text-gray-900 mb-2">
-                  Due Time
-                </label>
-                <input
-                  type="time"
-                  value={allocateDueTime}
-                  onChange={(e) => setAllocateDueTime(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-                />
-              </div>
+              {/* First Check-in Window Indicator */}
+              {allocateFirstCheckInDate && allocateCheckInWindow.enabled && (() => {
+                const windowInfo = getFirstCheckInWindowStart();
+                if (!windowInfo) return null;
+                return (
+                  <div className="bg-orange-50 border border-orange-200 rounded-xl p-4">
+                    <div className="flex items-start">
+                      <div className="flex-shrink-0">
+                        <svg className="w-5 h-5 text-orange-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                      </div>
+                      <div className="ml-3 flex-1">
+                        <h4 className="text-sm font-semibold text-orange-900 mb-1">First Check-in Window</h4>
+                        <p className="text-sm text-orange-700">
+                          Opens on <span className="font-medium">{windowInfo.displayText}</span>
+                        </p>
+                        {allocateCheckInWindow.endDay && allocateCheckInWindow.endTime && (
+                          <p className="text-xs text-orange-600 mt-1">
+                            Window closes {allocateCheckInWindow.endDay.charAt(0).toUpperCase() + allocateCheckInWindow.endDay.slice(1)} at {
+                              (() => {
+                                const [hours, minutes] = allocateCheckInWindow.endTime.split(':').map(Number);
+                                const ampm = hours >= 12 ? 'PM' : 'AM';
+                                const displayHours = hours % 12 || 12;
+                                return `${displayHours}:${minutes.toString().padStart(2, '0')} ${ampm}`;
+                              })()
+                            }
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Check-in Window */}
               <div className="border-t border-gray-200 pt-4">
@@ -2896,7 +2949,7 @@ export default function ClientProfilePage() {
                         ...allocateCheckInWindow,
                         enabled: e.target.checked
                       })}
-                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      className="rounded border-gray-300 text-orange-500 focus:ring-orange-500"
                     />
                     <span className="ml-2 text-sm text-gray-700">Enable check-in window</span>
                   </label>
@@ -2913,7 +2966,7 @@ export default function ClientProfilePage() {
                             ...allocateCheckInWindow,
                             startDay: e.target.value
                           })}
-                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-orange-500"
                         >
                           <option value="monday">Monday</option>
                           <option value="tuesday">Tuesday</option>
@@ -2933,7 +2986,7 @@ export default function ClientProfilePage() {
                             ...allocateCheckInWindow,
                             startTime: e.target.value
                           })}
-                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-orange-500"
                         />
                       </div>
                     </div>
@@ -2946,7 +2999,7 @@ export default function ClientProfilePage() {
                             ...allocateCheckInWindow,
                             endDay: e.target.value
                           })}
-                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-orange-500"
                         >
                           <option value="monday">Monday</option>
                           <option value="tuesday">Tuesday</option>
@@ -2966,7 +3019,7 @@ export default function ClientProfilePage() {
                             ...allocateCheckInWindow,
                             endTime: e.target.value
                           })}
-                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-orange-500"
                         />
                       </div>
                     </div>
@@ -2978,14 +3031,14 @@ export default function ClientProfilePage() {
               <div className="flex space-x-3 pt-4">
                 <button
                   onClick={() => setShowAllocateModal(false)}
-                  className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition-colors"
+                  className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-2xl font-medium transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleAllocateCheckIn}
                   disabled={!selectedAllocateForm || !allocateStartDate || !allocateFirstCheckInDate || allocatingCheckIn}
-                  className="flex-1 px-4 py-2 bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-700 hover:to-cyan-700 text-white rounded-lg font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-2xl font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                 >
                   {allocatingCheckIn ? 'Allocating...' : 'Allocate Check-in'}
                 </button>

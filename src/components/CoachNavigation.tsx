@@ -145,12 +145,12 @@ export default function CoachNavigation() {
         lg:translate-x-0
         fixed lg:static inset-y-0 left-0 z-50
         w-64
-        bg-white shadow-xl border-r border-gray-100
+        bg-white shadow-[0_1px_3px_rgba(0,0,0,0.1)] border-r border-gray-100
         transform transition-all duration-300 ease-in-out
         overflow-y-auto flex flex-col
       `}>
         {/* Sidebar Header */}
-        <div className="bg-gradient-to-br from-blue-500 to-indigo-600 px-6 py-8">
+        <div className="bg-gradient-to-br from-orange-500 to-orange-600 px-6 py-8">
           <div className="flex items-center space-x-3">
             <div className="w-12 h-12 bg-white bg-opacity-20 rounded-xl flex items-center justify-center">
               <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -159,7 +159,7 @@ export default function CoachNavigation() {
             </div>
             <div>
               <h1 className="text-white font-bold text-lg">Coach Hub</h1>
-              <p className="text-blue-100 text-sm">{currentPageTitle}</p>
+              <p className="text-orange-100 text-sm">{currentPageTitle}</p>
             </div>
           </div>
         </div>
@@ -173,17 +173,17 @@ export default function CoachNavigation() {
                 href={item.href}
                 onClick={() => setIsOpen(false)}
                 className={`
-                  flex items-center space-x-3 px-4 py-3 rounded-xl font-medium transition-all duration-200
+                  flex items-center space-x-3 px-4 py-3 rounded-2xl font-medium transition-all duration-200
                   ${isActive(item.href)
-                    ? 'bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700 shadow-sm border border-blue-100'
-                    : 'text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-blue-50 hover:text-blue-700'
+                    ? 'bg-orange-50 text-orange-700 border-l-4 border-orange-500'
+                    : 'text-gray-700 hover:bg-orange-50 hover:text-orange-700'
                   }
                 `}
               >
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                  isActive(item.href) ? 'bg-blue-100' : 'bg-gray-100'
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${
+                  isActive(item.href) ? 'bg-orange-100' : 'bg-gray-100'
                 }`}>
-                  <div className={isActive(item.href) ? 'text-blue-600' : 'text-gray-600'}>
+                  <div className={isActive(item.href) ? 'text-orange-600' : 'text-gray-600'}>
                     {item.icon}
                   </div>
                 </div>
@@ -202,10 +202,10 @@ export default function CoachNavigation() {
             <Link
               href="/clients/create"
               onClick={() => setIsOpen(false)}
-              className="flex items-center space-x-3 px-4 py-3 text-gray-700 hover:bg-gradient-to-r hover:from-green-50 hover:to-emerald-50 hover:text-green-700 rounded-xl font-medium transition-all duration-200"
+              className="flex items-center space-x-3 px-4 py-3 text-gray-700 hover:bg-orange-50 hover:text-orange-700 rounded-2xl font-medium transition-all duration-200"
             >
-              <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
-                <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="w-8 h-8 bg-orange-100 rounded-xl flex items-center justify-center">
+                <svg className="w-4 h-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                 </svg>
               </div>
@@ -215,10 +215,10 @@ export default function CoachNavigation() {
             <Link
               href="/forms/create"
               onClick={() => setIsOpen(false)}
-              className="flex items-center space-x-3 px-4 py-3 text-gray-700 hover:bg-gradient-to-r hover:from-purple-50 hover:to-pink-50 hover:text-purple-700 rounded-xl font-medium transition-all duration-200"
+              className="flex items-center space-x-3 px-4 py-3 text-gray-700 hover:bg-orange-50 hover:text-orange-700 rounded-2xl font-medium transition-all duration-200"
             >
-              <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
-                <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="w-8 h-8 bg-orange-100 rounded-xl flex items-center justify-center">
+                <svg className="w-4 h-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                 </svg>
               </div>
@@ -231,8 +231,8 @@ export default function CoachNavigation() {
 
           {/* User Profile */}
           <div className="px-4">
-            <div className="flex items-center space-x-3 p-3 bg-gradient-to-r from-gray-50 to-blue-50 rounded-xl border border-gray-200">
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center">
+            <div className="flex items-center space-x-3 p-3 bg-gradient-to-r from-gray-50 to-orange-50 rounded-2xl border border-gray-200">
+              <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-orange-600 rounded-2xl flex items-center justify-center">
                 <span className="text-white font-bold text-sm">
                   {userProfile?.firstName?.charAt(0) || 'C'}
                 </span>
@@ -245,7 +245,7 @@ export default function CoachNavigation() {
               </div>
               <button
                 onClick={logout}
-                className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center hover:bg-red-200 transition-colors"
+                className="w-8 h-8 bg-red-100 rounded-xl flex items-center justify-center hover:bg-red-200 transition-colors"
               >
                 <svg className="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />

@@ -192,9 +192,9 @@ export default function CheckInsPage() {
   });
 
   const getScoreColor = (score: number) => {
-    if (score >= 80) return 'text-green-600 bg-green-100';
-    if (score >= 60) return 'text-yellow-600 bg-yellow-100';
-    return 'text-red-600 bg-red-100';
+    if (score >= 80) return 'text-[#34C759] bg-[#34C759]/10 border border-[#34C759]/20';
+    if (score >= 60) return 'text-orange-600 bg-orange-100 border border-orange-200';
+    return 'text-[#FF3B30] bg-[#FF3B30]/10 border border-[#FF3B30]/20';
   };
 
   const getScoreLabel = (score: number) => {
@@ -285,11 +285,11 @@ export default function CheckInsPage() {
 
             {/* Stats Overview */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-              <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-6 py-4 border-b border-gray-100">
+              <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                <div className="bg-orange-50 px-6 py-4 border-b-2 border-orange-200">
                   <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                      <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center">
+                      <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                       </svg>
                     </div>
@@ -302,11 +302,11 @@ export default function CheckInsPage() {
                 </div>
               </div>
 
-              <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-                <div className="bg-gradient-to-r from-green-50 to-emerald-50 px-6 py-4 border-b border-gray-100">
+              <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                <div className="bg-[#34C759]/10 px-6 py-4 border-b-2 border-[#34C759]/20">
                   <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                      <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="w-10 h-10 bg-[#34C759]/20 rounded-xl flex items-center justify-center">
+                      <svg className="w-5 h-5 text-[#34C759]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                     </div>
@@ -319,10 +319,10 @@ export default function CheckInsPage() {
                 </div>
               </div>
 
-              <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-                <div className="bg-gradient-to-r from-orange-50 to-red-50 px-6 py-4 border-b border-gray-100">
+              <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                <div className="bg-orange-50 px-6 py-4 border-b-2 border-orange-200">
                   <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+                    <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center">
                       <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
                       </svg>
@@ -336,11 +336,11 @@ export default function CheckInsPage() {
                 </div>
               </div>
 
-              <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-                <div className="bg-gradient-to-r from-purple-50 to-pink-50 px-6 py-4 border-b border-gray-100">
+              <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                <div className="bg-gray-50 px-6 py-4 border-b-2 border-gray-200">
                   <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                      <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center">
+                      <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                       </svg>
                     </div>
@@ -355,8 +355,8 @@ export default function CheckInsPage() {
             </div>
 
             {/* Filters */}
-            <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden mb-8">
-              <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-8 py-6 border-b border-gray-100">
+            <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden mb-8">
+              <div className="bg-orange-50 px-10 py-8 border-b-2 border-orange-200">
                 <h2 className="text-2xl font-bold text-gray-900">Filters</h2>
               </div>
               <div className="p-8">
@@ -368,7 +368,7 @@ export default function CheckInsPage() {
                     <select
                       value={selectedClient}
                       onChange={(e) => setSelectedClient(e.target.value)}
-                      className="w-full border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 bg-white"
+                      className="w-full border border-gray-200 rounded-2xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 text-gray-900 bg-white"
                     >
                       <option value="all">All Clients</option>
                       {getUniqueClients().map((client) => (
@@ -385,7 +385,7 @@ export default function CheckInsPage() {
                     <select
                       value={selectedForm}
                       onChange={(e) => setSelectedForm(e.target.value)}
-                      className="w-full border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 bg-white"
+                      className="w-full border border-gray-200 rounded-2xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 text-gray-900 bg-white"
                     >
                       <option value="all">All Forms</option>
                       {getUniqueForms().map((formTitle) => (
@@ -402,7 +402,7 @@ export default function CheckInsPage() {
                     <select
                       value={dateRange}
                       onChange={(e) => setDateRange(e.target.value)}
-                      className="w-full border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 bg-white"
+                      className="w-full border border-gray-200 rounded-2xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 text-gray-900 bg-white"
                     >
                       <option value="all">All Time</option>
                       <option value="today">Today</option>
@@ -415,29 +415,29 @@ export default function CheckInsPage() {
             </div>
 
             {/* Check-ins List with Tabs */}
-            <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-              <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-8 py-6 border-b border-gray-100">
+            <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+              <div className="bg-orange-50 px-10 py-8 border-b-2 border-orange-200">
                 <div className="flex items-center justify-between">
                   <h2 className="text-2xl font-bold text-gray-900">Check-ins</h2>
                   <div className="flex items-center space-x-2">
                     {/* Tab Navigation */}
-                    <div className="flex bg-white rounded-lg p-1 shadow-sm text-xs md:text-sm">
+                    <div className="flex bg-white rounded-2xl p-1 shadow-sm text-xs md:text-sm">
                       <button
                         onClick={() => setActiveTab('review')}
-                        className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                        className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
                           activeTab === 'review'
-                            ? 'bg-blue-600 text-white shadow-sm'
-                            : 'text-gray-600 hover:text-gray-900'
+                            ? 'bg-orange-500 text-white shadow-sm'
+                            : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                         }`}
                       >
                         To Review ({checkInsToReview.filter(ci => !ci.coachResponded).length})
                       </button>
                       <button
                         onClick={() => setActiveTab('all')}
-                        className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                        className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
                           activeTab === 'all'
-                            ? 'bg-green-600 text-white shadow-sm'
-                            : 'text-gray-600 hover:text-gray-900'
+                            ? 'bg-[#34C759] text-white shadow-sm'
+                            : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                         }`}
                       >
                         All Check-ins ({filteredCheckIns.length})
@@ -472,34 +472,34 @@ export default function CheckInsPage() {
                           return (
                             <div
                               key={checkIn.id}
-                              className={`rounded-lg p-3 border hover:shadow-md transition-all duration-200 cursor-pointer ${
+                              className={`rounded-2xl p-4 border hover:shadow-sm transition-all duration-200 cursor-pointer ${
                                 needsResponse 
-                                  ? 'bg-gradient-to-r from-yellow-50 to-orange-50 border-yellow-300 hover:border-yellow-400' 
-                                  : 'bg-gradient-to-r from-gray-50 to-gray-100 border-gray-200 hover:border-gray-300'
+                                  ? 'bg-orange-50 border-orange-200 hover:border-orange-300' 
+                                  : 'bg-white border-gray-200 hover:border-gray-300'
                               }`}
                               onClick={() => window.location.href = `/responses/${checkIn.id}`}
                             >
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center space-x-3 md:space-x-4 flex-1">
                                   <div
-                                    className={`w-8 h-8 rounded-full flex items-center justify-center shadow-sm ${
+                                    className={`w-8 h-8 rounded-full flex items-center justify-center ${
                                       isOverdue
-                                        ? 'bg-red-100'
+                                        ? 'bg-[#FF3B30]/10'
                                         : needsResponse
-                                        ? 'bg-yellow-100'
-                                        : 'bg-green-100'
+                                        ? 'bg-orange-100'
+                                        : 'bg-[#34C759]/10'
                                     }`}
                                   >
                                     {isOverdue ? (
-                                      <svg className="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <svg className="w-4 h-4 text-[#FF3B30]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v4m0 4h.01M12 5a7 7 0 00-7 7v0a7 7 0 0014 0v0a7 7 0 00-7-7z" />
                                       </svg>
                                     ) : needsResponse ? (
-                                      <svg className="w-4 h-4 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <svg className="w-4 h-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l2 2m-2-2H9m3-7a7 7 0 00-7 7v3l-1.5 1.5M19.5 19.5L18 17" />
                                       </svg>
                                     ) : (
-                                      <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <svg className="w-4 h-4 text-[#34C759]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                       </svg>
                                     )}
@@ -515,7 +515,7 @@ export default function CheckInsPage() {
                                     </p>
                                     <p className="text-[10px] text-gray-700 mt-0.5">
                                       {formatTimeAgo(checkIn.submittedAt)}
-                                      {isOverdue && <span className="ml-2 text-red-600 font-semibold">(Overdue)</span>}
+                                      {isOverdue && <span className="ml-2 text-[#FF3B30] font-semibold">(Overdue)</span>}
                                     </p>
                                   </div>
                                 </div>
@@ -528,10 +528,10 @@ export default function CheckInsPage() {
                                   </div>
                                   <Link
                                     href={`/responses/${checkIn.id}`}
-                                    className={`px-3 py-1.5 rounded-md hover:opacity-90 transition-colors text-xs font-medium ${
+                                    className={`px-4 py-2 rounded-2xl hover:opacity-90 transition-all duration-200 text-xs font-medium shadow-sm ${
                                       needsResponse 
-                                        ? 'bg-yellow-600 text-white hover:bg-yellow-700' 
-                                        : 'bg-blue-600 text-white hover:bg-blue-700'
+                                        ? 'bg-orange-500 text-white hover:bg-orange-600' 
+                                        : 'bg-[#007AFF] text-white hover:bg-[#0051D5]'
                                     }`}
                                     onClick={(e) => e.stopPropagation()}
                                   >
@@ -568,7 +568,7 @@ export default function CheckInsPage() {
               ) : (
                       <div className="space-y-3">
                         {filteredCheckIns.map((checkIn) => (
-                  <div key={checkIn.id} className={`bg-white rounded-xl shadow-md border border-gray-100 overflow-hidden hover:shadow-lg transition-all duration-200 ${
+                  <div key={checkIn.id} className={`bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-all duration-200 ${
                     checkIn.status === 'pending' ? 'border-orange-200 bg-orange-50' : ''
                   }`}>
                     <div className="p-4">
@@ -580,12 +580,12 @@ export default function CheckInsPage() {
                             </h3>
                             <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
                               checkIn.status === 'pending' 
-                                ? 'bg-orange-100 text-orange-800' 
-                                : 'bg-blue-100 text-blue-800'
+                                ? 'bg-orange-100 text-orange-800 border border-orange-200' 
+                                : 'bg-[#34C759]/10 text-[#34C759] border border-[#34C759]/20'
                             }`}>
                               {checkIn.status === 'pending' ? 'Pending' : 'Completed'}
                             </span>
-                            <span className="px-2 py-0.5 bg-blue-100 text-blue-800 text-xs font-medium rounded-full">
+                            <span className="px-2 py-0.5 bg-gray-100 text-gray-800 text-xs font-medium rounded-full border border-gray-200">
                               {clients[checkIn.clientId]?.status || 'Active'}
                             </span>
                           </div>
@@ -604,7 +604,7 @@ export default function CheckInsPage() {
                         <div className="ml-4 text-right">
                           {checkIn.status === 'completed' ? (
                             <>
-                              <div className={`px-3 py-1.5 rounded-lg text-xs font-medium ${getScoreColor(checkIn.score)}`}>
+                              <div className={`px-3 py-1.5 rounded-full text-xs font-medium ${getScoreColor(checkIn.score)}`}>
                                 {checkIn.score}% - {getScoreLabel(checkIn.score)}
                               </div>
                               {checkIn.mood && (
@@ -619,7 +619,7 @@ export default function CheckInsPage() {
                               )}
                             </>
                           ) : (
-                            <div className="px-3 py-1.5 rounded-lg text-xs font-medium bg-orange-100 text-orange-800">
+                            <div className="px-3 py-1.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800 border border-orange-200">
                               Pending Completion
                             </div>
                           )}
@@ -663,13 +663,13 @@ export default function CheckInsPage() {
                         <div className="flex flex-wrap gap-2">
                           <Link
                             href={`/clients/${checkIn.clientId}`}
-                            className="text-blue-600 hover:text-blue-800 text-xs font-medium transition-colors"
+                            className="text-orange-600 hover:text-orange-700 text-xs font-medium transition-colors"
                           >
                             View Client Profile
                           </Link>
                           <Link
                             href={`/forms/${checkIn.formId}`}
-                            className="text-green-600 hover:text-green-800 text-xs font-medium transition-colors"
+                            className="text-[#007AFF] hover:text-[#0051D5] text-xs font-medium transition-colors"
                           >
                             View Form
                           </Link>
@@ -682,12 +682,12 @@ export default function CheckInsPage() {
                               {checkIn.responseId && (
                                 <Link
                                   href={`/responses/${checkIn.responseId}`}
-                                  className="text-blue-600 hover:text-blue-800 text-xs font-medium transition-colors"
+                                  className="text-orange-600 hover:text-orange-700 text-xs font-medium transition-colors"
                                 >
                                   View Full Response
                                 </Link>
                               )}
-                              <button className="text-purple-600 hover:text-purple-800 text-xs font-medium transition-colors">
+                              <button className="text-[#007AFF] hover:text-[#0051D5] text-xs font-medium transition-colors">
                                 Add Coach Notes
                               </button>
                               <button className="text-orange-600 hover:text-orange-800 text-xs font-medium transition-colors">

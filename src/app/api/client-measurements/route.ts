@@ -130,3 +130,99 @@ export async function POST(request: NextRequest) {
   }
 }
 
+/**
+ * PUT /api/client-measurements
+ * Update an existing measurement entry
+ */
+export async function PUT(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { id, date, bodyWeight, measurements } = body;
+
+    if (!id) {
+      return NextResponse.json({
+        success: false,
+        message: 'Measurement ID is required'
+      }, { status: 400 });
+    }
+
+    if (!bodyWeight && (!measurements || Object.keys(measurements).length === 0)) {
+      return NextResponse.json({
+        success: false,
+        message: 'Either bodyWeight or measurements must be provided'
+      }, { status: 400 });
+    }
+
+    const db = getDb();
+    
+    const updateData: any = {
+      updatedAt: new Date()
+    };
+
+    if (date) {
+      updateData.date = new Date(date);
+    }
+
+    if (bodyWeight !== undefined) {
+      updateData.bodyWeight = bodyWeight;
+    }
+
+    if (measurements !== undefined) {
+      updateData.measurements = measurements;
+    }
+
+    await db.collection('client_measurements').doc(id).update(updateData);
+
+    return NextResponse.json({
+      success: true,
+      message: 'Measurement updated successfully',
+      data: {
+        id,
+        ...updateData
+      }
+    });
+
+  } catch (error) {
+    console.error('Error updating measurement:', error);
+    return NextResponse.json({
+      success: false,
+      message: 'Failed to update measurement',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
+  }
+}
+
+/**
+ * DELETE /api/client-measurements
+ * Delete a measurement entry
+ */
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+
+    if (!id) {
+      return NextResponse.json({
+        success: false,
+        message: 'Measurement ID is required'
+      }, { status: 400 });
+    }
+
+    const db = getDb();
+    await db.collection('client_measurements').doc(id).delete();
+
+    return NextResponse.json({
+      success: true,
+      message: 'Measurement deleted successfully'
+    });
+
+  } catch (error) {
+    console.error('Error deleting measurement:', error);
+    return NextResponse.json({
+      success: false,
+      message: 'Failed to delete measurement',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
+  }
+}
+

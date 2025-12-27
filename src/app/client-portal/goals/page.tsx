@@ -96,7 +96,18 @@ export default function ClientGoalsPage() {
     
     try {
       if (!clientId) {
-        console.error('No client ID available');
+        alert('Error: No client ID available. Please refresh the page and try again.');
+        return;
+      }
+
+      // Validate required fields
+      if (!newGoal.title || !newGoal.unit || !newGoal.deadline) {
+        alert('Please fill in all required fields (Title, Unit, and Deadline).');
+        return;
+      }
+
+      if (newGoal.targetValue <= 0) {
+        alert('Target Value must be greater than 0.');
         return;
       }
 
@@ -111,27 +122,26 @@ export default function ClientGoalsPage() {
         }),
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success) {
-          setShowAddGoal(false);
-          setNewGoal({
-            title: '',
-            description: '',
-            category: 'general',
-            targetValue: 0,
-            unit: '',
-            deadline: ''
-          });
-          fetchGoals(); // Refresh goals
-        } else {
-          console.error('Failed to create goal:', data.message);
-        }
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        setShowAddGoal(false);
+        setNewGoal({
+          title: '',
+          description: '',
+          category: 'general',
+          targetValue: 0,
+          unit: '',
+          deadline: ''
+        });
+        await fetchGoals(); // Refresh goals
       } else {
-        console.error('Failed to create goal:', response.status, response.statusText);
+        alert(`Failed to create goal: ${data.message || 'Unknown error'}`);
+        console.error('Failed to create goal:', data);
       }
     } catch (error) {
       console.error('Error adding goal:', error);
+      alert('An error occurred while creating the goal. Please try again.');
     }
   };
 

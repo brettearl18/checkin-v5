@@ -296,14 +296,20 @@ export default function FormViewPage() {
         );
 
       case 'textarea':
-        // Check if this is a "Describe Slip up" question - it should be a real textarea
+        // Check if this is a free-text explanation question - it should be a real textarea
         // Other textarea questions might be rendered as selectors for scoring
-        const isDescribeSlipUp = question.text?.toLowerCase().includes('describe slip up') || 
-                                  question.text?.toLowerCase().includes('slip up') ||
-                                  (question as any).questionWeight === 0 || 
-                                  (question as any).weight === 0; // Unscored questions should be real textareas
+        const questionText = ((question as any).text || (question as any).question || '').toLowerCase();
+        const isFreeTextQuestion = 
+          questionText.includes('describe slip up') || 
+          questionText.includes('slip up') ||
+          questionText.includes('explain') ||
+          questionText.includes('please explain') ||
+          questionText.includes('tell us more') ||
+          questionText.includes('provide details') ||
+          (question as any).questionWeight === 0 || 
+          (question as any).weight === 0; // Unscored questions should be real textareas
         
-        if (isDescribeSlipUp) {
+        if (isFreeTextQuestion) {
           // Render as actual textarea for free-text responses
           return (
             <textarea

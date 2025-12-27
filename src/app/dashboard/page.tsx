@@ -632,11 +632,11 @@ export default function DashboardPage() {
 
   return (
     <RoleProtected requiredRole="coach">
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 flex flex-col lg:flex-row">
+      <div className="min-h-screen bg-[#FAFAFA] flex flex-col lg:flex-row">
         {/* Mobile top bar */}
         <div className="flex items-center justify-between px-4 py-4 bg-white/90 backdrop-blur-sm border-b border-gray-200 shadow-sm lg:hidden">
           <div className="flex items-center space-x-2">
-            <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center text-white font-semibold">
+            <div className="w-9 h-9 bg-orange-500 rounded-2xl flex items-center justify-center text-white font-semibold">
               CH
             </div>
             <div>
@@ -650,7 +650,7 @@ export default function DashboardPage() {
             <button
               type="button"
               onClick={() => setIsMenuOpen(true)}
-              className="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-gray-200 bg-white text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="inline-flex items-center justify-center w-9 h-9 rounded-2xl border border-gray-200 bg-white text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
               aria-label="Open navigation menu"
             >
               <span className="sr-only">Open menu</span>
@@ -667,7 +667,7 @@ export default function DashboardPage() {
             <div className="w-64 bg-white shadow-2xl h-full flex flex-col p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
-                  <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center text-white font-semibold">
+                  <div className="w-9 h-9 bg-orange-500 rounded-2xl flex items-center justify-center text-white font-semibold">
                     CH
                   </div>
                   <div>
@@ -691,42 +691,42 @@ export default function DashboardPage() {
                 <Link
                   href="/dashboard"
                   onClick={() => setIsMenuOpen(false)}
-                  className="block px-3 py-2 rounded-lg text-sm font-medium text-gray-900 bg-blue-50 border border-blue-100"
+                  className="block px-3 py-2 rounded-2xl text-sm font-medium text-gray-900 bg-orange-50 border-l-4 border-orange-500"
                 >
                   Dashboard
                 </Link>
                 <Link
                   href="/clients"
                   onClick={() => setIsMenuOpen(false)}
-                  className="block px-3 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  className="block px-3 py-2 rounded-2xl text-sm font-medium text-gray-700 hover:bg-orange-50 transition-colors"
                 >
                   Clients
                 </Link>
                 <Link
                   href="/check-ins"
                   onClick={() => setIsMenuOpen(false)}
-                  className="block px-3 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  className="block px-3 py-2 rounded-2xl text-sm font-medium text-gray-700 hover:bg-orange-50 transition-colors"
                 >
                   Check-ins
                 </Link>
                 <Link
                   href="/forms"
                   onClick={() => setIsMenuOpen(false)}
-                  className="block px-3 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  className="block px-3 py-2 rounded-2xl text-sm font-medium text-gray-700 hover:bg-orange-50 transition-colors"
                 >
                   Forms
                 </Link>
                 <Link
                   href="/analytics"
                   onClick={() => setIsMenuOpen(false)}
-                  className="block px-3 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  className="block px-3 py-2 rounded-2xl text-sm font-medium text-gray-700 hover:bg-orange-50 transition-colors"
                 >
                   Analytics
                 </Link>
                 <Link
                   href="/settings"
                   onClick={() => setIsMenuOpen(false)}
-                  className="block px-3 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  className="block px-3 py-2 rounded-2xl text-sm font-medium text-gray-700 hover:bg-orange-50 transition-colors"
                 >
                   Settings
                 </Link>
@@ -747,7 +747,7 @@ export default function DashboardPage() {
                         setCopiedCode(true);
                         setTimeout(() => setCopiedCode(false), 2000);
                       }}
-                      className="ml-2 px-2 py-1 text-xs font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700"
+                      className="ml-2 px-2 py-1 text-xs font-medium rounded-xl bg-orange-500 text-white hover:bg-orange-600"
                     >
                       {copiedCode ? 'Copied' : 'Copy'}
                     </button>
@@ -766,9 +766,9 @@ export default function DashboardPage() {
         )}
 
         {/* Desktop sidebar */}
-        <div className={`hidden lg:flex ${isSidebarCollapsed ? 'w-16' : 'w-64'} bg-white shadow-xl border-r border-gray-100 flex-col transition-all duration-300 ease-in-out`}>
+        <div className={`hidden lg:flex ${isSidebarCollapsed ? 'w-16' : 'w-64'} bg-white shadow-[0_1px_3px_rgba(0,0,0,0.1)] border-r border-gray-100 flex-col transition-all duration-300 ease-in-out`}>
           {/* Sidebar Header */}
-          <div className={`bg-gradient-to-br from-blue-500 to-indigo-600 ${isSidebarCollapsed ? 'px-2 py-4' : 'px-6 py-8'} relative`}>
+          <div className={`bg-gradient-to-br from-orange-500 to-orange-600 ${isSidebarCollapsed ? 'px-2 py-4' : 'px-6 py-8'} relative`}>
             {!isSidebarCollapsed ? (
               <>
                 <div className="flex items-center space-x-3">
@@ -779,7 +779,7 @@ export default function DashboardPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <h1 className="text-white font-bold text-lg">Coach Hub</h1>
-                    <p className="text-blue-100 text-sm">Dashboard</p>
+                    <p className="text-orange-100 text-sm">Dashboard</p>
                   </div>
                 </div>
                 {/* Collapse/Expand Toggle Button - Expanded State */}
@@ -833,11 +833,11 @@ export default function DashboardPage() {
               {/* Dashboard */}
               <Link
                 href="/dashboard"
-                className={`flex items-center ${isSidebarCollapsed ? 'justify-center px-2' : 'space-x-3 px-4'} py-3 bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700 rounded-xl font-medium transition-all duration-200 shadow-sm border border-blue-100 group relative`}
+                className={`flex items-center ${isSidebarCollapsed ? 'justify-center px-2' : 'space-x-3 px-4'} py-3 bg-orange-50 text-orange-700 rounded-2xl font-medium transition-all duration-200 border-l-4 border-orange-500 group relative`}
                 title={isSidebarCollapsed ? 'Dashboard' : ''}
               >
-                <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="w-8 h-8 bg-orange-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <svg className="w-4 h-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z" />
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5a2 2 0 012-2h4a2 2 0 012 2v2H8V5z" />
                   </svg>
@@ -853,10 +853,10 @@ export default function DashboardPage() {
               {/* Clients */}
               <Link
                 href="/clients"
-                className={`flex items-center ${isSidebarCollapsed ? 'justify-center px-2' : 'space-x-3 px-4'} py-3 text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-blue-50 hover:text-blue-700 rounded-xl font-medium transition-all duration-200 group relative`}
+                className={`flex items-center ${isSidebarCollapsed ? 'justify-center px-2' : 'space-x-3 px-4'} py-3 text-gray-700 hover:bg-orange-50 hover:text-orange-700 rounded-2xl font-medium transition-all duration-200 group relative`}
                 title={isSidebarCollapsed ? 'Clients' : ''}
               >
-                <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                <div className="w-8 h-8 bg-gray-100 rounded-xl flex items-center justify-center flex-shrink-0">
                   <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
                   </svg>
@@ -872,10 +872,10 @@ export default function DashboardPage() {
               {/* Messages */}
               <Link
                 href="/messages"
-                className={`flex items-center ${isSidebarCollapsed ? 'justify-center px-2' : 'space-x-3 px-4'} py-3 text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-blue-50 hover:text-blue-700 rounded-xl font-medium transition-all duration-200 group relative`}
+                className={`flex items-center ${isSidebarCollapsed ? 'justify-center px-2' : 'space-x-3 px-4'} py-3 text-gray-700 hover:bg-orange-50 hover:text-orange-700 rounded-2xl font-medium transition-all duration-200 group relative`}
                 title={isSidebarCollapsed ? 'Messages' : ''}
               >
-                <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                <div className="w-8 h-8 bg-gray-100 rounded-xl flex items-center justify-center flex-shrink-0">
                   <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                   </svg>
@@ -891,10 +891,10 @@ export default function DashboardPage() {
               {/* Check-ins */}
               <Link
                 href="/check-ins"
-                className={`flex items-center ${isSidebarCollapsed ? 'justify-center px-2' : 'space-x-3 px-4'} py-3 text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-blue-50 hover:text-blue-700 rounded-xl font-medium transition-all duration-200 group relative`}
+                className={`flex items-center ${isSidebarCollapsed ? 'justify-center px-2' : 'space-x-3 px-4'} py-3 text-gray-700 hover:bg-orange-50 hover:text-orange-700 rounded-2xl font-medium transition-all duration-200 group relative`}
                 title={isSidebarCollapsed ? 'Check-ins' : ''}
               >
-                <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                <div className="w-8 h-8 bg-gray-100 rounded-xl flex items-center justify-center flex-shrink-0">
                   <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
@@ -910,10 +910,10 @@ export default function DashboardPage() {
               {/* Responses */}
               <Link
                 href="/responses"
-                className={`flex items-center ${isSidebarCollapsed ? 'justify-center px-2' : 'space-x-3 px-4'} py-3 text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-blue-50 hover:text-blue-700 rounded-xl font-medium transition-all duration-200 group relative`}
+                className={`flex items-center ${isSidebarCollapsed ? 'justify-center px-2' : 'space-x-3 px-4'} py-3 text-gray-700 hover:bg-orange-50 hover:text-orange-700 rounded-2xl font-medium transition-all duration-200 group relative`}
                 title={isSidebarCollapsed ? 'Responses' : ''}
               >
-                <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                <div className="w-8 h-8 bg-gray-100 rounded-xl flex items-center justify-center flex-shrink-0">
                   <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                   </svg>
@@ -929,10 +929,10 @@ export default function DashboardPage() {
               {/* Analytics */}
               <Link
                 href="/analytics"
-                className={`flex items-center ${isSidebarCollapsed ? 'justify-center px-2' : 'space-x-3 px-4'} py-3 text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-blue-50 hover:text-blue-700 rounded-xl font-medium transition-all duration-200 group relative`}
+                className={`flex items-center ${isSidebarCollapsed ? 'justify-center px-2' : 'space-x-3 px-4'} py-3 text-gray-700 hover:bg-orange-50 hover:text-orange-700 rounded-2xl font-medium transition-all duration-200 group relative`}
                 title={isSidebarCollapsed ? 'Analytics' : ''}
               >
-                <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                <div className="w-8 h-8 bg-gray-100 rounded-xl flex items-center justify-center flex-shrink-0">
                   <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                   </svg>
@@ -948,10 +948,10 @@ export default function DashboardPage() {
               {/* Forms */}
               <Link
                 href="/forms"
-                className={`flex items-center ${isSidebarCollapsed ? 'justify-center px-2' : 'space-x-3 px-4'} py-3 text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-blue-50 hover:text-blue-700 rounded-xl font-medium transition-all duration-200 group relative`}
+                className={`flex items-center ${isSidebarCollapsed ? 'justify-center px-2' : 'space-x-3 px-4'} py-3 text-gray-700 hover:bg-orange-50 hover:text-orange-700 rounded-2xl font-medium transition-all duration-200 group relative`}
                 title={isSidebarCollapsed ? 'Forms' : ''}
               >
-                <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                <div className="w-8 h-8 bg-gray-100 rounded-xl flex items-center justify-center flex-shrink-0">
                   <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
@@ -975,11 +975,11 @@ export default function DashboardPage() {
                 
                 <Link
                   href="/clients/create"
-                  className="flex items-center space-x-3 px-4 py-3 text-gray-700 hover:bg-gradient-to-r hover:from-green-50 hover:to-emerald-50 hover:text-green-700 rounded-xl font-medium transition-all duration-200 group relative"
+                  className="flex items-center space-x-3 px-4 py-3 text-gray-700 hover:bg-orange-50 hover:text-orange-700 rounded-2xl font-medium transition-all duration-200 group relative"
                   title={isSidebarCollapsed ? 'Add Client' : ''}
                 >
-                  <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="w-8 h-8 bg-orange-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                    <svg className="w-4 h-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                     </svg>
                   </div>
@@ -988,11 +988,11 @@ export default function DashboardPage() {
 
                 <Link
                   href="/forms/create"
-                  className="flex items-center space-x-3 px-4 py-3 text-gray-700 hover:bg-gradient-to-r hover:from-purple-50 hover:to-pink-50 hover:text-purple-700 rounded-xl font-medium transition-all duration-200 group relative"
+                  className="flex items-center space-x-3 px-4 py-3 text-gray-700 hover:bg-orange-50 hover:text-orange-700 rounded-2xl font-medium transition-all duration-200 group relative"
                   title={isSidebarCollapsed ? 'Create Form' : ''}
                 >
-                  <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="w-8 h-8 bg-orange-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                    <svg className="w-4 h-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                     </svg>
                   </div>
@@ -1096,7 +1096,7 @@ export default function DashboardPage() {
                   <button
                     onClick={handleManualRefresh}
                     disabled={refreshing}
-                    className={`p-2 text-gray-600 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-lg transition-colors ${
+                    className={`p-2 text-gray-600 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500 rounded-2xl transition-colors ${
                       refreshing ? 'opacity-50 cursor-not-allowed' : ''
                     }`}
                     title="Refresh Dashboard"
@@ -1119,30 +1119,30 @@ export default function DashboardPage() {
               
               {/* Quick Summary – mobile: compact row of 4 buttons */}
               <div className="mb-6 flex gap-3 overflow-x-auto pb-1 md:hidden">
-                <button className="flex-shrink-0 min-w-[150px] bg-gradient-to-r from-orange-50 to-red-50 border border-orange-200 rounded-xl px-3 py-3 text-left">
+                <button className="flex-shrink-0 min-w-[150px] bg-orange-50 border border-orange-200 rounded-2xl px-4 py-4 text-left">
                   <p className="text-xs font-medium text-orange-700">Needs response</p>
                   <p className="mt-1 text-xl font-bold text-orange-900">
                     {checkInsToReview.filter(ci => !ci.coachResponded).length}
                   </p>
                 </button>
 
-                <button className="flex-shrink-0 min-w-[150px] bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl px-3 py-3 text-left">
-                  <p className="text-xs font-medium text-blue-700">Active clients</p>
-                  <p className="mt-1 text-xl font-bold text-blue-900">
+                <button className="flex-shrink-0 min-w-[150px] bg-white border border-gray-200 rounded-2xl px-4 py-4 text-left">
+                  <p className="text-xs font-medium text-gray-700">Active clients</p>
+                  <p className="mt-1 text-xl font-bold text-gray-900">
                     {stats.activeClients}
                   </p>
                 </button>
 
-                <button className="flex-shrink-0 min-w-[150px] bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-xl px-3 py-3 text-left">
-                  <p className="text-xs font-medium text-purple-700">Forms</p>
-                  <p className="mt-1 text-xl font-bold text-purple-900">
+                <button className="flex-shrink-0 min-w-[150px] bg-white border border-gray-200 rounded-2xl px-4 py-4 text-left">
+                  <p className="text-xs font-medium text-gray-700">Forms</p>
+                  <p className="mt-1 text-xl font-bold text-gray-900">
                     {stats.totalForms}
                   </p>
                 </button>
 
-                <button className="flex-shrink-0 min-w-[150px] bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl px-3 py-3 text-left">
-                  <p className="text-xs font-medium text-green-700">Completed this week</p>
-                  <p className="mt-1 text-xl font-bold text-green-900">
+                <button className="flex-shrink-0 min-w-[150px] bg-[#34C759]/10 border border-[#34C759]/20 rounded-2xl px-4 py-4 text-left">
+                  <p className="text-xs font-medium text-[#34C759]">Completed this week</p>
+                  <p className="mt-1 text-xl font-bold text-gray-900">
                     {completedCheckIns.length}
                   </p>
                 </button>
@@ -1151,7 +1151,7 @@ export default function DashboardPage() {
               {/* Desktop summary – keep rich cards */}
               <div className="hidden md:grid mb-8 grid-cols-4 gap-6">
                 {/* Priority Actions */}
-                <div className="bg-gradient-to-r from-orange-50 to-red-50 border border-orange-200 rounded-xl p-6">
+                <div className="bg-orange-50 border border-orange-200 rounded-3xl p-8">
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-orange-600 text-sm font-medium">Needs Response</p>
@@ -1160,7 +1160,7 @@ export default function DashboardPage() {
                       </p>
                       <p className="text-xs text-orange-700 mt-1">Awaiting your feedback</p>
                     </div>
-                    <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
+                    <div className="w-12 h-12 bg-orange-100 rounded-2xl flex items-center justify-center">
                       <svg className="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
@@ -1169,15 +1169,15 @@ export default function DashboardPage() {
                 </div>
                 
                 {/* Client Engagement */}
-                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-6">
+                <div className="bg-white border border-gray-200 rounded-3xl p-8">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-blue-600 text-sm font-medium">Client Engagement</p>
-                      <p className="text-2xl font-bold text-blue-900">{stats.activeClients}</p>
-                      <p className="text-xs text-blue-700 mt-1">Active clients</p>
+                      <p className="text-gray-600 text-sm font-medium">Client Engagement</p>
+                      <p className="text-2xl font-bold text-gray-900">{stats.activeClients}</p>
+                      <p className="text-xs text-gray-500 mt-1">Active clients</p>
                     </div>
-                    <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-                      <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="w-12 h-12 bg-gray-100 rounded-2xl flex items-center justify-center">
+                      <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
                       </svg>
                     </div>
@@ -1185,15 +1185,15 @@ export default function DashboardPage() {
                 </div>
                 
                 {/* Platform Resources */}
-                <div className="bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-xl p-6">
+                <div className="bg-white border border-gray-200 rounded-3xl p-8">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-purple-600 text-sm font-medium">Platform Resources</p>
-                      <p className="text-2xl font-bold text-purple-900">{stats.totalForms}</p>
-                      <p className="text-xs text-purple-700 mt-1">Available forms</p>
+                      <p className="text-gray-600 text-sm font-medium">Platform Resources</p>
+                      <p className="text-2xl font-bold text-gray-900">{stats.totalForms}</p>
+                      <p className="text-xs text-gray-500 mt-1">Available forms</p>
                     </div>
-                    <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
-                      <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="w-12 h-12 bg-gray-100 rounded-2xl flex items-center justify-center">
+                      <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                       </svg>
                     </div>
@@ -1201,15 +1201,15 @@ export default function DashboardPage() {
                 </div>
                 
                 {/* Recent Activity */}
-                <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl p-6">
+                <div className="bg-[#34C759]/10 border border-[#34C759]/20 rounded-3xl p-8">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-green-600 text-sm font-medium">Recent Activity</p>
-                      <p className="text-2xl font-bold text-green-900">{completedCheckIns.length}</p>
-                      <p className="text-xs text-green-700 mt-1">Completed this week</p>
+                      <p className="text-[#34C759] text-sm font-medium">Recent Activity</p>
+                      <p className="text-2xl font-bold text-gray-900">{completedCheckIns.length}</p>
+                      <p className="text-xs text-gray-500 mt-1">Completed this week</p>
                     </div>
-                    <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
-                      <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="w-12 h-12 bg-[#34C759]/20 rounded-2xl flex items-center justify-center">
+                      <svg className="w-6 h-6 text-[#34C759]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                     </div>
@@ -1218,33 +1218,33 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-8">
+            <div className="grid grid-cols-1 gap-10">
               {/* Main Content */}
-              <div className="space-y-8">
+              <div className="space-y-10">
                 {/* Unified Check-ins Management */}
-                <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-                  <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-8 py-6 border-b border-gray-100">
+                <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                  <div className="bg-orange-50 px-10 py-8 border-b-2 border-orange-200">
                     <div className="flex items-center justify-between">
                       <h2 className="text-2xl font-bold text-gray-900">Check-ins Management</h2>
                       <div className="flex items-center space-x-2">
                         {/* Tab Navigation */}
-                        <div className="flex bg-white rounded-lg p-1 shadow-sm text-xs md:text-sm">
+                        <div className="flex bg-white rounded-2xl p-1 shadow-sm text-xs md:text-sm">
                           <button
                             onClick={() => setActiveTab('review')}
-                            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                            className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
                               activeTab === 'review'
-                                ? 'bg-blue-600 text-white shadow-sm'
-                                : 'text-gray-600 hover:text-gray-900'
+                                ? 'bg-orange-500 text-white shadow-sm'
+                                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                             }`}
                           >
                             To Review ({checkInsToReview.length})
                           </button>
                           <button
                             onClick={() => setActiveTab('completed')}
-                            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                            className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
                               activeTab === 'completed'
-                                ? 'bg-green-600 text-white shadow-sm'
-                                : 'text-gray-600 hover:text-gray-900'
+                                ? 'bg-[#34C759] text-white shadow-sm'
+                                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                             }`}
                           >
                             Completed ({completedCheckIns.length})
@@ -1262,7 +1262,7 @@ export default function DashboardPage() {
                               handleCompletedSortChange(newSortBy);
                             }
                           }}
-                          className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="px-3 py-2 border border-gray-200 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white"
                         >
                           <option value="submittedAt-desc">Newest First</option>
                           <option value="submittedAt-asc">Oldest First</option>
@@ -1302,26 +1302,26 @@ export default function DashboardPage() {
                               return (
                                 <div
                                   key={checkIn.id}
-                                  className={`rounded-xl p-4 md:p-5 border hover:shadow-md transition-all duration-200 ${
+                                  className={`rounded-2xl p-5 md:p-6 border hover:shadow-sm transition-all duration-200 ${
                                     needsResponse 
-                                      ? 'bg-gradient-to-r from-yellow-50 to-orange-50 border-yellow-300 hover:border-yellow-400' 
-                                      : 'bg-gradient-to-r from-gray-50 to-gray-100 border-gray-200 hover:border-gray-300'
+                                      ? 'bg-orange-50 border-orange-200 hover:border-orange-300' 
+                                      : 'bg-white border-gray-200 hover:border-gray-300'
                                   }`}
                                 >
                                   <div className="flex items-center justify-between">
                                     <div className="flex items-center space-x-3 md:space-x-4 flex-1">
                                       <div
-                                        className={`w-9 h-9 md:w-11 md:h-11 rounded-full flex items-center justify-center shadow-md ${
+                                        className={`w-9 h-9 md:w-11 md:h-11 rounded-full flex items-center justify-center ${
                                           isOverdue
-                                            ? 'bg-red-100'
+                                            ? 'bg-[#FF3B30]/10'
                                             : needsResponse
-                                            ? 'bg-yellow-100'
-                                            : 'bg-green-100'
+                                            ? 'bg-orange-100'
+                                            : 'bg-[#34C759]/10'
                                         }`}
                                       >
                                         {isOverdue ? (
                                           <svg
-                                            className="w-5 h-5 md:w-6 md:h-6 text-red-600"
+                                            className="w-5 h-5 md:w-6 md:h-6 text-[#FF3B30]"
                                             fill="none"
                                             stroke="currentColor"
                                             viewBox="0 0 24 24"
@@ -1335,7 +1335,7 @@ export default function DashboardPage() {
                                           </svg>
                                         ) : needsResponse ? (
                                           <svg
-                                            className="w-5 h-5 md:w-6 h-6 text-yellow-600"
+                                            className="w-5 h-5 md:w-6 h-6 text-orange-600"
                                             fill="none"
                                             stroke="currentColor"
                                             viewBox="0 0 24 24"
@@ -1349,7 +1349,7 @@ export default function DashboardPage() {
                                           </svg>
                                         ) : (
                                           <svg
-                                            className="w-5 h-5 md:w-6 md:h-6 text-green-600"
+                                            className="w-5 h-5 md:w-6 md:h-6 text-[#34C759]"
                                             fill="none"
                                             stroke="currentColor"
                                             viewBox="0 0 24 24"
@@ -1386,10 +1386,10 @@ export default function DashboardPage() {
                                       </div>
                                       <Link
                                         href={`/responses/${checkIn.id}`}
-                                        className={`px-3 py-1.5 md:px-4 md:py-2 rounded-lg hover:opacity-90 transition-colors text-xs md:text-sm font-medium ${
+                                        className={`px-4 py-2 rounded-2xl hover:opacity-90 transition-all duration-200 text-xs md:text-sm font-medium shadow-sm ${
                                           needsResponse 
-                                            ? 'bg-yellow-600 text-white hover:bg-yellow-700' 
-                                            : 'bg-blue-600 text-white hover:bg-blue-700'
+                                            ? 'bg-orange-500 text-white hover:bg-orange-600' 
+                                            : 'bg-[#007AFF] text-white hover:bg-[#0051D5]'
                                         }`}
                                       >
                                         {needsResponse ? 'Respond' : 'View'}
@@ -1449,7 +1449,7 @@ export default function DashboardPage() {
                                     </div>
                                     <Link
                                       href={`/responses/${checkIn.id}`}
-                                      className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
+                                      className="px-4 py-2 bg-[#007AFF] text-white rounded-2xl hover:bg-[#0051D5] transition-all duration-200 text-sm font-medium shadow-sm"
                                     >
                                       View Details
                                     </Link>
@@ -1461,7 +1461,7 @@ export default function DashboardPage() {
                               <div className="text-center pt-4">
                                 <Link
                                   href="/check-ins"
-                                  className="text-green-600 hover:text-green-700 text-sm font-medium"
+                                  className="text-orange-600 hover:text-orange-700 text-sm font-medium"
                                 >
                                   View all {completedCheckIns.length} completed check-ins →
                                 </Link>
@@ -1475,13 +1475,13 @@ export default function DashboardPage() {
                 </div>
 
                 {/* Latest Client Photos */}
-                <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-                  <div className="bg-gradient-to-r from-pink-50 to-rose-50 px-8 py-6 border-b border-gray-100">
+                <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                  <div className="bg-orange-50 px-10 py-8 border-b-2 border-orange-200">
                     <div className="flex items-center justify-between">
                       <h2 className="text-2xl font-bold text-gray-900">Latest Client Photos</h2>
                       <Link
                         href="/clients"
-                        className="text-pink-600 hover:text-pink-700 text-sm font-medium"
+                        className="text-orange-600 hover:text-orange-700 text-sm font-medium"
                       >
                         View All Clients
                       </Link>
@@ -1502,7 +1502,7 @@ export default function DashboardPage() {
                       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-6">
                         {clientPhotos.slice(0, 16).map((photo) => (
                           <div key={photo.id} className="group relative">
-                            <div className="aspect-square bg-gradient-to-br from-gray-100 to-gray-200 rounded-xl overflow-hidden border border-gray-200 hover:border-pink-300 transition-all duration-200 hover:shadow-lg">
+                            <div className="aspect-square bg-gradient-to-br from-gray-100 to-gray-200 rounded-2xl overflow-hidden border border-gray-200 hover:border-orange-300 transition-all duration-200 hover:shadow-sm">
                               {/* Actual Photo Thumbnail */}
                               <img
                                 src={photo.photoUrl}
@@ -1590,38 +1590,38 @@ export default function DashboardPage() {
                 </div>
 
                 {/* Summary Cards Row */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                   {/* Forms Summary */}
-                  <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-                    <div className="bg-gradient-to-r from-purple-50 to-pink-50 px-6 py-4 border-b border-gray-100">
+                  <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                    <div className="bg-orange-50 px-8 py-6 border-b-2 border-orange-200">
                       <div className="flex items-center justify-between">
                         <h3 className="text-lg font-bold text-gray-900">Forms Summary</h3>
                         <Link
                           href="/forms"
-                          className="text-purple-600 hover:text-purple-700 text-sm font-medium"
+                          className="text-orange-600 hover:text-orange-700 text-sm font-medium"
                         >
                           View All
                         </Link>
                       </div>
                     </div>
-                    <div className="p-6">
-                      <div className="space-y-4">
+                    <div className="p-8">
+                      <div className="space-y-5">
                         <div className="flex items-center justify-between">
                           <span className="text-sm text-gray-600">Total Forms</span>
-                          <span className="text-lg font-bold text-gray-900">{stats.totalForms}</span>
+                          <span className="text-xl font-bold text-gray-900">{stats.totalForms}</span>
                         </div>
                         <div className="flex items-center justify-between">
                           <span className="text-sm text-gray-600">Standard Forms</span>
-                          <span className="text-sm font-medium text-green-600">2</span>
+                          <span className="text-sm font-medium text-[#34C759]">2</span>
                         </div>
                         <div className="flex items-center justify-between">
                           <span className="text-sm text-gray-600">Custom Forms</span>
-                          <span className="text-sm font-medium text-blue-600">{Math.max(0, stats.totalForms - 2)}</span>
+                          <span className="text-sm font-medium text-[#007AFF]">{Math.max(0, stats.totalForms - 2)}</span>
                         </div>
-                        <div className="pt-4 border-t border-gray-100">
+                        <div className="pt-5 border-t border-gray-100">
                           <Link
                             href="/forms/create"
-                            className="w-full flex items-center justify-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium"
+                            className="w-full flex items-center justify-center px-4 py-3 bg-orange-500 text-white rounded-2xl hover:bg-orange-600 transition-all duration-200 text-sm font-medium shadow-sm"
                           >
                             <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
@@ -1634,26 +1634,26 @@ export default function DashboardPage() {
                   </div>
 
                   {/* Quick Actions */}
-                  <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-                    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-6 py-4 border-b border-gray-100">
+                  <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                    <div className="bg-orange-50 px-8 py-6 border-b-2 border-orange-200">
                       <h3 className="text-lg font-bold text-gray-900">Quick Actions</h3>
                     </div>
-                    <div className="p-6 space-y-3">
+                    <div className="p-8 space-y-4">
                       <Link
                         href="/clients/create"
-                        className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-4 py-3 rounded-xl text-sm font-medium text-center transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 block"
+                        className="w-full bg-orange-500 hover:bg-orange-600 text-white px-4 py-3 rounded-2xl text-sm font-medium text-center transition-all duration-200 shadow-sm block"
                       >
                         Add New Client
                       </Link>
                       <Link
                         href="/forms"
-                        className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white px-4 py-3 rounded-xl text-sm font-medium text-center transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 block"
+                        className="w-full bg-white border-2 border-gray-200 hover:border-orange-300 text-gray-700 hover:text-orange-700 px-4 py-3 rounded-2xl text-sm font-medium text-center transition-all duration-200 block"
                       >
                         Manage Forms
                       </Link>
                       <Link
                         href="/analytics"
-                        className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white px-4 py-3 rounded-xl text-sm font-medium text-center transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 block"
+                        className="w-full bg-white border-2 border-gray-200 hover:border-orange-300 text-gray-700 hover:text-orange-700 px-4 py-3 rounded-2xl text-sm font-medium text-center transition-all duration-200 block"
                       >
                         View Analytics
                       </Link>
@@ -1661,11 +1661,11 @@ export default function DashboardPage() {
                   </div>
 
                   {/* Performance Summary */}
-                  <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-                    <div className="bg-gradient-to-r from-emerald-50 to-teal-50 px-6 py-4 border-b border-gray-100">
+                  <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                    <div className="bg-orange-50 px-8 py-6 border-b-2 border-orange-200">
                       <h3 className="text-lg font-bold text-gray-900">Performance Summary</h3>
                     </div>
-                    <div className="p-6 space-y-4">
+                    <div className="p-8 space-y-5">
                       <div className="flex items-center justify-between">
                         <span className="text-gray-600">Monthly Growth</span>
                         <span className="font-bold text-gray-900">+{stats.monthlyGrowth}%</span>
@@ -1684,8 +1684,8 @@ export default function DashboardPage() {
 
                 {/* Question Progress Grid */}
                 {questionProgress.length > 0 && (
-                  <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-                    <div className="bg-gradient-to-r from-purple-50 to-pink-50 px-8 py-6 border-b border-gray-100">
+                  <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                    <div className="bg-orange-50 px-10 py-8 border-b-2 border-orange-200">
                       <div className="flex items-center justify-between">
                         <div>
                           <h2 className="text-2xl font-bold text-gray-900">Question Progress Over Time</h2>
