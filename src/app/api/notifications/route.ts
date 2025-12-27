@@ -39,15 +39,16 @@ export async function GET(request: NextRequest) {
     let unreadCount = 0;
 
     try {
-      // Try with orderBy first
+      // Build query with all where clauses first, then orderBy
       let query = db.collection('notifications')
-        .where('userId', '==', userId)
-        .orderBy('createdAt', 'desc')
-        .limit(limit);
+        .where('userId', '==', userId);
 
       if (unreadOnly) {
         query = query.where('isRead', '==', false);
       }
+
+      // orderBy must come after all where clauses
+      query = query.orderBy('createdAt', 'desc').limit(limit);
 
       const snapshot = await query.get();
       notifications = snapshot.docs.map(doc => ({
