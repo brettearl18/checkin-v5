@@ -95,7 +95,7 @@ function LoginContent() {
     <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="text-center">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Welcome Back</h1>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Welcome Back to the Vana Health Check In Portal</h1>
           <p className="text-gray-800 font-medium">Sign in to your account to continue</p>
         </div>
       </div>
@@ -325,25 +325,6 @@ function LoginContent() {
               </svg>
               Register as Client
             </Link>
-          </div>
-
-          {/* Demo Access */}
-          <div className="mt-6 p-4 bg-gray-50 rounded-md">
-            <h3 className="text-sm font-medium text-gray-900 mb-2">Demo Access</h3>
-            <p className="text-xs text-gray-800 mb-3">
-              For testing purposes, you can use these demo accounts:
-            </p>
-            <div className="space-y-2 text-xs">
-              <div className="text-gray-800">
-                <strong>Admin:</strong> admin@demo.com / demo123
-              </div>
-              <div className="text-gray-800">
-                <strong>Coach:</strong> coach@demo.com / demo123
-              </div>
-              <div className="text-gray-800">
-                <strong>Client:</strong> client@demo.com / demo123
-              </div>
-            </div>
           </div>
         </div>
       </div>

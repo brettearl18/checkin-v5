@@ -157,6 +157,7 @@ export default function DashboardPage() {
   const [selectedClientForProgress, setSelectedClientForProgress] = useState<string | null>(null);
   const [questionProgress, setQuestionProgress] = useState<any[]>([]);
   const [loadingQuestionProgress, setLoadingQuestionProgress] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [selectedResponse, setSelectedResponse] = useState<{
     question: string;
     answer: any;
@@ -765,175 +766,315 @@ export default function DashboardPage() {
         )}
 
         {/* Desktop sidebar */}
-        <div className="hidden lg:flex w-64 bg-white shadow-xl border-r border-gray-100 flex-col">
+        <div className={`hidden lg:flex ${isSidebarCollapsed ? 'w-16' : 'w-64'} bg-white shadow-xl border-r border-gray-100 flex-col transition-all duration-300 ease-in-out`}>
           {/* Sidebar Header */}
-          <div className="bg-gradient-to-br from-blue-500 to-indigo-600 px-6 py-8">
-            <div className="flex items-center space-x-3">
-              <div className="w-12 h-12 bg-white bg-opacity-20 rounded-xl flex items-center justify-center">
-                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-              <div>
-                <h1 className="text-white font-bold text-lg">Coach Hub</h1>
-                <p className="text-blue-100 text-sm">Dashboard</p>
-              </div>
-            </div>
+          <div className={`bg-gradient-to-br from-blue-500 to-indigo-600 ${isSidebarCollapsed ? 'px-2 py-4' : 'px-6 py-8'} relative`}>
+            {!isSidebarCollapsed ? (
+              <>
+                <div className="flex items-center space-x-3">
+                  <div className="w-12 h-12 bg-white bg-opacity-20 rounded-xl flex items-center justify-center flex-shrink-0">
+                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h1 className="text-white font-bold text-lg">Coach Hub</h1>
+                    <p className="text-blue-100 text-sm">Dashboard</p>
+                  </div>
+                </div>
+                {/* Collapse/Expand Toggle Button - Expanded State */}
+                <button
+                  onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+                  className="absolute top-4 right-4 w-8 h-8 bg-white bg-opacity-20 hover:bg-opacity-30 rounded-lg flex items-center justify-center transition-all duration-200"
+                  title="Collapse sidebar"
+                >
+                  <svg 
+                    className="w-5 h-5 text-white" 
+                    fill="none" 
+                    stroke="currentColor" 
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                  </svg>
+                </button>
+              </>
+            ) : (
+              <>
+                {/* Collapsed State - Logo and Toggle Button Stacked */}
+                <div className="flex flex-col items-center space-y-3">
+                  <div className="w-12 h-12 bg-white bg-opacity-20 rounded-xl flex items-center justify-center flex-shrink-0">
+                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  {/* Collapse/Expand Toggle Button - Collapsed State */}
+                  <button
+                    onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+                    className="w-8 h-8 bg-white bg-opacity-20 hover:bg-opacity-30 rounded-lg flex items-center justify-center transition-all duration-200"
+                    title="Expand sidebar"
+                  >
+                    <svg 
+                      className="w-5 h-5 text-white rotate-180" 
+                      fill="none" 
+                      stroke="currentColor" 
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                    </svg>
+                  </button>
+                </div>
+              </>
+            )}
           </div>
 
           {/* Navigation Menu */}
-          <nav className="px-4 py-6">
-            <div className="space-y-2">
+          <nav className="px-4 py-6 flex-1 flex flex-col">
+            <div className="space-y-2 flex-1">
               {/* Dashboard */}
               <Link
                 href="/dashboard"
-                className="flex items-center space-x-3 px-4 py-3 bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700 rounded-xl font-medium transition-all duration-200 shadow-sm border border-blue-100"
+                className={`flex items-center ${isSidebarCollapsed ? 'justify-center px-2' : 'space-x-3 px-4'} py-3 bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700 rounded-xl font-medium transition-all duration-200 shadow-sm border border-blue-100 group relative`}
+                title={isSidebarCollapsed ? 'Dashboard' : ''}
               >
-                <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
                   <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z" />
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5a2 2 0 012-2h4a2 2 0 012 2v2H8V5z" />
                   </svg>
                 </div>
-                <span>Dashboard</span>
+                {!isSidebarCollapsed && <span>Dashboard</span>}
+                {isSidebarCollapsed && (
+                  <div className="absolute left-full ml-2 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all whitespace-nowrap z-50">
+                    Dashboard
+                  </div>
+                )}
               </Link>
 
               {/* Clients */}
               <Link
                 href="/clients"
-                className="flex items-center space-x-3 px-4 py-3 text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-blue-50 hover:text-blue-700 rounded-xl font-medium transition-all duration-200"
+                className={`flex items-center ${isSidebarCollapsed ? 'justify-center px-2' : 'space-x-3 px-4'} py-3 text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-blue-50 hover:text-blue-700 rounded-xl font-medium transition-all duration-200 group relative`}
+                title={isSidebarCollapsed ? 'Clients' : ''}
               >
-                <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
+                <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
                   <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
                   </svg>
                 </div>
-                <span>Clients</span>
+                {!isSidebarCollapsed && <span>Clients</span>}
+                {isSidebarCollapsed && (
+                  <div className="absolute left-full ml-2 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all whitespace-nowrap z-50">
+                    Clients
+                  </div>
+                )}
               </Link>
 
               {/* Messages */}
               <Link
                 href="/messages"
-                className="flex items-center space-x-3 px-4 py-3 text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-blue-50 hover:text-blue-700 rounded-xl font-medium transition-all duration-200"
+                className={`flex items-center ${isSidebarCollapsed ? 'justify-center px-2' : 'space-x-3 px-4'} py-3 text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-blue-50 hover:text-blue-700 rounded-xl font-medium transition-all duration-200 group relative`}
+                title={isSidebarCollapsed ? 'Messages' : ''}
               >
-                <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
+                <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
                   <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                   </svg>
                 </div>
-                <span>Messages</span>
+                {!isSidebarCollapsed && <span>Messages</span>}
+                {isSidebarCollapsed && (
+                  <div className="absolute left-full ml-2 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all whitespace-nowrap z-50">
+                    Messages
+                  </div>
+                )}
               </Link>
 
               {/* Check-ins */}
               <Link
                 href="/check-ins"
-                className="flex items-center space-x-3 px-4 py-3 text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-blue-50 hover:text-blue-700 rounded-xl font-medium transition-all duration-200"
+                className={`flex items-center ${isSidebarCollapsed ? 'justify-center px-2' : 'space-x-3 px-4'} py-3 text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-blue-50 hover:text-blue-700 rounded-xl font-medium transition-all duration-200 group relative`}
+                title={isSidebarCollapsed ? 'Check-ins' : ''}
               >
-                <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
+                <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
                   <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
                 </div>
-                <span>Check-ins</span>
+                {!isSidebarCollapsed && <span>Check-ins</span>}
+                {isSidebarCollapsed && (
+                  <div className="absolute left-full ml-2 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all whitespace-nowrap z-50">
+                    Check-ins
+                  </div>
+                )}
               </Link>
 
               {/* Responses */}
               <Link
                 href="/responses"
-                className="flex items-center space-x-3 px-4 py-3 text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-blue-50 hover:text-blue-700 rounded-xl font-medium transition-all duration-200"
+                className={`flex items-center ${isSidebarCollapsed ? 'justify-center px-2' : 'space-x-3 px-4'} py-3 text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-blue-50 hover:text-blue-700 rounded-xl font-medium transition-all duration-200 group relative`}
+                title={isSidebarCollapsed ? 'Responses' : ''}
               >
-                <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
+                <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
                   <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                   </svg>
                 </div>
-                <span>Responses</span>
+                {!isSidebarCollapsed && <span>Responses</span>}
+                {isSidebarCollapsed && (
+                  <div className="absolute left-full ml-2 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all whitespace-nowrap z-50">
+                    Responses
+                  </div>
+                )}
               </Link>
 
               {/* Analytics */}
               <Link
                 href="/analytics"
-                className="flex items-center space-x-3 px-4 py-3 text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-blue-50 hover:text-blue-700 rounded-xl font-medium transition-all duration-200"
+                className={`flex items-center ${isSidebarCollapsed ? 'justify-center px-2' : 'space-x-3 px-4'} py-3 text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-blue-50 hover:text-blue-700 rounded-xl font-medium transition-all duration-200 group relative`}
+                title={isSidebarCollapsed ? 'Analytics' : ''}
               >
-                <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
+                <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
                   <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                   </svg>
                 </div>
-                <span>Analytics</span>
+                {!isSidebarCollapsed && <span>Analytics</span>}
+                {isSidebarCollapsed && (
+                  <div className="absolute left-full ml-2 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all whitespace-nowrap z-50">
+                    Analytics
+                  </div>
+                )}
               </Link>
 
               {/* Forms */}
               <Link
                 href="/forms"
-                className="flex items-center space-x-3 px-4 py-3 text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-blue-50 hover:text-blue-700 rounded-xl font-medium transition-all duration-200"
+                className={`flex items-center ${isSidebarCollapsed ? 'justify-center px-2' : 'space-x-3 px-4'} py-3 text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-blue-50 hover:text-blue-700 rounded-xl font-medium transition-all duration-200 group relative`}
+                title={isSidebarCollapsed ? 'Forms' : ''}
               >
-                <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
+                <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
                   <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
                 </div>
-                <span>Forms</span>
+                {!isSidebarCollapsed && <span>Forms</span>}
+                {isSidebarCollapsed && (
+                  <div className="absolute left-full ml-2 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all whitespace-nowrap z-50">
+                    Forms
+                  </div>
+                )}
               </Link>
             </div>
 
             {/* Divider */}
-            <div className="my-6 border-t border-gray-200"></div>
+            {!isSidebarCollapsed && <div className="my-6 border-t border-gray-200"></div>}
 
             {/* Quick Actions */}
-            <div className="space-y-2">
-              <h3 className="px-4 text-sm font-semibold text-gray-700 uppercase tracking-wider">Quick Actions</h3>
-              
-              <Link
-                href="/clients/create"
-                className="flex items-center space-x-3 px-4 py-3 text-gray-700 hover:bg-gradient-to-r hover:from-green-50 hover:to-emerald-50 hover:text-green-700 rounded-xl font-medium transition-all duration-200"
-              >
-                <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
-                  <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                  </svg>
-                </div>
-                <span>Add Client</span>
-              </Link>
+            {!isSidebarCollapsed && (
+              <div className="space-y-2">
+                <h3 className="px-4 text-sm font-semibold text-gray-700 uppercase tracking-wider">Quick Actions</h3>
+                
+                <Link
+                  href="/clients/create"
+                  className="flex items-center space-x-3 px-4 py-3 text-gray-700 hover:bg-gradient-to-r hover:from-green-50 hover:to-emerald-50 hover:text-green-700 rounded-xl font-medium transition-all duration-200 group relative"
+                  title={isSidebarCollapsed ? 'Add Client' : ''}
+                >
+                  <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                  </div>
+                  <span>Add Client</span>
+                </Link>
 
-              <Link
-                href="/forms/create"
-                className="flex items-center space-x-3 px-4 py-3 text-gray-700 hover:bg-gradient-to-r hover:from-purple-50 hover:to-pink-50 hover:text-purple-700 rounded-xl font-medium transition-all duration-200"
-              >
-                <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
-                  <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                  </svg>
-                </div>
-                <span>Create Form</span>
-              </Link>
-            </div>
+                <Link
+                  href="/forms/create"
+                  className="flex items-center space-x-3 px-4 py-3 text-gray-700 hover:bg-gradient-to-r hover:from-purple-50 hover:to-pink-50 hover:text-purple-700 rounded-xl font-medium transition-all duration-200 group relative"
+                  title={isSidebarCollapsed ? 'Create Form' : ''}
+                >
+                  <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                  </div>
+                  <span>Create Form</span>
+                </Link>
+              </div>
+            )}
+            {isSidebarCollapsed && (
+              <div className="space-y-2">
+                <Link
+                  href="/clients/create"
+                  className="flex items-center justify-center px-2 py-3 text-gray-700 hover:bg-gradient-to-r hover:from-green-50 hover:to-emerald-50 hover:text-green-700 rounded-xl font-medium transition-all duration-200 group relative"
+                  title="Add Client"
+                >
+                  <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                  </div>
+                  <div className="absolute left-full ml-2 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all whitespace-nowrap z-50">
+                    Add Client
+                  </div>
+                </Link>
+
+                <Link
+                  href="/forms/create"
+                  className="flex items-center justify-center px-2 py-3 text-gray-700 hover:bg-gradient-to-r hover:from-purple-50 hover:to-pink-50 hover:text-purple-700 rounded-xl font-medium transition-all duration-200 group relative"
+                  title="Create Form"
+                >
+                  <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                  </div>
+                  <div className="absolute left-full ml-2 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all whitespace-nowrap z-50">
+                    Create Form
+                  </div>
+                </Link>
+              </div>
+            )}
 
             {/* Divider */}
-            <div className="my-6 border-t border-gray-200"></div>
+            {!isSidebarCollapsed && <div className="my-6 border-t border-gray-200"></div>}
 
             {/* User Profile */}
-            <div className="px-4">
-              <div className="flex items-center space-x-3 p-3 bg-gradient-to-r from-gray-50 to-blue-50 rounded-xl border border-gray-200">
-                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center">
+            <div className={`${isSidebarCollapsed ? 'px-2' : 'px-4'} mt-auto`}>
+              <div className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'space-x-3'} p-3 bg-gradient-to-r from-gray-50 to-blue-50 rounded-xl border border-gray-200`}>
+                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center flex-shrink-0">
                   <span className="text-white font-bold text-sm">
                     {userProfile?.firstName?.charAt(0) || 'C'}
                   </span>
                 </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-900">
-                    {userProfile?.firstName} {userProfile?.lastName}
-                  </p>
-                  <p className="text-xs text-gray-700">Coach</p>
-                </div>
-                <button
-                  onClick={logout}
-                  className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center hover:bg-red-200 transition-colors"
-                >
-                  <svg className="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                  </svg>
-                </button>
+                {!isSidebarCollapsed && (
+                  <>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">
+                        {userProfile?.firstName} {userProfile?.lastName}
+                      </p>
+                      <p className="text-xs text-gray-700">Coach</p>
+                    </div>
+                    <button
+                      onClick={logout}
+                      className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center hover:bg-red-200 transition-colors flex-shrink-0"
+                      title="Logout"
+                    >
+                      <svg className="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                      </svg>
+                    </button>
+                  </>
+                )}
+                {isSidebarCollapsed && (
+                  <button
+                    onClick={logout}
+                    className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center hover:bg-red-200 transition-colors flex-shrink-0"
+                    title="Logout"
+                  >
+                    <svg className="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                    </svg>
+                  </button>
+                )}
               </div>
             </div>
           </nav>
@@ -1077,9 +1218,9 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 gap-8">
               {/* Main Content */}
-              <div className="lg:col-span-2 space-y-8">
+              <div className="space-y-8">
                 {/* Unified Check-ins Management */}
                 <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
                   <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-8 py-6 border-b border-gray-100">
@@ -1358,8 +1499,8 @@ export default function DashboardPage() {
                         <p className="text-gray-400 text-sm">Client photos will appear here as they're uploaded</p>
                       </div>
                     ) : (
-                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                        {clientPhotos.slice(0, 8).map((photo) => (
+                      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-6">
+                        {clientPhotos.slice(0, 16).map((photo) => (
                           <div key={photo.id} className="group relative">
                             <div className="aspect-square bg-gradient-to-br from-gray-100 to-gray-200 rounded-xl overflow-hidden border border-gray-200 hover:border-pink-300 transition-all duration-200 hover:shadow-lg">
                               {/* Actual Photo Thumbnail */}
@@ -1435,7 +1576,7 @@ export default function DashboardPage() {
                       </div>
                     )}
                     
-                    {clientPhotos.length > 8 && (
+                    {clientPhotos.length > 16 && (
                       <div className="text-center pt-6">
                         <Link
                           href="/clients"
@@ -1445,6 +1586,99 @@ export default function DashboardPage() {
                         </Link>
                       </div>
                     )}
+                  </div>
+                </div>
+
+                {/* Summary Cards Row */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {/* Forms Summary */}
+                  <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+                    <div className="bg-gradient-to-r from-purple-50 to-pink-50 px-6 py-4 border-b border-gray-100">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-lg font-bold text-gray-900">Forms Summary</h3>
+                        <Link
+                          href="/forms"
+                          className="text-purple-600 hover:text-purple-700 text-sm font-medium"
+                        >
+                          View All
+                        </Link>
+                      </div>
+                    </div>
+                    <div className="p-6">
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-gray-600">Total Forms</span>
+                          <span className="text-lg font-bold text-gray-900">{stats.totalForms}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-gray-600">Standard Forms</span>
+                          <span className="text-sm font-medium text-green-600">2</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-gray-600">Custom Forms</span>
+                          <span className="text-sm font-medium text-blue-600">{Math.max(0, stats.totalForms - 2)}</span>
+                        </div>
+                        <div className="pt-4 border-t border-gray-100">
+                          <Link
+                            href="/forms/create"
+                            className="w-full flex items-center justify-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium"
+                          >
+                            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                            </svg>
+                            Create New Form
+                          </Link>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Quick Actions */}
+                  <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+                    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-6 py-4 border-b border-gray-100">
+                      <h3 className="text-lg font-bold text-gray-900">Quick Actions</h3>
+                    </div>
+                    <div className="p-6 space-y-3">
+                      <Link
+                        href="/clients/create"
+                        className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-4 py-3 rounded-xl text-sm font-medium text-center transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 block"
+                      >
+                        Add New Client
+                      </Link>
+                      <Link
+                        href="/forms"
+                        className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white px-4 py-3 rounded-xl text-sm font-medium text-center transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 block"
+                      >
+                        Manage Forms
+                      </Link>
+                      <Link
+                        href="/analytics"
+                        className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white px-4 py-3 rounded-xl text-sm font-medium text-center transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 block"
+                      >
+                        View Analytics
+                      </Link>
+                    </div>
+                  </div>
+
+                  {/* Performance Summary */}
+                  <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+                    <div className="bg-gradient-to-r from-emerald-50 to-teal-50 px-6 py-4 border-b border-gray-100">
+                      <h3 className="text-lg font-bold text-gray-900">Performance Summary</h3>
+                    </div>
+                    <div className="p-6 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-600">Monthly Growth</span>
+                        <span className="font-bold text-gray-900">+{stats.monthlyGrowth}%</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-600">Avg Engagement</span>
+                        <span className="font-bold text-gray-900">{stats.avgEngagement}%</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-600">Recent Check-ins</span>
+                        <span className="font-bold text-gray-900">{stats.recentCheckIns}</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -1654,99 +1888,6 @@ export default function DashboardPage() {
                     </div>
                   </div>
                 )}
-              </div>
-
-              {/* Sidebar */}
-              <div className="space-y-8">
-                {/* Forms Summary */}
-                <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-                  <div className="bg-gradient-to-r from-purple-50 to-pink-50 px-6 py-4 border-b border-gray-100">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-lg font-bold text-gray-900">Forms Summary</h3>
-                      <Link
-                        href="/forms"
-                        className="text-purple-600 hover:text-purple-700 text-sm font-medium"
-                      >
-                        View All
-                      </Link>
-                    </div>
-                  </div>
-                  <div className="p-6">
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-gray-600">Total Forms</span>
-                        <span className="text-lg font-bold text-gray-900">{stats.totalForms}</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-gray-600">Standard Forms</span>
-                        <span className="text-sm font-medium text-green-600">2</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-gray-600">Custom Forms</span>
-                        <span className="text-sm font-medium text-blue-600">{Math.max(0, stats.totalForms - 2)}</span>
-                      </div>
-                      <div className="pt-4 border-t border-gray-100">
-                        <Link
-                          href="/forms/create"
-                          className="w-full flex items-center justify-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium"
-                        >
-                          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                          </svg>
-                          Create New Form
-                        </Link>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Quick Actions */}
-                <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-6 py-4 border-b border-gray-100">
-                    <h3 className="text-lg font-bold text-gray-900">Quick Actions</h3>
-                  </div>
-                  <div className="p-6 space-y-3">
-                    <Link
-                      href="/clients/create"
-                      className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-4 py-3 rounded-xl text-sm font-medium text-center transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 block"
-                    >
-                      Add New Client
-                    </Link>
-                    <Link
-                      href="/forms"
-                      className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white px-4 py-3 rounded-xl text-sm font-medium text-center transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 block"
-                    >
-                      Manage Forms
-                    </Link>
-                    <Link
-                      href="/analytics"
-                      className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white px-4 py-3 rounded-xl text-sm font-medium text-center transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 block"
-                    >
-                      View Analytics
-                    </Link>
-                  </div>
-                </div>
-
-                {/* Performance Summary */}
-                <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-                  <div className="bg-gradient-to-r from-emerald-50 to-teal-50 px-6 py-4 border-b border-gray-100">
-                    <h3 className="text-lg font-bold text-gray-900">Performance Summary</h3>
-                  </div>
-                  <div className="p-6 space-y-4">
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-600">Monthly Growth</span>
-                      <span className="font-bold text-gray-900">+{stats.monthlyGrowth}%</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-600">Avg Engagement</span>
-                      <span className="font-bold text-gray-900">{stats.avgEngagement}%</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-600">Recent Check-ins</span>
-                      <span className="font-bold text-gray-900">{stats.recentCheckIns}</span>
-                    </div>
-                  </div>
-                </div>
               </div>
             </div>
           </div>

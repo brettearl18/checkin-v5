@@ -19,7 +19,7 @@ interface Client {
   lastName: string;
   email: string;
   phone?: string;
-  status: 'active' | 'inactive' | 'pending' | 'paused' | 'completed';
+  status: 'active' | 'inactive' | 'pending' | 'paused' | 'completed' | 'archived';
   assignedCoach: string;
   lastCheckIn?: string;
   progressScore?: number;
@@ -505,6 +505,8 @@ export default function ClientsPage() {
                 <div className="p-6">
                   <div className="text-3xl font-bold text-gray-900">
                     {clientsWithMetrics.filter(c => {
+                      // Exclude archived clients
+                      if (c.status === 'archived') return false;
                       if (!c.progressScore) return false;
                       const status = getTrafficLightStatus(c.progressScore, c.scoringThresholds || getDefaultThresholds('lifestyle'));
                       return status === 'red';
@@ -548,14 +550,16 @@ export default function ClientsPage() {
                 </div>
                 <div className="p-6">
                   <div className="text-3xl font-bold text-gray-900">
-                    {clientsWithMetrics.length > 0
-                      ? Math.round(
-                          clientsWithMetrics
-                            .filter(c => c.progressScore !== undefined)
-                            .reduce((sum, c) => sum + (c.progressScore || 0), 0) /
-                            Math.max(1, clientsWithMetrics.filter(c => c.progressScore !== undefined).length)
-                        )
-                      : 0}%
+                    {(() => {
+                      // Filter out archived clients from the calculation
+                      const activeClients = clientsWithMetrics.filter(c => c.status !== 'archived');
+                      const clientsWithScores = activeClients.filter(c => c.progressScore !== undefined);
+                      
+                      if (clientsWithScores.length === 0) return 0;
+                      
+                      const totalScore = clientsWithScores.reduce((sum, c) => sum + (c.progressScore || 0), 0);
+                      return Math.round(totalScore / clientsWithScores.length);
+                    })()}%
                   </div>
                   <div className="text-sm text-gray-500 mt-1">Average score</div>
                 </div>
