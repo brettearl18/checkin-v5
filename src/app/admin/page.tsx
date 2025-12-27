@@ -192,9 +192,6 @@ function ClearTestDataButton() {
       alert('This feature has been removed for production optimization. Data management should be done through proper admin tools.');
       setIsClearing(false);
       return;
-      } else {
-        alert(`❌ Error: ${data.message}`);
-      }
     } catch (error) {
       console.error('Error clearing test data:', error);
       setResult({
