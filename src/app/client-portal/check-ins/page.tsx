@@ -444,7 +444,7 @@ export default function ClientCheckInsPage() {
                     </div>
                   </div>
                   <div className="text-xl lg:text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">{stats.upcoming}</div>
-                  <div className="text-[10px] lg:text-xs text-gray-900 mt-0.5 lg:mt-1 font-medium">This Week</div>
+                  <div className="text-[10px] lg:text-xs text-gray-900 mt-0.5 lg:mt-1 font-medium">Upcoming</div>
                 </div>
               </div>
 
@@ -484,7 +484,7 @@ export default function ClientCheckInsPage() {
               <div className="flex flex-wrap gap-2">
                 {[
                   { key: 'needsAction', label: 'Needs Action', count: stats.needsAction, color: 'red' },
-                  { key: 'upcoming', label: 'This Week', count: stats.upcoming, color: 'blue' },
+                  { key: 'upcoming', label: 'Upcoming', count: stats.upcoming, color: 'blue' },
                   { key: 'pending', label: 'Pending', count: stats.pending, color: 'yellow' },
                   { key: 'completed', label: 'Completed', count: stats.completed, color: 'green' },
                   { key: 'overdue', label: 'Overdue', count: stats.overdue, color: 'red' }
@@ -517,7 +517,7 @@ export default function ClientCheckInsPage() {
               <div className="p-4 lg:p-5 border-b border-gray-200/60 bg-gradient-to-r from-gray-50/50 to-white/50">
                 <h2 className="text-lg lg:text-xl font-bold text-gray-900">
                   {filter === 'needsAction' ? '🔴 Needs Your Action' : 
-                   filter === 'upcoming' ? '📅 This Week\'s Check-ins' : 
+                   filter === 'upcoming' ? '📅 Upcoming Check-ins (Next 7 Days)' : 
                    filter === 'overdue' ? '⚠️ Overdue Check-ins' :
                    filter === 'completed' ? '✅ Completed Check-ins' :
                    `${filter.charAt(0).toUpperCase() + filter.slice(1)} Check-ins`}

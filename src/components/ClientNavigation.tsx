@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
@@ -130,6 +130,9 @@ const clientNavItems: NavItem[] = [
 export default function ClientNavigation() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [clientId, setClientId] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const pathname = usePathname();
   const { userProfile, logout } = useAuth();
 
@@ -140,17 +143,81 @@ export default function ClientNavigation() {
     return pathname.startsWith(href);
   };
 
+  // Fetch client ID
+  useEffect(() => {
+    const fetchClientId = async () => {
+      if (userProfile?.email) {
+        try {
+          const response = await fetch(`/api/client-portal?clientEmail=${encodeURIComponent(userProfile.email)}`);
+          const result = await response.json();
+          if (result.success && result.data.client) {
+            setClientId(result.data.client.id);
+          }
+        } catch (error) {
+          console.error('Error fetching client ID:', error);
+        }
+      }
+    };
+    fetchClientId();
+  }, [userProfile?.email]);
+
   // Close menu when route changes
   const handleLinkClick = () => {
     setIsMenuOpen(false);
   };
 
+  // Handle profile image upload
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !clientId) return;
+
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('clientId', clientId);
+
+      const response = await fetch('/api/client-portal/profile-image', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        // Reload the page to refresh the profile image
+        window.location.reload();
+      } else {
+        alert(`Failed to upload image: ${result.message}`);
+      }
+    } catch (error) {
+      console.error('Error uploading profile image:', error);
+      alert('Failed to upload profile image. Please try again.');
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const clientName = userProfile ? `${userProfile.firstName || ''} ${userProfile.lastName || ''}`.trim() : 'Client Portal';
+  const initials = userProfile ? `${userProfile.firstName?.charAt(0) || ''}${userProfile.lastName?.charAt(0) || ''}`.toUpperCase() : 'CP';
+
   return (
     <>
+      {/* Hidden file input - shared by all upload buttons */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleImageUpload}
+        accept="image/*"
+        className="hidden"
+      />
+      
       {/* Mobile Hamburger Button - Only visible on mobile */}
       <button
         onClick={() => setIsMenuOpen(true)}
-        className="lg:hidden fixed top-4 left-4 z-50 inline-flex items-center justify-center w-10 h-10 rounded-lg border border-gray-200 bg-white text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-pink-500"
+        className="lg:hidden fixed top-4 left-4 z-50 inline-flex items-center justify-center w-10 h-10 rounded-lg border border-gray-200 bg-white text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#daa450]"
         aria-label="Open navigation menu"
       >
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -166,13 +233,19 @@ export default function ClientNavigation() {
             <div className="px-6 py-6" style={{ backgroundColor: '#daa450' }}>
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 bg-white bg-opacity-20 rounded-xl flex items-center justify-center">
-                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                    </svg>
-                  </div>
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading || !clientId}
+                    className="w-10 h-10 bg-white bg-opacity-20 rounded-xl flex items-center justify-center overflow-hidden hover:bg-opacity-30 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {userProfile?.avatar ? (
+                      <img src={userProfile.avatar} alt={clientName} className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-white text-sm font-medium">{initials.substring(0, 2)}</span>
+                    )}
+                  </button>
                   <div>
-                    <h1 className="text-white font-bold text-base">Client Portal</h1>
+                    <h1 className="text-white font-bold text-base truncate max-w-[150px]">{clientName}</h1>
                     <p className="text-white text-xs opacity-90">Wellness journey</p>
                   </div>
                 </div>
@@ -247,9 +320,19 @@ export default function ClientNavigation() {
             {/* User Section */}
             <div className="px-4 py-4 border-t border-gray-100 bg-white">
               <div className="flex items-center space-x-3 mb-3">
-                <div className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-medium shadow-sm" style={{ backgroundColor: '#daa450' }}>
-                  {userProfile?.firstName?.charAt(0) || 'C'}
-                </div>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading || !clientId}
+                  className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-medium shadow-sm overflow-hidden hover:opacity-90 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+                  style={{ backgroundColor: userProfile?.avatar ? 'transparent' : '#daa450' }}
+                  title="Click to upload profile image"
+                >
+                  {userProfile?.avatar ? (
+                    <img src={userProfile.avatar} alt={clientName} className="w-full h-full object-cover" />
+                  ) : (
+                    <span>{initials.substring(0, 2)}</span>
+                  )}
+                </button>
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium text-gray-900 truncate">
                     {userProfile?.firstName} {userProfile?.lastName}
@@ -277,17 +360,24 @@ export default function ClientNavigation() {
       {/* Desktop Sidebar - Hidden on mobile */}
       <div className={`hidden lg:flex ${isCollapsed ? 'w-16' : 'w-64'} bg-white shadow-[0_1px_3px_rgba(0,0,0,0.1)] border-r border-gray-100 transition-all duration-300 h-screen flex-col`}>
       {/* Sidebar Header */}
-      <div className="bg-gradient-to-br from-pink-500 to-rose-600 px-6 py-8">
+      <div className="px-6 py-8" style={{ backgroundColor: '#daa450' }}>
         <div className="flex items-center space-x-3">
-          <div className="w-12 h-12 bg-white bg-opacity-20 rounded-xl flex items-center justify-center">
-            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-            </svg>
-          </div>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading || !clientId}
+            className="w-12 h-12 bg-white bg-opacity-20 rounded-xl flex items-center justify-center overflow-hidden hover:bg-opacity-30 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+            title={isCollapsed ? "Click to upload profile image" : undefined}
+          >
+            {userProfile?.avatar ? (
+              <img src={userProfile.avatar} alt={clientName} className="w-full h-full object-cover" />
+            ) : (
+              <span className="text-white text-base font-medium">{initials.substring(0, 2)}</span>
+            )}
+          </button>
           {!isCollapsed && (
-            <div>
-              <h1 className="text-white font-bold text-lg">Client Portal</h1>
-                    <p className="text-white text-sm opacity-90">Wellness journey</p>
+            <div className="min-w-0 flex-1">
+              <h1 className="text-white font-bold text-lg truncate">{clientName}</h1>
+              <p className="text-white text-sm opacity-90">Wellness journey</p>
             </div>
           )}
         </div>
@@ -357,9 +447,26 @@ export default function ClientNavigation() {
         <div className="flex items-center justify-between">
           {!isCollapsed && (
             <div className="flex items-center space-x-3 flex-1 min-w-0">
-              <div className="w-10 h-10 bg-gradient-to-br from-pink-500 to-rose-600 rounded-full flex items-center justify-center text-white text-sm font-medium flex-shrink-0 shadow-sm">
-                {userProfile?.firstName?.charAt(0) || 'C'}
-              </div>
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleImageUpload}
+                accept="image/*"
+                className="hidden"
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading || !clientId}
+                className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-medium flex-shrink-0 shadow-sm overflow-hidden hover:opacity-90 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{ backgroundColor: userProfile?.avatar ? 'transparent' : '#daa450' }}
+                title="Click to upload profile image"
+              >
+                {userProfile?.avatar ? (
+                  <img src={userProfile.avatar} alt={clientName} className="w-full h-full object-cover" />
+                ) : (
+                  <span>{initials.substring(0, 2)}</span>
+                )}
+              </button>
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-medium text-gray-900 truncate">
                   {userProfile?.firstName} {userProfile?.lastName}
@@ -369,9 +476,19 @@ export default function ClientNavigation() {
             </div>
           )}
           {isCollapsed && (
-            <div className="w-10 h-10 bg-gradient-to-br from-pink-500 to-rose-600 rounded-full flex items-center justify-center text-white text-sm font-medium mx-auto shadow-sm">
-              {userProfile?.firstName?.charAt(0) || 'C'}
-            </div>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading || !clientId}
+              className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-medium mx-auto shadow-sm overflow-hidden hover:opacity-90 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ backgroundColor: userProfile?.avatar ? 'transparent' : '#daa450' }}
+              title="Click to upload profile image"
+            >
+              {userProfile?.avatar ? (
+                <img src={userProfile.avatar} alt={clientName} className="w-full h-full object-cover" />
+              ) : (
+                <span>{initials.substring(0, 2)}</span>
+              )}
+            </button>
           )}
           <button
             onClick={logout}

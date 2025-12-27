@@ -91,7 +91,10 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { clientId, title, description, category, targetValue, unit, deadline } = await request.json();
+    const body = await request.json();
+    const { clientId, title, description, category, targetValue, unit, deadline } = body;
+
+    console.log('Received goal data:', { clientId, title, targetValue, unit, deadline, category });
 
     if (!clientId || !title || targetValue === undefined || targetValue === null || !unit || !deadline) {
       return NextResponse.json({
@@ -102,6 +105,24 @@ export async function POST(request: NextRequest) {
 
     const db = getDb();
 
+    // Parse deadline - date input sends ISO format (YYYY-MM-DD)
+    let deadlineDate: Date;
+    try {
+      deadlineDate = new Date(deadline);
+      
+      // Validate the date is valid
+      if (isNaN(deadlineDate.getTime())) {
+        throw new Error(`Invalid date: ${deadline}`);
+      }
+    } catch (dateError) {
+      console.error('Error parsing deadline date:', dateError, 'Original value:', deadline);
+      return NextResponse.json({
+        success: false,
+        message: `Invalid deadline date: ${deadline}`,
+        error: dateError instanceof Error ? dateError.message : 'Unknown date parsing error'
+      }, { status: 400 });
+    }
+
     const goalData = {
       clientId,
       title,
@@ -110,12 +131,14 @@ export async function POST(request: NextRequest) {
       targetValue: Number(targetValue),
       currentValue: 0,
       unit,
-      deadline: new Date(deadline),
+      deadline: deadlineDate,
       status: 'active',
       progress: 0,
       createdAt: new Date(),
       updatedAt: new Date()
     };
+
+    console.log('Creating goal with data:', goalData);
 
     const docRef = await db.collection('clientGoals').add(goalData);
 

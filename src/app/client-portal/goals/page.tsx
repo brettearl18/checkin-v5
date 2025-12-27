@@ -20,7 +20,7 @@ interface Goal {
 }
 
 export default function ClientGoalsPage() {
-  const { userProfile } = useAuth();
+  const { userProfile, loading: authLoading } = useAuth();
   const [goals, setGoals] = useState<Goal[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddGoal, setShowAddGoal] = useState(false);
@@ -35,8 +35,19 @@ export default function ClientGoalsPage() {
   });
 
   useEffect(() => {
-    fetchClientId();
-  }, [userProfile?.email]);
+    // Wait for auth to finish loading before trying to fetch client ID
+    if (authLoading) {
+      // Still loading auth, wait
+      return;
+    }
+    
+    if (userProfile?.email) {
+      fetchClientId();
+    } else {
+      // Auth finished but no user profile - user might not be logged in
+      setLoading(false);
+    }
+  }, [userProfile?.email, authLoading]);
 
   useEffect(() => {
     if (clientId) {
@@ -47,7 +58,7 @@ export default function ClientGoalsPage() {
   const fetchClientId = async () => {
     try {
       if (!userProfile?.email) {
-        console.error('No user email available');
+        // Don't log as error - this is expected if userProfile is still loading
         setLoading(false);
         return;
       }
@@ -59,11 +70,11 @@ export default function ClientGoalsPage() {
       if (result.success && result.data.client) {
         setClientId(result.data.client.id);
       } else {
-        console.error('Failed to fetch client ID:', result.message);
+        console.warn('Failed to fetch client ID:', result.message);
         setLoading(false);
       }
     } catch (error) {
-      console.error('Error fetching client ID:', error);
+      console.warn('Error fetching client ID:', error);
       setLoading(false);
     }
   };
@@ -106,23 +117,29 @@ export default function ClientGoalsPage() {
         return;
       }
 
-      if (newGoal.targetValue <= 0) {
+      if (!newGoal.targetValue || newGoal.targetValue <= 0 || isNaN(newGoal.targetValue)) {
         alert('Target Value must be greater than 0.');
         return;
       }
+
+      const goalData = {
+        clientId,
+        ...newGoal
+      };
+      
+      console.log('Submitting goal:', goalData);
 
       const response = await fetch('/api/client-portal/goals', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          clientId,
-          ...newGoal
-        }),
+        body: JSON.stringify(goalData),
       });
 
       const data = await response.json();
+      
+      console.log('Goal API response:', { status: response.status, data });
 
       if (response.ok && data.success) {
         setShowAddGoal(false);
@@ -136,8 +153,9 @@ export default function ClientGoalsPage() {
         });
         await fetchGoals(); // Refresh goals
       } else {
-        alert(`Failed to create goal: ${data.message || 'Unknown error'}`);
-        console.error('Failed to create goal:', data);
+        const errorMsg = data.message || data.error || 'Unknown error';
+        alert(`Failed to create goal: ${errorMsg}`);
+        console.error('Failed to create goal:', { response: response.status, data });
       }
     } catch (error) {
       console.error('Error adding goal:', error);
@@ -265,7 +283,7 @@ export default function ClientGoalsPage() {
               <p className="text-gray-900 mt-1">Track your progress towards achieving your wellness goals</p>
             </div>
 
-            {loading ? (
+            {(loading || authLoading) ? (
               <div className="p-8 text-center">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
                 <p className="mt-4 text-gray-900">Loading your goals...</p>
@@ -275,23 +293,12 @@ export default function ClientGoalsPage() {
                 <div className="text-6xl mb-4">🎯</div>
                 <h3 className="text-xl font-semibold text-gray-900 mb-2">No goals set yet</h3>
                 <p className="text-gray-900 mb-6">Start by setting your first wellness goal to track your progress.</p>
-                <div className="space-y-3">
-                  <button
-                    onClick={() => setShowAddGoal(true)}
-                    className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
-                  >
-                    Set Your First Goal
-                  </button>
-                  <div className="text-sm text-gray-700">or</div>
-                  <button
-                    onClick={async () => {
-                      alert('This feature has been removed for production optimization. Please set your goals manually.');
-                    }}
-                    className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"
-                  >
-                    Create Sample Goals (Demo)
-                  </button>
-                </div>
+                <button
+                  onClick={() => setShowAddGoal(true)}
+                  className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                >
+                  Set Your First Goal
+                </button>
               </div>
             ) : (
               <div className="p-6">
@@ -421,10 +428,15 @@ export default function ClientGoalsPage() {
                       <input
                         type="number"
                         required
-                        value={newGoal.targetValue}
-                        onChange={(e) => setNewGoal({...newGoal, targetValue: Number(e.target.value)})}
+                        min="1"
+                        step="any"
+                        value={newGoal.targetValue > 0 ? newGoal.targetValue : ''}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setNewGoal({...newGoal, targetValue: value ? Number(value) : 0});
+                        }}
                         className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="0"
+                        placeholder="Enter target value"
                       />
                     </div>
                     <div>

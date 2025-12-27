@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase-server';
 
+export const dynamic = 'force-dynamic';
+
 interface Notification {
   id: string;
   userId: string;
@@ -39,63 +41,71 @@ export async function GET(request: NextRequest) {
     let unreadCount = 0;
 
     try {
-      // Build query with all where clauses first, then orderBy
-      let query = db.collection('notifications')
-        .where('userId', '==', userId);
+      // Build query - start with base query
+      let query: any = db.collection('notifications').where('userId', '==', userId);
 
+      // Add unread filter if needed
       if (unreadOnly) {
         query = query.where('isRead', '==', false);
       }
 
-      // orderBy must come after all where clauses
-      query = query.orderBy('createdAt', 'desc').limit(limit);
+      // Try with orderBy first (requires composite index)
+      try {
+        query = query.orderBy('createdAt', 'desc').limit(limit);
+        const snapshot = await query.get();
+        notifications = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+      } catch (orderByError: any) {
+        // If orderBy fails (missing index), fetch without orderBy and sort client-side
+        console.log('OrderBy failed, fetching without orderBy:', orderByError.message);
+        
+        // Rebuild query without orderBy
+        query = db.collection('notifications').where('userId', '==', userId);
+        if (unreadOnly) {
+          query = query.where('isRead', '==', false);
+        }
+        query = query.limit(limit * 2); // Get more to account for client-side sorting
+        
+        const snapshot = await query.get();
+        notifications = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
 
-      const snapshot = await query.get();
-      notifications = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-
-      // Get unread count
-      const unreadSnapshot = await db.collection('notifications')
-        .where('userId', '==', userId)
-        .where('isRead', '==', false)
-        .get();
-
-      unreadCount = unreadSnapshot.size;
-
-    } catch (indexError: any) {
-      console.log('Index error, trying without orderBy:', indexError.message);
-      
-      // Fallback without orderBy
-      let query = db.collection('notifications')
-        .where('userId', '==', userId)
-        .limit(limit);
-
-      if (unreadOnly) {
-        query = query.where('isRead', '==', false);
+        // Sort client-side by createdAt
+        notifications.sort((a, b) => {
+          try {
+            const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : (a.createdAt ? new Date(a.createdAt) : new Date(0));
+            const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : (b.createdAt ? new Date(b.createdAt) : new Date(0));
+            return dateB.getTime() - dateA.getTime();
+          } catch (dateError) {
+            return 0;
+          }
+        });
+        
+        // Limit after sorting
+        notifications = notifications.slice(0, limit);
       }
 
-      const snapshot = await query.get();
-      notifications = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
+      // Get unread count separately (this query should always work)
+      try {
+        const unreadSnapshot = await db.collection('notifications')
+          .where('userId', '==', userId)
+          .where('isRead', '==', false)
+          .get();
+        unreadCount = unreadSnapshot.size;
+      } catch (unreadError) {
+        console.log('Error getting unread count, defaulting to 0:', unreadError);
+        unreadCount = notifications.filter(n => !n.isRead).length;
+      }
 
-      // Sort client-side
-      notifications.sort((a, b) => {
-        const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt);
-        const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt);
-        return dateB.getTime() - dateA.getTime();
-      });
-
-      // Get unread count
-      const unreadSnapshot = await db.collection('notifications')
-        .where('userId', '==', userId)
-        .where('isRead', '==', false)
-        .get();
-
-      unreadCount = unreadSnapshot.size;
+    } catch (queryError: any) {
+      console.error('Query error in notifications API:', queryError);
+      // Return empty array instead of failing completely
+      notifications = [];
+      unreadCount = 0;
     }
 
     return NextResponse.json({
@@ -107,9 +117,17 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error('Error fetching notifications:', error);
+    // Return 200 with error details instead of 500, since we're handling it gracefully
     return NextResponse.json(
-      { success: false, message: 'Failed to fetch notifications', error: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 }
+      { 
+        success: false, 
+        message: 'Failed to fetch notifications', 
+        error: error instanceof Error ? error.message : 'Unknown error',
+        notifications: [],
+        unreadCount: 0,
+        totalCount: 0
+      },
+      { status: 200 }
     );
   }
 }

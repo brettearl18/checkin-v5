@@ -103,7 +103,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           firstName: clientData.firstName,
           lastName: clientData.lastName,
           phone: clientData.phone,
-          avatar: undefined,
+          avatar: clientData.profileImage || undefined,
           status: clientData.status,
           createdAt: clientData.createdAt?.toDate() || new Date(),
           updatedAt: clientData.updatedAt?.toDate() || new Date(),
