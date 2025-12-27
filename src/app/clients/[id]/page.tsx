@@ -119,6 +119,16 @@ export default function ClientProfilePage() {
   const [loadingCheckIns, setLoadingCheckIns] = useState(false);
   const [hasLoadedCheckIns, setHasLoadedCheckIns] = useState(false);
   const [showStatusModal, setShowStatusModal] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [clientSettings, setClientSettings] = useState({
+    programStartDate: '',
+    programDuration: 12, // weeks
+    programDurationUnit: 'weeks' as 'weeks' | 'months',
+    coachNotes: '',
+    checkInFrequency: 'weekly' as 'daily' | 'weekly' | 'bi-weekly' | 'monthly',
+    communicationPreference: 'email' as 'email' | 'sms' | 'both',
+  });
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [newStatus, setNewStatus] = useState('');
   const [statusReason, setStatusReason] = useState('');
@@ -159,6 +169,18 @@ export default function ClientProfilePage() {
       if (response.ok) {
         const data = await response.json();
         setClient(data.client);
+        
+        // Load client settings if they exist
+        if (data.client) {
+          setClientSettings({
+            programStartDate: data.client.programStartDate || '',
+            programDuration: data.client.programDuration || 12,
+            programDurationUnit: data.client.programDurationUnit || 'weeks',
+            coachNotes: data.client.notes || data.client.coachNotes || '',
+            checkInFrequency: data.client.profile?.preferences?.checkInFrequency || 'weekly',
+            communicationPreference: data.client.profile?.preferences?.communication || 'email',
+          });
+        }
       } else {
         setError('Client not found');
       }
@@ -167,6 +189,49 @@ export default function ClientProfilePage() {
       setError('Failed to load client data');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveSettings = async () => {
+    if (!clientId) return;
+    
+    setSavingSettings(true);
+    try {
+      const response = await fetch(`/api/clients/${clientId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          programStartDate: clientSettings.programStartDate,
+          programDuration: clientSettings.programDuration,
+          programDurationUnit: clientSettings.programDurationUnit,
+          notes: clientSettings.coachNotes,
+          coachNotes: clientSettings.coachNotes,
+          profile: {
+            ...client?.profile,
+            preferences: {
+              ...client?.profile?.preferences,
+              checkInFrequency: clientSettings.checkInFrequency,
+              communication: clientSettings.communicationPreference,
+            },
+          },
+        }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        alert('Settings saved successfully!');
+        setShowSettingsModal(false);
+        fetchClient(); // Refresh client data
+      } else {
+        alert('Failed to save settings: ' + (data.error || 'Unknown error'));
+      }
+    } catch (error) {
+      console.error('Error saving settings:', error);
+      alert('Failed to save settings. Please try again.');
+    } finally {
+      setSavingSettings(false);
     }
   };
 
@@ -360,6 +425,7 @@ export default function ClientProfilePage() {
       case 'inactive': return 'bg-gray-100 text-gray-800';
       case 'pending': return 'bg-yellow-100 text-yellow-800';
       case 'at-risk': return 'bg-red-100 text-red-800';
+      case 'archived': return 'bg-slate-100 text-slate-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
@@ -933,6 +999,7 @@ export default function ClientProfilePage() {
                 <option value="inactive">Inactive</option>
                 <option value="pending">Pending</option>
                 <option value="at-risk">At Risk</option>
+                <option value="archived">Archived</option>
               </select>
             </div>
 
@@ -2655,6 +2722,12 @@ export default function ClientProfilePage() {
                   >
                     Manage Check-ins
                   </button>
+                  <button
+                    onClick={() => setShowSettingsModal(true)}
+                    className="w-full bg-gradient-to-r from-gray-600 to-gray-700 hover:from-gray-700 hover:to-gray-800 text-white px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 shadow-sm"
+                  >
+                    ⚙️ Settings
+                  </button>
                 </div>
               </div>
 
@@ -3189,6 +3262,178 @@ export default function ClientProfilePage() {
                   className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
                 >
                   {updatingCheckIn ? 'Updating...' : 'Update Check-in'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Client Settings Modal */}
+      {showSettingsModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="bg-gradient-to-r from-gray-50 to-blue-50 px-6 py-4 border-b border-gray-100 rounded-t-2xl">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900">Client Settings</h3>
+                  <p className="text-gray-600 mt-1">Configure program settings for {client?.firstName} {client?.lastName}</p>
+                </div>
+                <button
+                  onClick={() => setShowSettingsModal(false)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            
+            <div className="p-6 space-y-6">
+              {/* Traffic Light Thresholds */}
+              <div className="border-b border-gray-200 pb-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <h4 className="text-lg font-semibold text-gray-900">Traffic Light Thresholds</h4>
+                    <p className="text-sm text-gray-600">Set red/orange/green percentage splits for scoring</p>
+                  </div>
+                  <Link
+                    href={`/clients/${clientId}/scoring`}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
+                  >
+                    Configure →
+                  </Link>
+                </div>
+                {scoringThresholds && (
+                  <div className="grid grid-cols-3 gap-3 mt-3">
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                      <div className="text-xs font-medium text-red-700 mb-1">🔴 Red Zone</div>
+                      <div className="text-lg font-bold text-red-600">0-{scoringThresholds.redMax}%</div>
+                    </div>
+                    <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+                      <div className="text-xs font-medium text-orange-700 mb-1">🟠 Orange Zone</div>
+                      <div className="text-lg font-bold text-orange-600">{scoringThresholds.redMax + 1}-{scoringThresholds.orangeMax}%</div>
+                    </div>
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                      <div className="text-xs font-medium text-green-700 mb-1">🟢 Green Zone</div>
+                      <div className="text-lg font-bold text-green-600">{scoringThresholds.orangeMax + 1}-100%</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Program Duration & Start Date */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-900 mb-2">
+                    Program Start Date
+                  </label>
+                  <input
+                    type="date"
+                    value={clientSettings.programStartDate}
+                    onChange={(e) => setClientSettings({...clientSettings, programStartDate: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-900 mb-2">
+                    Program Duration
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      min="1"
+                      value={clientSettings.programDuration}
+                      onChange={(e) => setClientSettings({...clientSettings, programDuration: parseInt(e.target.value) || 1})}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <select
+                      value={clientSettings.programDurationUnit}
+                      onChange={(e) => setClientSettings({...clientSettings, programDurationUnit: e.target.value as 'weeks' | 'months'})}
+                      className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="weeks">Weeks</option>
+                      <option value="months">Months</option>
+                    </select>
+                  </div>
+                  {clientSettings.programStartDate && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Program ends: {(() => {
+                        const start = new Date(clientSettings.programStartDate);
+                        const duration = clientSettings.programDurationUnit === 'weeks' 
+                          ? clientSettings.programDuration * 7 
+                          : clientSettings.programDuration * 30;
+                        const end = new Date(start.getTime() + duration * 24 * 60 * 60 * 1000);
+                        return end.toLocaleDateString();
+                      })()}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Check-in Frequency & Communication */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-900 mb-2">
+                    Check-in Frequency
+                  </label>
+                  <select
+                    value={clientSettings.checkInFrequency}
+                    onChange={(e) => setClientSettings({...clientSettings, checkInFrequency: e.target.value as any})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly</option>
+                    <option value="bi-weekly">Bi-weekly</option>
+                    <option value="monthly">Monthly</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-900 mb-2">
+                    Communication Preference
+                  </label>
+                  <select
+                    value={clientSettings.communicationPreference}
+                    onChange={(e) => setClientSettings({...clientSettings, communicationPreference: e.target.value as any})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="email">Email</option>
+                    <option value="sms">SMS</option>
+                    <option value="both">Both</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Coach Notes */}
+              <div>
+                <label className="block text-sm font-medium text-gray-900 mb-2">
+                  Coach Notes
+                </label>
+                <textarea
+                  value={clientSettings.coachNotes}
+                  onChange={(e) => setClientSettings({...clientSettings, coachNotes: e.target.value})}
+                  rows={6}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Add notes about this client, their goals, preferences, or any important information..."
+                />
+                <p className="text-xs text-gray-500 mt-1">These notes are only visible to coaches</p>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex space-x-3 pt-4 border-t border-gray-200">
+                <button
+                  onClick={() => setShowSettingsModal(false)}
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveSettings}
+                  disabled={savingSettings}
+                  className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                >
+                  {savingSettings ? 'Saving...' : 'Save Settings'}
                 </button>
               </div>
             </div>

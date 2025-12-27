@@ -275,22 +275,7 @@ export default function ClientGoalsPage() {
                   <div className="text-sm text-gray-700">or</div>
                   <button
                     onClick={async () => {
-                      try {
-                        const response = await fetch('/api/setup-sample-goals', {
-                          method: 'POST',
-                          headers: {
-                            'Content-Type': 'application/json',
-                          },
-                          body: JSON.stringify({
-                            clientId: userProfile?.uid
-                          }),
-                        });
-                        if (response.ok) {
-                          fetchGoals(); // Refresh goals
-                        }
-                      } catch (error) {
-                        console.error('Error creating sample goals:', error);
-                      }
+                      alert('This feature has been removed for production optimization. Please set your goals manually.');
                     }}
                     className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"
                   >

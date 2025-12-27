@@ -106,111 +106,15 @@ export default function QuestionLibraryPage() {
   };
 
   const handleCreateFemaleLibrary = async () => {
-    if (!userProfile?.uid) {
-      alert('Please log in to create the question library');
-      return;
-    }
-
-    if (!window.confirm('This will create 80+ pre-weighted female-focused questions. Continue?')) {
-      return;
-    }
-
-    try {
-      const response = await fetch('/api/create-female-question-library', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          coachId: userProfile.uid
-        })
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        alert(`Successfully created ${data.count} female-focused questions!\n\nCategories: ${data.categories.join(', ')}`);
-        // Refresh the questions list
-        window.location.reload();
-      } else {
-        alert('Error creating question library: ' + (data.message || 'Unknown error'));
-      }
-    } catch (error) {
-      console.error('Error creating female question library:', error);
-      alert('Error creating question library. Please try again.');
-    }
+    alert('This feature has been removed for production optimization. Please create questions manually or use the form builder.');
   };
 
   const handleCreateVanaCheckInQuestions = async () => {
-    if (!userProfile?.uid) {
-      alert('Please log in to create the question library');
-      return;
-    }
-
-    if (!window.confirm('This will create 27 Vana Check In questions. Continue?')) {
-      return;
-    }
-
-    try {
-      const response = await fetch('/api/create-vana-checkin-questions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          coachId: userProfile.uid
-        })
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        alert(`Successfully created ${data.count} Vana Check In questions!\n\nCategories: ${data.categories.join(', ')}`);
-        // Refresh the questions list
-        window.location.reload();
-      } else {
-        alert('Error creating question library: ' + (data.message || 'Unknown error'));
-      }
-    } catch (error) {
-      console.error('Error creating Vana Check In questions:', error);
-      alert('Error creating question library. Please try again.');
-    }
+    alert('This feature has been removed for production optimization. Please create questions manually or use the form builder.');
   };
 
   const handleResetAndReload = async () => {
-    if (!userProfile?.uid) {
-      alert('Please log in to reset and reload questions');
-      return;
-    }
-
-    if (!window.confirm('⚠️ WARNING: This will DELETE ALL your existing questions and replace them with the updated female-focused question library (with "past week" language and comment support).\n\nThis action cannot be undone. Continue?')) {
-      return;
-    }
-
-    try {
-      const response = await fetch('/api/questions/reset-and-reload', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          coachId: userProfile.uid
-        })
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        alert(`✅ Reset Complete!\n\nDeleted: ${data.deletedCount} questions\nCreated: ${data.createdCount} new questions\n\nCategories: ${data.categories.join(', ')}${data.errors ? `\n\nErrors: ${data.errors.length}` : ''}`);
-        // Refresh the questions list
-        window.location.reload();
-      } else {
-        alert('Error resetting and reloading questions: ' + (data.message || 'Unknown error'));
-      }
-    } catch (error) {
-      console.error('Error resetting and reloading questions:', error);
-      alert('Error resetting and reloading questions. Please try again.');
-    }
+    alert('This feature has been removed for production optimization. Please manage questions through the question builder interface.');
   };
 
   const filteredQuestions = questions.filter(question => {

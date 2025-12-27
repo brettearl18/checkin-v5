@@ -69,7 +69,7 @@ async function fetchCheckIns(coachId: string, status?: string, sortBy: string = 
     const clientIds = new Set<string>();
     const formIds = new Set<string>();
 
-    // First, fetch all clients for this coach
+    // First, fetch all clients for this coach (excluding archived clients)
     const clientsSnapshot = await db.collection('clients')
       .where('coachId', '==', coachId)
       .get();
@@ -77,6 +77,10 @@ async function fetchCheckIns(coachId: string, status?: string, sortBy: string = 
     const clientsData: { [key: string]: any } = {};
     clientsSnapshot.docs.forEach(doc => {
       const clientData = doc.data();
+      // Skip archived clients
+      if (clientData.status === 'archived') {
+        return;
+      }
       clientsData[doc.id] = {
         id: doc.id,
         name: `${clientData.firstName} ${clientData.lastName}`,

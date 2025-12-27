@@ -46,7 +46,7 @@ export default function ClientsPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'pending' | 'needsAttention'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'pending' | 'needsAttention' | 'archived'>('all');
   const [clientTableSortBy, setClientTableSortBy] = useState<string>('name');
   const [clientTableSortOrder, setClientTableSortOrder] = useState<'asc' | 'desc'>('asc');
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
@@ -170,6 +170,11 @@ export default function ClientsPage() {
       return matchesSearch && (hasOverdue || lowScore || noActivity || lowCompletion || isRedOrOrange);
     }
     
+    // Handle archived clients separately - don't show them unless archive filter is selected
+    if (client.status === 'archived' && statusFilter !== 'archived') {
+      return false;
+    }
+    
     const matchesStatus = statusFilter === 'all' || client.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -181,6 +186,7 @@ export default function ClientsPage() {
       case 'completed': return 'bg-blue-100 text-blue-800';
       case 'inactive': return 'bg-gray-100 text-gray-800';
       case 'pending': return 'bg-yellow-100 text-yellow-800';
+      case 'archived': return 'bg-slate-100 text-slate-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
@@ -611,6 +617,16 @@ export default function ClientsPage() {
                     >
                       Needs Attention
                     </button>
+                    <button
+                      onClick={() => setStatusFilter('archived')}
+                      className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                        statusFilter === 'archived'
+                          ? 'bg-white text-slate-600 shadow-sm'
+                          : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      Archived
+                    </button>
                   </div>
                 </div>
               </div>
@@ -622,7 +638,9 @@ export default function ClientsPage() {
                 <div className="flex items-center justify-between">
                   <h2 className="text-2xl font-bold text-gray-900">Client Inventory</h2>
                   <div className="flex items-center space-x-3">
-                    <span className="text-sm text-gray-600">{filteredClients.length} {statusFilter === 'needsAttention' ? 'need attention' : 'total clients'}</span>
+                    <span className="text-sm text-gray-600">
+                      {filteredClients.length} {statusFilter === 'needsAttention' ? 'need attention' : statusFilter === 'archived' ? 'archived clients' : 'total clients'}
+                    </span>
                     <select
                       value={`${clientTableSortBy}-${clientTableSortOrder}`}
                       onChange={(e) => {
@@ -978,6 +996,7 @@ export default function ClientsPage() {
                   <option value="paused">Paused</option>
                   <option value="completed">Completed</option>
                   <option value="inactive">Inactive</option>
+                  <option value="archived">Archived</option>
                 </select>
               </div>
 

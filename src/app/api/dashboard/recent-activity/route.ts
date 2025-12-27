@@ -80,7 +80,7 @@ async function fetchRecentActivity(coachId: string): Promise<any[]> {
     }
 
     // Fetch recent clients (simplified query)
-    let clients: any[] = [];
+    let allClients: any[] = [];
     try {
       const clientsSnapshot = await db.collection('clients')
         .where('coachId', '==', coachId)
@@ -88,22 +88,25 @@ async function fetchRecentActivity(coachId: string): Promise<any[]> {
         .limit(10)
         .get();
 
-      clients = clientsSnapshot.docs.map(doc => ({
+      allClients = clientsSnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       }));
       
-      console.log('Found clients:', clients.length);
-      console.log('Client data:', clients);
+      console.log('Found clients:', allClients.length);
+      console.log('Client data:', allClients);
     } catch (error) {
       console.log('No clients found or index issue:', error);
-      clients = [];
+      allClients = [];
     }
+
+    // Filter out archived clients
+    const clients = allClients.filter(client => client.status !== 'archived');
 
     // Combine and format activities
     const activities: any[] = [];
 
-    // Add form responses (sort in memory)
+    // Add form responses (sort in memory) - only for non-archived clients
     responses
       .sort((a, b) => {
         const dateA = new Date(a.submittedAt);
@@ -112,7 +115,8 @@ async function fetchRecentActivity(coachId: string): Promise<any[]> {
       })
       .forEach(response => {
         const client = clients.find(c => c.id === response.clientId);
-        if (client) {
+        // Only include activities for non-archived clients
+        if (client && client.status !== 'archived') {
           activities.push({
             id: response.id,
             type: 'check-in',
@@ -124,8 +128,9 @@ async function fetchRecentActivity(coachId: string): Promise<any[]> {
         }
       });
 
-    // Add new client registrations (sort in memory)
+    // Add new client registrations (sort in memory) - only non-archived clients
     clients
+      .filter(client => client.status !== 'archived')
       .sort((a, b) => {
         const dateA = new Date(a.createdAt);
         const dateB = new Date(b.createdAt);
@@ -155,7 +160,8 @@ async function fetchRecentActivity(coachId: string): Promise<any[]> {
       })
       .forEach(assignment => {
         const client = clients.find(c => c.id === assignment.clientId);
-        if (client) {
+        // Only include activities for non-archived clients
+        if (client && client.status !== 'archived') {
           activities.push({
             id: `assignment-${assignment.id}`,
             type: 'form-response',

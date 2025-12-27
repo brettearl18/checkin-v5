@@ -82,20 +82,26 @@ export async function POST(
     
     const clientName = `${clientData.firstName} ${clientData.lastName}`;
 
-    // Calculate score
-    let score = 0;
-    let totalWeight = 0;
+    // Calculate score - use the score from frontend if provided, otherwise recalculate
+    let finalScore = requestData.score || 0;
+    
+    // If score not provided, calculate from individual response scores
+    if (!finalScore && requestData.responses && Array.isArray(requestData.responses)) {
+      let totalWeightedScore = 0;
+      let totalWeight = 0;
 
-    if (requestData.responses && Array.isArray(requestData.responses)) {
       requestData.responses.forEach((response: any) => {
-        if (response.weight) {
+        if (response.weight && response.score !== undefined) {
+          totalWeightedScore += (response.score || 0) * response.weight;
           totalWeight += response.weight;
-          score += response.score || 0;
         }
       });
-    }
 
-    const finalScore = totalWeight > 0 ? Math.round((score / totalWeight) * 100) : 0;
+      // Calculate: (totalWeightedScore / (totalWeight * 10)) * 100
+      finalScore = totalWeight > 0 
+        ? Math.round((totalWeightedScore / (totalWeight * 10)) * 100)
+        : 0;
+    }
 
     // Prepare response data
     const responseData = {

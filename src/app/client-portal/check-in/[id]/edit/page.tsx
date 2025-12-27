@@ -97,12 +97,16 @@ export default function EditCheckInPage() {
         id: responseDoc.id
       });
 
-      // Fetch questions
+      // Fetch questions and filter to only "Vana Check In" category
       const questionsData: Question[] = [];
       for (const response of responseData.responses) {
         const questionDoc = await getDoc(doc(db, 'questions', response.questionId));
         if (questionDoc.exists()) {
-          questionsData.push({ id: questionDoc.id, ...questionDoc.data() } as Question);
+          const questionData = { id: questionDoc.id, ...questionDoc.data() } as Question;
+          // Only include questions from "Vana Check In" category
+          if (questionData.category === 'Vana Check In') {
+            questionsData.push(questionData);
+          }
         }
       }
       setQuestions(questionsData);
@@ -247,7 +251,19 @@ export default function EditCheckInPage() {
             break;
             
           case 'textarea':
-            // For textarea questions, map the selected option to a score
+            // Check if this is the "Describe Slip up" question - it's not scored (weight = 0)
+            const isDescribeSlipUpQuestion = question.text?.toLowerCase().includes('describe slip up') || 
+                                             question.text?.toLowerCase().includes('slip up') ||
+                                             (question.questionWeight === 0 || question.weight === 0);
+            
+            if (isDescribeSlipUpQuestion) {
+              // This is a free-text question for context only, not scored
+              questionScore = 0;
+              // Skip adding to weighted score for unscored questions
+              return; // Exit early, don't add to scoring
+            }
+            
+            // For other textarea questions, map the selected option to a score
             const textareaAnswer = String(response.answer).trim().toLowerCase();
             if (textareaAnswer === 'great') {
               questionScore = 9; // Great = 9/10
@@ -264,6 +280,11 @@ export default function EditCheckInPage() {
           default:
             questionScore = 5;
             break;
+        }
+        
+        // Skip unscored questions (weight = 0) from scoring calculation
+        if (questionWeight === 0) {
+          return; // Don't add to totals for unscored questions
         }
         
         totalWeightedScore += questionScore * questionWeight;
@@ -311,7 +332,26 @@ export default function EditCheckInPage() {
         );
 
       case 'textarea':
-        // For textarea questions, show a 3-option selector for scoring
+        // Check if this is a "Describe Slip up" question - it should be a real textarea
+        // Other textarea questions might be rendered as selectors for scoring
+        const isDescribeSlipUp = question.text?.toLowerCase().includes('describe slip up') || 
+                                  question.text?.toLowerCase().includes('slip up') ||
+                                  question.questionWeight === 0; // Unscored questions should be real textareas
+        
+        if (isDescribeSlipUp) {
+          // Render as actual textarea for free-text responses
+          return (
+            <textarea
+              value={answer as string || ''}
+              onChange={(e) => handleAnswerChange(question.id, e.target.value)}
+              rows={4}
+              className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-gray-900 text-base transition-all resize-y"
+              placeholder="Enter your answer..."
+            />
+          );
+        }
+        
+        // For other textarea questions, show a 3-option selector for scoring
         const textareaValue = typeof answer === 'string' ? answer : '';
         const isGreat = textareaValue === 'Great' || textareaValue === 'great';
         const isAverage = textareaValue === 'Average' || textareaValue === 'average';

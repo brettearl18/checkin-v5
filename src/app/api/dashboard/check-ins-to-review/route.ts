@@ -21,20 +21,23 @@ export async function GET(request: NextRequest) {
     try {
       console.log('Fetching check-ins to review for coachId:', coachId);
       
-      // First, get all clients for this coach
+      // First, get all clients for this coach (excluding archived clients)
       const clientsSnapshot = await db.collection('clients')
         .where('coachId', '==', coachId)
         .get();
 
-      const clients = clientsSnapshot.docs.map(doc => ({
+      const allClients = clientsSnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       }));
 
-      console.log('Found clients for coach:', clients.length);
+      // Filter out archived clients
+      const clients = allClients.filter(client => client.status !== 'archived');
+
+      console.log('Found clients for coach:', clients.length, '(excluding', allClients.length - clients.length, 'archived)');
       console.log('Client IDs:', clients.map(c => c.id));
 
-      // Get all completed assignments for these clients
+      // Get all completed assignments for these clients (non-archived)
       let allAssignments: any[] = [];
       for (const client of clients) {
         try {

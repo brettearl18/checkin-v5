@@ -113,6 +113,8 @@ export default function ClientProgressPage() {
       const responsesData: FormResponse[] = data.history || [];
       
       console.log('Fetched responses:', responsesData.length);
+      console.log('Sample response structure:', responsesData[0]);
+      console.log('Sample response.responses:', responsesData[0]?.responses?.[0]);
       setResponses(responsesData);
 
       // Process question-level progress
@@ -264,36 +266,72 @@ export default function ClientProgressPage() {
       return;
     }
 
-    // Get all unique questions
-    const questionMap = new Map<string, { questionId: string; questionText: string }>();
+    // Get all unique questions - use questionText as key if questionId is missing
+    const questionMap = new Map<string, { questionId: string; questionText: string; allKeys?: string[] }>();
     
     sortedResponses.forEach(response => {
       if (response.responses && Array.isArray(response.responses)) {
         response.responses.forEach((qResp: QuestionResponse) => {
-          if (qResp.questionId && !questionMap.has(qResp.questionId)) {
-            questionMap.set(qResp.questionId, {
-              questionId: qResp.questionId,
-              questionText: qResp.question || `Question ${qResp.questionId.slice(0, 8)}`
+          // Use questionId if available, otherwise use questionText as identifier
+          const questionId = qResp.questionId || '';
+          const questionText = qResp.questionText || qResp.question || '';
+          const questionKey = questionId || questionText || '';
+          
+          if (questionKey && !questionMap.has(questionKey)) {
+            // Store all possible keys for matching
+            const allKeys = [questionId, questionText, qResp.question].filter(Boolean);
+            questionMap.set(questionKey, {
+              questionId: questionId || questionKey,
+              questionText: questionText || `Question ${questionKey.slice(0, 8)}`,
+              allKeys: allKeys
             });
           }
         });
       }
     });
 
+    console.log('Question map:', Array.from(questionMap.values()));
+    console.log('Sample response:', sortedResponses[0]?.responses?.[0]);
+    console.log('Total responses to process:', sortedResponses.length);
+
     // Create progress data for each question
     const progress: QuestionProgress[] = Array.from(questionMap.values()).map(question => {
       const weeks = sortedResponses.map((response, index) => {
         // Find this question's response in this check-in
+        // Try multiple matching strategies - match by any of the stored keys
         const qResponse = response.responses?.find(
-          (r: QuestionResponse) => r.questionId === question.questionId
+          (r: QuestionResponse) => {
+            const rQuestionId = r.questionId || '';
+            const rQuestionText = r.questionText || r.question || '';
+            
+            // Match by questionId
+            if (question.questionId && rQuestionId && rQuestionId === question.questionId) {
+              return true;
+            }
+            
+            // Match by questionText
+            if (question.questionText && rQuestionText && rQuestionText === question.questionText) {
+              return true;
+            }
+            
+            // Match by any of the stored keys
+            if (question.allKeys && question.allKeys.some(key => 
+              (key && rQuestionId === key) || (key && rQuestionText === key)
+            )) {
+              return true;
+            }
+            
+            return false;
+          }
         );
 
         if (!qResponse) {
           return null;
         }
 
-        // Get score (0-10 scale typically)
-        const score = qResponse.score || 0;
+        // Get score (0-10 scale typically) - check multiple possible fields
+        const score = qResponse.score !== undefined ? qResponse.score : 
+                     (qResponse.weightedScore !== undefined ? qResponse.weightedScore / (qResponse.weight || 1) : 0);
         
         // Determine status based on score
         // Green: 7-10, Orange: 4-6, Red: 0-3

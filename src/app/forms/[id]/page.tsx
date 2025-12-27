@@ -116,6 +116,12 @@ export default function FormViewPage() {
     let totalQuestions = 0;
 
     for (const question of questions) {
+      // Skip unscored questions (weight = 0) like "Describe Slip up"
+      const questionWeight = (question as any).questionWeight || (question as any).weight || 5;
+      if (questionWeight === 0) {
+        continue; // Skip unscored questions
+      }
+      
       if (responses[question.id] !== undefined && responses[question.id] !== '') {
         let questionScore = 0;
         
@@ -142,6 +148,15 @@ export default function FormViewPage() {
         } else if (question.type === 'text') {
           questionScore = 5;
         } else if (question.type === 'textarea') {
+          // Check if this is the "Describe Slip up" question - it's not scored (weight = 0)
+          const isDescribeSlipUpQuestion = question.text?.toLowerCase().includes('describe slip up') || 
+                                           question.text?.toLowerCase().includes('slip up');
+          
+          if (isDescribeSlipUpQuestion) {
+            // This is a free-text question for context only, not scored - skip it
+            continue; // Don't count in score calculation
+          }
+          
           const textareaAnswer = String(responses[question.id]).trim().toLowerCase();
           if (textareaAnswer === 'great') {
             questionScore = 9;
@@ -281,6 +296,26 @@ export default function FormViewPage() {
         );
 
       case 'textarea':
+        // Check if this is a "Describe Slip up" question - it should be a real textarea
+        // Other textarea questions might be rendered as selectors for scoring
+        const isDescribeSlipUp = question.text?.toLowerCase().includes('describe slip up') || 
+                                  question.text?.toLowerCase().includes('slip up') ||
+                                  (question as any).questionWeight === 0 || 
+                                  (question as any).weight === 0; // Unscored questions should be real textareas
+        
+        if (isDescribeSlipUp) {
+          // Render as actual textarea for free-text responses
+          return (
+            <textarea
+              value={responses[question.id] || ''}
+              onChange={(e) => handleResponseChange(question.id, e.target.value)}
+              rows={4}
+              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 text-lg transition-all resize-y"
+              placeholder="Enter your answer..."
+            />
+          );
+        }
+        
         const textareaValue = responses[question.id] || '';
         const isGreat = textareaValue === 'Great' || textareaValue === 'great';
         const isAverage = textareaValue === 'Average' || textareaValue === 'average';

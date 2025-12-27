@@ -189,22 +189,9 @@ function ClearTestDataButton() {
     setResult(null);
 
     try {
-      const response = await fetch('/api/clear-test-data', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          confirm: 'CLEAR_ALL_TEST_DATA'
-        })
-      });
-
-      const data = await response.json();
-      setResult(data);
-      
-      if (data.success) {
-        alert(`✅ Successfully cleared ${data.totalDeleted} test/demo records!\n\nPlease refresh the page to see updated statistics.`);
-        window.location.reload();
+      alert('This feature has been removed for production optimization. Data management should be done through proper admin tools.');
+      setIsClearing(false);
+      return;
       } else {
         alert(`❌ Error: ${data.message}`);
       }

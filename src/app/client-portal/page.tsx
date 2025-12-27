@@ -203,6 +203,12 @@ export default function ClientPortalPage() {
   const [averageTrafficLight, setAverageTrafficLight] = useState<TrafficLightStatus>('orange');
   const [clientId, setClientId] = useState<string | null>(null);
   const [showScoringInfo, setShowScoringInfo] = useState(false);
+  const [onboardingTodos, setOnboardingTodos] = useState({
+    hasWeight: false,
+    hasMeasurements: false,
+    hasBeforePhotos: false,
+  });
+  const [loadingTodos, setLoadingTodos] = useState(true);
 
   useEffect(() => {
     if (userProfile?.email) {
@@ -270,6 +276,23 @@ export default function ClientPortalPage() {
     fetchScoringConfig();
   }, [clientId, stats.averageScore]);
 
+  // Refresh onboarding todos when clientId changes or when page becomes visible
+  useEffect(() => {
+    if (clientId) {
+      fetchOnboardingTodos(clientId);
+      
+      // Refresh todos when page becomes visible (user returns from completing a task)
+      const handleVisibilityChange = () => {
+        if (!document.hidden && clientId) {
+          fetchOnboardingTodos(clientId);
+        }
+      };
+      
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+    }
+  }, [clientId]);
+
   const fetchClientData = async () => {
     try {
       // Fetch client-specific data using email (more reliable than UID)
@@ -294,6 +317,8 @@ export default function ClientPortalPage() {
           // Store client ID for fetching scoring config
           if (client?.id) {
             setClientId(client.id);
+            // Fetch onboarding to-do status
+            fetchOnboardingTodos(client.id);
           }
           
           // Calculate average score from recent responses if available
@@ -414,6 +439,40 @@ export default function ClientPortalPage() {
       setCoach(null);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchOnboardingTodos = async (id: string) => {
+    try {
+      setLoadingTodos(true);
+      
+      // Check for weight and measurements
+      const measurementsResponse = await fetch(`/api/client-measurements?clientId=${id}`);
+      const measurementsData = await measurementsResponse.json();
+      
+      // Check for before photos
+      const imagesResponse = await fetch(`/api/progress-images?clientId=${id}&limit=50`);
+      const imagesData = await imagesResponse.json();
+      
+      const measurements = measurementsData.success ? (measurementsData.data || measurementsData.measurements || []) : [];
+      const images = imagesData.success ? (imagesData.images || imagesData.data || []) : [];
+      
+      const hasWeight = measurements.some((m: any) => m.bodyWeight && m.bodyWeight > 0);
+      const hasMeasurements = measurements.some((m: any) => {
+        const measurementValues = m.measurements || {};
+        return Object.keys(measurementValues).length > 0 && Object.values(measurementValues).some((v: any) => v && v > 0);
+      });
+      const hasBeforePhotos = images.some((img: any) => img.imageType === 'before');
+      
+      setOnboardingTodos({
+        hasWeight: !!hasWeight,
+        hasMeasurements: !!hasMeasurements,
+        hasBeforePhotos: !!hasBeforePhotos,
+      });
+    } catch (error) {
+      console.error('Error fetching onboarding todos:', error);
+    } finally {
+      setLoadingTodos(false);
     }
   };
 
@@ -659,6 +718,109 @@ export default function ClientPortalPage() {
             <h1 className="text-xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">Welcome Back!</h1>
             <p className="text-gray-600 text-xs mt-1">Track your progress and stay connected</p>
           </div>
+
+          {/* Onboarding To-Do List - Show if any tasks are incomplete */}
+          {!loadingTodos && (!onboardingTodos.hasWeight || !onboardingTodos.hasMeasurements || !onboardingTodos.hasBeforePhotos) && (
+            <div className="bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 rounded-xl lg:rounded-2xl shadow-lg border-2 border-blue-200 mb-4 lg:mb-6 overflow-hidden">
+              <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-3 lg:px-6 lg:py-4 border-b border-blue-300">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-white bg-opacity-20 rounded-lg flex items-center justify-center">
+                      <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h2 className="text-lg lg:text-xl font-bold text-white">Get Started</h2>
+                      <p className="text-blue-100 text-xs lg:text-sm">Complete these steps to begin your wellness journey</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="p-4 lg:p-6 space-y-3">
+                {/* Weight Task */}
+                {!onboardingTodos.hasWeight && (
+                  <Link
+                    href="/client-portal/measurements"
+                    className="flex items-center justify-between p-4 bg-white rounded-lg border-2 border-blue-200 hover:border-blue-400 hover:shadow-md transition-all group"
+                  >
+                    <div className="flex items-center gap-3 flex-1">
+                      <div className="w-8 h-8 rounded-full border-2 border-blue-400 flex items-center justify-center flex-shrink-0">
+                        <span className="text-blue-600 font-bold text-sm">1</span>
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">Enter Your Weight</h3>
+                        <p className="text-sm text-gray-600">Record your starting weight to track progress</p>
+                      </div>
+                    </div>
+                    <svg className="w-5 h-5 text-gray-400 group-hover:text-blue-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </Link>
+                )}
+
+                {/* Measurements Task */}
+                {!onboardingTodos.hasMeasurements && (
+                  <Link
+                    href="/client-portal/measurements"
+                    className="flex items-center justify-between p-4 bg-white rounded-lg border-2 border-blue-200 hover:border-blue-400 hover:shadow-md transition-all group"
+                  >
+                    <div className="flex items-center gap-3 flex-1">
+                      <div className="w-8 h-8 rounded-full border-2 border-blue-400 flex items-center justify-center flex-shrink-0">
+                        <span className="text-blue-600 font-bold text-sm">2</span>
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">Add Your Measurements</h3>
+                        <p className="text-sm text-gray-600">Record body measurements (waist, hips, chest, etc.)</p>
+                      </div>
+                    </div>
+                    <svg className="w-5 h-5 text-gray-400 group-hover:text-blue-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </Link>
+                )}
+
+                {/* Before Photos Task */}
+                {!onboardingTodos.hasBeforePhotos && (
+                  <Link
+                    href="/client-portal/progress-images"
+                    className="flex items-center justify-between p-4 bg-white rounded-lg border-2 border-blue-200 hover:border-blue-400 hover:shadow-md transition-all group"
+                  >
+                    <div className="flex items-center gap-3 flex-1">
+                      <div className="w-8 h-8 rounded-full border-2 border-blue-400 flex items-center justify-center flex-shrink-0">
+                        <span className="text-blue-600 font-bold text-sm">3</span>
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">Upload Before Photos</h3>
+                        <p className="text-sm text-gray-600">Take and upload front, back, and side photos to track your transformation</p>
+                      </div>
+                    </div>
+                    <svg className="w-5 h-5 text-gray-400 group-hover:text-blue-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </Link>
+                )}
+
+                {/* Completion Message */}
+                {onboardingTodos.hasWeight && onboardingTodos.hasMeasurements && onboardingTodos.hasBeforePhotos && (
+                  <div className="p-4 bg-green-50 rounded-lg border-2 border-green-200">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
+                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-green-900">All Set!</h3>
+                        <p className="text-sm text-green-700">You've completed your initial setup. Keep up the great work!</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Stats Overview - Mobile: Compact 2x2, Desktop: 4 columns */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4 mb-4 lg:mb-6">

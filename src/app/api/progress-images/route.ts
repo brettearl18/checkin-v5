@@ -79,14 +79,22 @@ export async function GET(request: NextRequest) {
       return imageData;
     });
     
-    // Filter out images from invalid/deleted clients
+    // Filter out images from invalid/deleted clients and archived clients
     if (coachId) {
-      // Get all active clients for this coach
+      // Get all clients for this coach (excluding archived clients)
       const clientsSnapshot = await db.collection('clients')
         .where('coachId', '==', coachId)
         .get();
       
-      const validClientIds = new Set(clientsSnapshot.docs.map(doc => doc.id));
+      // Filter out archived clients
+      const validClientIds = new Set(
+        clientsSnapshot.docs
+          .filter(doc => {
+            const clientData = doc.data();
+            return clientData.status !== 'archived';
+          })
+          .map(doc => doc.id)
+      );
       
       // Filter images to only include those from valid clients
       images = images.filter(img => {

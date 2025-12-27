@@ -628,28 +628,7 @@ export default function FormsPage() {
                   <div className="flex justify-center space-x-4">
                     <button
                       onClick={async () => {
-                        try {
-                          const response = await fetch('/api/setup-standard-forms', {
-                            method: 'POST',
-                            headers: {
-                              'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify({
-                              coachId: userProfile?.uid
-                            })
-                          });
-                          
-                          if (response.ok) {
-                            const data = await response.json();
-                            if (data.success) {
-                              // Refresh the page to show the new forms
-                              window.location.reload();
-                            }
-                          }
-                        } catch (error) {
-                          console.error('Error setting up standard forms:', error);
-                          alert('Error setting up standard forms. Please try again.');
-                        }
+                        alert('This feature has been removed for production optimization. Please create forms manually using the form builder.');
                       }}
                       className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl text-sm font-medium transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
                     >

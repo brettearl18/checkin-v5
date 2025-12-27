@@ -9,9 +9,9 @@ export async function PATCH(
     const { id } = await params;
     const { status, reason } = await request.json();
     
-    if (!status || !['active', 'inactive', 'pending', 'at-risk'].includes(status)) {
+    if (!status || !['active', 'inactive', 'pending', 'at-risk', 'archived'].includes(status)) {
       return NextResponse.json(
-        { error: 'Invalid status. Must be one of: active, inactive, pending, at-risk' },
+        { error: 'Invalid status. Must be one of: active, inactive, pending, at-risk, archived' },
         { status: 400 }
       );
     }

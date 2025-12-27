@@ -120,12 +120,16 @@ export default function CheckInSuccessPage() {
                 const formData = formDoc.data();
                 const questionIds = formData.questions || [];
                 
-                // Fetch all questions
+                // Fetch questions and filter to only "Vana Check In" category
                 const questionsData: any[] = [];
                 for (const questionId of questionIds) {
                   const questionDoc = await getDoc(doc(db, 'questions', questionId));
                   if (questionDoc.exists()) {
-                    questionsData.push({ id: questionDoc.id, ...questionDoc.data() });
+                    const questionData = { id: questionDoc.id, ...questionDoc.data() };
+                    // Only include questions from "Vana Check In" category
+                    if (questionData.category === 'Vana Check In') {
+                      questionsData.push(questionData);
+                    }
                   }
                 }
                 setQuestions(questionsData);
