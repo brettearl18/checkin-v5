@@ -16,7 +16,7 @@ function generateShortUID(): string {
 }
 
 // Function to check if a short UID is unique
-async function isShortUIDUnique(shortUID: string): Promise<boolean> {
+async function isShortUIDUnique(shortUID: string, db: any): Promise<boolean> {
   const snapshot = await db.collection('coaches')
     .where('shortUID', '==', shortUID)
     .limit(1)
@@ -25,7 +25,7 @@ async function isShortUIDUnique(shortUID: string): Promise<boolean> {
 }
 
 // Function to generate a unique short UID
-async function generateUniqueShortUID(): Promise<string> {
+async function generateUniqueShortUID(db: any): Promise<string> {
   let shortUID: string;
   let attempts = 0;
   const maxAttempts = 10;
@@ -36,13 +36,13 @@ async function generateUniqueShortUID(): Promise<string> {
     if (attempts > maxAttempts) {
       throw new Error('Unable to generate unique short UID after maximum attempts');
     }
-  } while (!(await isShortUIDUnique(shortUID)));
+  } while (!(await isShortUIDUnique(shortUID, db)));
   
   return shortUID;
 }
 
 // Function to create standard questions for men's health
-async function createMensHealthQuestions(coachId: string) {
+async function createMensHealthQuestions(coachId: string, db: any) {
   const questions = [
     {
       id: `mens-q-${Date.now()}-1`,
@@ -331,6 +331,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create Firebase Auth user
+    const auth = getAuthInstance();
     const userRecord = await auth.createUser({
       email,
       password,
@@ -387,7 +388,7 @@ export async function POST(request: NextRequest) {
 
     // If registering as a coach, create coach record
     if (role === 'coach') {
-      const shortUID = await generateUniqueShortUID();
+      const shortUID = await generateUniqueShortUID(db);
       const coachRecord = {
         id: userRecord.uid,
         shortUID,
