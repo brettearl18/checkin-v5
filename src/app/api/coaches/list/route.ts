@@ -20,7 +20,8 @@ export async function GET(request: NextRequest) {
           firstName: data.firstName || '',
           lastName: data.lastName || '',
           status: data.status || 'unknown',
-          specialization: data.specialization || ''
+          specialization: data.specialization || '',
+          shortUID: data.shortUID || null // Include coach code/verification code
         };
       })
       .filter(coach => coach.status === 'active'); // Only show active coaches
