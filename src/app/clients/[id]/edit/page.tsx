@@ -287,3 +287,4 @@ export default function EditClientPage() {
         </div>
       </RoleProtected>
     );
+  }
