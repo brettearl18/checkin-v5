@@ -437,9 +437,16 @@ export default function MeasurementsPage() {
                     </thead>
                     <tbody className="divide-y divide-gray-200">
                       {measurementHistory.map((entry) => (
-                        <tr key={entry.id} className="hover:bg-gray-50">
+                        <tr key={entry.id} className={`hover:bg-gray-50 ${entry.isBaseline ? 'bg-blue-50' : ''}`}>
                           <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                            {formatDate(entry.date)}
+                            <div className="flex items-center space-x-2">
+                              <span>{formatDate(entry.date)}</span>
+                              {entry.isBaseline && (
+                                <span className="px-2 py-0.5 bg-blue-600 text-white text-xs font-semibold rounded-full">
+                                  Baseline
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-600">
                             {entry.bodyWeight ? `${entry.bodyWeight}` : '-'}

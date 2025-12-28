@@ -161,6 +161,10 @@ export default function ClientProfilePage() {
   const [scoringThresholds, setScoringThresholds] = useState<ScoringThresholds>(getDefaultThresholds('lifestyle'));
   const [progressTrafficLight, setProgressTrafficLight] = useState<TrafficLightStatus>('orange');
   const [checkInTab, setCheckInTab] = useState<'all' | 'completed'>('all');
+  const [activeTab, setActiveTab] = useState<'overview' | 'progress' | 'checkins' | 'history'>('overview');
+  const [questionProgressExpanded, setQuestionProgressExpanded] = useState(false);
+  const [imagesExpanded, setImagesExpanded] = useState(false);
+  const [measurementsExpanded, setMeasurementsExpanded] = useState(false);
 
   // Debug forms state changes
   useEffect(() => {
@@ -379,7 +383,7 @@ export default function ClientProfilePage() {
     fetchProgressImages();
   }, [params.id]);
 
-  // Fetch onboarding data
+  // Fetch onboarding report data
   useEffect(() => {
     const fetchOnboardingData = async () => {
       const clientId = params.id as string;
@@ -387,13 +391,13 @@ export default function ClientProfilePage() {
 
       setLoadingOnboarding(true);
       try {
-        const response = await fetch(`/api/client-onboarding/data?clientId=${clientId}`);
+        const response = await fetch(`/api/client-portal/onboarding/report?clientId=${clientId}`);
         const data = await response.json();
         if (data.success) {
           setOnboardingData(data.data);
         }
       } catch (error) {
-        console.error('Error fetching onboarding data:', error);
+        console.error('Error fetching onboarding report:', error);
       } finally {
         setLoadingOnboarding(false);
       }
@@ -1457,10 +1461,59 @@ export default function ClientProfilePage() {
             </div>
           </div>
 
+          {/* Tab Navigation */}
+          <div className="mb-6 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="flex border-b border-gray-200">
+              <button
+                onClick={() => setActiveTab('overview')}
+                className={`flex-1 px-6 py-4 text-sm font-semibold transition-all ${
+                  activeTab === 'overview'
+                    ? 'text-orange-600 border-b-2 border-orange-600 bg-orange-50/50'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                }`}
+              >
+                Overview
+              </button>
+              <button
+                onClick={() => setActiveTab('progress')}
+                className={`flex-1 px-6 py-4 text-sm font-semibold transition-all ${
+                  activeTab === 'progress'
+                    ? 'text-orange-600 border-b-2 border-orange-600 bg-orange-50/50'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                }`}
+              >
+                Progress
+              </button>
+              <button
+                onClick={() => setActiveTab('checkins')}
+                className={`flex-1 px-6 py-4 text-sm font-semibold transition-all ${
+                  activeTab === 'checkins'
+                    ? 'text-orange-600 border-b-2 border-orange-600 bg-orange-50/50'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                }`}
+              >
+                Check-ins
+              </button>
+              <button
+                onClick={() => setActiveTab('history')}
+                className={`flex-1 px-6 py-4 text-sm font-semibold transition-all ${
+                  activeTab === 'history'
+                    ? 'text-orange-600 border-b-2 border-orange-600 bg-orange-50/50'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                }`}
+              >
+                History
+              </button>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             {/* Main Content */}
             <div className="lg:col-span-3 space-y-6">
-              {/* Compact Overview & Progress Combined */}
+              {/* OVERVIEW TAB */}
+              {activeTab === 'overview' && (
+                <div className="space-y-6">
+                  {/* Compact Overview & Progress Combined */}
               <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
                 <div className="p-5">
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -1528,16 +1581,247 @@ export default function ClientProfilePage() {
                 </div>
               </div>
 
+              {/* Quick Insights Panel */}
+              <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-6 py-4 border-b-2 border-blue-200">
+                  <h2 className="text-xl font-bold text-gray-900">Quick Insights</h2>
+                  <p className="text-sm text-gray-600 mt-1">Action items and key information at a glance</p>
+                </div>
+                <div className="p-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Pending Check-ins */}
+                    {(() => {
+                      const pendingCheckIns = allocatedCheckIns.filter(ci => ci.status === 'pending' || ci.status === 'completed' && !ci.reviewed);
+                      const overdueCheckIns = allocatedCheckIns.filter(ci => {
+                        if (ci.status !== 'pending') return false;
+                        const dueDate = ci.dueDate?.toDate ? ci.dueDate.toDate() : new Date(ci.dueDate);
+                        return dueDate < new Date();
+                      });
+                      return (
+                        <>
+                          {pendingCheckIns.length > 0 && (
+                            <div className="flex items-start space-x-3 p-4 bg-orange-50 rounded-xl border border-orange-200">
+                              <div className="w-10 h-10 bg-orange-500 rounded-lg flex items-center justify-center flex-shrink-0">
+                                <span className="text-white font-bold text-sm">{pendingCheckIns.length}</span>
+                              </div>
+                              <div className="flex-1">
+                                <p className="font-semibold text-gray-900 text-sm">Check-ins Pending Review</p>
+                                <p className="text-xs text-gray-600 mt-1">{pendingCheckIns.length} check-in{pendingCheckIns.length !== 1 ? 's' : ''} need your attention</p>
+                                <button
+                                  onClick={() => setActiveTab('checkins')}
+                                  className="text-xs text-orange-600 hover:text-orange-700 font-medium mt-2"
+                                >
+                                  Review now →
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                          {overdueCheckIns.length > 0 && (
+                            <div className="flex items-start space-x-3 p-4 bg-red-50 rounded-xl border border-red-200">
+                              <div className="w-10 h-10 bg-red-500 rounded-lg flex items-center justify-center flex-shrink-0">
+                                <span className="text-white font-bold text-sm">{overdueCheckIns.length}</span>
+                              </div>
+                              <div className="flex-1">
+                                <p className="font-semibold text-gray-900 text-sm">Overdue Check-ins</p>
+                                <p className="text-xs text-gray-600 mt-1">{overdueCheckIns.length} check-in{overdueCheckIns.length !== 1 ? 's' : ''} past due date</p>
+                                <button
+                                  onClick={() => setActiveTab('checkins')}
+                                  className="text-xs text-red-600 hover:text-red-700 font-medium mt-2"
+                                >
+                                  View overdue →
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
+
+                    {/* Onboarding Status */}
+                    {onboardingData && (
+                      <div className={`flex items-start space-x-3 p-4 rounded-xl border ${
+                        onboardingData.status === 'submitted' 
+                          ? 'bg-green-50 border-green-200' 
+                          : onboardingData.status === 'completed'
+                          ? 'bg-blue-50 border-blue-200'
+                          : 'bg-yellow-50 border-yellow-200'
+                      }`}>
+                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                          onboardingData.status === 'submitted' 
+                            ? 'bg-green-500' 
+                            : onboardingData.status === 'completed'
+                            ? 'bg-blue-500'
+                            : 'bg-yellow-500'
+                        }`}>
+                          <span className="text-white text-lg">
+                            {onboardingData.status === 'submitted' ? '✓' : onboardingData.status === 'completed' ? '✓' : '⏳'}
+                          </span>
+                        </div>
+                        <div className="flex-1">
+                          <p className="font-semibold text-gray-900 text-sm">Onboarding</p>
+                          <p className="text-xs text-gray-600 mt-1">
+                            {onboardingData.status === 'submitted' 
+                              ? 'Submitted - Review responses' 
+                              : onboardingData.status === 'completed'
+                              ? 'Completed'
+                              : `${onboardingData.progress?.completionPercentage || 0}% complete`}
+                          </p>
+                          {onboardingData.status === 'submitted' && (
+                            <Link
+                              href={`/clients/${clientId}/onboarding-report`}
+                              target="_blank"
+                              className="text-xs text-green-600 hover:text-green-700 font-medium mt-2 inline-block"
+                            >
+                              View report →
+                            </Link>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Activity Alert */}
+                    {(() => {
+                      const daysSinceLastCheckIn = client.lastCheckIn 
+                        ? Math.floor((new Date().getTime() - new Date(client.lastCheckIn).getTime()) / (1000 * 60 * 60 * 24))
+                        : null;
+                      const needsAttention = daysSinceLastCheckIn !== null && daysSinceLastCheckIn > 7;
+                      return needsAttention ? (
+                        <div className="flex items-start space-x-3 p-4 bg-amber-50 rounded-xl border border-amber-200">
+                          <div className="w-10 h-10 bg-amber-500 rounded-lg flex items-center justify-center flex-shrink-0">
+                            <span className="text-white text-lg">⚠️</span>
+                          </div>
+                          <div className="flex-1">
+                            <p className="font-semibold text-gray-900 text-sm">Low Activity</p>
+                            <p className="text-xs text-gray-600 mt-1">No check-in in {daysSinceLastCheckIn} days</p>
+                            <button
+                              onClick={openQuickSendModal}
+                              className="text-xs text-amber-600 hover:text-amber-700 font-medium mt-2"
+                            >
+                              Send check-in →
+                            </button>
+                          </div>
+                        </div>
+                      ) : null;
+                    })()}
+
+                    {/* Progress Trend */}
+                    {client.progressScore !== undefined && (
+                      <div className="flex items-start space-x-3 p-4 bg-purple-50 rounded-xl border border-purple-200">
+                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                          progressTrafficLight === 'red' 
+                            ? 'bg-red-500' 
+                            : progressTrafficLight === 'orange'
+                            ? 'bg-orange-500'
+                            : 'bg-green-500'
+                        }`}>
+                          <span className="text-white text-lg">{getTrafficLightIcon(progressTrafficLight)}</span>
+                        </div>
+                        <div className="flex-1">
+                          <p className="font-semibold text-gray-900 text-sm">Progress Status</p>
+                          <p className="text-xs text-gray-600 mt-1">
+                            {getTrafficLightLabel(progressTrafficLight)} - {client.progressScore}%
+                          </p>
+                          <Link
+                            href={`/clients/${clientId}/progress`}
+                            className="text-xs text-purple-600 hover:text-purple-700 font-medium mt-2 inline-block"
+                          >
+                            View details →
+                          </Link>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Onboarding Summary - Compact */}
+              {onboardingData && (
+                <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+                  <div className="bg-green-50 px-6 py-4 border-b-2 border-green-200">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h2 className="text-xl font-bold text-gray-900">Onboarding Questionnaire</h2>
+                        <p className="text-xs text-gray-600 mt-1">
+                          {onboardingData.submittedAt 
+                            ? `Submitted ${new Date(onboardingData.submittedAt).toLocaleDateString()}`
+                            : 'In progress'}
+                        </p>
+                      </div>
+                      {onboardingData.status === 'submitted' && (
+                        <span className="px-2 py-1 bg-green-600 text-white rounded-full text-xs font-medium">
+                          Submitted
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="p-6">
+                    {onboardingData.sections && onboardingData.sections.length > 0 ? (
+                      <div className="space-y-3">
+                        {onboardingData.sections.slice(0, 3).map((section: any) => (
+                          <div key={section.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                            <div className="flex items-center space-x-3">
+                              <span className="text-xl">{section.icon}</span>
+                              <div>
+                                <p className="text-sm font-semibold text-gray-900">
+                                  Section {section.id}: {section.name}
+                                </p>
+                                <p className="text-xs text-gray-600">
+                                  {section.questions.filter((q: any) => q.answered).length} / {section.questions.length} answered
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                        {onboardingData.sections.length > 3 && (
+                          <p className="text-xs text-gray-500 text-center pt-2">
+                            + {onboardingData.sections.length - 3} more sections
+                          </p>
+                        )}
+                        <Link
+                          href={`/clients/${clientId}/onboarding-report`}
+                          target="_blank"
+                          className="w-full mt-4 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-xl text-sm font-medium text-center transition-all duration-200 shadow-sm block"
+                        >
+                          View Full Report →
+                        </Link>
+                      </div>
+                    ) : (
+                      <div className="text-center py-4 text-gray-500">
+                        <p className="text-sm">No onboarding data available yet.</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+                </div>
+              )}
+
+              {/* PROGRESS TAB */}
+              {activeTab === 'progress' && (
+                <div className="space-y-6">
               {/* Question Progress Grid */}
               {questionProgress.length > 0 && (
                 <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
                   <div className="bg-orange-50 px-8 py-6 border-b-2 border-orange-200">
-                    <h2 className="text-2xl font-bold text-gray-900">Question Progress Over Time</h2>
-                    <p className="text-sm text-gray-600 mt-1">Track how each question improves week by week</p>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h2 className="text-2xl font-bold text-gray-900">Question Progress Over Time</h2>
+                        <p className="text-sm text-gray-600 mt-1">Track how each question improves week by week</p>
+                      </div>
+                      <button
+                        onClick={() => setQuestionProgressExpanded(!questionProgressExpanded)}
+                        className="px-4 py-2 bg-white hover:bg-gray-50 text-gray-700 rounded-xl text-sm font-medium transition-all border border-gray-200"
+                      >
+                        {questionProgressExpanded ? 'Collapse' : 'Expand'}
+                      </button>
+                    </div>
                   </div>
                   
-                  {/* Legend */}
-                  <div className="flex items-center gap-3 px-6 py-3 bg-gray-50/50 border-b border-gray-100">
+                  {questionProgressExpanded && (
+                    <>
+                      {/* Legend */}
+                      <div className="flex items-center gap-3 px-6 py-3 bg-gray-50/50 border-b border-gray-100">
                     <div className="flex items-center gap-1">
                       <div className="w-2.5 h-2.5 rounded-full bg-green-500"></div>
                       <span className="text-[10px] text-gray-600 font-medium">Good (7-10)</span>
@@ -1625,11 +1909,14 @@ export default function ClientProfilePage() {
                       </table>
                     </div>
                   )}
+                    </>
+                  )}
                 </div>
               )}
 
               {/* Progress Images */}
-              <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+              {activeTab === 'progress' && (
+                <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
                 <div className="bg-orange-50 px-8 py-6 border-b-2 border-orange-200">
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="text-2xl font-bold text-gray-900">Progress Images</h2>
@@ -1993,9 +2280,10 @@ export default function ClientProfilePage() {
                   )}
                 </div>
               </div>
+              )}
 
               {/* Measurement History */}
-              {(measurementHistory.length > 0 || allMeasurementsData.length > 0) && (
+              {activeTab === 'progress' && (measurementHistory.length > 0 || allMeasurementsData.length > 0) && (
                 <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
                   <div className="bg-orange-50 px-8 py-6 border-b-2 border-orange-200">
                     <h2 className="text-2xl font-bold text-gray-900">Measurement History</h2>
@@ -2407,7 +2695,7 @@ export default function ClientProfilePage() {
               )}
 
               {/* Notes */}
-              {client.notes && (
+              {activeTab === 'progress' && client.notes && (
                 <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
                   <div className="bg-gradient-to-r from-yellow-50 to-amber-50 px-8 py-6 border-b border-gray-100">
                     <h2 className="text-2xl font-bold text-gray-900">Notes</h2>
@@ -2417,7 +2705,12 @@ export default function ClientProfilePage() {
                   </div>
                 </div>
               )}
+                </div>
+              )}
 
+              {/* CHECK-INS TAB */}
+              {activeTab === 'checkins' && (
+                <div className="space-y-6">
               {/* Modern Check-ins Overview */}
               <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
                 <div className="bg-orange-50 px-8 py-6 border-b-2 border-orange-200">
@@ -2878,6 +3171,97 @@ export default function ClientProfilePage() {
                   )}
                 </div>
               </div>
+                </div>
+              )}
+
+              {/* HISTORY TAB */}
+              {activeTab === 'history' && (
+                <div className="space-y-6">
+                  <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                    <div className="bg-orange-50 px-8 py-6 border-b-2 border-orange-200">
+                      <h2 className="text-2xl font-bold text-gray-900">Activity Timeline</h2>
+                      <p className="text-sm text-gray-600 mt-1">Complete history of client interactions and progress</p>
+                    </div>
+                    <div className="p-8">
+                      <div className="space-y-6">
+                        {/* Completed Check-ins Timeline */}
+                        {allocatedCheckIns.filter(c => c.status === 'completed').length > 0 && (
+                          <div>
+                            <h3 className="text-lg font-semibold text-gray-900 mb-4">Completed Check-ins</h3>
+                            <div className="space-y-3">
+                              {allocatedCheckIns
+                                .filter(c => c.status === 'completed')
+                                .sort((a, b) => {
+                                  const dateA = a.completedAt?.toDate ? a.completedAt.toDate() : new Date(a.completedAt);
+                                  const dateB = b.completedAt?.toDate ? b.completedAt.toDate() : new Date(b.completedAt);
+                                  return dateB.getTime() - dateA.getTime();
+                                })
+                                .slice(0, 10)
+                                .map((checkIn) => (
+                                  <div key={checkIn.id} className="flex items-start space-x-4 p-4 bg-gray-50 rounded-xl border border-gray-200">
+                                    <div className="w-2 h-2 bg-green-500 rounded-full mt-2"></div>
+                                    <div className="flex-1">
+                                      <p className="font-semibold text-gray-900">{checkIn.formTitle || 'Check-in'}</p>
+                                      <p className="text-sm text-gray-600">
+                                        Completed {checkIn.completedAt?.toDate ? formatDate(checkIn.completedAt.toDate()) : formatDate(checkIn.completedAt)}
+                                      </p>
+                                      {checkIn.score !== undefined && (
+                                        <p className="text-xs text-gray-500 mt-1">Score: {checkIn.score}%</p>
+                                      )}
+                                    </div>
+                                    {checkIn.responseId && (
+                                      <Link
+                                        href={`/responses/${checkIn.responseId}`}
+                                        className="text-orange-600 hover:text-orange-700 text-sm font-medium"
+                                      >
+                                        View →
+                                      </Link>
+                                    )}
+                                  </div>
+                                ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Measurement History Timeline */}
+                        {measurementHistory.length > 0 && (
+                          <div>
+                            <h3 className="text-lg font-semibold text-gray-900 mb-4">Measurement Entries</h3>
+                            <div className="space-y-3">
+                              {measurementHistory.slice(0, 10).map((entry) => (
+                                <div key={entry.id} className="flex items-start space-x-4 p-4 bg-gray-50 rounded-xl border border-gray-200">
+                                  <div className="w-2 h-2 bg-blue-500 rounded-full mt-2"></div>
+                                  <div className="flex-1">
+                                    <p className="font-semibold text-gray-900">Measurement Recorded</p>
+                                    <p className="text-sm text-gray-600">
+                                      {formatDate(entry.date)}
+                                    </p>
+                                    {entry.bodyWeight && (
+                                      <p className="text-xs text-gray-500 mt-1">Weight: {entry.bodyWeight} kg</p>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {allocatedCheckIns.filter(c => c.status === 'completed').length === 0 && measurementHistory.length === 0 && (
+                          <div className="text-center py-12">
+                            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                              <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                            </div>
+                            <p className="text-gray-500 text-lg mb-2">No activity history yet</p>
+                            <p className="text-gray-400 text-sm">Client activity will appear here</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Compact Sidebar */}
@@ -2912,13 +3296,17 @@ export default function ClientProfilePage() {
                   >
                     Form Responses
                   </Link>
+                  {onboardingData && (
+                    <Link
+                      href={`/clients/${clientId}/onboarding-report`}
+                      target="_blank"
+                      className="w-full bg-orange-500 hover:bg-orange-600 text-white px-3 py-2 rounded-2xl text-sm font-medium text-center transition-all duration-200 shadow-sm block"
+                    >
+                      View Onboarding
+                    </Link>
+                  )}
                   <button
-                    onClick={() => {
-                      const checkInsSection = document.getElementById('check-ins-section');
-                      if (checkInsSection) {
-                        checkInsSection.scrollIntoView({ behavior: 'smooth' });
-                      }
-                    }}
+                    onClick={() => setActiveTab('checkins')}
                     className="w-full bg-orange-500 hover:bg-orange-600 text-white px-3 py-2 rounded-2xl text-sm font-medium transition-all duration-200 shadow-sm"
                   >
                     Manage Check-ins

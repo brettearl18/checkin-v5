@@ -37,7 +37,8 @@ export default function OnboardingQuestionnairePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [onboardingStatus, setOnboardingStatus] = useState<'not_started' | 'in_progress' | 'completed' | 'skipped'>('not_started');
+  const [submitting, setSubmitting] = useState(false);
+  const [onboardingStatus, setOnboardingStatus] = useState<'not_started' | 'in_progress' | 'completed' | 'skipped' | 'submitted'>('not_started');
 
   useEffect(() => {
     if (userProfile?.email) {
@@ -180,6 +181,53 @@ export default function OnboardingQuestionnairePage() {
       await handleSectionSave();
     }
     setCurrentSection(section);
+  };
+
+  const handleSubmitToCoach = async () => {
+    if (!clientId || !coachId) {
+      alert('Unable to submit: Missing client or coach information.');
+      return;
+    }
+
+    // First, save the current section
+    await handleSectionSave();
+
+    // Check if all sections are complete
+    if (progress.completedSections.length < 10) {
+      const incompleteSections = 10 - progress.completedSections.length;
+      if (!confirm(`You have ${incompleteSections} incomplete section(s). Do you want to submit anyway? Your coach will see what you've completed so far.`)) {
+        return;
+      }
+    }
+
+    setSubmitting(true);
+    try {
+      const response = await fetch('/api/client-portal/onboarding/submit', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          clientId,
+          coachId,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setOnboardingStatus('submitted');
+        alert('Onboarding submitted successfully! Your coach has been notified and will review your responses.');
+        router.push('/client-portal');
+      } else {
+        alert(data.message || 'Failed to submit onboarding. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error submitting onboarding:', error);
+      alert('An error occurred while submitting. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const renderQuestion = (question: OnboardingQuestion) => {
@@ -543,13 +591,14 @@ export default function OnboardingQuestionnairePage() {
                     Next Section
                   </button>
                 )}
-                {currentSection === 10 && progress.completedSections.length === 10 && (
-                  <Link
-                    href="/client-portal"
-                    className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-medium transition-colors"
+                {currentSection === 10 && (
+                  <button
+                    onClick={handleSubmitToCoach}
+                    disabled={submitting || saving}
+                    className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Complete & Go to Dashboard
-                  </Link>
+                    {submitting ? 'Submitting...' : 'Submit to Coach'}
+                  </button>
                 )}
               </div>
             </div>

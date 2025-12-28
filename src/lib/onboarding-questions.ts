@@ -742,3 +742,5 @@ export function getQuestionsCountBySection(section: number): number {
   return ONBOARDING_QUESTIONS.filter(q => q.section === section).length;
 }
 
+
+
