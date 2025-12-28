@@ -213,6 +213,8 @@ export default function ClientPortalPage() {
     hasBeforePhotos: false,
   });
   const [loadingTodos, setLoadingTodos] = useState(true);
+  const [onboardingStatus, setOnboardingStatus] = useState<'not_started' | 'in_progress' | 'completed' | 'skipped'>('not_started');
+  const [onboardingProgress, setOnboardingProgress] = useState(0);
 
   useEffect(() => {
     if (userProfile?.email) {
@@ -323,6 +325,8 @@ export default function ClientPortalPage() {
             setClientId(client.id);
             // Fetch onboarding to-do status
             fetchOnboardingTodos(client.id);
+            // Fetch onboarding questionnaire status
+            fetchOnboardingQuestionnaireStatus(client.id);
           }
           
           // Calculate average score from recent responses if available
@@ -479,6 +483,22 @@ export default function ClientPortalPage() {
       console.error('Error fetching onboarding todos:', error);
     } finally {
       setLoadingTodos(false);
+    }
+  };
+
+  const fetchOnboardingQuestionnaireStatus = async (id: string) => {
+    try {
+      const response = await fetch(`/api/client-portal/onboarding?clientId=${id}`);
+      const data = await response.json();
+      
+      if (data.success) {
+        setOnboardingStatus(data.onboardingStatus || 'not_started');
+        if (data.onboardingData?.progress) {
+          setOnboardingProgress(data.onboardingData.progress.completionPercentage || 0);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching onboarding questionnaire status:', error);
     }
   };
 
@@ -724,6 +744,46 @@ export default function ClientPortalPage() {
               <h1 className="text-xl font-bold text-gray-900">Welcome Back!</h1>
               <p className="text-gray-600 text-xs mt-1">Track your progress and stay connected</p>
             </div>
+
+            {/* Onboarding Questionnaire Banner - Show if not completed */}
+            {onboardingStatus !== 'completed' && (
+              <div className="bg-gradient-to-r from-[#daa450] to-[#c89540] rounded-3xl shadow-lg mb-6 overflow-hidden border border-[#daa450]/20">
+                <div className="px-6 py-6">
+                  <div className="flex items-center justify-between flex-wrap gap-4">
+                    <div className="flex items-center gap-4 flex-1 min-w-0">
+                      <div className="w-12 h-12 bg-white bg-opacity-20 rounded-2xl flex items-center justify-center flex-shrink-0">
+                        <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h2 className="text-xl font-bold text-white mb-1">Complete Your Onboarding Questionnaire</h2>
+                        <p className="text-white/90 text-sm">
+                          {onboardingStatus === 'not_started' 
+                            ? 'Help us understand your goals and preferences. This must be completed before you can receive check-ins.'
+                            : `You're ${onboardingProgress}% complete. Finish the questionnaire to unlock check-ins.`
+                          }
+                        </p>
+                        {onboardingProgress > 0 && (
+                          <div className="mt-3 w-full bg-white/20 rounded-full h-2">
+                            <div 
+                              className="bg-white h-2 rounded-full transition-all duration-300"
+                              style={{ width: `${onboardingProgress}%` }}
+                            ></div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <Link
+                      href="/client-portal/onboarding-questionnaire"
+                      className="px-6 py-3 bg-white text-[#daa450] rounded-xl font-semibold hover:bg-gray-50 transition-colors shadow-md flex-shrink-0"
+                    >
+                      {onboardingStatus === 'not_started' ? 'Start Questionnaire' : 'Continue Questionnaire'}
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Onboarding To-Do List - Show if any tasks are incomplete */}
             {!loadingTodos && (!onboardingTodos.hasWeight || !onboardingTodos.hasMeasurements || !onboardingTodos.hasBeforePhotos) && (

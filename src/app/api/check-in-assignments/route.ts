@@ -18,8 +18,30 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Fetch form to get the title
+    // Fetch form to get the title and validate client can receive check-ins
     const db = getDb();
+    
+    // Check if client has completed onboarding
+    try {
+      const clientDoc = await db.collection('clients').doc(clientId).get();
+      if (clientDoc.exists) {
+        const clientData = clientDoc.data();
+        const canStartCheckIns = clientData?.canStartCheckIns;
+        const onboardingStatus = clientData?.onboardingStatus;
+        
+        if (!canStartCheckIns || onboardingStatus !== 'completed') {
+          return NextResponse.json({
+            success: false,
+            message: 'Client must complete the onboarding questionnaire before receiving check-in assignments. Please complete onboarding first.',
+            onboardingStatus: onboardingStatus || 'not_started'
+          }, { status: 400 });
+        }
+      }
+    } catch (error) {
+      console.error('Error checking client onboarding status:', error);
+      // Continue - don't block if we can't check
+    }
+    
     let formTitle = 'Unknown Form';
     try {
       const formDoc = await db.collection('forms').doc(formId).get();
