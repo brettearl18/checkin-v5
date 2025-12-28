@@ -90,7 +90,7 @@ function SortableQuestionItem({
     };
     return labels[type] || type;
   };
-  const getCategoryLabel = (category: string) => {
+  const getCategoryLabel = (category: string | undefined) => {
     if (!category) return 'Uncategorized';
     return category
       .split(' ')
@@ -355,7 +355,9 @@ export default function EditFormPage() {
     return typeMap[type] || type;
   };
 
-  const getCategoryLabel = (category: string) => {
+  const getCategoryLabel = (category: string | undefined) => {
+    if (!category) return 'Uncategorized';
+    
     const categoryMap: { [key: string]: string } = {
       'general': 'General',
       'mental_health': 'Mental Health',
@@ -375,13 +377,14 @@ export default function EditFormPage() {
       'Self-Care': 'Self-Care',
       'Stress Management': 'Stress Management'
     };
-    if (!categoryMap[category]) {
-      return category
-        .split(' ')
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-        .join(' ');
+    if (categoryMap[category]) {
+      return categoryMap[category];
     }
-    return categoryMap[category];
+    // Safe split - category is guaranteed to be a string at this point
+    return category
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
   };
 
   // Filter questions

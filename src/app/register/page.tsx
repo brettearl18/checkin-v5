@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
@@ -11,14 +11,14 @@ interface RegistrationForm {
   firstName: string;
   lastName: string;
   role: 'coach' | 'client';
-  coachShortUID?: string;
+  coachId?: string;
 }
 
-interface CoachInfo {
+interface Coach {
+  id: string;
   firstName: string;
   lastName: string;
   email: string;
-  shortUID: string;
 }
 
 export default function RegisterPage() {
@@ -34,8 +34,29 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [coachInfo, setCoachInfo] = useState<CoachInfo | null>(null);
-  const [verifyingCoach, setVerifyingCoach] = useState(false);
+  const [coaches, setCoaches] = useState<Coach[]>([]);
+  const [loadingCoaches, setLoadingCoaches] = useState(false);
+
+  // Fetch coaches when role is 'client'
+  useEffect(() => {
+    const fetchCoaches = async () => {
+      if (formData.role === 'client') {
+        setLoadingCoaches(true);
+        try {
+          const response = await fetch('/api/coaches/list');
+          const data = await response.json();
+          if (data.success && data.coaches) {
+            setCoaches(data.coaches);
+          }
+        } catch (error) {
+          console.error('Failed to fetch coaches:', error);
+        } finally {
+          setLoadingCoaches(false);
+        }
+      }
+    };
+    fetchCoaches();
+  }, [formData.role]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -43,40 +64,6 @@ export default function RegisterPage() {
       ...prev,
       [name]: value
     }));
-    
-    // Clear coach info when coach code changes
-    if (name === 'coachShortUID') {
-      setCoachInfo(null);
-    }
-  };
-
-  const verifyCoach = async () => {
-    if (!formData.coachShortUID || formData.coachShortUID.length !== 6) {
-      setError('Please enter a valid 6-character coach code');
-      return;
-    }
-
-    setVerifyingCoach(true);
-    setError('');
-    setSuccess(''); // Clear any previous success messages
-
-    try {
-      const response = await fetch(`/api/coaches/lookup?shortUID=${formData.coachShortUID}`);
-      const data = await response.json();
-
-      if (data.success) {
-        setCoachInfo(data.coach);
-        setSuccess(`Coach verified: ${data.coach.firstName} ${data.coach.lastName}`);
-      } else {
-        setError(data.message || 'Coach not found');
-        setCoachInfo(null);
-      }
-    } catch (error) {
-      setError('Failed to verify coach. Please try again.');
-      setCoachInfo(null);
-    } finally {
-      setVerifyingCoach(false);
-    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -217,49 +204,27 @@ export default function RegisterPage() {
 
             {formData.role === 'client' && (
               <div>
-                <label htmlFor="coachShortUID" className="block text-sm font-medium text-gray-700">
-                  Coach Code (Optional)
+                <label htmlFor="coachId" className="block text-sm font-medium text-gray-700">
+                  Select Your Coach (Optional)
                 </label>
-                <div className="mt-1 flex space-x-2">
-                  <input
-                    id="coachShortUID"
-                    name="coachShortUID"
-                    type="text"
-                    value={formData.coachShortUID || ''}
-                    onChange={handleInputChange}
-                    placeholder="Enter your coach's 6-digit code (e.g., ABC123)"
-                    className="flex-1 border border-gray-300 rounded-md px-3 py-2 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    maxLength={6}
-                  />
-                  <button
-                    type="button"
-                    onClick={verifyCoach}
-                    disabled={!formData.coachShortUID || formData.coachShortUID.length !== 6 || verifyingCoach}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  >
-                    {verifyingCoach ? 'Verifying...' : 'Verify'}
-                  </button>
-                </div>
+                <select
+                  id="coachId"
+                  name="coachId"
+                  value={formData.coachId || ''}
+                  onChange={handleInputChange}
+                  disabled={loadingCoaches}
+                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                >
+                  <option value="">-- Select a coach --</option>
+                  {coaches.map((coach) => (
+                    <option key={coach.id} value={coach.id}>
+                      {coach.firstName} {coach.lastName} ({coach.email})
+                    </option>
+                  ))}
+                </select>
                 <p className="mt-1 text-xs text-gray-500">
-                  Ask your coach for their unique 6-digit code to link your account
+                  {loadingCoaches ? 'Loading coaches...' : 'Select your coach to link your account (optional)'}
                 </p>
-                
-                {/* Coach Verification Result */}
-                {coachInfo && (
-                  <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-md">
-                    <div className="flex items-center space-x-2">
-                      <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <div>
-                        <p className="text-sm font-medium text-green-800">
-                          Coach Verified: {coachInfo.firstName} {coachInfo.lastName}
-                        </p>
-                        <p className="text-xs text-green-600">{coachInfo.email}</p>
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
             )}
 

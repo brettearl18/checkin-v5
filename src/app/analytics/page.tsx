@@ -107,6 +107,10 @@ export default function AnalyticsPage() {
       overallProgress: 0,
       achievementRate: 0,
       trendingGoals: []
+    },
+    areasOfConcern: {
+      groupLevel: [],
+      individual: []
     }
   });
 
@@ -436,6 +440,109 @@ export default function AnalyticsPage() {
                 </div>
               </div>
             </div>
+
+            {/* Areas of Concern */}
+            {(analyticsData.areasOfConcern?.groupLevel?.length > 0 || analyticsData.areasOfConcern?.individual?.length > 0) && (
+              <div className="mt-8 space-y-6">
+                {/* Group Level Concerns */}
+                {analyticsData.areasOfConcern?.groupLevel && analyticsData.areasOfConcern.groupLevel.length > 0 && (
+                  <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                    <div className="bg-orange-50 px-8 py-6 border-b-2 border-orange-200">
+                      <h2 className="text-2xl font-bold text-gray-900">Group-Level Areas of Concern</h2>
+                      <p className="text-gray-600 mt-1 text-sm">Issues affecting multiple clients that may need systemic attention</p>
+                    </div>
+                    <div className="p-8">
+                      <div className="space-y-4">
+                        {analyticsData.areasOfConcern.groupLevel.map((concern: any, index: number) => (
+                          <div key={index} className={`border-l-4 rounded-r-xl p-5 ${
+                            concern.severity === 'high' ? 'border-red-500 bg-red-50' :
+                            concern.severity === 'medium' ? 'border-orange-500 bg-orange-50' :
+                            'border-yellow-500 bg-yellow-50'
+                          }`}>
+                            <div className="flex items-start justify-between mb-3">
+                              <div className="flex-1">
+                                <div className="flex items-center space-x-3 mb-2">
+                                  <h3 className="text-lg font-bold text-gray-900">{concern.category}</h3>
+                                  <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                                    concern.severity === 'high' ? 'bg-red-200 text-red-800' :
+                                    concern.severity === 'medium' ? 'bg-orange-200 text-orange-800' :
+                                    'bg-yellow-200 text-yellow-800'
+                                  }`}>
+                                    {concern.severity.toUpperCase()}
+                                  </span>
+                                </div>
+                                <p className="text-gray-700 mb-2">{concern.description}</p>
+                                <p className="text-sm text-gray-600 italic">💡 {concern.recommendation}</p>
+                              </div>
+                              <div className="ml-4 text-right">
+                                <div className="text-2xl font-bold text-gray-900">{concern.affectedClients}</div>
+                                <div className="text-xs text-gray-600">Affected</div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Individual Client Concerns */}
+                {analyticsData.areasOfConcern?.individual && analyticsData.areasOfConcern.individual.length > 0 && (
+                  <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                    <div className="bg-orange-50 px-8 py-6 border-b-2 border-orange-200">
+                      <h2 className="text-2xl font-bold text-gray-900">Individual Client Concerns</h2>
+                      <p className="text-gray-600 mt-1 text-sm">Clients who may need individual attention</p>
+                    </div>
+                    <div className="p-8">
+                      <div className="space-y-6">
+                        {analyticsData.areasOfConcern.individual.map((client: any) => (
+                          <div key={client.clientId} className="border border-gray-200 rounded-2xl p-6 bg-gray-50 hover:shadow-lg transition-all duration-200">
+                            <div className="flex items-center justify-between mb-4">
+                              <div>
+                                <h3 className="text-xl font-bold text-gray-900">{client.clientName}</h3>
+                                <p className="text-sm text-gray-600">Client ID: {client.clientId}</p>
+                              </div>
+                              <Link
+                                href={`/clients/${client.clientId}`}
+                                className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-2xl text-sm font-medium transition-all duration-200 shadow-sm"
+                              >
+                                View Profile
+                              </Link>
+                            </div>
+                            <div className="space-y-3">
+                              {client.concerns.map((concern: any, concernIndex: number) => (
+                                <div key={concernIndex} className={`border-l-4 rounded-r-lg p-4 bg-white ${
+                                  concern.severity === 'high' ? 'border-red-500' :
+                                  concern.severity === 'medium' ? 'border-orange-500' :
+                                  'border-yellow-500'
+                                }`}>
+                                  <div className="flex items-start justify-between mb-2">
+                                    <div className="flex-1">
+                                      <div className="flex items-center space-x-2 mb-1">
+                                        <span className="font-semibold text-gray-900">{concern.category}</span>
+                                        <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                                          concern.severity === 'high' ? 'bg-red-100 text-red-700' :
+                                          concern.severity === 'medium' ? 'bg-orange-100 text-orange-700' :
+                                          'bg-yellow-100 text-yellow-700'
+                                        }`}>
+                                          {concern.severity.toUpperCase()}
+                                        </span>
+                                      </div>
+                                      <p className="text-sm text-gray-700 mb-2">{concern.description}</p>
+                                      <p className="text-xs text-gray-600 italic">💡 {concern.recommendation}</p>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>

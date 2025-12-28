@@ -269,7 +269,7 @@ async function createStandardForms(coachId: string, coachName: string, db: any) 
 export async function POST(request: NextRequest) {
   const db = getDb();
   try {
-    const { email, password, firstName, lastName, role, coachShortUID } = await request.json();
+    const { email, password, firstName, lastName, role, coachId: providedCoachId } = await request.json();
 
     // Validate required fields
     if (!email || !password || !firstName || !lastName || !role) {
@@ -287,28 +287,22 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // If registering as a client, look up coach by short UID
-    let coachId = null;
-    if (role === 'client' && coachShortUID) {
+    // If registering as a client, validate coach ID if provided
+    let coachId = providedCoachId || null;
+    if (role === 'client' && coachId) {
       try {
-        const coachesSnapshot = await db.collection('coaches')
-          .where('shortUID', '==', coachShortUID)
-          .limit(1)
-          .get();
-
-        if (coachesSnapshot.empty) {
+        const coachDoc = await db.collection('coaches').doc(coachId).get();
+        if (!coachDoc.exists) {
           return NextResponse.json({
             success: false,
-            message: 'Coach not found with the provided short UID'
+            message: 'Coach not found with the provided ID'
           }, { status: 404 });
         }
-
-        coachId = coachesSnapshot.docs[0].id;
       } catch (error) {
-        console.error('Error looking up coach:', error);
+        console.error('Error validating coach:', error);
         return NextResponse.json({
           success: false,
-          message: 'Failed to look up coach'
+          message: 'Failed to validate coach'
         }, { status: 500 });
       }
     }
