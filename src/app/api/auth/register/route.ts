@@ -365,6 +365,8 @@ export async function POST(request: NextRequest) {
         email,
         phone: '',
         status: 'pending', // Set to pending if no coach assigned
+        onboardingStatus: 'not_started', // Initialize onboarding status
+        canStartCheckIns: false, // Cannot start check-ins until onboarding is complete
         profile: {
           goals: [],
           preferences: {
