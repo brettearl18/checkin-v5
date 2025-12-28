@@ -57,7 +57,7 @@ export default function CheckInsPage() {
   const [selectedClient, setSelectedClient] = useState('all');
   const [selectedForm, setSelectedForm] = useState('all');
   const [dateRange, setDateRange] = useState('all');
-  const [activeTab, setActiveTab] = useState<'review' | 'all'>('review');
+  const [activeTab, setActiveTab] = useState<'review' | 'all' | 'replied'>('review');
   const [metrics, setMetrics] = useState({
     totalCheckIns: 0,
     highPerformers: 0,
@@ -433,6 +433,16 @@ export default function CheckInsPage() {
                         To Review ({checkInsToReview.filter(ci => !ci.coachResponded).length})
                       </button>
                       <button
+                        onClick={() => setActiveTab('replied')}
+                        className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
+                          activeTab === 'replied'
+                            ? 'bg-[#007AFF] text-white shadow-sm'
+                            : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                        }`}
+                      >
+                        Replied ({checkInsToReview.filter(ci => ci.coachResponded).length})
+                      </button>
+                      <button
                         onClick={() => setActiveTab('all')}
                         className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
                           activeTab === 'all'
@@ -536,6 +546,76 @@ export default function CheckInsPage() {
                                     onClick={(e) => e.stopPropagation()}
                                   >
                                     {needsResponse ? 'Respond' : 'View'}
+                                  </Link>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* Replied Tab */}
+                {activeTab === 'replied' && (
+                  <>
+                    {checkInsToReview.filter(ci => ci.coachResponded).length === 0 ? (
+                      <div className="text-center py-12">
+                        <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                          <svg className="w-8 h-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                          </svg>
+                        </div>
+                        <p className="text-gray-700 text-lg mb-4">No replied check-ins</p>
+                        <p className="text-gray-600 text-sm">Check-ins you've replied to will appear here</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {checkInsToReview.filter(ci => ci.coachResponded).map((checkIn) => {
+                          return (
+                            <div
+                              key={checkIn.id}
+                              className="bg-blue-50 border border-blue-200 rounded-2xl p-4 hover:shadow-sm transition-all duration-200 cursor-pointer hover:border-blue-300"
+                              onClick={() => window.location.href = `/responses/${checkIn.id}`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center space-x-3 md:space-x-4 flex-1">
+                                  <div className="w-8 h-8 rounded-full flex items-center justify-center bg-blue-100">
+                                    <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                  </div>
+                                  <div className="flex-1">
+                                    <div className="flex items-center space-x-2">
+                                      <h3 className="text-sm font-semibold text-gray-900">
+                                        {checkIn.clientName}
+                                      </h3>
+                                      <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-800 border border-blue-200">
+                                        Replied
+                                      </span>
+                                    </div>
+                                    <p className="text-gray-600 text-xs">
+                                      {checkIn.formTitle}
+                                    </p>
+                                    <p className="text-[10px] text-gray-700 mt-0.5">
+                                      {formatTimeAgo(checkIn.submittedAt)}
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  <div className="text-right">
+                                    <div className="text-base font-bold text-gray-900">
+                                      {checkIn.score}%
+                                    </div>
+                                    <div className="text-[10px] text-gray-700">Score</div>
+                                  </div>
+                                  <Link
+                                    href={`/responses/${checkIn.id}`}
+                                    className="px-4 py-2 rounded-2xl hover:opacity-90 transition-all duration-200 text-xs font-medium shadow-sm bg-[#007AFF] text-white hover:bg-[#0051D5]"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    View Reply
                                   </Link>
                                 </div>
                               </div>

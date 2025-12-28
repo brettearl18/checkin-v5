@@ -151,6 +151,13 @@ export default function ClientProfilePage() {
   const [deletingCheckIn, setDeletingCheckIn] = useState(false);
   const [updatingCheckIn, setUpdatingCheckIn] = useState(false);
   const [deletingSeries, setDeletingSeries] = useState(false);
+  const [showPauseModal, setShowPauseModal] = useState(false);
+  const [selectedSeriesForPause, setSelectedSeriesForPause] = useState<{formId: string, formTitle: string} | null>(null);
+  const [pauseWeeks, setPauseWeeks] = useState(1);
+  const [pauseResumeDate, setPauseResumeDate] = useState('');
+  const [pauseInputMode, setPauseInputMode] = useState<'weeks' | 'date'>('weeks');
+  const [pausingSeries, setPausingSeries] = useState(false);
+  const [unpausingSeries, setUnpausingSeries] = useState(false);
   const [scoringThresholds, setScoringThresholds] = useState<ScoringThresholds>(getDefaultThresholds('lifestyle'));
   const [progressTrafficLight, setProgressTrafficLight] = useState<TrafficLightStatus>('orange');
   const [checkInTab, setCheckInTab] = useState<'all' | 'completed'>('all');
@@ -871,6 +878,132 @@ export default function ClientProfilePage() {
       alert(`Error deleting ${action} series. Please try again.`);
     } finally {
       setDeletingSeries(false);
+    }
+  };
+
+  const openPauseModal = (formId: string, formTitle: string) => {
+    setSelectedSeriesForPause({ formId, formTitle });
+    setPauseWeeks(1);
+    setPauseResumeDate('');
+    setPauseInputMode('weeks');
+    setShowPauseModal(true);
+  };
+
+  const handleUnpauseSeries = async (formId: string, formTitle: string) => {
+    if (!confirm(`Are you sure you want to unpause the "${formTitle}" check-in series? All check-ins will return to their original due dates.`)) {
+      return;
+    }
+
+    setUnpausingSeries(true);
+    try {
+      if (!userProfile?.uid) {
+        alert('You must be logged in as a coach to unpause check-in series.');
+        setUnpausingSeries(false);
+        return;
+      }
+      
+      const response = await fetch('/api/check-in-assignments/series/unpause', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          clientId: clientId,
+          formId: formId,
+          coachId: userProfile.uid
+        }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        alert(`✅ ${result.message}`);
+        // Refresh check-ins
+        setHasLoadedCheckIns(false);
+        fetchAllocatedCheckIns();
+      } else {
+        const errorData = await response.json();
+        alert(`Failed to unpause series: ${errorData.message}`);
+      }
+    } catch (error) {
+      console.error('Error unpausing series:', error);
+      alert('Error unpausing series. Please try again.');
+    } finally {
+      setUnpausingSeries(false);
+    }
+  };
+
+  const handlePauseSeries = async () => {
+    if (!selectedSeriesForPause || !client) {
+      return;
+    }
+
+    // Calculate pauseWeeks based on input mode
+    let calculatedPauseWeeks = pauseWeeks;
+    if (pauseInputMode === 'date' && pauseResumeDate) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const resumeDate = new Date(pauseResumeDate);
+      resumeDate.setHours(0, 0, 0, 0);
+      
+      if (resumeDate <= today) {
+        alert('Resume date must be in the future.');
+        return;
+      }
+      
+      const daysDiff = Math.ceil((resumeDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      calculatedPauseWeeks = Math.ceil(daysDiff / 7);
+      
+      if (calculatedPauseWeeks < 1) {
+        calculatedPauseWeeks = 1;
+      }
+    }
+
+    if (calculatedPauseWeeks < 1) {
+      alert('Please enter a valid pause duration.');
+      return;
+    }
+
+    setPausingSeries(true);
+    try {
+      if (!userProfile?.uid) {
+        alert('You must be logged in as a coach to pause check-in series.');
+        setPausingSeries(false);
+        return;
+      }
+      
+      const response = await fetch('/api/check-in-assignments/series/pause', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          clientId: clientId,
+          formId: selectedSeriesForPause.formId,
+          pauseWeeks: calculatedPauseWeeks,
+          coachId: userProfile.uid
+        }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        alert(`✅ ${result.message}`);
+        setShowPauseModal(false);
+        setSelectedSeriesForPause(null);
+        setPauseWeeks(1);
+        setPauseResumeDate('');
+        setPauseInputMode('weeks');
+        // Refresh check-ins
+        setHasLoadedCheckIns(false);
+        fetchAllocatedCheckIns();
+      } else {
+        const errorData = await response.json();
+        alert(`Failed to pause series: ${errorData.message}`);
+      }
+    } catch (error) {
+      console.error('Error pausing series:', error);
+      alert('Error pausing series. Please try again.');
+    } finally {
+      setPausingSeries(false);
     }
   };
 
@@ -2473,7 +2606,9 @@ export default function ClientProfilePage() {
                               completedCheckIns: 0,
                               pendingCheckIns: 0,
                               isRecurring: checkIn.isRecurring,
-                              totalWeeks: checkIn.totalWeeks
+                              totalWeeks: checkIn.totalWeeks,
+                              isPaused: false,
+                              pausedUntil: null
                             });
                           }
                           const series = seriesMap.get(checkIn.formId);
@@ -2482,6 +2617,17 @@ export default function ClientProfilePage() {
                             series.completedCheckIns++;
                           } else if (checkIn.status === 'pending') {
                             series.pendingCheckIns++;
+                          }
+                          // Check if series is paused (has pausedUntil date in future)
+                          if (checkIn.pausedUntil) {
+                            const pausedUntilDate = new Date(checkIn.pausedUntil);
+                            const now = new Date();
+                            if (pausedUntilDate > now) {
+                              series.isPaused = true;
+                              if (!series.pausedUntil || pausedUntilDate > new Date(series.pausedUntil)) {
+                                series.pausedUntil = checkIn.pausedUntil;
+                              }
+                            }
                           }
                         });
 
@@ -2509,12 +2655,36 @@ export default function ClientProfilePage() {
                                           {s.totalWeeks} weeks
                                         </span>
                                       )}
+                                      {s.isPaused && s.pausedUntil && (
+                                        <span className="px-2 py-1 text-xs font-medium rounded-full bg-yellow-100 text-yellow-800" title={`Paused until ${new Date(s.pausedUntil).toLocaleDateString()}`}>
+                                          ⏸️ Paused until {new Date(s.pausedUntil).toLocaleDateString()}
+                                        </span>
+                                      )}
                                     </div>
                                   </div>
                                   <div className="flex space-x-2">
+                                    {s.isPaused ? (
+                                      <button
+                                        onClick={() => handleUnpauseSeries(s.formId, s.formTitle)}
+                                        disabled={unpausingSeries || pausingSeries || deletingSeries}
+                                        className="px-3 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                        title="Resume the series early - restore original due dates"
+                                      >
+                                        {unpausingSeries ? 'Unpausing...' : 'Unpause Series'}
+                                      </button>
+                                    ) : (
+                                      <button
+                                        onClick={() => openPauseModal(s.formId, s.formTitle)}
+                                        disabled={pausingSeries || deletingSeries}
+                                        className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                        title="Pause the series for X weeks (e.g., for holidays or injury)"
+                                      >
+                                        {pausingSeries ? 'Pausing...' : 'Pause Series'}
+                                      </button>
+                                    )}
                                     <button
                                       onClick={() => handleDeleteSeries(s.formId, s.formTitle, true)}
-                                      disabled={deletingSeries}
+                                      disabled={deletingSeries || pausingSeries}
                                       className="px-3 py-2 bg-orange-600 hover:bg-orange-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                       title="Delete only pending check-ins, preserve completed history"
                                     >
@@ -2522,7 +2692,7 @@ export default function ClientProfilePage() {
                                     </button>
                                     <button
                                       onClick={() => handleDeleteSeries(s.formId, s.formTitle, false)}
-                                      disabled={deletingSeries}
+                                      disabled={deletingSeries || pausingSeries}
                                       className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                       title="Delete entire series including all history (cannot be undone)"
                                     >
@@ -3041,6 +3211,180 @@ export default function ClientProfilePage() {
                   className="flex-1 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-2xl font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                 >
                   {allocatingCheckIn ? 'Allocating...' : 'Allocate Check-in'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pause Series Modal */}
+      {showPauseModal && selectedSeriesForPause && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Pause Check-in Series
+                  </h3>
+                  {client && (
+                    <p className="text-sm text-gray-600 mt-1">
+                      For: <span className="font-medium text-gray-900">{client.firstName} {client.lastName}</span>
+                    </p>
+                  )}
+                </div>
+                <button
+                  onClick={() => {
+                    setShowPauseModal(false);
+                    setSelectedSeriesForPause(null);
+                    setPauseWeeks(1);
+                    setPauseResumeDate('');
+                    setPauseInputMode('weeks');
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            
+            <div className="px-6 py-4 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-900 mb-2">
+                  Series
+                </label>
+                <p className="text-gray-700 font-medium">{selectedSeriesForPause.formTitle}</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-900 mb-3">
+                  Pause Duration
+                </label>
+                
+                {/* Input Mode Toggle */}
+                <div className="flex space-x-2 mb-3">
+                  <button
+                    type="button"
+                    onClick={() => setPauseInputMode('weeks')}
+                    className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      pauseInputMode === 'weeks'
+                        ? 'bg-orange-500 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    By Weeks
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPauseInputMode('date')}
+                    className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      pauseInputMode === 'date'
+                        ? 'bg-orange-500 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    By Date
+                  </button>
+                </div>
+
+                {/* Weeks Input */}
+                {pauseInputMode === 'weeks' && (
+                  <>
+                    <input
+                      type="number"
+                      min="1"
+                      max="52"
+                      value={pauseWeeks}
+                      onChange={(e) => setPauseWeeks(Math.max(1, parseInt(e.target.value) || 1))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      placeholder="Enter number of weeks"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      All future check-in due dates will be extended by this many weeks.
+                    </p>
+                  </>
+                )}
+
+                {/* Date Input (Calendar) */}
+                {pauseInputMode === 'date' && (
+                  <>
+                    <input
+                      type="date"
+                      value={pauseResumeDate}
+                      onChange={(e) => setPauseResumeDate(e.target.value)}
+                      min={new Date().toISOString().split('T')[0]}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    />
+                    {pauseResumeDate && (() => {
+                      const today = new Date();
+                      today.setHours(0, 0, 0, 0);
+                      const resumeDate = new Date(pauseResumeDate);
+                      resumeDate.setHours(0, 0, 0, 0);
+                      const daysDiff = Math.ceil((resumeDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                      const weeksCalc = Math.ceil(daysDiff / 7);
+                      return (
+                        <p className="text-xs text-gray-600 mt-1 font-medium">
+                          Series will resume on {resumeDate.toLocaleDateString()} ({weeksCalc} week{weeksCalc !== 1 ? 's' : ''})
+                        </p>
+                      );
+                    })()}
+                    <p className="text-xs text-gray-500 mt-1">
+                      Select the date when check-ins should resume. All future check-in due dates will be extended until this date.
+                    </p>
+                  </>
+                )}
+              </div>
+
+              <div className="bg-orange-50 border border-orange-200 rounded-xl p-3">
+                <div className="flex items-start">
+                  <svg className="w-5 h-5 text-orange-600 mt-0.5 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <div className="text-sm text-orange-800">
+                    <p className="font-medium mb-1">What happens when you pause:</p>
+                    <ul className="list-disc list-inside space-y-1 text-xs">
+                      <li>All pending/future check-ins will have their due dates extended</li>
+                      <li>Completed check-ins will remain unchanged</li>
+                      <li>The pause duration will be tracked for reference</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex space-x-3 pt-4">
+                <button
+                  onClick={() => {
+                    setShowPauseModal(false);
+                    setSelectedSeriesForPause(null);
+                    setPauseWeeks(1);
+                    setPauseResumeDate('');
+                    setPauseInputMode('weeks');
+                  }}
+                  className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-2xl font-medium transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handlePauseSeries}
+                  disabled={pausingSeries || (pauseInputMode === 'weeks' && pauseWeeks < 1) || (pauseInputMode === 'date' && !pauseResumeDate)}
+                  className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                >
+                  {pausingSeries ? 'Pausing...' : (() => {
+                    if (pauseInputMode === 'date' && pauseResumeDate) {
+                      const today = new Date();
+                      today.setHours(0, 0, 0, 0);
+                      const resumeDate = new Date(pauseResumeDate);
+                      resumeDate.setHours(0, 0, 0, 0);
+                      const daysDiff = Math.ceil((resumeDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                      const weeksCalc = Math.ceil(daysDiff / 7);
+                      return `Pause until ${resumeDate.toLocaleDateString()} (${weeksCalc} week${weeksCalc !== 1 ? 's' : ''})`;
+                    }
+                    return `Pause for ${pauseWeeks} week${pauseWeeks !== 1 ? 's' : ''}`;
+                  })()}
                 </button>
               </div>
             </div>

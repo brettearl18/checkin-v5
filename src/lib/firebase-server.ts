@@ -86,7 +86,12 @@ export function getDb() {
           }),
         } as any;
       }
+      
+      // If we reach here and getApps().length is still 0 and we're not in build phase,
+      // initialization must have failed - throw error
+      throw new Error('Firebase Admin not initialized. Check FIREBASE_SERVICE_ACCOUNT configuration.');
     }
+    
     const db = getFirestore();
     if (!db) {
       throw new Error('Failed to get Firestore instance');

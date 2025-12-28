@@ -30,17 +30,20 @@ interface CheckIn {
 }
 
 export default function ClientCheckInsPage() {
-  const { userProfile } = useAuth();
+  const { userProfile, authLoading } = useAuth();
   const [checkins, setCheckins] = useState<CheckIn[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<'needsAction' | 'upcoming' | 'pending' | 'completed' | 'overdue'>('needsAction');
+  const [filter, setFilter] = useState<'toDo' | 'scheduled' | 'completed'>('toDo');
   const [clientId, setClientId] = useState<string | null>(null);
   const [coachTimezone, setCoachTimezone] = useState<string>(Intl.DateTimeFormat().resolvedOptions().timeZone);
   const [thresholds, setThresholds] = useState<ScoringThresholds>(getDefaultThresholds('lifestyle'));
 
   useEffect(() => {
-    fetchClientId();
-  }, [userProfile?.email]);
+    // Wait for auth to finish loading before fetching client ID
+    if (!authLoading && userProfile?.email) {
+      fetchClientId();
+    }
+  }, [userProfile?.email, authLoading]);
 
   useEffect(() => {
     if (clientId) {
@@ -56,7 +59,7 @@ export default function ClientCheckInsPage() {
   const fetchClientId = async () => {
     try {
       if (!userProfile?.email) {
-        console.error('No user email available');
+        console.warn('No user email available yet');
         setLoading(false);
         return;
       }
@@ -144,7 +147,38 @@ export default function ClientCheckInsPage() {
       const result = await response.json();
 
       if (result.success) {
-        setCheckins(result.data.checkins);
+        // Ensure checkInWindow is properly structured for each check-in
+        const processedCheckins = result.data.checkins.map((checkin: any) => {
+          // Log the raw check-in data for debugging
+          console.log('Raw check-in data:', {
+            id: checkin.id,
+            title: checkin.title,
+            dueDate: checkin.dueDate,
+            checkInWindow: checkin.checkInWindow,
+            status: checkin.status
+          });
+
+          // Ensure checkInWindow has the correct structure
+          let checkInWindow = DEFAULT_CHECK_IN_WINDOW;
+          if (checkin.checkInWindow) {
+            if (typeof checkin.checkInWindow === 'object' && 
+                checkin.checkInWindow.enabled !== undefined &&
+                checkin.checkInWindow.startDay &&
+                checkin.checkInWindow.startTime) {
+              checkInWindow = checkin.checkInWindow;
+            } else {
+              console.warn('Invalid checkInWindow structure for check-in:', checkin.id, checkin.checkInWindow);
+            }
+          }
+
+          return {
+            ...checkin,
+            checkInWindow
+          };
+        });
+        
+        console.log('Processed check-ins:', processedCheckins.length, processedCheckins);
+        setCheckins(processedCheckins);
       } else {
         console.error('Failed to fetch check-ins:', result.message);
         setCheckins([]);
@@ -163,6 +197,52 @@ export default function ClientCheckInsPage() {
       day: 'numeric',
       year: 'numeric'
     });
+  };
+
+  // Calculate the start date of the check-in window for a given due date
+  // Returns the Friday (or startDay) of the week that contains the due date
+  // For example: If due date is Monday Jan 12, and start day is Friday, return Friday Jan 16 of that same week
+  const getCheckInWindowStartDate = (dueDate: string, window?: CheckInWindow): Date => {
+    const due = new Date(dueDate);
+    const checkInWindow = window || DEFAULT_CHECK_IN_WINDOW;
+    
+    if (!checkInWindow.enabled) {
+      return due; // If window is disabled, use due date
+    }
+    
+    // Get the day of week for the start day (e.g., Friday = 5)
+    const startDayNum = getDayOfWeek(checkInWindow.startDay);
+    
+    // Get the day of week for the due date (0 = Sunday, 1 = Monday, ..., 6 = Saturday)
+    const dueDayOfWeek = due.getDay();
+    
+    // Calculate days to add to get to the start day of that week
+    // We want the start day of the week containing the due date
+    // If due date is Monday (1) and start day is Friday (5):
+    // We need to add 4 days (Monday -> Tuesday -> Wednesday -> Thursday -> Friday)
+    // Formula: (startDayNum - dueDayOfWeek + 7) % 7
+    let daysToAdd = (startDayNum - dueDayOfWeek + 7) % 7;
+    
+    // Create a new date at the start day of the week
+    const windowStartDate = new Date(due);
+    windowStartDate.setDate(due.getDate() + daysToAdd);
+    windowStartDate.setHours(0, 0, 0, 0); // Reset to start of day
+    
+    return windowStartDate;
+  };
+
+  // Helper function to get day of week number (0 = Sunday, 1 = Monday, ..., 6 = Saturday)
+  const getDayOfWeek = (dayName: string): number => {
+    const days: { [key: string]: number } = {
+      'sunday': 0,
+      'monday': 1,
+      'tuesday': 2,
+      'wednesday': 3,
+      'thursday': 4,
+      'friday': 5,
+      'saturday': 6
+    };
+    return days[dayName.toLowerCase()] ?? 5; // Default to Friday
   };
 
   const getStatusColor = (status: string) => {
@@ -191,111 +271,126 @@ export default function ClientCheckInsPage() {
     }
   };
 
-  // Filter check-ins based on next 7 days and status
-  const getUpcomingCheckins = () => {
+  // "To Do" - Actionable check-ins that need attention
+  // Includes: overdue, available now (window open), or due within next 7 days (not completed)
+  const getToDoCheckins = () => {
     const now = new Date();
-    
-    // Calculate start of today and end of next 7 days
-    const startOfToday = new Date(now);
-    startOfToday.setHours(0, 0, 0, 0);
-    
     const endOfNextWeek = new Date(now);
     endOfNextWeek.setDate(now.getDate() + 7);
     endOfNextWeek.setHours(23, 59, 59, 999);
 
     return checkins.filter(checkin => {
+      // Exclude completed check-ins from "To Do"
+      if (checkin.status === 'completed') return false;
+
       const dueDate = new Date(checkin.dueDate);
       
-      // Check if the due date is within the next 7 days and not completed
-      return dueDate >= startOfToday && dueDate <= endOfNextWeek && checkin.status !== 'completed';
+      // Normalize dates for comparison (set to start of day)
+      dueDate.setHours(0, 0, 0, 0);
+      const today = new Date(now);
+      today.setHours(0, 0, 0, 0);
+      
+      // Include if overdue
+      if (dueDate < today) return true;
+      
+      // Include if due date has arrived AND window is open (available now)
+      if (dueDate <= today) {
+        const checkInWindow = checkin.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
+        const windowStatus = isWithinCheckInWindow(checkInWindow);
+        if (windowStatus.isOpen) return true;
+      }
+      
+      // Include if due within next 7 days
+      if (dueDate >= now && dueDate <= endOfNextWeek) return true;
+      
+      return false;
     });
   };
 
-  // Get check-ins that are available now (window is open)
-  // This includes check-ins where the window is currently open, regardless of overdue status
-  // This ensures that if a check-in is overdue but its window is open, it still shows
-  const getAvailableCheckins = () => {
-    return checkins.filter(checkin => {
-      if (checkin.status === 'completed') return false;
-      const checkInWindow = checkin.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
-      const windowStatus = isWithinCheckInWindow(checkInWindow);
-      return windowStatus.isOpen;
-    });
-  };
-
-  // Get check-ins that need action (overdue + available now)
-  // This includes:
-  // 1. All overdue check-ins (regardless of window status)
-  // 2. All check-ins with open windows (regardless of overdue status)
-  // 3. All instances of recurring check-ins (each week shown separately)
-  const getNeedsActionCheckins = () => {
+  // "Scheduled" - Next 2 upcoming check-ins
+  // Shows the next 2 upcoming check-ins so users can see what's coming and when windows open
+  const getScheduledCheckins = () => {
     const now = new Date();
-    const overdue = checkins.filter(c => {
-      // Check if overdue by comparing dueDate to now
-      const dueDate = new Date(c.dueDate);
-      const hoursOverdue = (now.getTime() - dueDate.getTime()) / (1000 * 60 * 60);
-      return hoursOverdue > 0 && c.status !== 'completed';
-    });
-    
-    const available = getAvailableCheckins();
-    
-    // Combine both lists - each check-in (including different weeks of recurring) should show
-    // Since recurring check-ins have different IDs for each week, no need to deduplicate
-    const combined = [...overdue, ...available];
-    
-    // Remove duplicates by ID only (in case a check-in is both overdue AND has open window)
-    return combined.filter((checkin, index, self) => 
-      index === self.findIndex(c => c.id === checkin.id)
-    );
+    const startOfToday = new Date(now);
+    startOfToday.setHours(0, 0, 0, 0);
+
+    const futureCheckins = checkins
+      .filter(checkin => {
+        // Exclude completed check-ins from "Scheduled"
+        if (checkin.status === 'completed') return false;
+        const dueDate = new Date(checkin.dueDate);
+        // Only include future check-ins (due date is today or later)
+        return dueDate >= startOfToday;
+      })
+      .sort((a, b) => {
+        // Sort by due date (earliest first)
+        const dateA = new Date(a.dueDate).getTime();
+        const dateB = new Date(b.dueDate).getTime();
+        return dateA - dateB;
+      })
+      .slice(0, 2); // Get the next 2 upcoming check-ins
+
+    return futureCheckins;
   };
 
-  // Sort check-ins by urgency: overdue > available now > upcoming > completed
-  const sortByUrgency = (checkinsList: CheckIn[]) => {
-    return [...checkinsList].sort((a, b) => {
-      // Overdue first
-      if (a.status === 'overdue' && b.status !== 'overdue') return -1;
-      if (b.status === 'overdue' && a.status !== 'overdue') return 1;
-      
-      // Then available now
-      const aWindow = a.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
-      const bWindow = b.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
-      const aAvailable = isWithinCheckInWindow(aWindow).isOpen && a.status !== 'completed';
-      const bAvailable = isWithinCheckInWindow(bWindow).isOpen && b.status !== 'completed';
-      if (aAvailable && !bAvailable) return -1;
-      if (bAvailable && !aAvailable) return 1;
-      
-      // Then by due date (earliest first)
-      const aDue = new Date(a.dueDate).getTime();
-      const bDue = new Date(b.dueDate).getTime();
-      if (a.status !== 'completed' && b.status === 'completed') return -1;
-      if (a.status === 'completed' && b.status !== 'completed') return 1;
-      return aDue - bDue;
-    });
+  // Get the next scheduled check-in (for empty state messaging)
+  const getNextScheduledCheckin = () => {
+    const scheduled = getScheduledCheckins();
+    if (scheduled.length === 0) return null;
+    
+    return scheduled.sort((a, b) => {
+      const dateA = new Date(a.dueDate).getTime();
+      const dateB = new Date(b.dueDate).getTime();
+      return dateA - dateB;
+    })[0];
   };
 
   const filteredCheckins = (() => {
     let result: CheckIn[] = [];
     switch (filter) {
-      case 'needsAction':
-        result = getNeedsActionCheckins();
-        break;
-      case 'upcoming':
-        result = getUpcomingCheckins();
-        break;
-      case 'pending':
-        result = checkins.filter(c => c.status === 'pending');
-        break;
+      case 'toDo':
+        result = getToDoCheckins();
+        // Sort by urgency: overdue first, then available now, then due soon
+        return result.sort((a, b) => {
+          const aDue = new Date(a.dueDate).getTime();
+          const bDue = new Date(b.dueDate).getTime();
+          const now = new Date().getTime();
+          
+          // Overdue first
+          if (aDue < now && bDue >= now) return -1;
+          if (bDue < now && aDue >= now) return 1;
+          
+          // Then available now
+          const aWindow = a.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
+          const bWindow = b.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
+          const aAvailable = isWithinCheckInWindow(aWindow).isOpen;
+          const bAvailable = isWithinCheckInWindow(bWindow).isOpen;
+          if (aAvailable && !bAvailable) return -1;
+          if (bAvailable && !aAvailable) return 1;
+          
+          // Then by due date (earliest first)
+          return aDue - bDue;
+        });
+      case 'scheduled':
+        result = getScheduledCheckins();
+        // Sort by due date (earliest first)
+        return result.sort((a, b) => {
+          const dateA = new Date(a.dueDate).getTime();
+          const dateB = new Date(b.dueDate).getTime();
+          return dateA - dateB;
+        });
       case 'completed':
         result = checkins.filter(c => c.status === 'completed');
-        break;
-      case 'overdue':
-        result = checkins.filter(c => c.status === 'overdue');
-        break;
+        // Sort by completion date (most recent first)
+        return result.sort((a, b) => {
+          const dateA = a.completedAt ? new Date(a.completedAt).getTime() : 0;
+          const dateB = b.completedAt ? new Date(b.completedAt).getTime() : 0;
+          return dateB - dateA;
+        });
       default:
         result = checkins;
     }
-    // Always sort by urgency
-    return sortByUrgency(result);
+    return result;
   })();
 
   // Helper function to get time until due date
@@ -336,21 +431,27 @@ export default function ClientCheckInsPage() {
       }
     }
     
-    // For pending check-ins, use window status
-    const checkInWindow = checkin.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
-    const windowStatus = isWithinCheckInWindow(checkInWindow);
-    if (windowStatus.isOpen) return 'border-l-4 border-green-500';
+    // For pending check-ins, use window status (only if due date has arrived)
+    const now = new Date();
+    const dueDate = new Date(checkin.dueDate);
+    dueDate.setHours(0, 0, 0, 0);
+    const today = new Date(now);
+    today.setHours(0, 0, 0, 0);
+    
+    if (dueDate <= today) {
+      const checkInWindow = checkin.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
+      const windowStatus = isWithinCheckInWindow(checkInWindow);
+      if (windowStatus.isOpen) return 'border-l-4 border-green-500';
+    }
     
     return 'border-l-4 border-yellow-500';
   };
 
   const stats = {
-    upcoming: getUpcomingCheckins().length,
-    pending: checkins.filter(c => c.status === 'pending').length,
+    toDo: getToDoCheckins().length,
+    scheduled: getScheduledCheckins().length,
     completed: checkins.filter(c => c.status === 'completed').length,
-    overdue: checkins.filter(c => c.status === 'overdue').length,
-    available: getAvailableCheckins().length,
-    needsAction: getNeedsActionCheckins().length
+    total: checkins.length
   };
 
   if (loading) {
@@ -479,34 +580,42 @@ export default function ClientCheckInsPage() {
               </div>
             </div>
 
-            {/* Filters */}
+            {/* Filters - 3 Clear Tabs */}
             <div className="mb-4 lg:mb-6">
               <div className="flex flex-wrap gap-2">
                 {[
-                  { key: 'needsAction', label: 'Needs Action', count: stats.needsAction, color: 'red' },
-                  { key: 'upcoming', label: 'Upcoming', count: stats.upcoming, color: 'blue' },
-                  { key: 'pending', label: 'Pending', count: stats.pending, color: 'yellow' },
-                  { key: 'completed', label: 'Completed', count: stats.completed, color: 'green' },
-                  { key: 'overdue', label: 'Overdue', count: stats.overdue, color: 'red' }
+                  { key: 'toDo', label: 'To Do', count: stats.toDo, color: 'red', icon: '📋' },
+                  { key: 'scheduled', label: 'Scheduled', count: stats.scheduled, color: 'blue', icon: '📅' },
+                  { key: 'completed', label: 'Completed', count: stats.completed, color: 'green', icon: '✅' }
                 ].map((filterOption) => (
                   <button
                     key={filterOption.key}
                     onClick={() => setFilter(filterOption.key as any)}
-                    className={`px-3 py-2 lg:px-5 lg:py-2.5 rounded-lg text-xs lg:text-sm font-medium transition-all duration-200 min-h-[36px] ${
+                    className={`px-4 py-2.5 lg:px-6 lg:py-3 rounded-xl text-sm lg:text-base font-semibold transition-all duration-200 min-h-[44px] flex items-center gap-2 ${
                       filter === filterOption.key
                         ? filterOption.color === 'red'
-                          ? 'bg-red-600 text-white shadow-lg'
+                          ? 'bg-red-600 text-white shadow-lg shadow-red-500/30'
                           : filterOption.color === 'green'
-                          ? 'bg-green-600 text-white shadow-lg'
-                          : filterOption.color === 'yellow'
-                          ? 'bg-yellow-500 text-white shadow-lg'
-                          : 'bg-blue-600 text-white shadow-lg'
-                        : 'bg-white/80 backdrop-blur-sm text-gray-900 hover:bg-white border border-gray-200/60 hover:shadow-md'
+                          ? 'bg-green-600 text-white shadow-lg shadow-green-500/30'
+                          : 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
+                        : 'bg-white/80 backdrop-blur-sm text-gray-900 hover:bg-white border-2 border-gray-200/60 hover:border-gray-300 hover:shadow-md'
                     }`}
                   >
-                    <span className="hidden sm:inline">{filterOption.label}</span>
-                    <span className="sm:hidden">{filterOption.label.split(' ')[0]}</span>
-                    {filterOption.count > 0 && <span className="ml-1">({filterOption.count})</span>}
+                    <span className="text-lg">{filterOption.icon}</span>
+                    <span>{filterOption.label}</span>
+                    {filterOption.count > 0 && (
+                      <span className={`ml-1 px-2 py-0.5 rounded-full text-xs font-bold ${
+                        filter === filterOption.key
+                          ? 'bg-white/20 text-white'
+                          : filterOption.color === 'red'
+                          ? 'bg-red-100 text-red-700'
+                          : filterOption.color === 'green'
+                          ? 'bg-green-100 text-green-700'
+                          : 'bg-blue-100 text-blue-700'
+                      }`}>
+                        {filterOption.count}
+                      </span>
+                    )}
                   </button>
                 ))}
               </div>
@@ -516,14 +625,15 @@ export default function ClientCheckInsPage() {
             <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200/60 overflow-hidden">
               <div className="p-4 lg:p-5 border-b border-gray-200/60 bg-gradient-to-r from-gray-50/50 to-white/50">
                 <h2 className="text-lg lg:text-xl font-bold text-gray-900">
-                  {filter === 'needsAction' ? '🔴 Needs Your Action' : 
-                   filter === 'upcoming' ? '📅 Upcoming Check-ins (Next 7 Days)' : 
-                   filter === 'overdue' ? '⚠️ Overdue Check-ins' :
-                   filter === 'completed' ? '✅ Completed Check-ins' :
-                   `${filter.charAt(0).toUpperCase() + filter.slice(1)} Check-ins`}
+                  {filter === 'toDo' ? '📋 Check-ins To Do' : 
+                   filter === 'scheduled' ? '📅 Scheduled Check-ins' :
+                   '✅ Completed Check-ins'}
                 </h2>
                 <p className="text-gray-900 text-xs lg:text-sm mt-0.5 lg:mt-1">
-                  {filteredCheckins.length} check-in{filteredCheckins.length !== 1 ? 's' : ''} found
+                  {filter === 'toDo' && 'Complete your check-ins that need attention'}
+                  {filter === 'scheduled' && 'Upcoming check-ins scheduled for later'}
+                  {filter === 'completed' && 'Your completed check-ins and results'}
+                  {filteredCheckins.length > 0 && ` • ${filteredCheckins.length} check-in${filteredCheckins.length !== 1 ? 's' : ''}`}
                 </p>
               </div>
               
@@ -533,29 +643,30 @@ export default function ClientCheckInsPage() {
                     {filteredCheckins.map((checkin) => {
                       const checkInWindow = checkin.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
                       const windowStatus = isWithinCheckInWindow(checkInWindow);
-                      const isAvailable = windowStatus.isOpen && checkin.status !== 'completed';
+                      
+                      // A check-in is only available if:
+                      // 1. The due date has arrived (today >= due date)
+                      // 2. AND we're currently within the check-in window period
+                      // 3. AND the check-in is not completed
+                      const now = new Date();
+                      const dueDate = new Date(checkin.dueDate);
+                      dueDate.setHours(0, 0, 0, 0); // Reset to start of day for comparison
+                      const today = new Date(now);
+                      today.setHours(0, 0, 0, 0);
+                      
+                      const dueDateHasArrived = dueDate <= today;
+                      const isAvailable = dueDateHasArrived && windowStatus.isOpen && checkin.status !== 'completed';
                       const isOverdue = checkin.status === 'overdue';
                       const isCompleted = checkin.status === 'completed';
                       
-                      // Determine the best action link for completed check-ins
-                      const getCompletedCheckInLink = () => {
-                        if (checkin.coachResponded && checkin.responseId) {
-                          return `/client-portal/feedback/${checkin.responseId}`;
-                        } else if (checkin.responseId) {
-                          return `/client-portal/check-in/${checkin.id}/success`;
-                        }
-                        return null;
-                      };
-
-                      const completedLink = isCompleted ? getCompletedCheckInLink() : null;
-                      const CardWrapper = completedLink ? Link : 'div';
-                      const cardProps = completedLink ? { href: completedLink } : {};
+                      // For completed check-ins, don't make the entire card a link since there are action buttons inside
+                      // Instead, just use a div wrapper
+                      const CardWrapper = 'div';
 
                       return (
                         <CardWrapper
                           key={checkin.id}
-                          {...cardProps}
-                          className={`${getCardBorderColor(checkin)} bg-white/80 backdrop-blur-sm rounded-lg p-3 lg:p-4 hover:shadow-md transition-all duration-200 border border-gray-200/60 ${completedLink ? 'cursor-pointer' : ''}`}
+                          className={`${getCardBorderColor(checkin)} bg-white/80 backdrop-blur-sm rounded-lg p-3 lg:p-4 hover:shadow-md transition-all duration-200 border border-gray-200/60`}
                         >
                           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                             {/* Left: Main Content */}
@@ -563,7 +674,12 @@ export default function ClientCheckInsPage() {
                               <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-3 mb-2">
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-2 mb-1 flex-wrap">
-                                    <h3 className="text-sm lg:text-base font-bold text-gray-900 truncate">{checkin.title}</h3>
+                                    <h3 className="text-sm lg:text-base font-bold text-gray-900 truncate">
+                                      {checkin.isRecurring && checkin.recurringWeek 
+                                        ? `Week ${checkin.recurringWeek}: ${checkin.title}`
+                                        : checkin.title
+                                      }
+                                    </h3>
                                     {checkin.status === 'overdue' && (
                                       <span className="px-1.5 py-0.5 rounded-full text-[10px] lg:text-xs font-medium bg-red-100 text-red-800 flex-shrink-0">
                                         Overdue
@@ -574,9 +690,9 @@ export default function ClientCheckInsPage() {
                                         Available Now
                                       </span>
                                     )}
-                                    {!windowStatus.isOpen && !isOverdue && !isCompleted && (
+                                    {!isAvailable && !isOverdue && !isCompleted && (
                                       <span className="px-1.5 py-0.5 rounded-full text-[10px] lg:text-xs font-medium bg-yellow-100 text-yellow-800 flex-shrink-0">
-                                        Window Closed
+                                        {dueDateHasArrived ? 'Window Closed' : 'Not Yet Available'}
                                       </span>
                                     )}
                                   </div>
@@ -593,12 +709,35 @@ export default function ClientCheckInsPage() {
 
                                   {/* Window status for pending check-ins */}
                                   {!isCompleted && !isOverdue && (
-                                    <div className={`inline-flex items-center gap-1 px-2 py-0.5 lg:py-1 rounded text-[10px] lg:text-xs ${
-                                      windowStatus.isOpen 
-                                        ? 'bg-green-50 text-green-800' 
-                                        : 'bg-yellow-50 text-yellow-800'
-                                    }`}>
-                                      {windowStatus.isOpen ? '✅' : '⏰'} <span className="hidden sm:inline">{windowStatus.message}</span>
+                                    <div className="mt-2 space-y-1">
+                                      <div className={`inline-flex items-center gap-1 px-2 py-0.5 lg:py-1 rounded text-[10px] lg:text-xs ${
+                                        isAvailable 
+                                          ? 'bg-green-50 text-green-800' 
+                                          : dueDateHasArrived
+                                          ? 'bg-yellow-50 text-yellow-800'
+                                          : 'bg-gray-50 text-gray-800'
+                                      }`}>
+                                        {isAvailable ? '✅' : dueDateHasArrived ? '⏰' : '📅'} <span className="hidden sm:inline">
+                                          {isAvailable ? windowStatus.message : dueDateHasArrived ? windowStatus.message : (() => {
+                                            const windowStartDate = getCheckInWindowStartDate(checkin.dueDate, checkInWindow);
+                                            return `Available on ${formatDate(windowStartDate.toISOString())}`;
+                                          })()}
+                                        </span>
+                                      </div>
+                                      {/* Show window details for scheduled check-ins */}
+                                      {filter === 'scheduled' && checkInWindow?.enabled && checkInWindow?.startDay && checkInWindow?.startTime && (
+                                        <div className="text-[10px] lg:text-xs text-gray-700 font-medium">
+                                          {(() => {
+                                            const windowStartDate = getCheckInWindowStartDate(checkin.dueDate, checkInWindow);
+                                            const startDayName = checkInWindow.startDay.charAt(0).toUpperCase() + checkInWindow.startDay.slice(1);
+                                            const [hours, minutes] = checkInWindow.startTime.split(':').map(Number);
+                                            const period = hours >= 12 ? 'PM' : 'AM';
+                                            const displayHours = hours > 12 ? hours - 12 : hours === 0 ? 12 : hours;
+                                            const displayMinutes = minutes.toString().padStart(2, '0');
+                                            return `Window opens ${startDayName} ${formatDate(windowStartDate.toISOString())} at ${displayHours}:${displayMinutes} ${period}`;
+                                          })()}
+                                        </div>
+                                      )}
                                     </div>
                                   )}
 
@@ -679,13 +818,16 @@ export default function ClientCheckInsPage() {
                                       Start Check-in
                                     </Link>
                                   )}
-                                  {!windowStatus.isOpen && !isOverdue && !isCompleted && (
+                                  {!isAvailable && !isOverdue && !isCompleted && (
                                     <button
                                       disabled
                                       className="w-full sm:w-auto px-3 py-2 lg:px-4 lg:py-2 bg-gray-300 text-gray-600 rounded-lg text-xs lg:text-sm font-semibold cursor-not-allowed min-h-[36px]"
-                                      title={getCheckInWindowDescription(checkInWindow)}
+                                      title={dueDateHasArrived ? getCheckInWindowDescription(checkInWindow) : (() => {
+                                        const windowStartDate = getCheckInWindowStartDate(checkin.dueDate, checkInWindow);
+                                        return `Check-in available on ${formatDate(windowStartDate.toISOString())}`;
+                                      })()}
                                     >
-                                      Window Closed
+                                      {dueDateHasArrived ? 'Window Closed' : 'Not Available Yet'}
                                     </button>
                                   )}
                                   {isCompleted && (
@@ -694,7 +836,6 @@ export default function ClientCheckInsPage() {
                                         <Link
                                           href={`/client-portal/feedback/${checkin.responseId}`}
                                           className="w-full sm:w-auto px-3 py-2 lg:px-4 lg:py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs lg:text-sm font-semibold transition-all duration-200 shadow-sm hover:shadow-md flex items-center justify-center gap-1.5 min-h-[36px]"
-                                          onClick={(e) => e.stopPropagation()}
                                         >
                                           <svg className="w-3.5 h-3.5 lg:w-4 lg:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -706,7 +847,6 @@ export default function ClientCheckInsPage() {
                                       <Link
                                         href={`/client-portal/check-in/${checkin.id}/success`}
                                         className="w-full sm:w-auto px-3 py-2 lg:px-4 lg:py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs lg:text-sm font-semibold transition-all duration-200 shadow-sm hover:shadow-md flex items-center justify-center gap-1.5 min-h-[36px]"
-                                        onClick={(e) => e.stopPropagation()}
                                       >
                                         <svg className="w-3.5 h-3.5 lg:w-4 lg:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
@@ -726,31 +866,103 @@ export default function ClientCheckInsPage() {
                   </div>
                 ) : (
                   <div className="text-center py-12">
-                    <div className="text-6xl mb-4">
-                      {filter === 'needsAction' ? '🎯' :
-                       filter === 'completed' ? '✅' : 
-                       filter === 'overdue' ? '🎉' : 
-                       filter === 'upcoming' ? '📅' : '📋'}
-                    </div>
-                    <h3 className="text-xl font-bold text-gray-900 mb-2">
-                      {filter === 'needsAction' ? 'All caught up!' :
-                       filter === 'completed' ? 'No completed check-ins yet' :
-                       filter === 'overdue' ? 'No overdue check-ins!' :
-                       filter === 'upcoming' ? 'No check-ins this week' :
-                       'No check-ins found'}
-                    </h3>
-                    <p className="text-gray-900 text-sm max-w-md mx-auto">
-                      {filter === 'needsAction' 
-                        ? 'You\'re all set! No check-ins need your immediate attention.'
-                        : filter === 'completed' 
-                        ? 'Complete your first check-in to see your results here.'
-                        : filter === 'overdue'
-                        ? 'Great job staying on top of your check-ins!'
-                        : filter === 'upcoming'
-                        ? 'No check-ins scheduled for this week. Check back later!'
-                        : 'No check-ins have been assigned yet.'
+                    {filter === 'toDo' ? (
+                      <>
+                        <div className="text-6xl mb-4">🎯</div>
+                        <h3 className="text-xl font-bold text-gray-900 mb-2">All caught up!</h3>
+                        <p className="text-gray-900 text-sm max-w-md mx-auto mb-6">
+                          No check-ins need your attention right now. Great job staying on top of things!
+                        </p>
+                        {(() => {
+                          const nextScheduled = getNextScheduledCheckin();
+                          if (nextScheduled) {
+                            const scheduledDueDate = new Date(nextScheduled.dueDate);
+                            const now = new Date();
+                            const diffTime = scheduledDueDate.getTime() - now.getTime();
+                            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                            return (
+                              <div className="max-w-md mx-auto bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6 border-2 border-blue-200 shadow-lg">
+                                <h4 className="text-lg font-bold text-gray-900 mb-2">Next Check-in</h4>
+                                <p className="text-base font-semibold text-blue-900 mb-3">{nextScheduled.title}</p>
+                                <p className="text-sm text-blue-700 font-medium">
+                                  Scheduled for {formatDate(nextScheduled.dueDate)} ({diffDays === 1 ? 'tomorrow' : `in ${diffDays} days`})
+                                </p>
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()}
+                      </>
+                    ) : filter === 'scheduled' ? (() => {
+                      const nextScheduled = getNextScheduledCheckin();
+                      if (nextScheduled) {
+                        const scheduledDueDate = new Date(nextScheduled.dueDate);
+                        const now = new Date();
+                        const diffTime = scheduledDueDate.getTime() - now.getTime();
+                        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                        const diffWeeks = Math.floor(diffDays / 7);
+                        
+                        return (
+                          <div>
+                            <div className="text-6xl mb-4">📅</div>
+                            <h3 className="text-xl font-bold text-gray-900 mb-2">No scheduled check-ins</h3>
+                            <p className="text-gray-900 text-sm max-w-md mx-auto mb-6">
+                              All your upcoming check-ins are ready to complete. Check the "To Do" tab!
+                            </p>
+                            
+                            {/* Next Check-in Card */}
+                            <div className="max-w-md mx-auto bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6 border-2 border-blue-200 shadow-lg">
+                              <div className="flex items-center justify-center mb-3">
+                                <div className="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center">
+                                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                  </svg>
+                                </div>
+                              </div>
+                              <h4 className="text-lg font-bold text-gray-900 mb-2">Next Check-in</h4>
+                              <p className="text-base font-semibold text-blue-900 mb-3">{nextScheduled.title}</p>
+                              <div className="flex items-center justify-center gap-2 text-sm text-gray-700">
+                                <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                </svg>
+                                <span className="font-medium">
+                                  Due {formatDate(nextScheduled.dueDate)}
+                                </span>
+                              </div>
+                              <p className="text-sm text-blue-700 mt-2 font-medium">
+                                {diffDays === 0 
+                                  ? 'Due today'
+                                  : diffDays === 1
+                                  ? 'Due tomorrow'
+                                  : diffWeeks === 1
+                                  ? 'Due in 1 week'
+                                  : diffWeeks > 1
+                                  ? `Due in ${diffWeeks} weeks`
+                                  : `Due in ${diffDays} days`
+                                }
+                              </p>
+                            </div>
+                          </div>
+                        );
                       }
-                    </p>
+                      return (
+                        <>
+                          <div className="text-6xl mb-4">📅</div>
+                          <h3 className="text-xl font-bold text-gray-900 mb-2">No scheduled check-ins</h3>
+                          <p className="text-gray-900 text-sm max-w-md mx-auto">
+                            All your upcoming check-ins are ready to complete. Check the "To Do" tab!
+                          </p>
+                        </>
+                      );
+                    })() : (
+                      <>
+                        <div className="text-6xl mb-4">✅</div>
+                        <h3 className="text-xl font-bold text-gray-900 mb-2">No completed check-ins yet</h3>
+                        <p className="text-gray-900 text-sm max-w-md mx-auto">
+                          Complete your first check-in to see your results and progress here.
+                        </p>
+                      </>
+                    )}
                   </div>
                 )}
               </div>

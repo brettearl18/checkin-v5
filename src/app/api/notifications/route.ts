@@ -36,7 +36,26 @@ export async function GET(request: NextRequest) {
       }, { status: 400 });
     }
 
-    const db = getDb();
+    let db;
+    try {
+      db = getDb();
+      // Validate db is properly initialized
+      if (!db || typeof db.collection !== 'function') {
+        console.error('Database instance is invalid:', typeof db);
+        throw new Error('Database instance is not properly initialized');
+      }
+    } catch (dbError: any) {
+      console.error('Error getting database instance:', dbError);
+      return NextResponse.json({
+        success: false,
+        message: 'Database connection failed',
+        error: dbError instanceof Error ? dbError.message : 'Unknown error',
+        notifications: [],
+        unreadCount: 0,
+        totalCount: 0
+      }, { status: 200 });
+    }
+
     let notifications: any[] = [];
     let unreadCount = 0;
 
@@ -53,10 +72,18 @@ export async function GET(request: NextRequest) {
       try {
         query = query.orderBy('createdAt', 'desc').limit(limit);
         const snapshot = await query.get();
-        notifications = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
+        notifications = snapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            ...data,
+            // Convert Firestore Timestamp to ISO string for proper serialization
+            createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : 
+                       (data.createdAt?._seconds ? new Date(data.createdAt._seconds * 1000).toISOString() : 
+                       (data.createdAt instanceof Date ? data.createdAt.toISOString() : 
+                       (typeof data.createdAt === 'string' ? data.createdAt : new Date().toISOString())))
+          };
+        });
       } catch (orderByError: any) {
         // If orderBy fails (missing index), fetch without orderBy and sort client-side
         console.log('OrderBy failed, fetching without orderBy:', orderByError.message);
@@ -69,10 +96,18 @@ export async function GET(request: NextRequest) {
         query = query.limit(limit * 2); // Get more to account for client-side sorting
         
         const snapshot = await query.get();
-        notifications = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
+        notifications = snapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            ...data,
+            // Convert Firestore Timestamp to ISO string for proper serialization
+            createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : 
+                       (data.createdAt?._seconds ? new Date(data.createdAt._seconds * 1000).toISOString() : 
+                       (data.createdAt instanceof Date ? data.createdAt.toISOString() : 
+                       (typeof data.createdAt === 'string' ? data.createdAt : new Date().toISOString())))
+          };
+        });
 
         // Sort client-side by createdAt
         notifications.sort((a, b) => {
@@ -115,14 +150,18 @@ export async function GET(request: NextRequest) {
       totalCount: notifications.length
     });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error fetching notifications:', error);
+    // Log the full error for debugging
+    if (error?.stack) {
+      console.error('Error stack:', error.stack);
+    }
     // Return 200 with error details instead of 500, since we're handling it gracefully
     return NextResponse.json(
       { 
         success: false, 
         message: 'Failed to fetch notifications', 
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: error instanceof Error ? error.message : (typeof error === 'string' ? error : 'Unknown error'),
         notifications: [],
         unreadCount: 0,
         totalCount: 0

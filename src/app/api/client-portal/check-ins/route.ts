@@ -61,16 +61,16 @@ export async function GET(request: NextRequest) {
         };
 
         // Check if pausedUntil date has passed - auto-reactivate if so
-        let status = data.status || 'active';
+        let assignmentStatus = data.status || 'active';
         let pausedUntil = data.pausedUntil;
         
-        if (status === 'inactive' && pausedUntil) {
+        if (assignmentStatus === 'inactive' && pausedUntil) {
           const pausedUntilDate = pausedUntil?.toDate ? pausedUntil.toDate() : new Date(pausedUntil);
           const now = new Date();
           
           // If pausedUntil date has passed, automatically reactivate
           if (pausedUntilDate <= now) {
-            status = 'active';
+            assignmentStatus = 'active';
             pausedUntil = null;
             // Update the assignment in the background
             db.collection('check_in_assignments').doc(doc.id).update({
@@ -79,24 +79,25 @@ export async function GET(request: NextRequest) {
             }).catch(err => console.error('Error auto-reactivating check-in:', err));
           }
         }
+
+        // Convert Firestore Timestamp to Date for dueDate
+        const dueDate = convertDate(data.dueDate);
+        const dueDateObj = new Date(dueDate);
+        const now = new Date();
         
-        return {
-          id: doc.id,
-          title: data.formTitle || 'Check-in Assignment',
-          description: data.description || 'Complete your assigned check-in',
-          dueDate: convertDate(data.dueDate),
-          status: status,
-          formId: data.formId || '',
-          assignedBy: data.assignedBy || 'Coach',
-          assignedAt: convertDate(data.assignedAt),
-          completedAt: data.completedAt ? convertDate(data.completedAt) : undefined,
-          score: data.score || undefined,
-          isRecurring: data.isRecurring || false,
-          recurringWeek: data.recurringWeek || 1,
-          totalWeeks: data.totalWeeks || 1,
-          checkInWindow: data.checkInWindow || DEFAULT_CHECK_IN_WINDOW,
-          pausedUntil: pausedUntil ? (pausedUntil?.toDate ? pausedUntil.toDate().toISOString() : new Date(pausedUntil).toISOString()) : undefined
-        };
+        // Determine display status: 'pending', 'completed', or 'overdue'
+        let displayStatus: 'pending' | 'completed' | 'overdue';
+        if (assignmentStatus === 'completed' || data.completedAt) {
+          displayStatus = 'completed';
+        } else {
+          // Check if overdue
+          if (dueDateObj < now) {
+            displayStatus = 'overdue';
+          } else {
+            // Map 'active' and 'pending' to 'pending' for display
+            displayStatus = 'pending';
+          }
+        }
         
         // Check if coach has responded (has feedback)
         let coachResponded = false;
@@ -115,11 +116,43 @@ export async function GET(request: NextRequest) {
           }
         }
 
-        return {
-          ...assignment,
+        // Ensure checkInWindow is properly structured
+        let checkInWindow = DEFAULT_CHECK_IN_WINDOW;
+        if (data.checkInWindow) {
+          // Check if it's a valid checkInWindow object
+          if (typeof data.checkInWindow === 'object' && 
+              data.checkInWindow.enabled !== undefined &&
+              data.checkInWindow.startDay &&
+              data.checkInWindow.startTime) {
+            checkInWindow = data.checkInWindow;
+          } else {
+            console.log('Invalid checkInWindow structure for assignment:', doc.id, 'Raw data:', JSON.stringify(data.checkInWindow));
+          }
+        } else {
+          console.log('No checkInWindow found for assignment:', doc.id, 'Using default');
+        }
+
+        const assignmentData = {
+          id: doc.id,
+          title: data.formTitle || 'Check-in Assignment',
+          description: data.description || 'Complete your assigned check-in',
+          dueDate: dueDate,
+          status: displayStatus,
+          formId: data.formId || '',
+          assignedBy: data.assignedBy || 'Coach',
+          assignedAt: convertDate(data.assignedAt),
+          completedAt: data.completedAt ? convertDate(data.completedAt) : undefined,
+          score: data.score || undefined,
+          isRecurring: data.isRecurring || false,
+          recurringWeek: data.recurringWeek || 1,
+          totalWeeks: data.totalWeeks || 1,
+          checkInWindow: checkInWindow,
+          pausedUntil: pausedUntil ? (pausedUntil?.toDate ? pausedUntil.toDate().toISOString() : new Date(pausedUntil).toISOString()) : undefined,
           responseId: responseId,
           coachResponded: coachResponded || data.coachResponded || false
         };
+
+        return assignmentData;
       }));
     } catch (indexError) {
       console.log('Index error, trying without orderBy:', indexError);
@@ -160,12 +193,65 @@ export async function GET(request: NextRequest) {
           return new Date().toISOString();
         };
 
+        // Determine assignment status
+        const assignmentStatus = data.status || 'active';
+        
+        // Convert Firestore Timestamp to Date for dueDate
+        const dueDate = convertDate(data.dueDate);
+        const dueDateObj = new Date(dueDate);
+        const now = new Date();
+        
+        // Determine display status: 'pending', 'completed', or 'overdue'
+        let displayStatus: 'pending' | 'completed' | 'overdue';
+        if (assignmentStatus === 'completed' || data.completedAt) {
+          displayStatus = 'completed';
+        } else {
+          // Check if overdue
+          if (dueDateObj < now) {
+            displayStatus = 'overdue';
+          } else {
+            // Map 'active' and 'pending' to 'pending' for display
+            displayStatus = 'pending';
+          }
+        }
+        
+        // Check if coach has responded (has feedback)
+        let coachResponded = false;
+        const responseId = data.responseId;
+        
+        if (responseId) {
+          try {
+            const feedbackSnapshot = await db.collection('coachFeedback')
+              .where('responseId', '==', responseId)
+              .limit(1)
+              .get();
+            
+            coachResponded = !feedbackSnapshot.empty || data.coachResponded || false;
+          } catch (error) {
+            console.log('Error checking feedback:', error);
+            coachResponded = data.coachResponded || false;
+          }
+        }
+
+        // Ensure checkInWindow is properly structured (same logic as above)
+        let checkInWindow = DEFAULT_CHECK_IN_WINDOW;
+        if (data.checkInWindow) {
+          if (typeof data.checkInWindow === 'object' && 
+              data.checkInWindow.enabled !== undefined &&
+              data.checkInWindow.startDay &&
+              data.checkInWindow.startTime) {
+            checkInWindow = data.checkInWindow;
+          } else {
+            console.log('Invalid checkInWindow structure for assignment (fallback):', doc.id);
+          }
+        }
+
         return {
           id: doc.id,
           title: data.formTitle || 'Check-in Assignment',
           description: data.description || 'Complete your assigned check-in',
-          dueDate: convertDate(data.dueDate),
-          status: data.status || 'pending',
+          dueDate: dueDate,
+          status: displayStatus,
           formId: data.formId || '',
           assignedBy: data.assignedBy || 'Coach',
           assignedAt: convertDate(data.assignedAt),
@@ -174,30 +260,9 @@ export async function GET(request: NextRequest) {
           isRecurring: data.isRecurring || false,
           recurringWeek: data.recurringWeek || 1,
           totalWeeks: data.totalWeeks || 1,
-          checkInWindow: data.checkInWindow || DEFAULT_CHECK_IN_WINDOW,
-          responseId: (() => {
-            // Check if coach has responded (has feedback)
-            const responseId = data.responseId;
-            return responseId;
-          })(),
-          coachResponded: (async () => {
-            // Check if coach has responded (has feedback)
-            const responseId = data.responseId;
-            if (responseId) {
-              try {
-                const feedbackSnapshot = await db.collection('coachFeedback')
-                  .where('responseId', '==', responseId)
-                  .limit(1)
-                  .get();
-                
-                return !feedbackSnapshot.empty || data.coachResponded || false;
-              } catch (error) {
-                console.log('Error checking feedback:', error);
-                return data.coachResponded || false;
-              }
-            }
-            return false;
-          })()
+          checkInWindow: checkInWindow,
+          responseId: responseId,
+          coachResponded: coachResponded || data.coachResponded || false
         };
       }));
 
@@ -205,8 +270,75 @@ export async function GET(request: NextRequest) {
       allAssignments.sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
     }
 
-    // Show all assignments (including completed ones) instead of filtering
-    const assignments = allAssignments;
+    // Expand recurring check-ins into individual weekly assignments
+    // Group assignments by formId and clientId to identify recurring series
+    const recurringSeriesMap = new Map<string, any[]>();
+    const nonRecurringAssignments: any[] = [];
+    
+    allAssignments.forEach(assignment => {
+      if (assignment.isRecurring && assignment.totalWeeks > 1) {
+        // Use a unique key based on formId, clientId, and startDate/assignedAt
+        const seriesKey = `${assignment.formId}_${assignment.clientId}_${assignment.startDate || (assignment.assignedAt ? new Date(assignment.assignedAt).toISOString().split('T')[0] : 'default')}`;
+        if (!recurringSeriesMap.has(seriesKey)) {
+          recurringSeriesMap.set(seriesKey, []);
+        }
+        recurringSeriesMap.get(seriesKey)!.push(assignment);
+      } else {
+        // Non-recurring assignments go directly to the result
+        nonRecurringAssignments.push(assignment);
+      }
+    });
+    
+    const expandedAssignments: any[] = [...nonRecurringAssignments];
+    const now = new Date();
+    
+    // Process each recurring series and expand missing weeks
+    recurringSeriesMap.forEach((seriesAssignments) => {
+      // Get the base assignment (prefer one with recurringWeek: 1, otherwise the first one)
+      const baseAssignment = seriesAssignments.find(a => a.recurringWeek === 1) || seriesAssignments[0];
+      const existingWeeks = new Set(seriesAssignments.map(a => a.recurringWeek || 1));
+      
+      // Add all existing assignments from the series (these are real documents from DB)
+      seriesAssignments.forEach(assignment => {
+        expandedAssignments.push(assignment);
+      });
+      
+      // If we only have one assignment in the series (base assignment), expand it into future weeks
+      // If we already have multiple assignments (one per week), we're done
+      if (seriesAssignments.length === 1 && baseAssignment.totalWeeks > 1) {
+        const firstDueDate = new Date(baseAssignment.dueDate);
+        const checkInWindow = baseAssignment.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
+        
+        // Generate assignments for remaining weeks (week 2 onwards, since week 1 is the base)
+        for (let week = 2; week <= baseAssignment.totalWeeks; week++) {
+          // Calculate due date for this week (7 days * (week - 1) from first due date)
+          const weekDueDate = new Date(firstDueDate);
+          weekDueDate.setDate(firstDueDate.getDate() + (7 * (week - 1)));
+          
+          // Only include future weeks (not past weeks that weren't created)
+          if (weekDueDate >= now) {
+            expandedAssignments.push({
+              ...baseAssignment,
+              id: `${baseAssignment.id}_week_${week}`, // Unique ID for each week
+              recurringWeek: week,
+              dueDate: weekDueDate.toISOString(),
+              status: weekDueDate < now ? 'overdue' : 'pending',
+              checkInWindow: checkInWindow,
+              responseId: undefined,
+              coachResponded: false,
+              completedAt: undefined,
+              score: undefined
+            });
+          }
+        }
+      }
+    });
+    
+    // Sort all assignments by due date
+    expandedAssignments.sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+
+    // Show all assignments (including expanded recurring ones)
+    const assignments = expandedAssignments;
 
     // Fetch coach names for all unique coach IDs
     const coachIds = [...new Set(assignments.map(a => a.assignedBy).filter(id => id && id !== 'Coach'))];
