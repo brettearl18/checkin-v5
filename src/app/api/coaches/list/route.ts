@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
           specialization: data.specialization || ''
         };
       })
-      .filter(coach => coach.status === 'active' || coach.status === 'unknown'); // Filter active coaches
+      .filter(coach => coach.status === 'active'); // Only show active coaches
     
     // Sort by name (last name, then first name)
     coaches.sort((a, b) => {
