@@ -267,8 +267,8 @@ async function createStandardForms(coachId: string, coachName: string, db: any) 
 }
 
 export async function POST(request: NextRequest) {
-  const db = getDb();
   try {
+    const db = getDb();
     const { email, password, firstName, lastName, role, coachId: providedCoachId } = await request.json();
 
     // Validate required fields
@@ -432,7 +432,13 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error: any) {
-    console.error('Error registering user:', error);
+    // Log the full error for debugging
+    console.error('Error registering user:', {
+      message: error.message,
+      code: error.code,
+      stack: error.stack,
+      name: error.name
+    });
     
     // Handle specific Firebase Auth errors
     if (error.code === 'auth/email-already-exists') {
@@ -459,7 +465,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: false,
       message: 'Failed to register user',
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : 'An error occurred during registration. Please try again.'
     }, { status: 500 });
   }
 }
