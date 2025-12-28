@@ -52,6 +52,7 @@ export default function ClientsPage() {
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
   const [statusModal, setStatusModal] = useState<{ clientId: string; status: string; pausedUntil?: string } | null>(null);
   const [clientsWithMetrics, setClientsWithMetrics] = useState<Client[]>([]);
+  const [deletingClient, setDeletingClient] = useState<string | null>(null);
 
   useEffect(() => {
     if (userProfile?.uid) {
@@ -137,17 +138,46 @@ export default function ClientsPage() {
   };
 
   const handleDeleteClient = async (clientId: string) => {
-    if (confirm('Are you sure you want to delete this client?')) {
-      try {
-        const response = await fetch(`/api/clients/${clientId}`, {
-          method: 'DELETE',
-        });
-        if (response.ok) {
-          setClients(clients.filter(client => client.id !== clientId));
-        }
-      } catch (error) {
-        console.error('Error deleting client:', error);
+    const client = clients.find(c => c.id === clientId);
+    const clientName = client ? `${client.firstName} ${client.lastName}` : 'this client';
+    
+    const confirmMessage = client?.status === 'archived'
+      ? `⚠️ PERMANENT DELETION WARNING ⚠️\n\nAre you absolutely sure you want to PERMANENTLY DELETE ${clientName}?\n\nThis will permanently delete:\n- All check-in assignments\n- All form responses\n- All measurements\n- All goals\n- All progress images\n- All coach feedback\n- All onboarding data\n- Client profile and scoring settings\n\nThis action CANNOT be undone!\n\nType "DELETE" to confirm:`
+      : `Are you sure you want to delete ${clientName}?\n\nNote: Only archived clients can be permanently deleted. Please archive this client first if you want to delete them permanently.`;
+
+    if (client?.status === 'archived') {
+      const userInput = prompt(confirmMessage);
+      if (userInput !== 'DELETE') {
+        alert('Deletion cancelled. You must type "DELETE" exactly to confirm permanent deletion.');
+        return;
       }
+    } else {
+      if (!confirm(confirmMessage)) {
+        return;
+      }
+      alert('Only archived clients can be permanently deleted. Please archive this client first.');
+      return;
+    }
+
+    setDeletingClient(clientId);
+    try {
+      const response = await fetch(`/api/clients/${clientId}`, {
+        method: 'DELETE',
+      });
+      const data = await response.json();
+      if (response.ok && data.success) {
+        // Remove from local state
+        setClients(clients.filter(client => client.id !== clientId));
+        setClientsWithMetrics(clientsWithMetrics.filter(client => client.id !== clientId));
+        alert(`Client ${clientName} and all related data have been permanently deleted.`);
+      } else {
+        alert(data.error || 'Failed to delete client');
+      }
+    } catch (error) {
+      console.error('Error deleting client:', error);
+      alert('An error occurred while deleting the client. Please try again.');
+    } finally {
+      setDeletingClient(null);
     }
   };
 
@@ -942,13 +972,25 @@ export default function ClientsPage() {
                                 </div>
                               )}
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-center">
-                              <Link
-                                href={`/clients/${client.id}`}
-                                className="text-orange-600 hover:text-orange-700 text-sm font-medium"
-                              >
-                                View →
-                              </Link>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex items-center justify-center gap-3">
+                                <Link
+                                  href={`/clients/${client.id}`}
+                                  className="text-orange-600 hover:text-orange-700 text-sm font-medium"
+                                >
+                                  View →
+                                </Link>
+                                {client.status === 'archived' && (
+                                  <button
+                                    onClick={() => handleDeleteClient(client.id)}
+                                    disabled={deletingClient === client.id}
+                                    className="text-red-600 hover:text-red-700 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                                    title="Permanently delete this archived client"
+                                  >
+                                    {deletingClient === client.id ? 'Deleting...' : 'Delete'}
+                                  </button>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         );
