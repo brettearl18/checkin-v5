@@ -161,7 +161,17 @@ export default function ClientProfilePage() {
   const [scoringThresholds, setScoringThresholds] = useState<ScoringThresholds>(getDefaultThresholds('lifestyle'));
   const [progressTrafficLight, setProgressTrafficLight] = useState<TrafficLightStatus>('orange');
   const [checkInTab, setCheckInTab] = useState<'all' | 'completed'>('all');
-  const [activeTab, setActiveTab] = useState<'overview' | 'progress' | 'checkins' | 'history'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'progress' | 'checkins' | 'history' | 'ai-analytics'>('overview');
+  const [aiAnalytics, setAiAnalytics] = useState<any>(null);
+  const [loadingAiAnalytics, setLoadingAiAnalytics] = useState(false);
+  const [showGenerateAnalyticsModal, setShowGenerateAnalyticsModal] = useState(false);
+  const [timePeriod, setTimePeriod] = useState<'all' | 'last-checkin' | '2-weeks' | '1-month' | '6-months' | '1-year' | 'custom'>('1-month');
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
+  const [generatingAnalytics, setGeneratingAnalytics] = useState(false);
+  const [analyticsHistory, setAnalyticsHistory] = useState<any[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
   const [questionProgressExpanded, setQuestionProgressExpanded] = useState(false);
   const [imagesExpanded, setImagesExpanded] = useState(false);
   const [measurementsExpanded, setMeasurementsExpanded] = useState(false);
@@ -301,6 +311,166 @@ export default function ClientProfilePage() {
       fetchAllocatedCheckIns();
     }
   }, [client, hasLoadedCheckIns]);
+
+  // Fetch AI Analytics history when tab is opened
+  useEffect(() => {
+    const fetchAnalyticsHistory = async () => {
+      if (activeTab === 'ai-analytics' && clientId) {
+        setLoadingHistory(true);
+        try {
+          const response = await fetch(`/api/clients/${clientId}/ai-analytics?history=true`);
+          if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.history) {
+              setAnalyticsHistory(data.history);
+              // If no current analytics loaded and we have history, load the most recent
+              if (!aiAnalytics && data.history.length > 0 && !selectedHistoryId) {
+                setAiAnalytics(data.history[0].analytics);
+                setSelectedHistoryId(data.history[0].id);
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching analytics history:', error);
+        } finally {
+          setLoadingHistory(false);
+        }
+      }
+    };
+
+    fetchAnalyticsHistory();
+  }, [activeTab, clientId]);
+
+  // Fetch specific history item when selected
+  useEffect(() => {
+    const fetchHistoryItem = async () => {
+      if (selectedHistoryId && clientId && activeTab === 'ai-analytics') {
+        setLoadingAiAnalytics(true);
+        try {
+          const response = await fetch(`/api/clients/${clientId}/ai-analytics?historyId=${selectedHistoryId}`);
+          if (response.ok) {
+            const data = await response.json();
+            if (data.success) {
+              setAiAnalytics(data.data);
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching history item:', error);
+        } finally {
+          setLoadingAiAnalytics(false);
+        }
+      }
+    };
+
+    if (selectedHistoryId) {
+      fetchHistoryItem();
+    }
+  }, [selectedHistoryId, clientId, activeTab]);
+
+  // Generate new AI analytics with time period
+  const handleGenerateAnalytics = async () => {
+    if (!clientId) return;
+
+    // Calculate date range based on time period
+    let startDate: Date;
+    let endDate = new Date();
+    
+    const lastCheckIn = allocatedCheckIns
+      .filter(c => c.status === 'completed')
+      .sort((a, b) => {
+        const dateA = a.completedAt?.toDate ? a.completedAt.toDate() : new Date(a.completedAt || 0);
+        const dateB = b.completedAt?.toDate ? b.completedAt.toDate() : new Date(b.completedAt || 0);
+        return dateB.getTime() - dateA.getTime();
+      })[0];
+
+    switch (timePeriod) {
+      case 'all':
+        // Use all available data - set start date to a very early date
+        startDate = new Date('2020-01-01'); // Far back enough to capture all data
+        break;
+      case 'last-checkin':
+        if (lastCheckIn) {
+          const lastDate = lastCheckIn.completedAt?.toDate ? lastCheckIn.completedAt.toDate() : new Date(lastCheckIn.completedAt || 0);
+          startDate = new Date(lastDate);
+          startDate.setHours(0, 0, 0, 0);
+        } else {
+          alert('No check-ins found. Please select a different time period.');
+          return;
+        }
+        break;
+      case '2-weeks':
+        startDate = new Date();
+        startDate.setDate(startDate.getDate() - 14);
+        break;
+      case '1-month':
+        startDate = new Date();
+        startDate.setMonth(startDate.getMonth() - 1);
+        break;
+      case '6-months':
+        startDate = new Date();
+        startDate.setMonth(startDate.getMonth() - 6);
+        break;
+      case '1-year':
+        startDate = new Date();
+        startDate.setFullYear(startDate.getFullYear() - 1);
+        break;
+      case 'custom':
+        if (!customStartDate || !customEndDate) {
+          alert('Please select both start and end dates for custom range.');
+          return;
+        }
+        startDate = new Date(customStartDate);
+        endDate = new Date(customEndDate);
+        break;
+      default:
+        startDate = new Date();
+        startDate.setMonth(startDate.getMonth() - 1);
+    }
+
+    setGeneratingAnalytics(true);
+    setShowGenerateAnalyticsModal(false);
+
+    try {
+      const params = new URLSearchParams({
+        timePeriod,
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString()
+      });
+
+      const response = await fetch(`/api/clients/${clientId}/ai-analytics?${params.toString()}`, {
+        method: 'POST'
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setAiAnalytics(data.data);
+        } else {
+          alert('Failed to generate analytics: ' + (data.message || 'Unknown error'));
+        }
+      } else {
+        alert('Failed to generate analytics. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error generating AI analytics:', error);
+      alert('Error generating analytics. Please try again.');
+    } finally {
+      setGeneratingAnalytics(false);
+    }
+  };
+
+  const getTimePeriodLabel = (period: string) => {
+    switch (period) {
+      case 'all': return 'All Available Data';
+      case 'last-checkin': return 'Since Last Check-in';
+      case '2-weeks': return 'Last 2 Weeks';
+      case '1-month': return 'Last Month';
+      case '6-months': return 'Last 6 Months';
+      case '1-year': return 'Last Year';
+      case 'custom': return 'Custom Range';
+      default: return period;
+    }
+  };
 
   // Fetch client scoring configuration for traffic light system
   useEffect(() => {
@@ -1619,6 +1789,16 @@ export default function ClientProfilePage() {
                 }`}
               >
                 History
+              </button>
+              <button
+                onClick={() => setActiveTab('ai-analytics')}
+                className={`flex-1 px-6 py-4 text-sm font-semibold transition-all ${
+                  activeTab === 'ai-analytics'
+                    ? 'text-orange-600 border-b-2 border-orange-600 bg-orange-50/50'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                }`}
+              >
+                AI Analytics
               </button>
             </div>
           </div>
@@ -3364,6 +3544,315 @@ export default function ClientProfilePage() {
                   </div>
                 </div>
               )}
+
+              {/* AI ANALYTICS TAB */}
+              {activeTab === 'ai-analytics' && (
+                <div className="space-y-6">
+                  {loadingAiAnalytics ? (
+                    <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 p-8">
+                      <div className="text-center">
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mx-auto mb-4"></div>
+                        <p className="text-gray-600">Loading AI Analytics...</p>
+                      </div>
+                    </div>
+                  ) : generatingAnalytics ? (
+                    <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 p-8">
+                      <div className="text-center">
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mx-auto mb-4"></div>
+                        <p className="text-gray-600 font-medium">Generating AI Analytics...</p>
+                        <p className="text-sm text-gray-500 mt-2">This may take a few moments</p>
+                      </div>
+                    </div>
+                  ) : aiAnalytics ? (
+                    <>
+                      {/* Risk Status Card */}
+                      <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                        <div className={`px-8 py-6 border-b-2 ${
+                          aiAnalytics.riskLevel === 'critical' ? 'bg-red-50 border-red-200' :
+                          aiAnalytics.riskLevel === 'high' ? 'bg-orange-50 border-orange-200' :
+                          aiAnalytics.riskLevel === 'medium' ? 'bg-yellow-50 border-yellow-200' :
+                          'bg-green-50 border-green-200'
+                        }`}>
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <h2 className="text-2xl font-bold text-gray-900">AI Analytics Dashboard</h2>
+                              <p className="text-sm text-gray-600 mt-1">
+                                Intelligent insights and predictions based on client patterns
+                                {aiAnalytics.timePeriod && (
+                                  <span className="ml-2 px-2 py-0.5 bg-white/50 rounded text-xs font-medium">
+                                    {aiAnalytics.timePeriod}
+                                  </span>
+                                )}
+                                {aiAnalytics.generatedAt && (
+                                  <span className="ml-2 text-xs text-gray-500">
+                                    Generated {new Date(aiAnalytics.generatedAt).toLocaleDateString()}
+                                  </span>
+                                )}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-4">
+                              {analyticsHistory.length > 0 && (
+                                <select
+                                  value={selectedHistoryId || ''}
+                                  onChange={(e) => {
+                                    if (e.target.value === 'new') {
+                                      setShowGenerateAnalyticsModal(true);
+                                    } else {
+                                      setSelectedHistoryId(e.target.value);
+                                    }
+                                  }}
+                                  className="px-4 py-2 border border-gray-300 rounded-xl text-sm font-medium bg-white hover:bg-gray-50 transition-colors focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                                >
+                                  <option value="">Select Past Report...</option>
+                                  {analyticsHistory.map((item) => (
+                                    <option key={item.id} value={item.id}>
+                                      {item.timePeriod} - {new Date(item.createdAt).toLocaleDateString()}
+                                    </option>
+                                  ))}
+                                  <option value="new">+ Generate New Analytics</option>
+                                </select>
+                              )}
+                              <button
+                                onClick={() => setShowGenerateAnalyticsModal(true)}
+                                className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-sm font-medium transition-all duration-200 shadow-sm flex items-center gap-2"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                </svg>
+                                Generate New Analytics
+                              </button>
+                              <div className="text-right">
+                                <div className={`px-4 py-2 rounded-xl font-semibold text-sm ${
+                                  aiAnalytics.riskLevel === 'critical' ? 'bg-red-100 text-red-800' :
+                                  aiAnalytics.riskLevel === 'high' ? 'bg-orange-100 text-orange-800' :
+                                  aiAnalytics.riskLevel === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                                  'bg-green-100 text-green-800'
+                                }`}>
+                                  Risk Level: {aiAnalytics.riskLevel.toUpperCase()}
+                                </div>
+                                <p className="text-xs text-gray-500 mt-1">Risk Score: {aiAnalytics.riskScore}/100</p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="p-8">
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                            <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-2xl p-6 border border-blue-200">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-sm font-medium text-blue-700">Trend</span>
+                                <span className={`text-2xl ${
+                                  aiAnalytics.trend === 'improving' ? 'text-green-600' :
+                                  aiAnalytics.trend === 'declining' ? 'text-red-600' :
+                                  'text-gray-600'
+                                }`}>
+                                  {aiAnalytics.trend === 'improving' ? '📈' : aiAnalytics.trend === 'declining' ? '📉' : '➡️'}
+                                </span>
+                              </div>
+                              <p className="text-2xl font-bold text-gray-900 capitalize">{aiAnalytics.trend}</p>
+                            </div>
+                            <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-2xl p-6 border border-purple-200">
+                              <div className="text-sm font-medium text-purple-700 mb-2">Baseline Score</div>
+                              <p className="text-2xl font-bold text-gray-900">{aiAnalytics.baselineMetrics.averageScore}%</p>
+                              <p className="text-xs text-purple-600 mt-1">Est. {new Date(aiAnalytics.baselineMetrics.establishedAt).toLocaleDateString()}</p>
+                            </div>
+                            <div className="bg-gradient-to-br from-teal-50 to-teal-100 rounded-2xl p-6 border border-teal-200">
+                              <div className="text-sm font-medium text-teal-700 mb-2">Current Average</div>
+                              <p className="text-2xl font-bold text-gray-900">
+                                {aiAnalytics.currentMetrics.recentScores.length > 0 
+                                  ? Math.round(aiAnalytics.currentMetrics.recentScores.reduce((a: number, b: number) => a + b, 0) / aiAnalytics.currentMetrics.recentScores.length)
+                                  : 0}%
+                              </p>
+                              <p className="text-xs text-teal-600 mt-1">Last {aiAnalytics.currentMetrics.recentScores.length} weeks</p>
+                            </div>
+                          </div>
+
+                          {/* Alerts */}
+                          {aiAnalytics.alerts && aiAnalytics.alerts.length > 0 && (
+                            <div className="mb-8">
+                              <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Alerts</h3>
+                              <div className="space-y-3">
+                                {aiAnalytics.alerts.map((alert: any, index: number) => (
+                                  <div key={index} className={`p-4 rounded-xl border-2 ${
+                                    alert.type === 'urgent' ? 'bg-red-50 border-red-200' :
+                                    alert.type === 'warning' ? 'bg-yellow-50 border-yellow-200' :
+                                    alert.type === 'success' ? 'bg-green-50 border-green-200' :
+                                    'bg-blue-50 border-blue-200'
+                                  }`}>
+                                    <div className="flex items-start justify-between">
+                                      <div className="flex-1">
+                                        <div className="flex items-center gap-2 mb-1">
+                                          <span className={`font-semibold ${
+                                            alert.type === 'urgent' ? 'text-red-800' :
+                                            alert.type === 'warning' ? 'text-yellow-800' :
+                                            alert.type === 'success' ? 'text-green-800' :
+                                            'text-blue-800'
+                                          }`}>
+                                            {alert.title}
+                                          </span>
+                                          <span className="text-xs text-gray-500">
+                                            {new Date(alert.timestamp).toLocaleDateString()}
+                                          </span>
+                                        </div>
+                                        <p className="text-sm text-gray-700 mb-2">{alert.message}</p>
+                                        {alert.recommendedAction && (
+                                          <p className="text-xs font-medium text-gray-600">
+                                            💡 Recommended: {alert.recommendedAction}
+                                          </p>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Score History Chart */}
+                          {aiAnalytics.scoreHistory && aiAnalytics.scoreHistory.length > 0 && (
+                            <div className="mb-8">
+                              <h3 className="text-lg font-semibold text-gray-900 mb-4">Score History Trend</h3>
+                              <div className="bg-gray-50 rounded-xl p-6 border border-gray-200">
+                                <div className="flex items-end justify-between h-48 gap-2">
+                                  {aiAnalytics.scoreHistory.map((entry: any, index: number) => {
+                                    const height = (entry.score / 100) * 100;
+                                    return (
+                                      <div key={index} className="flex-1 flex flex-col items-center">
+                                        <div className="w-full flex flex-col items-center justify-end h-40 mb-2">
+                                          <div
+                                            className={`w-full rounded-t-lg ${
+                                              entry.status === 'green' ? 'bg-green-500' :
+                                              entry.status === 'orange' ? 'bg-orange-500' :
+                                              'bg-red-500'
+                                            }`}
+                                            style={{ height: `${height}%`, minHeight: '4px' }}
+                                          ></div>
+                                        </div>
+                                        <div className="text-xs font-medium text-gray-700 text-center">
+                                          {entry.score}%
+                                        </div>
+                                        <div className="text-xs text-gray-500 text-center mt-1">
+                                          W{entry.week}
+                                        </div>
+                                        <div className="text-[10px] text-gray-400 text-center">
+                                          {new Date(entry.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* AI Insights */}
+                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                            <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-2xl p-6 border border-indigo-200">
+                              <h3 className="text-lg font-semibold text-gray-900 mb-3">📊 Score Trend Analysis</h3>
+                              <p className="text-sm text-gray-700 leading-relaxed">{aiAnalytics.insights.scoreTrend}</p>
+                            </div>
+                            <div className="bg-gradient-to-br from-pink-50 to-pink-100 rounded-2xl p-6 border border-pink-200">
+                              <h3 className="text-lg font-semibold text-gray-900 mb-3">🧠 Behavioral Patterns</h3>
+                              <p className="text-sm text-gray-700 leading-relaxed">{aiAnalytics.insights.behavioralPatterns}</p>
+                            </div>
+                            <div className="bg-gradient-to-br from-cyan-50 to-cyan-100 rounded-2xl p-6 border border-cyan-200">
+                              <h3 className="text-lg font-semibold text-gray-900 mb-3">💬 Sentiment Analysis</h3>
+                              <p className="text-sm text-gray-700 leading-relaxed">{aiAnalytics.insights.sentimentAnalysis}</p>
+                            </div>
+                            <div className="bg-gradient-to-br from-amber-50 to-amber-100 rounded-2xl p-6 border border-amber-200">
+                              <h3 className="text-lg font-semibold text-gray-900 mb-3">🔮 Predictive Insights</h3>
+                              <p className="text-sm text-gray-700 leading-relaxed">{aiAnalytics.insights.predictiveInsights}</p>
+                            </div>
+                          </div>
+
+                          {/* Risk Factors & Success Factors */}
+                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                            {aiAnalytics.riskFactors.reasons.length > 0 && (
+                              <div className="bg-red-50 rounded-2xl p-6 border-2 border-red-200">
+                                <h3 className="text-lg font-semibold text-red-900 mb-3">⚠️ Risk Factors</h3>
+                                <ul className="space-y-2">
+                                  {aiAnalytics.riskFactors.reasons.map((reason: string, index: number) => (
+                                    <li key={index} className="flex items-start gap-2 text-sm text-red-800">
+                                      <span className="text-red-500 mt-1">•</span>
+                                      <span>{reason}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                            {aiAnalytics.successFactors.whatWorks.length > 0 && (
+                              <div className="bg-green-50 rounded-2xl p-6 border-2 border-green-200">
+                                <h3 className="text-lg font-semibold text-green-900 mb-3">✅ Success Factors</h3>
+                                <div className="mb-4">
+                                  <p className="text-sm font-medium text-green-800 mb-2">What's Working:</p>
+                                  <ul className="space-y-2">
+                                    {aiAnalytics.successFactors.whatWorks.map((item: string, index: number) => (
+                                      <li key={index} className="flex items-start gap-2 text-sm text-green-800">
+                                        <span className="text-green-500 mt-1">✓</span>
+                                        <span>{item}</span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                                {aiAnalytics.successFactors.strengths.length > 0 && (
+                                  <div>
+                                    <p className="text-sm font-medium text-green-800 mb-2">Client Strengths:</p>
+                                    <ul className="space-y-2">
+                                      {aiAnalytics.successFactors.strengths.map((strength: string, index: number) => (
+                                        <li key={index} className="flex items-start gap-2 text-sm text-green-800">
+                                          <span className="text-green-500 mt-1">💪</span>
+                                          <span>{strength}</span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Recommended Actions */}
+                          {aiAnalytics.recommendedActions && aiAnalytics.recommendedActions.length > 0 && (
+                            <div className="bg-orange-50 rounded-2xl p-6 border-2 border-orange-200">
+                              <h3 className="text-lg font-semibold text-orange-900 mb-4">🎯 Recommended Actions</h3>
+                              <ol className="space-y-3">
+                                {aiAnalytics.recommendedActions.map((action: string, index: number) => (
+                                  <li key={index} className="flex items-start gap-3 text-sm text-orange-900">
+                                    <span className="flex-shrink-0 w-6 h-6 bg-orange-500 text-white rounded-full flex items-center justify-center font-semibold text-xs">
+                                      {index + 1}
+                                    </span>
+                                    <span className="pt-0.5">{action}</span>
+                                  </li>
+                                ))}
+                              </ol>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 p-8">
+                      <div className="text-center py-12">
+                        <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                          <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                          </svg>
+                        </div>
+                        <p className="text-gray-500 text-lg mb-2">No AI Analytics Available</p>
+                        <p className="text-gray-400 text-sm mb-6">Generate AI analytics based on selected time period</p>
+                        <button
+                          onClick={() => setShowGenerateAnalyticsModal(true)}
+                          className="px-6 py-3 bg-orange-500 hover:bg-orange-600 text-white rounded-xl font-medium transition-all duration-200 shadow-sm flex items-center gap-2 mx-auto"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                          </svg>
+                          Generate New Analytics
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Compact Sidebar */}
@@ -4331,6 +4820,115 @@ export default function ClientProfilePage() {
                   className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
                 >
                   {savingSettings ? 'Saving...' : 'Save Settings'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Generate Analytics Modal */}
+      {showGenerateAnalyticsModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full">
+            <div className="bg-gradient-to-r from-orange-50 to-yellow-50 px-6 py-4 border-b border-gray-100 rounded-t-2xl">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900">Generate AI Analytics</h3>
+                  <p className="text-gray-600 mt-1 text-sm">Select a time period to analyze client data</p>
+                </div>
+                <button
+                  onClick={() => setShowGenerateAnalyticsModal(false)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            
+            <div className="p-6 space-y-6">
+              <div>
+                <label className="block text-sm font-semibold text-gray-900 mb-3">Time Period</label>
+                <div className="space-y-2">
+                  {['all', 'last-checkin', '2-weeks', '1-month', '6-months', '1-year', 'custom'].map((period) => (
+                    <label
+                      key={period}
+                      className={`flex items-center p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                        timePeriod === period
+                          ? 'border-orange-500 bg-orange-50'
+                          : 'border-gray-200 bg-white hover:border-gray-300'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="timePeriod"
+                        value={period}
+                        checked={timePeriod === period}
+                        onChange={(e) => setTimePeriod(e.target.value as any)}
+                        className="mr-3 text-orange-500"
+                      />
+                      <span className="text-sm font-medium text-gray-900">{getTimePeriodLabel(period)}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {timePeriod === 'custom' && (
+                <div className="grid grid-cols-2 gap-4 pt-2">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+                    <input
+                      type="date"
+                      value={customStartDate}
+                      onChange={(e) => setCustomStartDate(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+                    <input
+                      type="date"
+                      value={customEndDate}
+                      onChange={(e) => setCustomEndDate(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                <p className="text-sm text-blue-800">
+                  <strong>What will be analyzed:</strong> All check-ins, measurements, and messages within the selected time period will be used to generate insights.
+                </p>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => setShowGenerateAnalyticsModal(false)}
+                  className="flex-1 px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm font-medium transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleGenerateAnalytics}
+                  disabled={generatingAnalytics || (timePeriod === 'custom' && (!customStartDate || !customEndDate))}
+                  className="flex-1 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {generatingAnalytics ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                      Generate Analytics
+                    </>
+                  )}
                 </button>
               </div>
             </div>
