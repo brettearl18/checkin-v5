@@ -156,6 +156,48 @@ export async function POST(
       // Don't fail the check-in if notification fails
     }
 
+    // Send completion confirmation email to client
+    try {
+      const clientEmail = clientData.email;
+      if (clientEmail) {
+        const { sendEmail } = await import('@/lib/email-service');
+        const { getCheckInCompletedEmailTemplate } = await import('@/lib/email-templates');
+        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://checkinv5.web.app';
+        const checkInUrl = `${baseUrl}/client-portal/check-in/${assignmentId}`;
+
+        // Get coach name
+        let coachName: string | undefined;
+        if (assignmentData.coachId) {
+          try {
+            const coachDoc = await db.collection('coaches').doc(assignmentData.coachId).get();
+            if (coachDoc.exists) {
+              const coachData = coachDoc.data();
+              coachName = `${coachData?.firstName || ''} ${coachData?.lastName || ''}`.trim() || undefined;
+            }
+          } catch (error) {
+            console.log('Could not fetch coach information for completion email');
+          }
+        }
+
+        const { subject, html } = getCheckInCompletedEmailTemplate(
+          clientName,
+          formData.title,
+          finalScore,
+          checkInUrl,
+          coachName
+        );
+
+        await sendEmail({
+          to: clientEmail,
+          subject,
+          html,
+        });
+      }
+    } catch (error) {
+      console.error('Error sending completion email:', error);
+      // Don't fail the check-in if email fails
+    }
+
     return NextResponse.json({
       success: true,
       message: 'Check-in completed successfully',

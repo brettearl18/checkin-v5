@@ -143,12 +143,28 @@ export async function GET(request: NextRequest) {
       unreadCount = 0;
     }
 
-    return NextResponse.json({
-      success: true,
-      notifications,
-      unreadCount,
-      totalCount: notifications.length
-    });
+    // Ensure we always return a valid response
+    try {
+      return NextResponse.json({
+        success: true,
+        notifications: notifications || [],
+        unreadCount: unreadCount || 0,
+        totalCount: notifications?.length || 0
+      });
+    } catch (jsonError: any) {
+      console.error('Error serializing response:', jsonError);
+      // Fallback to a basic response if JSON serialization fails
+      return NextResponse.json(
+        { 
+          success: false, 
+          message: 'Error serializing response',
+          notifications: [],
+          unreadCount: 0,
+          totalCount: 0
+        },
+        { status: 200 }
+      );
+    }
 
   } catch (error: any) {
     console.error('Error fetching notifications:', error);
@@ -156,7 +172,11 @@ export async function GET(request: NextRequest) {
     if (error?.stack) {
       console.error('Error stack:', error.stack);
     }
+    if (error?.code) {
+      console.error('Error code:', error.code);
+    }
     // Return 200 with error details instead of 500, since we're handling it gracefully
+    // This ensures the UI doesn't break even if notifications fail to load
     return NextResponse.json(
       { 
         success: false, 

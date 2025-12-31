@@ -20,6 +20,39 @@ export async function GET(request: NextRequest) {
       }, { status: 400 });
     }
 
+    // Check if client has completed onboarding
+    // If not, return empty check-ins list (coaches can still allocate, but clients won't see them)
+    let onboardingCompleted = false;
+    try {
+      const clientDoc = await db.collection('clients').doc(clientId).get();
+      if (clientDoc.exists) {
+        const clientData = clientDoc.data();
+        const canStartCheckIns = clientData?.canStartCheckIns;
+        const onboardingStatus = clientData?.onboardingStatus;
+        onboardingCompleted = (canStartCheckIns && onboardingStatus === 'completed');
+      }
+    } catch (error) {
+      console.error('Error checking client onboarding status:', error);
+      // If we can't check, default to showing check-ins (fail open for better UX)
+      onboardingCompleted = true;
+    }
+
+    // If onboarding is not completed, return empty list
+    if (!onboardingCompleted) {
+      return NextResponse.json({
+        success: true,
+        data: {
+          checkins: [],
+          summary: {
+            total: 0,
+            pending: 0,
+            completed: 0,
+            overdue: 0
+          }
+        }
+      });
+    }
+
     let allAssignments: any[] = [];
 
     try {

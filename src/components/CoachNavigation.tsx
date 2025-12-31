@@ -22,7 +22,8 @@ const getPageTitle = (pathname: string): string => {
   if (pathname.startsWith('/questions')) return 'Questions Library';
   if (pathname.startsWith('/check-ins')) return 'Check-ins';
   if (pathname.startsWith('/responses')) return 'Responses';
-  if (pathname.startsWith('/questions')) return 'Questions Library';
+  if (pathname.startsWith('/test-scheduled-emails')) return 'Test Scheduled Emails';
+  if (pathname.startsWith('/test-email')) return 'Test Email';
   return 'Coach Portal';
 };
 
@@ -223,6 +224,52 @@ export default function CoachNavigation() {
                 </svg>
               </div>
               <span>Create Form</span>
+            </Link>
+          </div>
+
+          {/* Divider */}
+          <div className="my-6 border-t border-gray-200"></div>
+
+          {/* Tools Section */}
+          <div className="space-y-2">
+            <h3 className="px-4 text-sm font-semibold text-gray-700 uppercase tracking-wider">Tools</h3>
+            
+            <Link
+              href="/test-scheduled-emails"
+              onClick={() => setIsOpen(false)}
+              className={`flex items-center space-x-3 px-4 py-3 rounded-2xl font-medium transition-all duration-200 ${
+                isActive('/test-scheduled-emails')
+                  ? 'bg-orange-50 text-orange-700 border-l-4 border-orange-500'
+                  : 'text-gray-700 hover:bg-orange-50 hover:text-orange-700'
+              }`}
+            >
+              <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${
+                isActive('/test-scheduled-emails') ? 'bg-orange-100' : 'bg-gray-100'
+              }`}>
+                <svg className={`w-4 h-4 ${isActive('/test-scheduled-emails') ? 'text-orange-600' : 'text-gray-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+              </div>
+              <span>Test Scheduled Emails</span>
+            </Link>
+
+            <Link
+              href="/test-email"
+              onClick={() => setIsOpen(false)}
+              className={`flex items-center space-x-3 px-4 py-3 rounded-2xl font-medium transition-all duration-200 ${
+                isActive('/test-email')
+                  ? 'bg-orange-50 text-orange-700 border-l-4 border-orange-500'
+                  : 'text-gray-700 hover:bg-orange-50 hover:text-orange-700'
+              }`}
+            >
+              <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${
+                isActive('/test-email') ? 'bg-orange-100' : 'bg-gray-100'
+              }`}>
+                <svg className={`w-4 h-4 ${isActive('/test-email') ? 'text-orange-600' : 'text-gray-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <span>Test Email</span>
             </Link>
           </div>
 

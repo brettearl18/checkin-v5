@@ -217,7 +217,7 @@ export default function ClientNavigation() {
       {/* Mobile Hamburger Button - Only visible on mobile */}
       <button
         onClick={() => setIsMenuOpen(true)}
-        className="lg:hidden fixed top-4 left-4 z-50 inline-flex items-center justify-center w-10 h-10 rounded-lg border border-gray-200 bg-white text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#daa450]"
+        className="lg:hidden fixed top-4 left-4 z-[60] inline-flex items-center justify-center w-10 h-10 rounded-lg border border-gray-200 bg-white text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#daa450]"
         aria-label="Open navigation menu"
       >
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

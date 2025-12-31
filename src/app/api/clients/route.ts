@@ -10,20 +10,31 @@ function generateOnboardingToken(): string {
   return crypto.randomBytes(32).toString('hex');
 }
 
-// Send onboarding email (mock implementation for development)
-async function sendOnboardingEmail(email: string, onboardingToken: string, coachName: string) {
+// Send onboarding email using Mailgun
+async function sendOnboardingEmail(email: string, onboardingToken: string, coachName: string, clientName?: string) {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
   const onboardingUrl = `${baseUrl}/client-onboarding?token=${onboardingToken}&email=${encodeURIComponent(email)}`;
 
-  console.log('📧 ONBOARDING EMAIL SENT:');
-  console.log('To:', email);
-  console.log('From:', coachName);
-  console.log('Onboarding URL:', onboardingUrl);
-  console.log('---');
+  try {
+    const { sendEmail, getOnboardingEmailTemplate } = await import('@/lib/email-service');
+    const { subject, html } = getOnboardingEmailTemplate(
+      clientName || 'there',
+      onboardingUrl,
+      coachName
+    );
 
-  // In production, this would send a real email
-  // For now, we'll just log it so you can test the flow
-  return true;
+    await sendEmail({
+      to: email,
+      subject,
+      html,
+    });
+
+    return true;
+  } catch (error) {
+    console.error('Error sending onboarding email:', error);
+    // Don't fail the client creation if email fails
+    return false;
+  }
 }
 
 export async function GET(request: NextRequest) {
@@ -238,12 +249,35 @@ export async function POST(request: NextRequest) {
     // Save to Firestore
     await db.collection('clients').doc(clientId).set(client);
 
-    // If credentials were created, return them (for popup display)
+    // If credentials were created, send credentials email and return them (for popup display)
     // Otherwise, send onboarding email with token
     if (userCredentials) {
+      // Send credentials email
+      try {
+        const { sendEmail, getCredentialsEmailTemplate } = await import('@/lib/email-service');
+        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+        const loginUrl = `${baseUrl}/login`;
+        const { subject, html } = getCredentialsEmailTemplate(
+          `${firstName} ${lastName}`,
+          email,
+          userCredentials.password,
+          loginUrl,
+          coachName
+        );
+
+        await sendEmail({
+          to: email,
+          subject,
+          html,
+        });
+      } catch (emailError) {
+        console.error('Error sending credentials email:', emailError);
+        // Don't fail the client creation if email fails
+      }
+
       return NextResponse.json({
         success: true,
-        message: 'Client created successfully with login credentials.',
+        message: 'Client created successfully with login credentials. Email sent.',
         clientId: clientId,
         client: client,
         credentials: userCredentials
@@ -258,7 +292,7 @@ export async function POST(request: NextRequest) {
         tokenExpiry
       });
 
-      await sendOnboardingEmail(email, onboardingToken, coachName);
+      await sendOnboardingEmail(email, onboardingToken, coachName, `${firstName} ${lastName}`);
 
       return NextResponse.json({
         success: true,

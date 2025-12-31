@@ -18,29 +18,8 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Fetch form to get the title and validate client can receive check-ins
+    // Fetch form to get the title
     const db = getDb();
-    
-    // Check if client has completed onboarding
-    try {
-      const clientDoc = await db.collection('clients').doc(clientId).get();
-      if (clientDoc.exists) {
-        const clientData = clientDoc.data();
-        const canStartCheckIns = clientData?.canStartCheckIns;
-        const onboardingStatus = clientData?.onboardingStatus;
-        
-        if (!canStartCheckIns || onboardingStatus !== 'completed') {
-          return NextResponse.json({
-            success: false,
-            message: 'Client must complete the onboarding questionnaire before receiving check-in assignments. Please complete onboarding first.',
-            onboardingStatus: onboardingStatus || 'not_started'
-          }, { status: 400 });
-        }
-      }
-    } catch (error) {
-      console.error('Error checking client onboarding status:', error);
-      // Continue - don't block if we can't check
-    }
     
     let formTitle = 'Unknown Form';
     try {
@@ -104,12 +83,64 @@ export async function POST(request: NextRequest) {
     try {
       await notificationService.createFormAssignedNotification(
         clientId,
-        formData.title,
+        formTitle,
         docRef.id
       );
     } catch (error) {
       console.error('Error creating notification:', error);
       // Don't fail the assignment if notification fails
+    }
+
+    // Send email notification to client
+    try {
+      // Get client information
+      const clientDoc = await db.collection('clients').doc(clientId).get();
+      if (clientDoc.exists) {
+        const clientData = clientDoc.data();
+        const clientEmail = clientData?.email;
+        const clientName = `${clientData?.firstName || ''} ${clientData?.lastName || ''}`.trim() || 'there';
+        
+        // Get coach information
+        let coachName: string | undefined;
+        try {
+          const coachDoc = await db.collection('coaches').doc(coachId).get();
+          if (coachDoc.exists) {
+            const coachData = coachDoc.data();
+            coachName = `${coachData?.firstName || ''} ${coachData?.lastName || ''}`.trim() || undefined;
+          }
+        } catch (coachError) {
+          console.log('Could not fetch coach information for email');
+        }
+
+        if (clientEmail) {
+          const { sendEmail, getCheckInAssignmentEmailTemplate } = await import('@/lib/email-service');
+          const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+          const checkInUrl = `${baseUrl}/client-portal/check-in/${docRef.id}`;
+          const dueDateFormatted = dueDate.toLocaleDateString('en-US', { 
+            weekday: 'long', 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+          });
+
+          const { subject, html } = getCheckInAssignmentEmailTemplate(
+            clientName,
+            formTitle,
+            dueDateFormatted,
+            checkInUrl,
+            coachName
+          );
+
+          await sendEmail({
+            to: clientEmail,
+            subject,
+            html,
+          });
+        }
+      }
+    } catch (emailError) {
+      console.error('Error sending check-in assignment email:', emailError);
+      // Don't fail the assignment if email fails
     }
     
     return NextResponse.json({

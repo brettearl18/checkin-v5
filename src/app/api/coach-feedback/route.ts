@@ -143,6 +143,56 @@ export async function POST(request: NextRequest) {
             `${coachName} has provided feedback on your "${formTitle}" check-in. Click to view your coach's response.`,
             `/client-portal/feedback/${responseId}`
           );
+
+          // Send email notification to client
+          try {
+            // Get client information
+            const clientDoc = await db.collection('clients').doc(clientId).get();
+            if (clientDoc.exists) {
+              const clientData = clientDoc.data();
+              const clientEmail = clientData?.email;
+              const clientName = `${clientData?.firstName || ''} ${clientData?.lastName || ''}`.trim() || 'there';
+
+              if (clientEmail) {
+                const { sendEmail } = await import('@/lib/email-service');
+                const { getCoachFeedbackEmailTemplate } = await import('@/lib/email-templates');
+                const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://checkinv5.web.app';
+                const feedbackUrl = `${baseUrl}/client-portal/feedback/${responseId}`;
+
+                // Check if feedback has voice message (feedbackType comes from request body)
+                const hasVoiceFeedback = feedbackType === 'voice';
+
+                // Get score from response
+                let score = 0;
+                try {
+                  const responseDoc = await db.collection('formResponses').doc(responseId).get();
+                  if (responseDoc.exists) {
+                    score = responseDoc.data()?.score || 0;
+                  }
+                } catch (error) {
+                  console.log('Could not fetch score for feedback email');
+                }
+
+                const { subject, html } = getCoachFeedbackEmailTemplate(
+                  clientName,
+                  formTitle,
+                  score,
+                  feedbackUrl,
+                  hasVoiceFeedback,
+                  coachName === 'Your coach' ? undefined : coachName
+                );
+
+                await sendEmail({
+                  to: clientEmail,
+                  subject,
+                  html,
+                });
+              }
+            }
+          } catch (emailError) {
+            console.error('Error sending feedback email:', emailError);
+            // Don't fail the feedback save if email fails
+          }
         }
       } catch (error) {
         console.error('Error creating client notification:', error);

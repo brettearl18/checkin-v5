@@ -305,7 +305,7 @@ export default function ClientProfilePage() {
   // Fetch client scoring configuration for traffic light system
   useEffect(() => {
     const fetchScoringConfig = async () => {
-      if (!clientId) return;
+      if (!clientId || !db) return;
       
       try {
         const scoringDoc = await getDoc(doc(db, 'clientScoring', clientId));
