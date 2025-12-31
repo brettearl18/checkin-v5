@@ -146,9 +146,15 @@ export async function POST(request: NextRequest) {
       ...responses
     };
 
-    // Calculate progress
-    const answeredQuestions = Object.keys(updatedResponses).length;
-    const completionPercentage = Math.round((answeredQuestions / ONBOARDING_QUESTIONS.length) * 100);
+    // Calculate progress - only count main questions, not follow-ups
+    // Follow-up questions are stored with _followup suffix, so we filter those out
+    const mainQuestionIds = ONBOARDING_QUESTIONS.map(q => q.id);
+    const answeredMainQuestions = mainQuestionIds.filter(qId => {
+      const answer = updatedResponses[qId];
+      return answer !== undefined && answer !== null && answer !== '';
+    });
+    const answeredQuestions = answeredMainQuestions.length;
+    const completionPercentage = Math.min(100, Math.round((answeredQuestions / ONBOARDING_QUESTIONS.length) * 100));
     
     // Get completed sections
     const sectionQuestions = ONBOARDING_QUESTIONS.filter(q => q.section === section);
@@ -160,8 +166,8 @@ export async function POST(request: NextRequest) {
       completedSections = [...completedSections, section].sort((a, b) => a - b);
     }
 
-    // Determine if all sections are complete
-    const allSectionsComplete = completedSections.length === 10;
+    // Determine if all sections are complete (9 sections now, measurements removed)
+    const allSectionsComplete = completedSections.length === 9;
     const status = allSectionsComplete ? 'completed' : existingData.status || 'in_progress';
 
     // Update onboarding document

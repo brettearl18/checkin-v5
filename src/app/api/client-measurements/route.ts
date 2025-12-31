@@ -42,8 +42,9 @@ export async function GET(request: NextRequest) {
       return {
         id: doc.id,
         ...data,
-        date: data.date?.toDate?.()?.toISOString() || data.date,
-        createdAt: data.createdAt?.toDate?.()?.toISOString() || data.createdAt
+        date: data.date?.toDate?.()?.toISOString() || (data.date instanceof Date ? data.date.toISOString() : data.date),
+        createdAt: data.createdAt?.toDate?.()?.toISOString() || (data.createdAt instanceof Date ? data.createdAt.toISOString() : data.createdAt),
+        updatedAt: data.updatedAt?.toDate?.()?.toISOString() || (data.updatedAt instanceof Date ? data.updatedAt.toISOString() : data.updatedAt)
       };
     });
 

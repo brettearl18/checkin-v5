@@ -613,13 +613,6 @@ export default function ProgressImagesPage() {
                                   {formatTimeAgo(image.uploadedAt)}
                                 </span>
                               </div>
-                              {image.caption && (
-                                <div className="absolute bottom-2 left-2 right-2">
-                                  <p className="px-2 py-1 rounded text-xs font-medium bg-black bg-opacity-50 text-white truncate">
-                                    {image.caption}
-                                  </p>
-                                </div>
-                              )}
                               
                               {/* Delete Button - Shows on Hover */}
                               {!comparisonMode && (

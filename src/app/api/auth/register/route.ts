@@ -268,7 +268,23 @@ async function createStandardForms(coachId: string, coachName: string, db: any) 
 
 export async function POST(request: NextRequest) {
   try {
-    const db = getDb();
+    let db;
+    try {
+      db = getDb();
+      // Validate db is properly initialized
+      if (!db || typeof db.collection !== 'function') {
+        console.error('Database instance is invalid:', typeof db);
+        throw new Error('Database instance is not properly initialized');
+      }
+    } catch (dbError: any) {
+      console.error('Error getting database instance:', dbError);
+      return NextResponse.json({
+        success: false,
+        message: 'Database connection failed',
+        error: dbError instanceof Error ? dbError.message : 'Unknown error'
+      }, { status: 500 });
+    }
+
     const { email, password, firstName, lastName, role, coachId: providedCoachId } = await request.json();
 
     // Validate required fields
@@ -308,9 +324,19 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if client already exists
-    const existingClientQuery = await db.collection('clients')
-      .where('email', '==', email)
-      .get();
+    let existingClientQuery;
+    try {
+      existingClientQuery = await db.collection('clients')
+        .where('email', '==', email)
+        .get();
+    } catch (error: any) {
+      console.error('Error checking existing client:', error);
+      return NextResponse.json({
+        success: false,
+        message: 'Failed to check existing client',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      }, { status: 500 });
+    }
 
     if (!existingClientQuery.empty) {
       const existingClient = existingClientQuery.docs[0].data();
@@ -331,13 +357,42 @@ export async function POST(request: NextRequest) {
     }
 
     // Create Firebase Auth user
-    const auth = getAuthInstance();
-    const userRecord = await auth.createUser({
-      email,
-      password,
-      displayName: `${firstName} ${lastName}`,
-      emailVerified: false
-    });
+    let auth;
+    let userRecord;
+    try {
+      auth = getAuthInstance();
+      userRecord = await auth.createUser({
+        email,
+        password,
+        displayName: `${firstName} ${lastName}`,
+        emailVerified: false
+      });
+    } catch (authError: any) {
+      console.error('Error creating Firebase Auth user:', authError);
+      // Handle specific Firebase Auth errors
+      if (authError.code === 'auth/email-already-exists') {
+        return NextResponse.json({
+          success: false,
+          message: 'An account with this email already exists'
+        }, { status: 409 });
+      }
+      
+      if (authError.code === 'auth/weak-password') {
+        return NextResponse.json({
+          success: false,
+          message: 'Password is too weak. Please choose a stronger password'
+        }, { status: 400 });
+      }
+      
+      if (authError.code === 'auth/invalid-email') {
+        return NextResponse.json({
+          success: false,
+          message: 'Invalid email address'
+        }, { status: 400 });
+      }
+      
+      throw authError; // Re-throw to be caught by outer catch
+    }
 
     // Create user profile in Firestore
     const userProfile = {
@@ -353,7 +408,22 @@ export async function POST(request: NextRequest) {
     };
 
     // Save to users collection
-    await db.collection('users').doc(userRecord.uid).set(userProfile);
+    try {
+      await db.collection('users').doc(userRecord.uid).set(userProfile);
+    } catch (error: any) {
+      console.error('Error saving user profile:', error);
+      // Try to clean up the auth user if profile save fails
+      try {
+        await auth.deleteUser(userRecord.uid);
+      } catch (deleteError) {
+        console.error('Error cleaning up auth user:', deleteError);
+      }
+      return NextResponse.json({
+        success: false,
+        message: 'Failed to save user profile',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      }, { status: 500 });
+    }
 
     // If registering as a client, create client record
     if (role === 'client') {
@@ -385,12 +455,46 @@ export async function POST(request: NextRequest) {
         updatedAt: new Date()
       };
 
-      await db.collection('clients').doc(userRecord.uid).set(clientRecord);
+      try {
+        await db.collection('clients').doc(userRecord.uid).set(clientRecord);
+      } catch (error: any) {
+        console.error('Error saving client record:', error);
+        // Try to clean up the auth user and user profile if client record save fails
+        try {
+          await auth.deleteUser(userRecord.uid);
+          await db.collection('users').doc(userRecord.uid).delete();
+        } catch (deleteError) {
+          console.error('Error cleaning up after client record save failure:', deleteError);
+        }
+        return NextResponse.json({
+          success: false,
+          message: 'Failed to save client record',
+          error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        }, { status: 500 });
+      }
     }
 
     // If registering as a coach, create coach record
     if (role === 'coach') {
-      const shortUID = await generateUniqueShortUID(db);
+      let shortUID;
+      try {
+        shortUID = await generateUniqueShortUID(db);
+      } catch (error: any) {
+        console.error('Error generating short UID:', error);
+        // Try to clean up the auth user and user profile
+        try {
+          await auth.deleteUser(userRecord.uid);
+          await db.collection('users').doc(userRecord.uid).delete();
+        } catch (deleteError) {
+          console.error('Error cleaning up after short UID generation failure:', deleteError);
+        }
+        return NextResponse.json({
+          success: false,
+          message: 'Failed to generate coach code',
+          error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        }, { status: 500 });
+      }
+
       const coachRecord = {
         id: userRecord.uid,
         shortUID,
@@ -406,10 +510,32 @@ export async function POST(request: NextRequest) {
         updatedAt: new Date()
       };
 
-      await db.collection('coaches').doc(userRecord.uid).set(coachRecord);
+      try {
+        await db.collection('coaches').doc(userRecord.uid).set(coachRecord);
+      } catch (error: any) {
+        console.error('Error saving coach record:', error);
+        // Try to clean up the auth user and user profile
+        try {
+          await auth.deleteUser(userRecord.uid);
+          await db.collection('users').doc(userRecord.uid).delete();
+        } catch (deleteError) {
+          console.error('Error cleaning up after coach record save failure:', deleteError);
+        }
+        return NextResponse.json({
+          success: false,
+          message: 'Failed to save coach record',
+          error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        }, { status: 500 });
+      }
 
       // Create standard forms for the new coach
-      await createStandardForms(userRecord.uid, `${firstName} ${lastName}`, db);
+      try {
+        await createStandardForms(userRecord.uid, `${firstName} ${lastName}`, db);
+      } catch (error: any) {
+        console.error('Error creating standard forms:', error);
+        // Don't fail registration if forms creation fails - coach can create them manually
+        console.warn('Coach registered but standard forms creation failed. Coach can create forms manually.');
+      }
 
       return NextResponse.json({
         success: true,

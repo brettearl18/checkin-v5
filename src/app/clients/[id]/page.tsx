@@ -414,13 +414,61 @@ export default function ClientProfilePage() {
 
       setLoadingMeasurements(true);
       try {
-        const response = await fetch(`/api/client-measurements?clientId=${clientId}&limit=10`);
+        // Fetch from client_measurements collection
+        const response = await fetch(`/api/client-measurements?clientId=${clientId}`);
         const data = await response.json();
         if (data.success) {
-          setMeasurementHistory(data.data || []);
+          const measurements = data.data || [];
+          setMeasurementHistory(measurements);
+          
+          // Also fetch onboarding data for baseline measurements
+          let allMeasurements: any[] = [];
+          
+          try {
+            const onboardingResponse = await fetch(`/api/client-portal/onboarding/report?clientId=${clientId}`);
+            const onboardingData = await onboardingResponse.json();
+            
+            if (onboardingData.success && onboardingData.data) {
+              const onboarding = onboardingData.data;
+              if (onboarding.bodyWeight || (onboarding.measurements && Object.keys(onboarding.measurements).length > 0)) {
+                let onboardingDate = new Date();
+                if (onboarding.completedAt) {
+                  onboardingDate = new Date(onboarding.completedAt);
+                } else if (onboarding.createdAt) {
+                  onboardingDate = new Date(onboarding.createdAt);
+                } else {
+                  onboardingDate = new Date('2020-01-01');
+                }
+                
+                allMeasurements.push({
+                  date: onboardingDate,
+                  bodyWeight: onboarding.bodyWeight || null,
+                  measurements: onboarding.measurements || {},
+                  isBaseline: true
+                });
+              }
+            }
+          } catch (error) {
+            console.log('Error fetching onboarding data:', error);
+          }
+          
+          // Add regular measurements
+          const clientMeasurements = measurements.map((m: any) => ({
+            date: new Date(m.date),
+            bodyWeight: m.bodyWeight,
+            measurements: m.measurements || {},
+            isBaseline: false
+          }));
+          allMeasurements = [...allMeasurements, ...clientMeasurements];
+          
+          // Sort by date
+          allMeasurements.sort((a, b) => a.date.getTime() - b.date.getTime());
+          setAllMeasurementsData(allMeasurements);
         }
       } catch (error) {
         console.error('Error fetching measurement history:', error);
+        setMeasurementHistory([]);
+        setAllMeasurementsData([]);
       } finally {
         setLoadingMeasurements(false);
       }
@@ -489,6 +537,64 @@ export default function ClientProfilePage() {
       console.error('Error formatting date:', error);
       return 'Invalid Date';
     }
+  };
+
+  // Helper functions for measurements
+  const getAvailableMeasurements = () => {
+    const available = new Set<string>();
+    
+    allMeasurementsData.forEach(m => {
+      if (m.bodyWeight !== null && m.bodyWeight !== undefined && m.bodyWeight > 0) {
+        available.add('bodyWeight');
+      }
+      if (m.measurements) {
+        Object.keys(m.measurements).forEach(key => {
+          if (m.measurements[key] !== null && m.measurements[key] !== undefined && m.measurements[key] > 0) {
+            available.add(key);
+          }
+        });
+      }
+    });
+    
+    return Array.from(available);
+  };
+
+  const toggleMeasurement = (measurement: string) => {
+    const newSet = new Set(selectedMeasurements);
+    if (newSet.has(measurement)) {
+      newSet.delete(measurement);
+    } else {
+      newSet.add(measurement);
+    }
+    setSelectedMeasurements(newSet);
+  };
+
+  const getMeasurementColor = (index: number) => {
+    const colors = [
+      'bg-blue-500',
+      'bg-green-500',
+      'bg-purple-500',
+      'bg-orange-500',
+      'bg-pink-500',
+      'bg-indigo-500',
+      'bg-red-500',
+      'bg-yellow-500'
+    ];
+    return colors[index % colors.length];
+  };
+
+  const getMeasurementLabel = (key: string) => {
+    const labels: { [key: string]: string } = {
+      bodyWeight: 'Body Weight (kg)',
+      waist: 'Waist (cm)',
+      chest: 'Chest (cm)',
+      hips: 'Hips (cm)',
+      leftThigh: 'Left Thigh (cm)',
+      rightThigh: 'Right Thigh (cm)',
+      leftArm: 'Left Arm (cm)',
+      rightArm: 'Right Arm (cm)'
+    };
+    return labels[key] || key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, ' $1');
   };
 
   const fetchForms = async () => {
@@ -1092,8 +1198,18 @@ export default function ClientProfilePage() {
                     type="number"
                     min="1"
                     max="52"
-                    value={durationWeeks}
-                    onChange={(e) => setDurationWeeks(Number(e.target.value))}
+                    value={isNaN(durationWeeks) || durationWeeks === 0 ? '' : durationWeeks}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === '') {
+                        setDurationWeeks(1); // Reset to default when empty
+                      } else {
+                        const numVal = Number(val);
+                        if (!isNaN(numVal) && numVal > 0) {
+                          setDurationWeeks(numVal);
+                        }
+                      }
+                    }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-orange-500"
                     placeholder="Enter number of weeks"
                   />
@@ -1591,7 +1707,10 @@ export default function ClientProfilePage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Pending Check-ins */}
                     {(() => {
-                      const pendingCheckIns = allocatedCheckIns.filter(ci => ci.status === 'pending' || ci.status === 'completed' && !ci.reviewed);
+                      // Only show completed check-ins that haven't been reviewed yet
+                      const pendingCheckIns = allocatedCheckIns.filter(ci => 
+                        ci.status === 'completed' && !ci.reviewedByCoach
+                      );
                       const overdueCheckIns = allocatedCheckIns.filter(ci => {
                         if (ci.status !== 'pending') return false;
                         const dueDate = ci.dueDate?.toDate ? ci.dueDate.toDate() : new Date(ci.dueDate);
@@ -2113,20 +2232,6 @@ export default function ClientProfilePage() {
                                       </span>
                                     )}
                                   </div>
-                                  <div className="absolute bottom-2 left-2 right-2">
-                                    <div className="bg-black/70 backdrop-blur-sm rounded-lg px-3 py-2">
-                                      <p className="text-white text-xs font-medium">
-                                        {new Date(image.uploadedAt).toLocaleDateString('en-US', { 
-                                          year: 'numeric', 
-                                          month: 'short', 
-                                          day: 'numeric' 
-                                        })}
-                                      </p>
-                                      {image.caption && (
-                                        <p className="text-white/90 text-xs mt-1">{image.caption}</p>
-                                      )}
-                                    </div>
-                                  </div>
                                 </div>
                               </div>
                             ))}
@@ -2260,13 +2365,6 @@ export default function ClientProfilePage() {
                                             {new Date(image.uploadedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                                           </span>
                                         </div>
-                                        {image.caption && (
-                                          <div className="absolute bottom-2 left-2 right-2">
-                                            <p className="px-2 py-1 rounded text-xs font-medium bg-black bg-opacity-50 text-white truncate">
-                                              {image.caption}
-                                            </p>
-                                          </div>
-                                        )}
                                       </div>
                                     );
                                   })}
@@ -2283,7 +2381,7 @@ export default function ClientProfilePage() {
               )}
 
               {/* Measurement History */}
-              {activeTab === 'progress' && (measurementHistory.length > 0 || allMeasurementsData.length > 0) && (
+              {activeTab === 'progress' && (
                 <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
                   <div className="bg-orange-50 px-8 py-6 border-b-2 border-orange-200">
                     <h2 className="text-2xl font-bold text-gray-900">Measurement History</h2>
@@ -2437,7 +2535,7 @@ export default function ClientProfilePage() {
                           {/* X-axis date labels */}
                           <div className="flex justify-between mt-2 px-10">
                             {allMeasurementsData.map((measurement, index) => {
-                              const date = new Date(measurement.date);
+                              const date = measurement.date instanceof Date ? measurement.date : new Date(measurement.date);
                               return (
                                 <div key={index} className="flex flex-col items-center text-[9px] text-gray-500">
                                   <span>{date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' })}</span>
@@ -2504,7 +2602,7 @@ export default function ClientProfilePage() {
                         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600 mx-auto mb-4"></div>
                         <p className="text-gray-500 text-lg">Loading measurements...</p>
                       </div>
-                    ) : (
+                    ) : measurementHistory.length > 0 ? (
                       <div className="overflow-x-auto">
                         <table className="w-full">
                           <thead className="bg-gray-50 border-b border-gray-200">
@@ -2513,11 +2611,11 @@ export default function ClientProfilePage() {
                               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Weight (kg)</th>
                               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Waist (cm)</th>
                               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Hips (cm)</th>
-                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Chest (cm)</th>
-                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Left Thigh (cm)</th>
-                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Right Thigh (cm)</th>
-                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Left Arm (cm)</th>
-                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Right Arm (cm)</th>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Chest (cm)</th>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Left Thigh (cm)</th>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Right Thigh (cm)</th>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Left Arm (cm)</th>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Right Arm (cm)</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-200">
@@ -2558,6 +2656,10 @@ export default function ClientProfilePage() {
                             ))}
                           </tbody>
                         </table>
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-gray-500">
+                        <p className="text-sm">No measurements recorded yet</p>
                       </div>
                     )}
                   </div>
@@ -3451,8 +3553,18 @@ export default function ClientProfilePage() {
                   type="number"
                   min="1"
                   max="52"
-                  value={allocateDuration}
-                  onChange={(e) => setAllocateDuration(parseInt(e.target.value))}
+                  value={isNaN(allocateDuration) || allocateDuration === 0 ? '' : allocateDuration}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === '') {
+                      setAllocateDuration(4); // Reset to default when empty
+                    } else {
+                      const numVal = parseInt(val, 10);
+                      if (!isNaN(numVal) && numVal > 0) {
+                        setAllocateDuration(numVal);
+                      }
+                    }
+                  }}
                   className="w-full px-3 py-2 border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                 />
               </div>

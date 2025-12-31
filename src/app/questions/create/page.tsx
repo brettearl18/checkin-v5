@@ -62,10 +62,23 @@ export default function CreateQuestionPage() {
   ];
 
   const handleInputChange = (field: keyof QuestionFormData, value: any) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }));
+    setFormData(prev => {
+      const updated = {
+        ...prev,
+        [field]: value
+      };
+      
+      // If changing to text or textarea, set questionWeight to 0 (they don't contribute to scoring)
+      if (field === 'type' && (value === 'text' || value === 'textarea')) {
+        updated.questionWeight = 0;
+      }
+      // If changing from text/textarea to a scorable type, set default weight to 5
+      else if (field === 'type' && value !== 'text' && value !== 'textarea' && (prev.type === 'text' || prev.type === 'textarea') && prev.questionWeight === 0) {
+        updated.questionWeight = 5;
+      }
+      
+      return updated;
+    });
   };
 
   const handleAddOption = () => {
@@ -148,8 +161,9 @@ export default function CreateQuestionPage() {
         category: formData.category || 'General',
         required: formData.required || false,
         isRequired: formData.required || false, // Also include as 'isRequired' for compatibility
-        questionWeight: formData.questionWeight || 5,
-        weight: formData.questionWeight || 5, // Also include as 'weight' for compatibility
+        // Text and textarea questions should have weight 0 (don't contribute to scoring)
+        questionWeight: (formData.type === 'text' || formData.type === 'textarea') ? 0 : (formData.questionWeight || 5),
+        weight: (formData.type === 'text' || formData.type === 'textarea') ? 0 : (formData.questionWeight || 5), // Also include as 'weight' for compatibility
         coachId: userProfile?.uid
       };
 
@@ -490,27 +504,38 @@ export default function CreateQuestionPage() {
                     />
                   </div>
 
-                  {/* Question Weight */}
-                  <div className="bg-gradient-to-r from-purple-50 to-pink-50 p-6 rounded-xl border border-purple-200">
-                    <label className="block text-sm font-medium text-purple-900 mb-4">
-                      Question Weight: {formData.questionWeight}/10
-                    </label>
-                    <input
-                      type="range"
-                      min="1"
-                      max="10"
-                      value={formData.questionWeight}
-                      onChange={(e) => handleInputChange('questionWeight', parseInt(e.target.value))}
-                      className="w-full h-2 bg-purple-200 rounded-lg appearance-none cursor-pointer"
-                    />
-                    <div className="flex justify-between text-xs text-purple-700 mt-2">
-                      <span>Low Impact (1)</span>
-                      <span>High Impact (10)</span>
+                  {/* Question Weight - Hidden for text/textarea questions (they don't contribute to scoring) */}
+                  {(formData.type !== 'text' && formData.type !== 'textarea') && (
+                    <div className="bg-gradient-to-r from-purple-50 to-pink-50 p-6 rounded-xl border border-purple-200">
+                      <label className="block text-sm font-medium text-purple-900 mb-4">
+                        Question Weight: {formData.questionWeight}/10
+                      </label>
+                      <input
+                        type="range"
+                        min="1"
+                        max="10"
+                        value={formData.questionWeight}
+                        onChange={(e) => handleInputChange('questionWeight', parseInt(e.target.value))}
+                        className="w-full h-2 bg-purple-200 rounded-lg appearance-none cursor-pointer"
+                      />
+                      <div className="flex justify-between text-xs text-purple-700 mt-2">
+                        <span>Low Impact (1)</span>
+                        <span>High Impact (10)</span>
+                      </div>
+                      <p className="text-xs text-purple-600 mt-2">
+                        This determines how much this question contributes to the overall score
+                      </p>
                     </div>
-                    <p className="text-xs text-purple-600 mt-2">
-                      This determines how much this question contributes to the overall score
-                    </p>
-                  </div>
+                  )}
+                  
+                  {/* Info message for text/textarea questions */}
+                  {(formData.type === 'text' || formData.type === 'textarea') && (
+                    <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+                      <p className="text-sm text-gray-600">
+                        <strong>Note:</strong> Text and Long Text questions do not contribute to scoring. They are used for context and feedback only.
+                      </p>
+                    </div>
+                  )}
 
                   {/* Boolean Question Settings */}
                   {formData.type === 'boolean' && (

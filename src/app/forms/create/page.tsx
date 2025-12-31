@@ -54,11 +54,13 @@ interface Client {
 function SortableQuestionItem({ 
   questionId, 
   question, 
-  index 
+  index,
+  returnUrl
 }: { 
   questionId: string; 
   question: Question; 
   index: number;
+  returnUrl?: string;
 }) {
   const {
     attributes,
@@ -100,6 +102,10 @@ function SortableQuestionItem({
       .join(' ');
   };
 
+  const editUrl = returnUrl 
+    ? `/questions/edit/${questionId}?returnUrl=${encodeURIComponent(returnUrl)}`
+    : `/questions/edit/${questionId}`;
+
   return (
     <div
       ref={setNodeRef}
@@ -125,6 +131,19 @@ function SortableQuestionItem({
           {getQuestionTypeLabel(getQuestionType(question))} • {getCategoryLabel(question.category)}
         </p>
       </div>
+      <Link
+        href={editUrl}
+        className="flex items-center justify-center px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg text-xs font-medium hover:bg-blue-200 transition-all duration-200 whitespace-nowrap"
+        onClick={(e) => {
+          // Don't trigger drag when clicking edit
+          e.stopPropagation();
+        }}
+      >
+        <svg className="w-3.5 h-3.5 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+        </svg>
+        Edit
+      </Link>
     </div>
   );
 }
@@ -133,7 +152,15 @@ function CreateFormPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { userProfile, logout } = useAuth();
-  const [currentStep, setCurrentStep] = useState(1);
+  const [currentStep, setCurrentStep] = useState(() => {
+    // Check if step is in URL (for returning from edit)
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const step = params.get('step');
+      return step ? parseInt(step) : 1;
+    }
+    return 1;
+  });
   const [isLoading, setIsLoading] = useState(false);
   const [showScoringInfo, setShowScoringInfo] = useState(false);
   const [previewThresholds, setPreviewThresholds] = useState({ redMax: 33, orangeMax: 80 });
@@ -240,6 +267,8 @@ function CreateFormPageContent() {
   // Refresh questions when returning from edit page
   useEffect(() => {
     const questionUpdated = searchParams?.get('questionUpdated');
+    const step = searchParams?.get('step');
+    
     if (questionUpdated === 'true' && userProfile?.uid) {
       // Refresh questions list
       fetch(`/api/questions?coachId=${userProfile.uid}`)
@@ -251,8 +280,15 @@ function CreateFormPageContent() {
         })
         .catch(err => console.error('Error refreshing questions:', err));
       
-      // Remove the query parameter from URL
-      router.replace('/forms/create');
+      // Return to the step that was specified, or stay on current step
+      if (step) {
+        setCurrentStep(parseInt(step));
+        // Remove the questionUpdated parameter but keep step
+        router.replace(`/forms/create?step=${step}`);
+      } else {
+        // Remove the query parameter from URL
+        router.replace('/forms/create');
+      }
     }
   }, [searchParams, userProfile?.uid, router]);
 
@@ -1333,12 +1369,17 @@ function CreateFormPageContent() {
                         const question = questions.find(q => q.id === questionId);
                         if (!question) return null;
                         
+                        // Create return URL to come back to this form preview
+                        // Use pathname only to avoid double query params
+                        const returnUrl = '/forms/create?step=3';
+                        
                         return (
                           <SortableQuestionItem
                             key={questionId}
                             questionId={questionId}
                             question={question}
                             index={index}
+                            returnUrl={returnUrl}
                           />
                         );
                       })}

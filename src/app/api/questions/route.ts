@@ -65,17 +65,17 @@ export async function POST(request: NextRequest) {
     
     console.log('Creating question with data:', JSON.stringify(question, null, 2));
     
-    // Save to Firestore using Admin SDK
+    // Save to Firestore using Admin SDK with the specified ID
     const db = getDb();
-    const docRef = await db.collection('questions').add(question);
+    await db.collection('questions').doc(questionId).set(question);
     
-    console.log('Question created with ID:', docRef.id);
+    console.log('Question created with ID:', questionId);
     
     return NextResponse.json({
       success: true,
       message: 'Question created successfully',
-      questionId: docRef.id,
-      question: { ...question, id: docRef.id }
+      questionId: questionId,
+      question: { ...question, id: questionId }
     });
     
   } catch (error) {

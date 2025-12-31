@@ -53,11 +53,13 @@ interface Form {
 function SortableQuestionItem({ 
   questionId, 
   question, 
-  index 
+  index,
+  returnUrl
 }: { 
   questionId: string; 
   question: Question; 
   index: number;
+  returnUrl?: string;
 }) {
   const {
     attributes,
@@ -91,12 +93,18 @@ function SortableQuestionItem({
     return labels[type] || type;
   };
   const getCategoryLabel = (category: string | undefined) => {
-    if (!category) return 'Uncategorized';
-    return category
+    if (!category || typeof category !== 'string') return 'Uncategorized';
+    const categoryStr = String(category).trim();
+    if (!categoryStr) return 'Uncategorized';
+    return categoryStr
       .split(' ')
       .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
       .join(' ');
   };
+
+  const editUrl = returnUrl 
+    ? `/questions/edit/${questionId}?returnUrl=${encodeURIComponent(returnUrl)}`
+    : `/questions/edit/${questionId}`;
 
   return (
     <div
@@ -123,6 +131,19 @@ function SortableQuestionItem({
           {getQuestionTypeLabel(getQuestionType(question))} • {getCategoryLabel(question.category)}
         </p>
       </div>
+      <Link
+        href={editUrl}
+        className="flex items-center justify-center px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg text-xs font-medium hover:bg-blue-200 transition-all duration-200 whitespace-nowrap"
+        onClick={(e) => {
+          // Don't trigger drag when clicking edit
+          e.stopPropagation();
+        }}
+      >
+        <svg className="w-3.5 h-3.5 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+        </svg>
+        Edit
+      </Link>
     </div>
   );
 }
@@ -135,7 +156,15 @@ export default function EditFormPage() {
   const searchParams = useSearchParams();
   const formId = (params?.id as string) || '';
   const { userProfile } = useAuth();
-  const [currentStep, setCurrentStep] = useState(1);
+  const [currentStep, setCurrentStep] = useState(() => {
+    // Check if step is in URL (for returning from edit)
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const step = params.get('step');
+      return step ? parseInt(step) : 1;
+    }
+    return 1;
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -224,6 +253,8 @@ export default function EditFormPage() {
   // Refresh questions when returning from edit page
   useEffect(() => {
     const questionUpdated = searchParams?.get('questionUpdated');
+    const step = searchParams?.get('step');
+    
     if (questionUpdated === 'true' && userProfile?.uid) {
       // Refresh questions list
       fetch(`/api/questions?coachId=${userProfile.uid}`)
@@ -235,8 +266,15 @@ export default function EditFormPage() {
         })
         .catch(err => console.error('Error refreshing questions:', err));
       
-      // Remove the query parameter from URL
-      router.replace(`/forms/${formId}/edit`);
+      // Return to the step that was specified, or stay on current step
+      if (step) {
+        setCurrentStep(parseInt(step));
+        // Remove the questionUpdated parameter but keep step
+        router.replace(`/forms/${formId}/edit?step=${step}`);
+      } else {
+        // Remove the query parameter from URL
+        router.replace(`/forms/${formId}/edit`);
+      }
     }
   }, [searchParams, userProfile?.uid, formId, router]);
 
@@ -356,7 +394,7 @@ export default function EditFormPage() {
   };
 
   const getCategoryLabel = (category: string | undefined) => {
-    if (!category) return 'Uncategorized';
+    if (!category || typeof category !== 'string') return 'Uncategorized';
     
     const categoryMap: { [key: string]: string } = {
       'general': 'General',
@@ -380,8 +418,10 @@ export default function EditFormPage() {
     if (categoryMap[category]) {
       return categoryMap[category];
     }
-    // Safe split - category is guaranteed to be a string at this point
-    return category
+    // Safe split - ensure category is a string before splitting
+    const categoryStr = String(category).trim();
+    if (!categoryStr) return 'Uncategorized';
+    return categoryStr
       .split(' ')
       .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
       .join(' ');
@@ -467,7 +507,7 @@ export default function EditFormPage() {
         );
 
       case 2:
-        const uniqueCategories = [...new Set(questions.map(q => q.category))].sort();
+        const uniqueCategories = [...new Set(questions.map(q => q.category).filter(cat => cat != null && cat !== ''))].sort();
         const uniqueTypes = [...new Set(questions.map(q => getQuestionType(q)))].sort();
 
         return (
@@ -912,12 +952,18 @@ export default function EditFormPage() {
                         const question = questions.find(q => q.id === questionId);
                         if (!question) return null;
                         
+                        // Create return URL to come back to this form preview
+                        const formId = params?.id as string || '';
+                        // Use pathname only to avoid double query params
+                        const returnUrl = `/forms/${formId}/edit?step=3`;
+                        
                         return (
                           <SortableQuestionItem
                             key={questionId}
                             questionId={questionId}
                             question={question}
                             index={index}
+                            returnUrl={returnUrl}
                           />
                         );
                       })}

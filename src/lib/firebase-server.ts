@@ -34,25 +34,53 @@ function initializeFirebaseAdmin() {
     }
 
     try {
-      const serviceAccount = JSON.parse(serviceAccountString);
+      // Handle both JSON string and already-parsed object
+      let serviceAccount;
+      if (typeof serviceAccountString === 'string') {
+        try {
+          serviceAccount = JSON.parse(serviceAccountString);
+        } catch (parseError) {
+          // If it's not valid JSON, try to fix common issues
+          console.warn('Failed to parse FIREBASE_SERVICE_ACCOUNT as JSON, attempting to fix...');
+          // Try replacing single quotes with double quotes (common issue)
+          const fixed = serviceAccountString.replace(/'/g, '"');
+          try {
+            serviceAccount = JSON.parse(fixed);
+          } catch (e) {
+            console.error('Original parse error:', parseError);
+            console.error('Fixed parse error:', e);
+            throw parseError;
+          }
+        }
+      } else {
+        serviceAccount = serviceAccountString;
+      }
       
       // Validate service account has required fields
       if (!serviceAccount.project_id && !process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) {
         throw new Error('Service account must contain project_id or NEXT_PUBLIC_FIREBASE_PROJECT_ID must be set');
       }
       
+      // Ensure required fields are present
+      if (!serviceAccount.private_key || !serviceAccount.client_email) {
+        throw new Error('Service account missing required fields: private_key or client_email');
+      }
+      
       initializeApp({
         credential: cert(serviceAccount),
         projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || serviceAccount.project_id || 'checkinv5',
       });
-    } catch (error) {
+      console.log('Firebase Admin initialized successfully');
+    } catch (error: any) {
       console.error('Error parsing FIREBASE_SERVICE_ACCOUNT:', error);
+      console.error('Service account string length:', serviceAccountString?.length);
+      console.error('Service account string preview:', serviceAccountString?.substring(0, 100));
       // During build, allow this to fail gracefully
       if (process.env.NEXT_PHASE === 'phase-production-build') {
         console.warn('Firebase Admin initialization failed during build - this is expected');
         return;
       }
-      throw new Error('Invalid FIREBASE_SERVICE_ACCOUNT configuration');
+      throw new Error(`Invalid FIREBASE_SERVICE_ACCOUNT configuration: ${error.message}`);
     }
   }
 }

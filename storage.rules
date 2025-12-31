@@ -2,41 +2,79 @@ rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
-    // Progress images - clients can upload their own images
-    match /progress-images/{userId}/{imageId} {
-      // Allow read if user owns the image or is their coach
-      allow read: if request.auth != null && (
-        request.auth.uid == userId || 
-        resource.metadata.coachId == request.auth.uid
+    
+    // ============================================
+    // Helper Functions
+    // ============================================
+    
+    // Check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Get user's UID
+    function getUserId() {
+      return request.auth.uid;
+    }
+    
+    // ============================================
+    // Progress Images
+    // ============================================
+    // Path: progress-images/{clientId}/{imageId}
+    match /progress-images/{clientId}/{imageId} {
+      // Clients can read their own progress images
+      // Coaches can read progress images for their clients (via metadata)
+      // Admins: Note - Storage rules don't support Firestore get() calls easily,
+      // so admins would need to be handled server-side or we allow authenticated users
+      // with proper metadata verification
+      allow read: if isAuthenticated() && (
+        // Client owns the image
+        clientId == getUserId() ||
+        // Coach can read if metadata indicates they're the coach
+        (resource.metadata.coachId != null && resource.metadata.coachId == getUserId())
       );
       
-      // Allow write if user owns the image
-      allow write: if request.auth != null && request.auth.uid == userId;
+      // Clients can upload their own progress images
+      // Coaches can upload for their clients (via API - metadata will be set server-side)
+      // Note: Uploads are typically done server-side via API routes, so this rule
+      // provides additional client-side protection if needed
+      allow write: if isAuthenticated() && (
+        clientId == getUserId() ||
+        // Allow if metadata indicates coach ownership (set by server)
+        (request.resource.metadata.coachId != null && 
+         request.resource.metadata.coachId == getUserId())
+      );
       
-      // Allow delete if user owns the image
-      allow delete: if request.auth != null && request.auth.uid == userId;
+      // Clients can delete their own images
+      // Coaches can delete images for their clients
+      allow delete: if isAuthenticated() && (
+        clientId == getUserId() ||
+        (resource.metadata.coachId != null && resource.metadata.coachId == getUserId())
+      );
     }
     
-    // Profile photos
-    match /profile-photos/{userId}/{photoId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == userId;
-      allow delete: if request.auth != null && request.auth.uid == userId;
+    // ============================================
+    // Profile Images/Photos
+    // ============================================
+    // Path: profile-images/{userId}/{photoId}
+    // Note: Files may be made public for display, but rules protect write/delete
+    match /profile-images/{userId}/{photoId} {
+      // Any authenticated user can read profile images (for display in UI)
+      // Users can write their own profile images
+      // Users can delete their own profile images
+      allow read: if isAuthenticated();
+      
+      allow write: if isAuthenticated() && userId == getUserId();
+      
+      allow delete: if isAuthenticated() && userId == getUserId();
     }
     
-    // Default: deny all other access
+    // ============================================
+    // Default Deny
+    // ============================================
+    // Deny all other paths by default
     match /{allPaths=**} {
       allow read, write: if false;
     }
   }
 }
-
-
-
-
-
-
-
-
-
-

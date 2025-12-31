@@ -109,55 +109,8 @@ export async function POST(request: NextRequest) {
       await db.collection('onboarding_reports').add(reportData);
     }
 
-    // Save measurements to client_measurements collection if provided
-    const wantsToEnter = responses['q10-1'];
-    if (wantsToEnter === true) {
-      const bodyWeight = responses['q10-2'];
-      const measurements: any = {};
-      
-      // Map onboarding question IDs to measurement keys
-      if (responses['q10-3']) measurements.waist = parseFloat(responses['q10-3']);
-      if (responses['q10-4']) measurements.hips = parseFloat(responses['q10-4']);
-      if (responses['q10-5']) measurements.chest = parseFloat(responses['q10-5']);
-      if (responses['q10-6']) measurements.leftThigh = parseFloat(responses['q10-6']);
-      if (responses['q10-7']) measurements.rightThigh = parseFloat(responses['q10-7']);
-      if (responses['q10-8']) measurements.leftArm = parseFloat(responses['q10-8']);
-      if (responses['q10-9']) measurements.rightArm = parseFloat(responses['q10-9']);
-
-      // Only save if there's at least weight or one measurement
-      if (bodyWeight || Object.keys(measurements).length > 0) {
-        // Check if baseline measurement already exists
-        const existingBaselineSnapshot = await db.collection('client_measurements')
-          .where('clientId', '==', clientId)
-          .where('isBaseline', '==', true)
-          .limit(1)
-          .get();
-
-        const measurementData: any = {
-          clientId,
-          date: new Date(),
-          measurements: measurements,
-          isBaseline: true,
-          source: 'onboarding',
-          createdAt: new Date(),
-          updatedAt: new Date()
-        };
-
-        if (bodyWeight) {
-          measurementData.bodyWeight = parseFloat(bodyWeight);
-        }
-
-        if (!existingBaselineSnapshot.empty) {
-          // Update existing baseline
-          await existingBaselineSnapshot.docs[0].ref.update(measurementData);
-          console.log(`[Onboarding Submit] Updated baseline measurement for client ${clientId}`);
-        } else {
-          // Create new baseline measurement
-          await db.collection('client_measurements').add(measurementData);
-          console.log(`[Onboarding Submit] Created baseline measurement for client ${clientId}`);
-        }
-      }
-    }
+    // Note: Measurements are no longer part of onboarding
+    // Clients can enter measurements through the Measurements page, which appears as a To-Do on their dashboard
 
     return NextResponse.json({
       success: true,
@@ -264,16 +217,10 @@ function generateOnboardingReport(responses: Record<string, any>) {
   report.barriers.previousBarriers = responses['q9-2'];
   report.barriers.monthlyBudget = responses['q9-3'];
 
-  // Measurements
-  report.measurements.wantsToEnter = responses['q10-1'];
-  report.measurements.weight = responses['q10-2'];
-  report.measurements.waist = responses['q10-3'];
-  report.measurements.hips = responses['q10-4'];
-  report.measurements.chest = responses['q10-5'];
-  report.measurements.leftThigh = responses['q10-6'];
-  report.measurements.rightThigh = responses['q10-7'];
-  report.measurements.leftArm = responses['q10-8'];
-  report.measurements.rightArm = responses['q10-9'];
+  // Measurements - removed from onboarding, now handled via dashboard To-Do
+  report.measurements = {
+    note: 'Measurements are entered separately through the Measurements page'
+  };
 
   return report;
 }

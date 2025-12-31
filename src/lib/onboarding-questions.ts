@@ -38,7 +38,6 @@ export const ONBOARDING_SECTIONS = [
   { id: 7, name: 'Lifestyle Factors', icon: '🌱' },
   { id: 8, name: 'Preferences & Communication', icon: '📱' },
   { id: 9, name: 'Barriers & Challenges', icon: '🚧' },
-  { id: 10, name: 'Current Measurements & Baselines', icon: '📏' },
 ];
 
 export const ONBOARDING_QUESTIONS: OnboardingQuestion[] = [
@@ -603,128 +602,6 @@ export const ONBOARDING_QUESTIONS: OnboardingQuestion[] = [
     options: ['Less than $100', '$100-$300', '$300-$500', '$500-$1000', 'More than $1000', 'Prefer not to say'],
   },
 
-  // SECTION 10: Current Measurements & Baselines
-  {
-    id: 'q10-1',
-    section: 10,
-    sectionName: 'Current Measurements & Baselines',
-    order: 1,
-    questionText: 'Would you like to enter your current measurements now?',
-    questionType: 'yes_no',
-    required: true,
-  },
-  {
-    id: 'q10-2',
-    section: 10,
-    sectionName: 'Current Measurements & Baselines',
-    order: 2,
-    questionText: 'Current Weight (kg)',
-    questionType: 'number',
-    required: false,
-    conditionalLogic: {
-      dependsOn: 'q10-1',
-      condition: 'equals',
-      value: true,
-    },
-  },
-  {
-    id: 'q10-3',
-    section: 10,
-    sectionName: 'Current Measurements & Baselines',
-    order: 3,
-    questionText: 'Waist (cm)',
-    questionType: 'number',
-    required: false,
-    conditionalLogic: {
-      dependsOn: 'q10-1',
-      condition: 'equals',
-      value: true,
-    },
-  },
-  {
-    id: 'q10-4',
-    section: 10,
-    sectionName: 'Current Measurements & Baselines',
-    order: 4,
-    questionText: 'Hips (cm)',
-    questionType: 'number',
-    required: false,
-    conditionalLogic: {
-      dependsOn: 'q10-1',
-      condition: 'equals',
-      value: true,
-    },
-  },
-  {
-    id: 'q10-5',
-    section: 10,
-    sectionName: 'Current Measurements & Baselines',
-    order: 5,
-    questionText: 'Chest (cm)',
-    questionType: 'number',
-    required: false,
-    conditionalLogic: {
-      dependsOn: 'q10-1',
-      condition: 'equals',
-      value: true,
-    },
-  },
-  {
-    id: 'q10-6',
-    section: 10,
-    sectionName: 'Current Measurements & Baselines',
-    order: 6,
-    questionText: 'Left Thigh (cm)',
-    questionType: 'number',
-    required: false,
-    conditionalLogic: {
-      dependsOn: 'q10-1',
-      condition: 'equals',
-      value: true,
-    },
-  },
-  {
-    id: 'q10-7',
-    section: 10,
-    sectionName: 'Current Measurements & Baselines',
-    order: 7,
-    questionText: 'Right Thigh (cm)',
-    questionType: 'number',
-    required: false,
-    conditionalLogic: {
-      dependsOn: 'q10-1',
-      condition: 'equals',
-      value: true,
-    },
-  },
-  {
-    id: 'q10-8',
-    section: 10,
-    sectionName: 'Current Measurements & Baselines',
-    order: 8,
-    questionText: 'Left Arm (cm)',
-    questionType: 'number',
-    required: false,
-    conditionalLogic: {
-      dependsOn: 'q10-1',
-      condition: 'equals',
-      value: true,
-    },
-  },
-  {
-    id: 'q10-9',
-    section: 10,
-    sectionName: 'Current Measurements & Baselines',
-    order: 9,
-    questionText: 'Right Arm (cm)',
-    questionType: 'number',
-    required: false,
-    conditionalLogic: {
-      dependsOn: 'q10-1',
-      condition: 'equals',
-      value: true,
-    },
-  },
 ];
 
 // Helper function to get questions by section

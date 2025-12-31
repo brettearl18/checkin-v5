@@ -21,6 +21,8 @@ interface MeasurementEntry {
     [key: string]: number | undefined;
   };
   createdAt: string;
+  isBaseline?: boolean;
+  source?: string;
 }
 
 export default function MeasurementsPage() {
@@ -238,7 +240,12 @@ export default function MeasurementsPage() {
   const getLatestMeasurement = (key: string) => {
     const latest = measurementHistory[0];
     if (!latest) return null;
-    return latest.measurements[key] || latest.bodyWeight;
+    // Handle bodyWeight as a top-level property
+    if (key === 'bodyWeight') {
+      return latest.bodyWeight || null;
+    }
+    // For other measurements, check the measurements object
+    return latest.measurements[key] || null;
   };
 
   const formatDate = (dateString: string) => {
