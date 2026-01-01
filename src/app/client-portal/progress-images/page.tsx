@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { RoleProtected } from '@/components/ProtectedRoute';
 import ClientNavigation from '@/components/ClientNavigation';
-import Link from 'next/link';
 
 interface ProgressImage {
   id: string;
@@ -56,12 +55,9 @@ export default function ProgressImagesPage() {
       const result = await response.json();
 
       if (result.success && result.data.client) {
-        const fetchedClientId = result.data.client.id;
-        console.log('Fetched client ID:', fetchedClientId);
-        setClientId(fetchedClientId);
+        setClientId(result.data.client.id);
         setCoachId(result.data.client.coachId || null);
       } else {
-        console.error('Failed to fetch client data:', result.message);
         setLoading(false);
       }
     } catch (error) {
@@ -73,23 +69,16 @@ export default function ProgressImagesPage() {
   const fetchImages = async () => {
     try {
       if (!clientId) {
-        console.log('No clientId available for fetching images');
         setLoading(false);
         return;
       }
 
-      console.log('Fetching images for clientId:', clientId);
       const response = await fetch(`/api/progress-images?clientId=${clientId}`);
       const data = await response.json();
 
-      console.log('Images API response:', data);
-
       if (data.success) {
-        const fetchedImages = data.data || [];
-        console.log(`Fetched ${fetchedImages.length} images`);
-        setImages(fetchedImages);
+        setImages(data.data || []);
       } else {
-        console.error('API returned error:', data.message);
         setImages([]);
       }
     } catch (error) {
@@ -103,12 +92,10 @@ export default function ProgressImagesPage() {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Validate file type
       if (!file.type.startsWith('image/')) {
         alert('Please select an image file');
         return;
       }
-      // Validate file size (max 10MB)
       if (file.size > 10 * 1024 * 1024) {
         alert('Image size must be less than 10MB');
         return;
@@ -142,12 +129,9 @@ export default function ProgressImagesPage() {
       const data = await response.json();
 
       if (data.success) {
-        console.log('Upload successful, response data:', data.data);
-        // Small delay to ensure Firestore has indexed the new document
         setTimeout(async () => {
           await fetchImages();
         }, 500);
-        // Reset form
         setSelectedFile(null);
         setCaption('');
         setImageType('progress');
@@ -156,13 +140,11 @@ export default function ProgressImagesPage() {
         alert('Image uploaded successfully!');
       } else {
         const errorMsg = data.error || data.message || 'Unknown error';
-        console.error('Upload error details:', data);
-        alert(`Failed to upload image: ${errorMsg}\n\nPlease check:\n1. Firebase Storage is configured\n2. Storage bucket exists\n3. Service account has storage permissions`);
+        alert(`Failed to upload image: ${errorMsg}`);
       }
     } catch (error) {
       console.error('Error uploading image:', error);
-      const errorMsg = error instanceof Error ? error.message : 'Network error';
-      alert(`Failed to upload image: ${errorMsg}\n\nPlease check your connection and try again.`);
+      alert('Failed to upload image. Please try again.');
     } finally {
       setUploading(false);
     }
@@ -183,7 +165,6 @@ export default function ProgressImagesPage() {
       const data = await response.json();
 
       if (data.success) {
-        // Remove from local state immediately for better UX
         setImages(images.filter(img => img.id !== imageId));
         alert('Image deleted successfully!');
       } else {
@@ -224,7 +205,7 @@ export default function ProgressImagesPage() {
 
   const getOrientationColor = (orientation?: string) => {
     switch (orientation) {
-      case 'front': return 'bg-pink-100 text-pink-800';
+      case 'front': return 'bg-blue-100 text-blue-800';
       case 'back': return 'bg-indigo-100 text-indigo-800';
       case 'side': return 'bg-teal-100 text-teal-800';
       default: return 'bg-gray-100 text-gray-800';
@@ -294,18 +275,8 @@ export default function ProgressImagesPage() {
   if (loading) {
     return (
       <RoleProtected requiredRole="client">
-        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/50 flex">
-          <ClientNavigation />
-          <div className="flex-1 ml-4 p-5">
-            <div className="animate-pulse">
-              <div className="h-8 bg-gray-200 rounded w-1/4 mb-6"></div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {[...Array(8)].map((_, i) => (
-                  <div key={i} className="aspect-square bg-gray-200 rounded-xl"></div>
-                ))}
-              </div>
-            </div>
-          </div>
+        <div className="min-h-screen bg-white flex items-center justify-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2" style={{ borderBottomColor: '#daa450' }}></div>
         </div>
       </RoleProtected>
     );
@@ -313,106 +284,97 @@ export default function ProgressImagesPage() {
 
   return (
     <RoleProtected requiredRole="client">
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/50 flex">
+      <div className="min-h-screen bg-white flex">
         <ClientNavigation />
         
-        <div className="flex-1 ml-4 p-5">
+        <div className="flex-1 ml-4 lg:ml-8 p-5 lg:p-6">
           {/* Header */}
-          <div className="mb-6">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">Progress Images</h1>
-                <p className="text-gray-900 text-sm mt-1 font-medium">Track your transformation journey with photos</p>
-              </div>
-              <div className="flex items-center space-x-3">
-                <button
-                  onClick={fetchImages}
-                  className="p-2 bg-white/80 backdrop-blur-sm hover:bg-white text-gray-700 rounded-xl border border-gray-200/60 shadow-sm transition-all duration-200 hover:shadow-md"
-                  title="Refresh images"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                </button>
-                <button
-                  onClick={() => setShowUploadModal(true)}
-                  className="px-5 py-2.5 bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-700 hover:to-rose-700 text-white rounded-xl font-medium transition-all duration-200 shadow-md hover:shadow-lg text-sm"
-                >
-                  <svg className="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                  </svg>
-                  Upload Image
-                </button>
+          <div className="mb-6 lg:mb-8">
+            <div className="px-4 py-4 sm:px-6 sm:py-5 lg:px-8 lg:py-6 border-b-2 mb-4 rounded-t-2xl lg:rounded-t-3xl" style={{ backgroundColor: '#fef9e7', borderColor: '#daa450' }}>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                  <h1 className="text-2xl lg:text-3xl font-bold text-gray-900 mb-2">Progress Images</h1>
+                  <p className="text-gray-600 text-sm lg:text-base">Track your transformation journey with photos</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={fetchImages}
+                    className="p-2.5 lg:p-2 rounded-xl lg:rounded-lg hover:bg-white/50 transition-colors min-w-[48px] lg:min-w-[44px] min-h-[48px] lg:min-h-[44px] flex items-center justify-center"
+                    title="Refresh images"
+                    style={{ color: '#daa450' }}
+                  >
+                    <svg className="w-5 h-5 lg:w-4 lg:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => setShowUploadModal(true)}
+                    className="px-5 py-3 lg:px-6 lg:py-2.5 rounded-xl lg:rounded-lg text-white font-semibold transition-all duration-200 shadow-sm hover:shadow-md min-h-[48px] lg:min-h-[44px] flex items-center justify-center gap-2"
+                    style={{ backgroundColor: '#daa450' }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#c89540'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#daa450'}
+                  >
+                    <svg className="w-5 h-5 lg:w-4 lg:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                    <span className="text-sm lg:text-base">Upload Image</span>
+                  </button>
+                </div>
               </div>
             </div>
             
             {/* Filters and Comparison Mode */}
             {images.length > 0 && (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between flex-wrap gap-3">
-                  <div className="flex items-center space-x-2 flex-wrap">
-                    <span className="text-xs font-medium text-gray-900">Filter by view:</span>
-                    <button
-                      onClick={() => setFilterOrientation('all')}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 ${
-                        filterOrientation === 'all'
-                          ? 'bg-gradient-to-r from-pink-600 to-rose-600 text-white shadow-md'
-                          : 'bg-white/80 backdrop-blur-sm text-gray-700 hover:bg-white border border-gray-200/60'
-                      }`}
-                    >
-                      All
-                    </button>
-                    <button
-                      onClick={() => setFilterOrientation('front')}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 ${
-                        filterOrientation === 'front'
-                          ? 'bg-gradient-to-r from-pink-600 to-rose-600 text-white shadow-md'
-                          : 'bg-white/80 backdrop-blur-sm text-gray-700 hover:bg-white border border-gray-200/60'
-                      }`}
-                    >
-                      Front
-                    </button>
-                    <button
-                      onClick={() => setFilterOrientation('back')}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 ${
-                        filterOrientation === 'back'
-                          ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-md'
-                          : 'bg-white/80 backdrop-blur-sm text-gray-700 hover:bg-white border border-gray-200/60'
-                      }`}
-                    >
-                      Back
-                    </button>
-                    <button
-                      onClick={() => setFilterOrientation('side')}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 ${
-                        filterOrientation === 'side'
-                          ? 'bg-gradient-to-r from-teal-600 to-cyan-600 text-white shadow-md'
-                          : 'bg-white/80 backdrop-blur-sm text-gray-700 hover:bg-white border border-gray-200/60'
-                      }`}
-                    >
-                      Side
-                    </button>
+              <div className="space-y-4 lg:space-y-3 mb-6">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs lg:text-sm font-medium text-gray-700">Filter by view:</span>
+                    {(['all', 'front', 'back', 'side'] as const).map((orient) => (
+                      <button
+                        key={orient}
+                        onClick={() => setFilterOrientation(orient)}
+                        className={`px-4 py-2.5 lg:px-3 lg:py-1.5 rounded-xl lg:rounded-lg text-xs lg:text-sm font-semibold transition-all duration-200 min-h-[48px] lg:min-h-[44px] whitespace-nowrap ${
+                          filterOrientation === orient
+                            ? 'text-white shadow-sm'
+                            : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
+                        }`}
+                        style={filterOrientation === orient ? { backgroundColor: '#daa450' } : {}}
+                        onMouseEnter={(e) => {
+                          if (filterOrientation !== orient) {
+                            e.currentTarget.style.backgroundColor = '#f9fafb';
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (filterOrientation !== orient) {
+                            e.currentTarget.style.backgroundColor = '#ffffff';
+                          }
+                        }}
+                      >
+                        {orient === 'all' ? 'All' : orient.charAt(0).toUpperCase() + orient.slice(1)}
+                      </button>
+                    ))}
                   </div>
                   
-                  <div className="flex items-center space-x-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     {selectedForComparison.length > 0 && (
-                      <div className="flex items-center space-x-2">
-                        <span className="text-xs text-gray-900 font-medium">
+                      <>
+                        <span className="text-xs lg:text-sm text-gray-700 font-medium">
                           {selectedForComparison.length} selected
                         </span>
                         <button
                           onClick={clearComparison}
-                          className="px-3 py-1.5 bg-white/80 backdrop-blur-sm hover:bg-white text-gray-700 rounded-lg text-xs font-medium transition-all duration-200 border border-gray-200/60 shadow-sm"
+                          className="px-4 py-2.5 lg:px-3 lg:py-1.5 bg-white hover:bg-gray-50 text-gray-700 rounded-xl lg:rounded-lg text-xs lg:text-sm font-semibold transition-colors border border-gray-200 min-h-[48px] lg:min-h-[44px] whitespace-nowrap"
                         >
                           Clear
                         </button>
                         <button
                           onClick={() => setComparisonMode(true)}
-                          className="px-3 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-lg text-xs font-medium transition-all duration-200 shadow-md hover:shadow-lg"
+                          className="px-4 py-2.5 lg:px-3 lg:py-1.5 rounded-xl lg:rounded-lg text-white text-xs lg:text-sm font-semibold transition-all duration-200 shadow-sm hover:shadow-md min-h-[48px] lg:min-h-[44px] whitespace-nowrap"
+                          style={{ backgroundColor: '#3b82f6' }}
                         >
                           Compare ({selectedForComparison.length})
                         </button>
-                      </div>
+                      </>
                     )}
                     <button
                       onClick={() => {
@@ -421,11 +383,12 @@ export default function ProgressImagesPage() {
                           setSelectedForComparison([]);
                         }
                       }}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 ${
+                      className={`px-4 py-2.5 lg:px-3 lg:py-1.5 rounded-xl lg:rounded-lg text-xs lg:text-sm font-semibold transition-all duration-200 min-h-[48px] lg:min-h-[44px] whitespace-nowrap ${
                         comparisonMode
-                          ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white shadow-md'
-                          : 'bg-white/80 backdrop-blur-sm text-gray-700 hover:bg-white border border-gray-200/60'
+                          ? 'text-white shadow-sm'
+                          : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
                       }`}
+                      style={comparisonMode ? { backgroundColor: '#22c55e' } : {}}
                     >
                       {comparisonMode ? 'Exit Compare' : 'Select to Compare'}
                     </button>
@@ -433,12 +396,15 @@ export default function ProgressImagesPage() {
                 </div>
                 
                 {/* Date Filter */}
-                <div className="flex items-center space-x-2">
-                  <span className="text-xs font-medium text-gray-900">Filter by date:</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs lg:text-sm font-medium text-gray-700">Filter by date:</span>
                   <select
                     value={filterDate}
                     onChange={(e) => setFilterDate(e.target.value)}
-                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-white/80 backdrop-blur-sm border border-gray-200/60 text-gray-700 hover:bg-white focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 shadow-sm"
+                    className="px-4 py-2.5 lg:px-3 lg:py-1.5 rounded-xl lg:rounded-lg text-xs lg:text-sm font-medium bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 transition-all min-h-[48px] lg:min-h-[44px]"
+                    style={{ focusRingColor: '#daa450' }}
+                    onFocus={(e) => e.target.style.borderColor = '#daa450'}
+                    onBlur={(e) => e.target.style.borderColor = '#e5e7eb'}
                   >
                     <option value="all">All Dates</option>
                     {getUniqueDates().map(date => (
@@ -450,67 +416,72 @@ export default function ProgressImagesPage() {
             )}
           </div>
 
-
           {/* Images Grid */}
           {images.length === 0 ? (
-            <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200/60 p-12 text-center">
-              <div className="w-20 h-20 bg-gradient-to-br from-pink-100 to-rose-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg className="w-10 h-10 text-pink-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 p-8 lg:p-12 text-center">
+              <div className="w-16 h-16 lg:w-20 lg:h-20 rounded-full flex items-center justify-center mx-auto mb-4" style={{ backgroundColor: '#fef9e7' }}>
+                <svg className="w-8 h-8 lg:w-10 lg:h-10" style={{ color: '#daa450' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
               </div>
-              <h3 className="text-lg font-semibold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent mb-2">No images yet</h3>
-              <p className="text-gray-900 text-sm mb-6">Start tracking your progress by uploading your first image</p>
+              <h3 className="text-lg lg:text-xl font-bold text-gray-900 mb-2">No images yet</h3>
+              <p className="text-gray-600 text-sm lg:text-base mb-6">Start tracking your progress by uploading your first image</p>
               <button
                 onClick={() => setShowUploadModal(true)}
-                className="px-5 py-2.5 bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-700 hover:to-rose-700 text-white rounded-xl font-medium transition-all duration-200 shadow-md hover:shadow-lg text-sm"
+                className="px-6 py-3 lg:py-2.5 rounded-xl lg:rounded-lg text-white font-semibold transition-all duration-200 shadow-sm hover:shadow-md min-h-[48px] lg:min-h-[44px] inline-flex items-center justify-center gap-2"
+                style={{ backgroundColor: '#daa450' }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#c89540'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#daa450'}
               >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
                 Upload Your First Image
               </button>
             </div>
           ) : (
             <>
               {filteredImages.length === 0 ? (
-                <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200/60 p-12 text-center">
-                  <p className="text-gray-900 text-sm">No {filterOrientation !== 'all' ? filterOrientation : ''} images found</p>
+                <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 p-8 lg:p-12 text-center">
+                  <p className="text-gray-600 text-sm lg:text-base">No {filterOrientation !== 'all' ? filterOrientation : ''} images found</p>
                 </div>
               ) : (
                 <>
                   {/* Comparison View */}
                   {comparisonMode && selectedForComparison.length > 0 && (
-                    <div className="mb-6 bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200/60 p-5">
-                      <div className="flex items-center justify-between mb-4">
-                        <h2 className="text-lg font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">Side-by-Side Comparison</h2>
+                    <div className="mb-6 lg:mb-8 bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 p-5 lg:p-8">
+                      <div className="flex items-center justify-between mb-4 lg:mb-6">
+                        <h2 className="text-lg lg:text-xl font-bold text-gray-900">Side-by-Side Comparison</h2>
                         <button
                           onClick={clearComparison}
-                          className="px-3 py-1.5 bg-white/80 backdrop-blur-sm hover:bg-white text-gray-700 rounded-lg text-xs font-medium transition-all duration-200 border border-gray-200/60 shadow-sm"
+                          className="px-4 py-2.5 lg:px-3 lg:py-1.5 bg-white hover:bg-gray-50 text-gray-700 rounded-xl lg:rounded-lg text-xs lg:text-sm font-semibold transition-colors border border-gray-200 min-h-[48px] lg:min-h-[44px] whitespace-nowrap"
                         >
                           Close Comparison
                         </button>
                       </div>
                       <div className={`grid gap-4 ${
                         selectedForComparison.length === 1 ? 'grid-cols-1' :
-                        selectedForComparison.length === 2 ? 'grid-cols-2' :
-                        selectedForComparison.length === 3 ? 'grid-cols-3' :
-                        'grid-cols-2 md:grid-cols-4'
+                        selectedForComparison.length === 2 ? 'grid-cols-1 sm:grid-cols-2' :
+                        selectedForComparison.length === 3 ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3' :
+                        'grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4'
                       }`}>
                         {getSelectedImages().map((image) => (
-                          <div key={image.id} className="bg-white rounded-xl border-2 border-blue-400 shadow-lg overflow-hidden">
+                          <div key={image.id} className="bg-white rounded-2xl border-2 overflow-hidden shadow-md" style={{ borderColor: '#daa450' }}>
                             <div className="aspect-square relative">
                               <img
                                 src={image.imageUrl}
                                 alt={image.caption || image.imageType}
                                 className="w-full h-full object-cover"
                               />
-                              <div className="absolute top-2 left-2 flex flex-col gap-1">
-                                <span className={`px-2 py-1 rounded text-xs font-medium ${getImageTypeColor(image.imageType)}`}>
+                              <div className="absolute top-2 left-2 flex flex-col gap-1.5">
+                                <span className={`px-2.5 py-1 rounded-lg text-xs font-medium ${getImageTypeColor(image.imageType)}`}>
                                   {image.imageType === 'profile' ? 'Profile' :
                                    image.imageType === 'before' ? 'Before' :
                                    image.imageType === 'after' ? 'After' :
                                    'Progress'}
                                 </span>
                                 {image.orientation && (
-                                  <span className={`px-2 py-1 rounded text-xs font-medium ${getOrientationColor(image.orientation)}`}>
+                                  <span className={`px-2.5 py-1 rounded-lg text-xs font-medium ${getOrientationColor(image.orientation)}`}>
                                     {image.orientation.charAt(0).toUpperCase() + image.orientation.slice(1)}
                                   </span>
                                 )}
@@ -538,31 +509,32 @@ export default function ProgressImagesPage() {
 
                   {/* Images grouped by date */}
                   {sortedDateKeys.map((dateKey) => (
-                    <div key={dateKey} className="mb-6">
-                      <div className="flex items-center justify-between mb-3">
-                        <h3 className="text-base font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent flex items-center">
-                          <svg className="w-4 h-4 mr-2 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div key={dateKey} className="mb-6 lg:mb-8">
+                      <div className="flex items-center justify-between mb-4 lg:mb-6">
+                        <h3 className="text-base lg:text-lg font-bold text-gray-900 flex items-center gap-2">
+                          <svg className="w-4 h-4 lg:w-5 lg:h-5" style={{ color: '#daa450' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                           </svg>
                           {dateKey}
-                          <span className="ml-2 text-xs font-normal text-gray-700">
+                          <span className="ml-2 text-xs lg:text-sm font-normal text-gray-600">
                             ({groupedImages[dateKey].length} {groupedImages[dateKey].length === 1 ? 'image' : 'images'})
                           </span>
                         </h3>
                       </div>
-                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 lg:gap-4">
                         {groupedImages[dateKey].map((image) => {
                           const isSelected = selectedForComparison.includes(image.id);
                           return (
                             <div 
                               key={image.id} 
-                              className={`group relative aspect-square rounded-xl overflow-hidden border transition-all duration-300 hover:shadow-lg bg-white/80 backdrop-blur-sm cursor-pointer ${
+                              className={`group relative aspect-square rounded-2xl overflow-hidden border transition-all duration-300 hover:shadow-lg cursor-pointer ${
                                 comparisonMode 
                                   ? isSelected 
-                                    ? 'border-blue-500 ring-2 ring-blue-200 shadow-md' 
-                                    : 'border-gray-200/60 hover:border-blue-300'
-                                  : 'border-gray-200/60 hover:border-pink-300'
+                                    ? 'ring-2 shadow-md' 
+                                    : 'border-gray-200 hover:border-gray-300'
+                                  : 'border-gray-200 hover:border-gray-300'
                               }`}
+                              style={comparisonMode && isSelected ? { borderColor: '#daa450', ringColor: '#fef9e7' } : {}}
                               onClick={() => {
                                 if (comparisonMode) {
                                   toggleImageSelection(image.id);
@@ -570,13 +542,15 @@ export default function ProgressImagesPage() {
                               }}
                             >
                               {comparisonMode && (
-                                <div className={`absolute top-2 right-2 z-10 w-6 h-6 rounded-full flex items-center justify-center transition-all ${
+                                <div className={`absolute top-2 right-2 z-10 w-7 h-7 lg:w-6 lg:h-6 rounded-full flex items-center justify-center transition-all shadow-md ${
                                   isSelected 
-                                    ? 'bg-blue-600 text-white shadow-lg' 
-                                    : 'bg-white/80 backdrop-blur-sm border-2 border-gray-300'
-                                }`}>
+                                    ? 'text-white' 
+                                    : 'bg-white border-2 border-gray-300'
+                                }`}
+                                style={isSelected ? { backgroundColor: '#daa450' } : {}}
+                                >
                                   {isSelected && (
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <svg className="w-4 h-4 lg:w-3.5 lg:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                                     </svg>
                                   )}
@@ -595,21 +569,21 @@ export default function ProgressImagesPage() {
                                   `)}`;
                                 }}
                               />
-                              <div className="absolute top-2 left-2 flex flex-col gap-1">
-                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${getImageTypeColor(image.imageType)}`}>
+                              <div className="absolute top-2 left-2 flex flex-col gap-1.5">
+                                <span className={`px-2 py-1 rounded-lg text-[10px] lg:text-xs font-medium ${getImageTypeColor(image.imageType)}`}>
                                   {image.imageType === 'profile' ? 'Profile' :
                                    image.imageType === 'before' ? 'Before' :
                                    image.imageType === 'after' ? 'After' :
                                    'Progress'}
                                 </span>
                                 {image.orientation && (
-                                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${getOrientationColor(image.orientation)}`}>
+                                  <span className={`px-2 py-1 rounded-lg text-[10px] lg:text-xs font-medium ${getOrientationColor(image.orientation)}`}>
                                     {image.orientation.charAt(0).toUpperCase() + image.orientation.slice(1)}
                                   </span>
                                 )}
                               </div>
                               <div className="absolute bottom-2 right-2">
-                                <span className="px-2 py-1 rounded-full text-xs font-medium bg-black bg-opacity-50 text-white">
+                                <span className="px-2 py-1 rounded-lg text-[10px] lg:text-xs font-medium bg-black/70 backdrop-blur-sm text-white">
                                   {formatTimeAgo(image.uploadedAt)}
                                 </span>
                               </div>
@@ -623,7 +597,7 @@ export default function ProgressImagesPage() {
                                       handleDelete(image.id);
                                     }}
                                     disabled={deletingId === image.id}
-                                    className="p-2 bg-red-600 hover:bg-red-700 text-white rounded-full shadow-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="p-2 bg-red-600 hover:bg-red-700 text-white rounded-xl shadow-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-w-[40px] min-h-[40px] flex items-center justify-center"
                                     title="Delete image"
                                   >
                                     {deletingId === image.id ? (
@@ -651,10 +625,16 @@ export default function ProgressImagesPage() {
 
           {/* Upload Modal */}
           {showUploadModal && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-              <div className="bg-white/95 backdrop-blur-sm rounded-xl shadow-xl border border-gray-200/60 max-w-md w-full p-5">
-                <div className="flex items-center justify-between mb-5">
-                  <h2 className="text-xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">Upload Progress Image</h2>
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => {
+              setShowUploadModal(false);
+              setSelectedFile(null);
+              setCaption('');
+              setImageType('progress');
+              setOrientation('front');
+            }}>
+              <div className="bg-white rounded-2xl lg:rounded-3xl shadow-xl border border-gray-100 max-w-md w-full p-5 lg:p-8" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-between mb-5 lg:mb-6">
+                  <h2 className="text-xl lg:text-2xl font-bold text-gray-900">Upload Progress Image</h2>
                   <button
                     onClick={() => {
                       setShowUploadModal(false);
@@ -663,7 +643,7 @@ export default function ProgressImagesPage() {
                       setImageType('progress');
                       setOrientation('front');
                     }}
-                    className="text-gray-600 hover:text-gray-800 transition-colors"
+                    className="text-gray-600 hover:text-gray-800 transition-colors p-2 rounded-lg hover:bg-gray-100"
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -671,13 +651,16 @@ export default function ProgressImagesPage() {
                   </button>
                 </div>
 
-                <div className="space-y-4">
+                <div className="space-y-5 lg:space-y-4">
                   <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1.5">Image Type</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Image Type</label>
                     <select
                       value={imageType}
                       onChange={(e) => setImageType(e.target.value as any)}
-                      className="w-full px-3 py-2 text-sm border border-gray-200/60 rounded-lg bg-white/80 backdrop-blur-sm focus:ring-2 focus:ring-pink-500 focus:border-pink-500 transition-all"
+                      className="w-full px-4 py-3 lg:py-2.5 border border-gray-300 rounded-xl lg:rounded-lg bg-white focus:ring-2 focus:outline-none transition-all text-sm lg:text-base min-h-[48px] lg:min-h-[44px]"
+                      style={{ focusRingColor: '#daa450' }}
+                      onFocus={(e) => e.target.style.borderColor = '#daa450'}
+                      onBlur={(e) => e.target.style.borderColor = '#d1d5db'}
                     >
                       <option value="profile">Profile</option>
                       <option value="before">Before</option>
@@ -687,45 +670,56 @@ export default function ProgressImagesPage() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1.5">View <span className="text-red-500">*</span></label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      View <span className="text-red-500">*</span>
+                    </label>
                     <select
                       value={orientation}
                       onChange={(e) => setOrientation(e.target.value as any)}
-                      className="w-full px-3 py-2 text-sm border border-gray-200/60 rounded-lg bg-white/80 backdrop-blur-sm focus:ring-2 focus:ring-pink-500 focus:border-pink-500 transition-all"
+                      className="w-full px-4 py-3 lg:py-2.5 border border-gray-300 rounded-xl lg:rounded-lg bg-white focus:ring-2 focus:outline-none transition-all text-sm lg:text-base min-h-[48px] lg:min-h-[44px]"
+                      style={{ focusRingColor: '#daa450' }}
+                      onFocus={(e) => e.target.style.borderColor = '#daa450'}
+                      onBlur={(e) => e.target.style.borderColor = '#d1d5db'}
                       required
                     >
                       <option value="front">Front</option>
                       <option value="back">Back</option>
                       <option value="side">Side</option>
                     </select>
-                    <p className="text-xs text-gray-700 mt-1">Select the view angle for easy comparison</p>
+                    <p className="text-xs text-gray-600 mt-2">Select the view angle for easy comparison</p>
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1.5">Select Image</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Select Image</label>
                     <input
                       type="file"
                       accept="image/*"
                       onChange={handleFileSelect}
-                      className="w-full px-3 py-2 text-sm border border-gray-200/60 rounded-lg bg-white/80 backdrop-blur-sm focus:ring-2 focus:ring-pink-500 focus:border-pink-500 transition-all"
+                      className="w-full px-4 py-3 lg:py-2.5 border border-gray-300 rounded-xl lg:rounded-lg bg-white focus:ring-2 focus:outline-none transition-all text-sm lg:text-base file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200 min-h-[48px] lg:min-h-[44px]"
+                      style={{ focusRingColor: '#daa450' }}
+                      onFocus={(e) => e.target.style.borderColor = '#daa450'}
+                      onBlur={(e) => e.target.style.borderColor = '#d1d5db'}
                     />
                     {selectedFile && (
-                      <p className="mt-1.5 text-xs text-gray-600">Selected: {selectedFile.name}</p>
+                      <p className="mt-2 text-xs lg:text-sm text-gray-600">Selected: {selectedFile.name}</p>
                     )}
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1.5">Caption (Optional)</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Caption (Optional)</label>
                     <input
                       type="text"
                       value={caption}
                       onChange={(e) => setCaption(e.target.value)}
                       placeholder="Add a caption..."
-                      className="w-full px-3 py-2 text-sm border border-gray-200/60 rounded-lg bg-white/80 backdrop-blur-sm focus:ring-2 focus:ring-pink-500 focus:border-pink-500 transition-all"
+                      className="w-full px-4 py-3 lg:py-2.5 border border-gray-300 rounded-xl lg:rounded-lg bg-white focus:ring-2 focus:outline-none transition-all text-sm lg:text-base min-h-[48px] lg:min-h-[44px]"
+                      style={{ focusRingColor: '#daa450' }}
+                      onFocus={(e) => e.target.style.borderColor = '#daa450'}
+                      onBlur={(e) => e.target.style.borderColor = '#d1d5db'}
                     />
                   </div>
 
-                  <div className="flex space-x-3 pt-4">
+                  <div className="flex gap-3 pt-4">
                     <button
                       onClick={() => {
                         setShowUploadModal(false);
@@ -734,14 +728,25 @@ export default function ProgressImagesPage() {
                         setImageType('progress');
                         setOrientation('front');
                       }}
-                      className="flex-1 px-4 py-2 text-sm border border-gray-200/60 rounded-lg bg-white/80 backdrop-blur-sm text-gray-700 hover:bg-white transition-all duration-200 shadow-sm"
+                      className="flex-1 px-4 py-3 lg:py-2.5 border border-gray-300 rounded-xl lg:rounded-lg bg-white text-gray-700 hover:bg-gray-50 transition-colors font-semibold text-sm lg:text-base min-h-[48px] lg:min-h-[44px]"
                     >
                       Cancel
                     </button>
                     <button
                       onClick={handleUpload}
                       disabled={!selectedFile || uploading}
-                      className="flex-1 px-4 py-2 text-sm bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-700 hover:to-rose-700 text-white rounded-lg font-medium transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="flex-1 px-4 py-3 lg:py-2.5 rounded-xl lg:rounded-lg text-white font-semibold transition-all duration-200 shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed text-sm lg:text-base min-h-[48px] lg:min-h-[44px]"
+                      style={{ backgroundColor: '#daa450' }}
+                      onMouseEnter={(e) => {
+                        if (!uploading && selectedFile) {
+                          e.currentTarget.style.backgroundColor = '#c89540';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!uploading && selectedFile) {
+                          e.currentTarget.style.backgroundColor = '#daa450';
+                        }
+                      }}
                     >
                       {uploading ? 'Uploading...' : 'Upload'}
                     </button>
@@ -755,4 +760,3 @@ export default function ProgressImagesPage() {
     </RoleProtected>
   );
 }
-

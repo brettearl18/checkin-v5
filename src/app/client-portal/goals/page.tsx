@@ -142,6 +142,7 @@ export default function ClientGoalsPage() {
       console.log('Goal API response:', { status: response.status, data });
 
       if (response.ok && data.success) {
+        // Success - close modal, reset form, and refresh goals
         setShowAddGoal(false);
         setNewGoal({
           title: '',
@@ -151,10 +152,13 @@ export default function ClientGoalsPage() {
           unit: '',
           deadline: ''
         });
-        await fetchGoals(); // Refresh goals
+        // Refresh goals list to show the new goal
+        await fetchGoals();
+        console.log('Goal created successfully with ID:', data.goalId);
       } else {
+        // Error - show user-friendly message
         const errorMsg = data.message || data.error || 'Unknown error';
-        alert(`Failed to create goal: ${errorMsg}`);
+        alert(`Failed to create goal: ${errorMsg}\n\nPlease check that all fields are filled correctly and try again.`);
         console.error('Failed to create goal:', { response: response.status, data });
       }
     } catch (error) {
@@ -205,146 +209,171 @@ export default function ClientGoalsPage() {
 
   return (
     <RoleProtected requiredRole="client">
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex">
+      <div className="min-h-screen bg-white flex">
         <ClientNavigation />
         
-        <div className="flex-1 ml-8 p-6">
+        <div className="flex-1 ml-4 lg:ml-8 p-5 lg:p-6">
           {/* Header */}
-          <div className="mb-8">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900 mb-2">My Goals</h1>
-                <p className="text-gray-900">Set and track your wellness goals</p>
+          <div className="mb-6 lg:mb-8">
+            <div className="px-4 py-4 sm:px-6 sm:py-5 lg:px-8 lg:py-6 border-b-2 mb-4 rounded-t-2xl lg:rounded-t-3xl" style={{ backgroundColor: '#fef9e7', borderColor: '#daa450' }}>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                  <h1 className="text-2xl lg:text-3xl font-bold text-gray-900 mb-2">My Goals</h1>
+                  <p className="text-gray-600 text-sm lg:text-base">Set and track your wellness goals</p>
+                </div>
+                <button
+                  onClick={() => setShowAddGoal(true)}
+                  className="px-5 py-3 lg:px-6 lg:py-2.5 rounded-xl lg:rounded-lg text-white font-semibold transition-all duration-200 shadow-sm hover:shadow-md min-h-[48px] lg:min-h-[44px] flex items-center justify-center"
+                  style={{ backgroundColor: '#daa450' }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#c89540'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#daa450'}
+                >
+                  + Add New Goal
+                </button>
               </div>
-              <button
-                onClick={() => setShowAddGoal(true)}
-                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
-              >
-                + Add New Goal
-              </button>
             </div>
           </div>
 
           {/* Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6 mb-6 lg:mb-8">
+            <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 p-4 lg:p-6">
               <div className="flex items-center">
-                <div className="p-3 bg-blue-100 rounded-lg">
-                  <span className="text-2xl">🎯</span>
+                <div className="p-2.5 lg:p-3 rounded-xl lg:rounded-lg flex-shrink-0" style={{ backgroundColor: '#daa450' }}>
+                  <svg className="w-6 h-6 lg:w-5 lg:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
                 </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-900">Total Goals</p>
-                  <p className="text-2xl font-bold text-gray-900">{goals.length}</p>
+                <div className="ml-3 lg:ml-4 min-w-0">
+                  <p className="text-xs lg:text-sm font-medium text-gray-600 truncate">Total Goals</p>
+                  <p className="text-xl lg:text-2xl font-bold text-gray-900">{goals.length}</p>
                 </div>
               </div>
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 p-4 lg:p-6">
               <div className="flex items-center">
-                <div className="p-3 bg-yellow-100 rounded-lg">
-                  <span className="text-2xl">⏳</span>
+                <div className="p-2.5 lg:p-3 rounded-xl lg:rounded-lg flex-shrink-0" style={{ backgroundColor: '#daa450' }}>
+                  <svg className="w-6 h-6 lg:w-5 lg:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
                 </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-900">Active Goals</p>
-                  <p className="text-2xl font-bold text-gray-900">{activeGoals.length}</p>
+                <div className="ml-3 lg:ml-4 min-w-0">
+                  <p className="text-xs lg:text-sm font-medium text-gray-600 truncate">Active Goals</p>
+                  <p className="text-xl lg:text-2xl font-bold text-gray-900">{activeGoals.length}</p>
                 </div>
               </div>
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 p-4 lg:p-6">
               <div className="flex items-center">
-                <div className="p-3 bg-green-100 rounded-lg">
-                  <span className="text-2xl">✅</span>
+                <div className="p-2.5 lg:p-3 rounded-xl lg:rounded-lg flex-shrink-0" style={{ backgroundColor: '#daa450' }}>
+                  <svg className="w-6 h-6 lg:w-5 lg:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
                 </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-900">Completed</p>
-                  <p className="text-2xl font-bold text-gray-900">{completedGoals.length}</p>
+                <div className="ml-3 lg:ml-4 min-w-0">
+                  <p className="text-xs lg:text-sm font-medium text-gray-600 truncate">Completed</p>
+                  <p className="text-xl lg:text-2xl font-bold text-gray-900">{completedGoals.length}</p>
                 </div>
               </div>
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 p-4 lg:p-6">
               <div className="flex items-center">
-                <div className="p-3 bg-red-100 rounded-lg">
-                  <span className="text-2xl">⚠️</span>
+                <div className="p-2.5 lg:p-3 rounded-xl lg:rounded-lg flex-shrink-0" style={{ backgroundColor: '#daa450' }}>
+                  <svg className="w-6 h-6 lg:w-5 lg:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
                 </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-900">Overdue</p>
-                  <p className="text-2xl font-bold text-gray-900">{overdueGoals.length}</p>
+                <div className="ml-3 lg:ml-4 min-w-0">
+                  <p className="text-xs lg:text-sm font-medium text-gray-600 truncate">Overdue</p>
+                  <p className="text-xl lg:text-2xl font-bold text-gray-900">{overdueGoals.length}</p>
                 </div>
               </div>
             </div>
           </div>
 
           {/* Goals List */}
-          <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-            <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-8 py-6 border-b border-gray-100">
-              <h2 className="text-2xl font-bold text-gray-900">Your Goals</h2>
-              <p className="text-gray-900 mt-1">Track your progress towards achieving your wellness goals</p>
+          <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+            <div className="px-4 py-4 sm:px-6 sm:py-5 lg:px-8 lg:py-6 border-b-2" style={{ backgroundColor: '#fef9e7', borderColor: '#daa450' }}>
+              <h2 className="text-xl lg:text-2xl font-bold text-gray-900">Your Goals</h2>
+              <p className="text-gray-600 text-sm lg:text-base mt-1">Track your progress towards achieving your wellness goals</p>
             </div>
 
             {(loading || authLoading) ? (
               <div className="p-8 text-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-                <p className="mt-4 text-gray-900">Loading your goals...</p>
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 mx-auto" style={{ borderBottomColor: '#daa450' }}></div>
+                <p className="mt-4 text-gray-600">Loading your goals...</p>
               </div>
             ) : goals.length === 0 ? (
               <div className="p-8 text-center">
                 <div className="text-6xl mb-4">🎯</div>
                 <h3 className="text-xl font-semibold text-gray-900 mb-2">No goals set yet</h3>
-                <p className="text-gray-900 mb-6">Start by setting your first wellness goal to track your progress.</p>
+                <p className="text-gray-600 mb-6">Start by setting your first wellness goal to track your progress.</p>
                 <button
                   onClick={() => setShowAddGoal(true)}
-                  className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                  className="px-6 py-3 rounded-xl lg:rounded-lg text-white font-semibold transition-all duration-200 shadow-sm hover:shadow-md min-h-[48px] flex items-center justify-center mx-auto"
+                  style={{ backgroundColor: '#daa450' }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#c89540'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#daa450'}
                 >
                   Set Your First Goal
                 </button>
               </div>
             ) : (
-              <div className="p-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="p-5 lg:p-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6">
                   {goals.map((goal) => (
-                    <div key={goal.id} className="bg-gray-50 rounded-xl p-6 border border-gray-200">
+                    <div key={goal.id} className="bg-gray-50 rounded-xl lg:rounded-2xl p-5 lg:p-6 border border-gray-200 hover:shadow-lg transition-all duration-200">
                       <div className="flex items-start justify-between mb-4">
                         <div className="flex items-center space-x-3">
                           <span className="text-2xl">{getCategoryIcon(goal.category)}</span>
                           <div>
-                            <h3 className="font-semibold text-gray-900">{goal.title}</h3>
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${getCategoryColor(goal.category)}`}>
+                            <h3 className="font-semibold text-gray-900 text-base lg:text-lg">{goal.title}</h3>
+                            <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${getCategoryColor(goal.category)} mt-1 inline-block`}>
                               {goal.category.replace('-', ' ')}
                             </span>
                           </div>
                         </div>
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(goal.status)}`}>
+                        <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${getStatusColor(goal.status)} flex-shrink-0`}>
                           {goal.status}
                         </span>
                       </div>
 
-                      <p className="text-gray-600 text-sm mb-4">{goal.description}</p>
+                      {goal.description && (
+                        <p className="text-gray-600 text-sm mb-4 line-clamp-2">{goal.description}</p>
+                      )}
 
                       <div className="mb-4">
                         <div className="flex justify-between text-sm text-gray-600 mb-1">
                           <span>Progress</span>
-                          <span>{goal.currentValue} / {goal.targetValue} {goal.unit}</span>
+                          <span className="font-medium">{goal.currentValue} / {goal.targetValue} {goal.unit}</span>
                         </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div className="w-full bg-gray-200 rounded-full h-2.5 mb-1">
                           <div 
-                            className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                            style={{ width: `${Math.min(goal.progress, 100)}%` }}
+                            className="h-2.5 rounded-full transition-all duration-300"
+                            style={{ 
+                              width: `${Math.min(goal.progress || 0, 100)}%`,
+                              backgroundColor: '#daa450'
+                            }}
                           ></div>
                         </div>
-                        <p className="text-xs text-gray-700 mt-1">{Math.round(goal.progress)}% complete</p>
+                        <p className="text-xs text-gray-700">{Math.round(goal.progress || 0)}% complete</p>
                       </div>
 
-                      <div className="text-xs text-gray-700">
+                      <div className="text-xs text-gray-700 mb-4">
                         Deadline: {formatDate(goal.deadline)}
                       </div>
 
-                      <div className="mt-4 flex space-x-2">
-                        <button className="flex-1 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm">
+                      <div className="mt-4 pt-4 border-t border-gray-200 flex flex-col sm:flex-row gap-2">
+                        <button className="flex-1 px-3 py-2.5 rounded-xl lg:rounded-lg text-white font-semibold transition-all duration-200 shadow-sm hover:shadow-md min-h-[44px] flex items-center justify-center text-sm"
+                          style={{ backgroundColor: '#daa450' }}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#c89540'}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#daa450'}
+                        >
                           Update Progress
                         </button>
-                        <button className="px-3 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors text-sm">
+                        <button className="px-4 py-2.5 bg-gray-200 text-gray-700 rounded-xl lg:rounded-lg hover:bg-gray-300 transition-colors text-sm font-medium min-h-[44px] flex items-center justify-center">
                           Edit
                         </button>
                       </div>
@@ -478,7 +507,10 @@ export default function ClientGoalsPage() {
                   </button>
                   <button
                     type="submit"
-                    className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    className="flex-1 px-4 py-2 rounded-xl lg:rounded-lg text-white font-semibold transition-all duration-200 shadow-sm hover:shadow-md min-h-[44px] flex items-center justify-center"
+                    style={{ backgroundColor: '#daa450' }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#c89540'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#daa450'}
                   >
                     Add Goal
                   </button>

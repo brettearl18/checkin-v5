@@ -22,12 +22,19 @@ export async function GET(request: NextRequest) {
         .orderBy('createdAt', 'desc')
         .get();
 
-      resources = resourcesSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-    } catch (error) {
-      console.log('No wellnessResources found, using sample data');
+      resources = resourcesSnapshot.docs.map(doc => {
+        const data = doc.data();
+        // Convert Firestore Timestamps to ISO strings for JSON serialization
+        return {
+          id: doc.id,
+          ...data,
+          createdAt: data.createdAt?.toDate?.()?.toISOString() || data.createdAt || new Date().toISOString()
+        };
+      });
+      
+      console.log(`Fetched ${resources.length} resources from wellnessResources collection`);
+    } catch (error: any) {
+      console.log('No wellnessResources found or error fetching, using sample data:', error.message);
       // Provide sample resources if none exist
       resources = [
         {

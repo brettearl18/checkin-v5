@@ -110,3 +110,4 @@ echo "1. Deploy Firebase Hosting: firebase deploy --only hosting"
 echo "2. Test your service: Visit https://checkinv5.web.app"
 echo ""
 
+

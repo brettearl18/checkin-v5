@@ -174,3 +174,4 @@ curl $SERVICE_URL
 - Verify all environment variables are set
 - Check that the service account JSON is valid
 
+

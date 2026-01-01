@@ -150,18 +150,22 @@ service cloud.firestore {
     // Forms Collection
     // ============================================
     match /forms/{formId} {
-      // Coaches can read their own forms
-      // Admins can read all forms
-      allow read: if isAuthenticated() && (
-        (isCoach() && resource.data.coachId == getUserId()) ||
-        hasAdminRole()
-      );
+      // All authenticated users can read forms
+      // (Forms are needed for check-ins and may be shared)
+      // Coaches can read all forms (needed for assigning to clients)
+      // Clients can read forms assigned to them (via check-in assignments)
+      // Standard forms are readable by all authenticated users
+      allow read: if isAuthenticated();
       
       // Coaches can create/update/delete their own forms
       // Admins can manage all forms
-      allow write: if isAuthenticated() && (
-        (isCoach() && (resource.data.coachId == getUserId() || 
-                       request.resource.data.coachId == getUserId())) ||
+      allow create: if isAuthenticated() && (
+        (isCoach() && request.resource.data.coachId == getUserId()) ||
+        hasAdminRole()
+      );
+      
+      allow update, delete: if isAuthenticated() && (
+        (isCoach() && resource.data.coachId == getUserId()) ||
         hasAdminRole()
       );
     }
@@ -430,6 +434,67 @@ service cloud.firestore {
         (isCoach() && resource.data.coachId == getUserId()) ||
         hasAdminRole()
       );
+    }
+    
+    // ============================================
+    // AI Analytics History Collection
+    // ============================================
+    match /ai_analytics_history/{historyId} {
+      // Only coaches and admins can access AI analytics
+      // Coaches can only access analytics for their own clients
+      allow read: if isAuthenticated() && (
+        (isCoach() && resource.data.coachId == getUserId()) ||
+        hasAdminRole()
+      );
+      
+      // Only server-side (via Admin SDK) should create/update
+      // This rule prevents client-side writes
+      allow write: if false; // Client-side writes disabled
+    }
+    
+    // ============================================
+    // Weekly Summaries Collection
+    // ============================================
+    match /weekly_summaries/{summaryId} {
+      // Only coaches and admins can access weekly summaries
+      // Coaches can only access summaries for their own clients
+      allow read: if isAuthenticated() && (
+        (isCoach() && resource.data.coachId == getUserId()) ||
+        hasAdminRole()
+      );
+      
+      // Only server-side (via Admin SDK) should create/update
+      allow write: if false; // Client-side writes disabled
+    }
+    
+    // ============================================
+    // SWOT Analyses Collection
+    // ============================================
+    match /swot_analyses/{analysisId} {
+      // Only coaches and admins can access SWOT analyses
+      // Coaches can only access analyses for their own clients
+      allow read: if isAuthenticated() && (
+        (isCoach() && resource.data.coachId == getUserId()) ||
+        hasAdminRole()
+      );
+      
+      // Only server-side (via Admin SDK) should create/update
+      allow write: if false; // Client-side writes disabled
+    }
+    
+    // ============================================
+    // Onboarding Reports Collection
+    // ============================================
+    match /onboarding_reports/{reportId} {
+      // Coaches can read reports for their clients
+      // Admins can read all reports
+      allow read: if isAuthenticated() && (
+        (isCoach() && resource.data.coachId == getUserId()) ||
+        hasAdminRole()
+      );
+      
+      // Only server-side (via Admin SDK) should create/update
+      allow write: if false; // Client-side writes disabled
     }
     
     // ============================================

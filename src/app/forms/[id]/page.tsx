@@ -2,8 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { doc, getDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '@/lib/firebase-client';
+// Removed direct Firestore client access - using API routes instead
 
 interface Question {
   id: string;
@@ -46,15 +45,25 @@ export default function FormViewPage() {
   useEffect(() => {
     const fetchFormAndQuestions = async () => {
       try {
-        // Fetch form
-        const formDoc = await getDoc(doc(db, 'forms', formId));
-        if (!formDoc.exists()) {
+        // Fetch form via API route (bypasses Firestore security rules)
+        const formResponse = await fetch(`/api/forms/${formId}`);
+        if (!formResponse.ok) {
+          if (formResponse.status === 404) {
+            alert('Form not found');
+            router.push('/forms');
+            return;
+          }
+          throw new Error('Failed to fetch form');
+        }
+
+        const formResult = await formResponse.json();
+        if (!formResult.success || !formResult.form) {
           alert('Form not found');
           router.push('/forms');
           return;
         }
 
-        const formData = { id: formDoc.id, ...formDoc.data() } as Form;
+        const formData = { id: formResult.form.id, ...formResult.form } as Form;
         setForm(formData);
 
         // Check if form is active or is a standard form
@@ -64,19 +73,21 @@ export default function FormViewPage() {
           return;
         }
 
-        // Fetch questions
+        // Questions should now be embedded in the form data (API route fetches them)
         const questionsData: Question[] = [];
-        for (const questionId of formData.questions) {
-          const questionDoc = await getDoc(doc(db, 'questions', questionId));
-          if (questionDoc.exists()) {
-            questionsData.push({ id: questionDoc.id, ...questionDoc.data() } as Question);
-          }
+        if (formData.questions && Array.isArray(formData.questions)) {
+          // Questions should be objects now (API route fetches them from IDs)
+          formData.questions.forEach((q: any) => {
+            if (typeof q === 'object' && q.id) {
+              questionsData.push(q as Question);
+            }
+          });
         }
 
         setQuestions(questionsData);
       } catch (error) {
         console.error('Error fetching form:', error);
-        alert('Error loading form');
+        alert('Error loading form: ' + (error instanceof Error ? error.message : 'Unknown error'));
       } finally {
         setIsLoading(false);
       }

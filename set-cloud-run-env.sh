@@ -49,3 +49,4 @@ echo "   1. Use Secret Manager (recommended for security)"
 echo "   2. Set as environment variable (see instructions below)"
 echo ""
 
+

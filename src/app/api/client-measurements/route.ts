@@ -78,7 +78,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { clientId, date, bodyWeight, measurements } = body;
+    const { clientId, date, bodyWeight, measurements, isBaseline } = body;
 
     if (!clientId) {
       return NextResponse.json({
@@ -106,6 +106,11 @@ export async function POST(request: NextRequest) {
 
     if (bodyWeight !== undefined) {
       measurementData.bodyWeight = bodyWeight;
+    }
+
+    // Add isBaseline flag if provided
+    if (isBaseline !== undefined) {
+      measurementData.isBaseline = Boolean(isBaseline);
     }
 
     const docRef = await db.collection('client_measurements').add(measurementData);
@@ -138,7 +143,7 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    const { id, date, bodyWeight, measurements } = body;
+    const { id, date, bodyWeight, measurements, isBaseline } = body;
 
     if (!id) {
       return NextResponse.json({
@@ -170,6 +175,11 @@ export async function PUT(request: NextRequest) {
 
     if (measurements !== undefined) {
       updateData.measurements = measurements;
+    }
+
+    // Update isBaseline flag if provided
+    if (isBaseline !== undefined) {
+      updateData.isBaseline = Boolean(isBaseline);
     }
 
     await db.collection('client_measurements').doc(id).update(updateData);

@@ -117,3 +117,4 @@ After deployment:
 - Check for JSON escaping issues in FIREBASE_SERVICE_ACCOUNT
 - Restart the service after updating variables
 
+

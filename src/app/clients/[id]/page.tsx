@@ -146,6 +146,23 @@ export default function ClientProfilePage() {
     endDay: 'monday',
     endTime: '22:00'
   });
+  const [measurementScheduleEnabled, setMeasurementScheduleEnabled] = useState(false);
+  const [firstMeasurementFriday, setFirstMeasurementFriday] = useState('');
+  const [showAllocationSummary, setShowAllocationSummary] = useState(false);
+  const [allocationSummary, setAllocationSummary] = useState<{
+    formTitle: string;
+    frequency: string;
+    duration: number;
+    startDate: string;
+    firstCheckInDate: string;
+    checkInWindow?: any;
+    measurementSchedule?: {
+      enabled: boolean;
+      firstFridayDate: string;
+      frequency: string;
+      nextDates: string[];
+    } | null;
+  } | null>(null);
   const [showCheckInManagementModal, setShowCheckInManagementModal] = useState(false);
   const [selectedCheckIn, setSelectedCheckIn] = useState<any>(null);
   const [deletingCheckIn, setDeletingCheckIn] = useState(false);
@@ -173,8 +190,14 @@ export default function ClientProfilePage() {
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
   const [questionProgressExpanded, setQuestionProgressExpanded] = useState(false);
+  const [weeklySummary, setWeeklySummary] = useState<any>(null);
+  const [loadingWeeklySummary, setLoadingWeeklySummary] = useState(false);
+  const [swotAnalysis, setSwotAnalysis] = useState<any>(null);
+  const [loadingSwot, setLoadingSwot] = useState(false);
   const [imagesExpanded, setImagesExpanded] = useState(false);
   const [measurementsExpanded, setMeasurementsExpanded] = useState(false);
+  const [onboardingAiSummary, setOnboardingAiSummary] = useState<{summary: string, generatedAt: string} | null>(null);
+  const [loadingOnboardingAiSummary, setLoadingOnboardingAiSummary] = useState(false);
 
   // Debug forms state changes
   useEffect(() => {
@@ -312,7 +335,7 @@ export default function ClientProfilePage() {
     }
   }, [client, hasLoadedCheckIns]);
 
-  // Fetch AI Analytics history when tab is opened
+  // Fetch AI Analytics history and onboarding summary when tab is opened
   useEffect(() => {
     const fetchAnalyticsHistory = async () => {
       if (activeTab === 'ai-analytics' && clientId) {
@@ -338,7 +361,39 @@ export default function ClientProfilePage() {
       }
     };
 
+    const fetchOnboardingAiSummary = async () => {
+      if (activeTab === 'ai-analytics' && clientId && !onboardingAiSummary && !loadingOnboardingAiSummary) {
+        console.log('Fetching onboarding AI summary for client:', clientId);
+        setLoadingOnboardingAiSummary(true);
+        try {
+          const response = await fetch(`/api/client-portal/onboarding/report?clientId=${clientId}`);
+          console.log('Onboarding report response status:', response.status);
+          if (response.ok) {
+            const data = await response.json();
+            console.log('Onboarding report response data:', data);
+            if (data.success && data.data?.aiSummary) {
+              console.log('Found AI summary, setting state');
+              setOnboardingAiSummary({
+                summary: data.data.aiSummary,
+                generatedAt: data.data.aiSummaryGeneratedAt || data.data.submittedAt || ''
+              });
+            } else {
+              console.log('No AI summary found in response. Success:', data.success, 'Has data:', !!data.data, 'Has aiSummary:', !!data.data?.aiSummary);
+            }
+          } else {
+            const errorText = await response.text();
+            console.error('Onboarding report response not ok:', response.status, errorText);
+          }
+        } catch (error) {
+          console.error('Error fetching onboarding AI summary:', error);
+        } finally {
+          setLoadingOnboardingAiSummary(false);
+        }
+      }
+    };
+
     fetchAnalyticsHistory();
+    fetchOnboardingAiSummary();
   }, [activeTab, clientId]);
 
   // Fetch specific history item when selected
@@ -366,6 +421,58 @@ export default function ClientProfilePage() {
       fetchHistoryItem();
     }
   }, [selectedHistoryId, clientId, activeTab]);
+
+  // Manual function to fetch weekly summary (only called when button is clicked)
+  const handleRefreshWeeklySummary = async (forceRegenerate = false) => {
+    if (!clientId) return;
+    
+    setLoadingWeeklySummary(true);
+    try {
+      const url = forceRegenerate 
+        ? `/api/clients/${clientId}/weekly-summary?regenerate=true`
+        : `/api/clients/${clientId}/weekly-summary`;
+      
+      const response = await fetch(url);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setWeeklySummary(data.data);
+        } else {
+          console.error('Weekly summary fetch failed:', data.message);
+        }
+      } else {
+        console.error('Weekly summary response not ok:', response.status);
+      }
+    } catch (error) {
+      console.error('Error fetching weekly summary:', error);
+    } finally {
+      setLoadingWeeklySummary(false);
+    }
+  };
+
+  // Manual function to fetch SWOT analysis (only called when button is clicked)
+  const handleRefreshSwotAnalysis = async (forceRegenerate = false) => {
+    if (!clientId) return;
+    
+    setLoadingSwot(true);
+    try {
+      const url = forceRegenerate
+        ? `/api/clients/${clientId}/swot-analysis?regenerate=true`
+        : `/api/clients/${clientId}/swot-analysis`;
+      
+      const response = await fetch(url);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setSwotAnalysis(data.data);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching SWOT analysis:', error);
+    } finally {
+      setLoadingSwot(false);
+    }
+  };
 
   // Generate new AI analytics with time period
   const handleGenerateAnalytics = async () => {
@@ -942,6 +1049,30 @@ export default function ClientProfilePage() {
     fetchForms(); // Fetch forms when modal opens
   };
 
+  // Calculate the 2nd Friday after a given start date
+  const calculateSecondFriday = (startDate: Date): Date | null => {
+    if (!startDate) return null;
+    
+    const date = new Date(startDate);
+    const dayOfWeek = date.getDay(); // 0 = Sunday, 5 = Friday
+    
+    // Calculate days until next Friday
+    let daysUntilFriday = (5 - dayOfWeek + 7) % 7;
+    if (daysUntilFriday === 0 && dayOfWeek !== 5) {
+      daysUntilFriday = 7; // If today is Friday and we want next Friday, add 7 days
+    }
+    
+    // Get first Friday
+    const firstFriday = new Date(date);
+    firstFriday.setDate(date.getDate() + daysUntilFriday);
+    
+    // Add 7 more days to get 2nd Friday
+    const secondFriday = new Date(firstFriday);
+    secondFriday.setDate(firstFriday.getDate() + 7);
+    
+    return secondFriday;
+  };
+
   // Calculate first check-in window start date/time
   const getFirstCheckInWindowStart = (): { date: string; time: string; displayText: string } | null => {
     if (!allocateFirstCheckInDate || !allocateCheckInWindow.enabled) {
@@ -1007,13 +1138,52 @@ export default function ClientProfilePage() {
           firstCheckInDate: allocateFirstCheckInDate || allocateStartDate,
           dueTime: '09:00', // Default due time, no longer user-configurable
           checkInWindow: allocateCheckInWindow.enabled ? allocateCheckInWindow : null,
-          status: 'pending'
+          status: 'pending',
+          measurementSchedule: measurementScheduleEnabled && firstMeasurementFriday ? {
+            enabled: true,
+            firstFridayDate: firstMeasurementFriday,
+            frequency: 'fortnightly'
+          } : null
         }),
       });
 
       if (response.ok) {
-        alert('Check-in allocated successfully!');
-        setShowAllocateModal(false);
+        // Calculate next measurement dates if schedule is enabled
+        let nextMeasurementDates: string[] = [];
+        if (measurementScheduleEnabled && firstMeasurementFriday) {
+          try {
+            const { calculateNextMeasurementDates } = await import('@/lib/measurement-task-utils');
+            const schedule = {
+              clientId: client.id,
+              coachId: userProfile?.uid || '',
+              firstFridayDate: firstMeasurementFriday,
+              frequency: 'fortnightly' as const,
+              isActive: true
+            };
+            nextMeasurementDates = calculateNextMeasurementDates(schedule, 6); // Show next 6 measurement dates
+          } catch (error) {
+            console.error('Error calculating measurement dates:', error);
+          }
+        }
+
+        // Store summary data before clearing form
+        const formTitle = selectedFormData?.title || 'Selected Form';
+        setAllocationSummary({
+          formTitle,
+          frequency: allocateFrequency,
+          duration: allocateDuration,
+          startDate: allocateStartDate,
+          firstCheckInDate: allocateFirstCheckInDate || allocateStartDate,
+          checkInWindow: allocateCheckInWindow.enabled ? allocateCheckInWindow : undefined,
+          measurementSchedule: measurementScheduleEnabled && firstMeasurementFriday ? {
+            enabled: true,
+            firstFridayDate: firstMeasurementFriday,
+            frequency: 'fortnightly',
+            nextDates: nextMeasurementDates
+          } : null
+        });
+
+        // Clear form fields
         setSelectedAllocateForm('');
         setAllocateStartDate('');
         setAllocateFirstCheckInDate('');
@@ -1026,6 +1196,12 @@ export default function ClientProfilePage() {
           endDay: 'monday',
           endTime: '22:00'
         });
+        setMeasurementScheduleEnabled(false);
+        setFirstMeasurementFriday('');
+
+        // Close allocation modal and show summary
+        setShowAllocateModal(false);
+        setShowAllocationSummary(true);
         
         // Refresh check-ins
         setHasLoadedCheckIns(false);
@@ -1876,6 +2052,231 @@ export default function ClientProfilePage() {
                   </div>
                 </div>
               </div>
+
+              {/* Weekly AI Summary */}
+              {loadingWeeklySummary ? (
+                <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                  <div className="bg-gradient-to-r from-purple-50 to-pink-50 px-6 py-4 border-b-2 border-purple-200">
+                    <h2 className="text-xl font-bold text-gray-900">This Week's Status</h2>
+                    <p className="text-sm text-gray-600 mt-1">AI-powered weekly summary</p>
+                  </div>
+                  <div className="p-6">
+                    <div className="animate-pulse space-y-3">
+                      <div className="h-4 bg-gray-200 rounded w-full"></div>
+                      <div className="h-4 bg-gray-200 rounded w-5/6"></div>
+                      <div className="h-4 bg-gray-200 rounded w-4/6"></div>
+                    </div>
+                  </div>
+                </div>
+              ) : !weeklySummary && !loadingWeeklySummary ? (
+                <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                  <div className="bg-gradient-to-r from-purple-50 to-pink-50 px-6 py-4 border-b-2 border-purple-200">
+                    <h2 className="text-xl font-bold text-gray-900">This Week's Status</h2>
+                    <p className="text-sm text-gray-600 mt-1">AI-powered weekly summary</p>
+                  </div>
+                  <div className="p-6 text-center">
+                    <p className="text-gray-600 mb-4">Generate an AI-powered weekly summary</p>
+                    <button
+                      onClick={() => handleRefreshWeeklySummary(true)}
+                      disabled={loadingWeeklySummary}
+                      className="px-6 py-3 bg-purple-500 hover:bg-purple-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-xl text-sm font-medium transition-colors flex items-center gap-2 mx-auto"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                      {loadingWeeklySummary ? 'Generating...' : 'Generate Weekly Summary'}
+                    </button>
+                  </div>
+                </div>
+              ) : weeklySummary ? (
+                <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                  <div className="bg-gradient-to-r from-purple-50 to-pink-50 px-6 py-4 border-b-2 border-purple-200">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h2 className="text-xl font-bold text-gray-900">This Week's Status</h2>
+                        <p className="text-sm text-gray-600 mt-1">
+                          AI-powered weekly summary • {new Date(weeklySummary.dateRange.endDate).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => handleRefreshWeeklySummary(true)}
+                        disabled={loadingWeeklySummary}
+                        className="px-4 py-2 bg-purple-500 hover:bg-purple-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-xl text-sm font-medium transition-colors flex items-center gap-2"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        {loadingWeeklySummary ? 'Generating...' : 'Refresh'}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="p-6">
+                    <div className="prose max-w-none">
+                      <p className="text-gray-800 leading-relaxed whitespace-pre-line text-sm">
+                        {weeklySummary.summary}
+                      </p>
+                    </div>
+                    {weeklySummary.checkInsCount !== undefined && (
+                      <div className="mt-4 pt-4 border-t border-gray-200 flex items-center gap-6 text-xs text-gray-600">
+                        <span>Check-ins: {weeklySummary.checkInsCount}</span>
+                        {weeklySummary.averageScore !== null && (
+                          <span>Avg Score: {weeklySummary.averageScore}%</span>
+                        )}
+                        {weeklySummary.measurementsCount > 0 && (
+                          <span>Measurements: {weeklySummary.measurementsCount}</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : null}
+
+              {/* SWOT Analysis */}
+              {loadingSwot ? (
+                <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                  <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-6 py-4 border-b-2 border-indigo-200">
+                    <h2 className="text-xl font-bold text-gray-900">SWOT Analysis</h2>
+                    <p className="text-sm text-gray-600 mt-1">Strengths, Weaknesses, Opportunities, Threats</p>
+                  </div>
+                  <div className="p-6">
+                    <div className="animate-pulse space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="h-32 bg-gray-200 rounded-xl"></div>
+                        <div className="h-32 bg-gray-200 rounded-xl"></div>
+                        <div className="h-32 bg-gray-200 rounded-xl"></div>
+                        <div className="h-32 bg-gray-200 rounded-xl"></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : !swotAnalysis && !loadingSwot ? (
+                <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                  <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-6 py-4 border-b-2 border-indigo-200">
+                    <h2 className="text-xl font-bold text-gray-900">SWOT Analysis</h2>
+                    <p className="text-sm text-gray-600 mt-1">Comprehensive analysis of current progress</p>
+                  </div>
+                  <div className="p-6 text-center">
+                    <p className="text-gray-600 mb-4">Generate a comprehensive SWOT analysis</p>
+                    <button
+                      onClick={() => handleRefreshSwotAnalysis(true)}
+                      disabled={loadingSwot}
+                      className="px-6 py-3 bg-indigo-500 hover:bg-indigo-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-xl text-sm font-medium transition-colors flex items-center gap-2 mx-auto"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                      {loadingSwot ? 'Generating...' : 'Generate SWOT Analysis'}
+                    </button>
+                  </div>
+                </div>
+              ) : swotAnalysis ? (
+                <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                  <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-6 py-4 border-b-2 border-indigo-200">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h2 className="text-xl font-bold text-gray-900">SWOT Analysis</h2>
+                        <p className="text-sm text-gray-600 mt-1">Comprehensive analysis of current progress</p>
+                      </div>
+                      <button
+                        onClick={() => handleRefreshSwotAnalysis(true)}
+                        disabled={loadingSwot}
+                        className="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-xl text-sm font-medium transition-colors flex items-center gap-2"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        {loadingSwot ? 'Generating...' : 'Refresh'}
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div className="p-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                      {/* Strengths */}
+                      <div className="bg-green-50 rounded-xl p-5 border-2 border-green-200">
+                        <div className="flex items-center mb-3">
+                          <div className="w-8 h-8 bg-green-500 rounded-lg flex items-center justify-center mr-3">
+                            <span className="text-white font-bold text-sm">S</span>
+                          </div>
+                          <h3 className="text-lg font-bold text-gray-900">Strengths</h3>
+                        </div>
+                        <ul className="space-y-2">
+                          {swotAnalysis.strengths?.map((strength: string, idx: number) => (
+                            <li key={idx} className="flex items-start">
+                              <span className="text-green-600 mr-2 mt-1">✓</span>
+                              <span className="text-gray-800 text-sm">{strength}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      {/* Weaknesses */}
+                      <div className="bg-orange-50 rounded-xl p-5 border-2 border-orange-200">
+                        <div className="flex items-center mb-3">
+                          <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center mr-3">
+                            <span className="text-white font-bold text-sm">W</span>
+                          </div>
+                          <h3 className="text-lg font-bold text-gray-900">Weaknesses</h3>
+                        </div>
+                        <ul className="space-y-2">
+                          {swotAnalysis.weaknesses?.map((weakness: string, idx: number) => (
+                            <li key={idx} className="flex items-start">
+                              <span className="text-orange-600 mr-2 mt-1">⚠</span>
+                              <span className="text-gray-800 text-sm">{weakness}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      {/* Opportunities */}
+                      <div className="bg-blue-50 rounded-xl p-5 border-2 border-blue-200">
+                        <div className="flex items-center mb-3">
+                          <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center mr-3">
+                            <span className="text-white font-bold text-sm">O</span>
+                          </div>
+                          <h3 className="text-lg font-bold text-gray-900">Opportunities</h3>
+                        </div>
+                        <ul className="space-y-2">
+                          {swotAnalysis.opportunities?.map((opportunity: string, idx: number) => (
+                            <li key={idx} className="flex items-start">
+                              <span className="text-blue-600 mr-2 mt-1">→</span>
+                              <span className="text-gray-800 text-sm">{opportunity}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      {/* Threats */}
+                      <div className="bg-red-50 rounded-xl p-5 border-2 border-red-200">
+                        <div className="flex items-center mb-3">
+                          <div className="w-8 h-8 bg-red-500 rounded-lg flex items-center justify-center mr-3">
+                            <span className="text-white font-bold text-sm">T</span>
+                          </div>
+                          <h3 className="text-lg font-bold text-gray-900">Threats</h3>
+                        </div>
+                        <ul className="space-y-2">
+                          {swotAnalysis.threats?.map((threat: string, idx: number) => (
+                            <li key={idx} className="flex items-start">
+                              <span className="text-red-600 mr-2 mt-1">!</span>
+                              <span className="text-gray-800 text-sm">{threat}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+
+                    {/* Overall Assessment */}
+                    {swotAnalysis.overallAssessment && (
+                      <div className="bg-gray-50 rounded-xl p-5 border border-gray-200 mt-4">
+                        <h3 className="text-lg font-bold text-gray-900 mb-3">Overall Assessment</h3>
+                        <p className="text-gray-800 leading-relaxed text-sm whitespace-pre-line">
+                          {swotAnalysis.overallAssessment}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : null}
 
               {/* Quick Insights Panel */}
               <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
@@ -3548,6 +3949,46 @@ export default function ClientProfilePage() {
               {/* AI ANALYTICS TAB */}
               {activeTab === 'ai-analytics' && (
                 <div className="space-y-6">
+                  {/* Onboarding AI Summary Section */}
+                  {loadingOnboardingAiSummary ? (
+                    <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 p-6">
+                      <div className="text-center py-4">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500 mx-auto mb-2"></div>
+                        <p className="text-gray-600 text-sm">Loading onboarding summary...</p>
+                      </div>
+                    </div>
+                  ) : onboardingAiSummary && onboardingAiSummary.summary ? (
+                    <div className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border-2 border-purple-200 overflow-hidden">
+                      <div className="px-8 py-6 border-b-2 border-purple-200 bg-white/50">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-purple-500 rounded-xl flex items-center justify-center">
+                              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                              </svg>
+                            </div>
+                            <div>
+                              <h2 className="text-2xl font-bold text-gray-900">Onboarding AI Analysis</h2>
+                              <p className="text-sm text-gray-600 mt-1">
+                                Initial client assessment from sign-up
+                                {onboardingAiSummary.generatedAt && (
+                                  <span className="ml-2 text-xs text-gray-500">
+                                    • Generated {new Date(onboardingAiSummary.generatedAt).toLocaleDateString()}
+                                  </span>
+                                )}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="p-8">
+                        <div className="prose max-w-none">
+                          <div className="text-gray-700 whitespace-pre-wrap leading-relaxed" dangerouslySetInnerHTML={{ __html: (onboardingAiSummary.summary || '').replace(/\n/g, '<br />') }} />
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+
                   {loadingAiAnalytics ? (
                     <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 p-8">
                       <div className="text-center">
@@ -4010,7 +4451,12 @@ export default function ClientProfilePage() {
                     const startDate = new Date(allocateStartDate);
                     startDate.setDate(startDate.getDate() + 7);
                     return startDate.toISOString().split('T')[0];
-                  })() : undefined}
+                  })() : new Date().toISOString().split('T')[0]}
+                  max={(() => {
+                    const maxDate = new Date();
+                    maxDate.setFullYear(maxDate.getFullYear() + 2); // Allow up to 2 years in the future
+                    return maxDate.toISOString().split('T')[0];
+                  })()}
                   className="w-full px-3 py-2 border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                 />
                 <p className="mt-1 text-xs text-gray-500">When is their first check-in? (typically 1 week after start date)</p>
@@ -4186,6 +4632,66 @@ export default function ClientProfilePage() {
                 )}
               </div>
 
+              {/* Measurement Schedule */}
+              <div className="border-t border-gray-200 pt-4">
+                <label className="block text-sm font-medium text-gray-900 mb-3">
+                  Measurement Reminders
+                </label>
+                
+                <div className="mb-3">
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={measurementScheduleEnabled}
+                      onChange={(e) => {
+                        setMeasurementScheduleEnabled(e.target.checked);
+                        // Auto-calculate first measurement Friday when enabled
+                        if (e.target.checked && allocateStartDate) {
+                          const startDate = new Date(allocateStartDate);
+                          const secondFriday = calculateSecondFriday(startDate);
+                          if (secondFriday) {
+                            setFirstMeasurementFriday(secondFriday.toISOString().split('T')[0]);
+                          }
+                        } else if (!e.target.checked) {
+                          setFirstMeasurementFriday('');
+                        }
+                      }}
+                      className="rounded border-gray-300 text-orange-500 focus:ring-orange-500"
+                    />
+                    <span className="ml-2 text-sm text-gray-700">Enable fortnightly measurement reminders</span>
+                  </label>
+                  <p className="mt-1 ml-6 text-xs text-gray-500">Client will be reminded to update measurements and progress photos every 2 weeks on Fridays</p>
+                </div>
+
+                {measurementScheduleEnabled && (
+                  <div className="space-y-3 pl-6 border-l-2 border-gray-200">
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-1">First Measurement Friday *</label>
+                      <input
+                        type="date"
+                        value={firstMeasurementFriday}
+                        onChange={(e) => setFirstMeasurementFriday(e.target.value)}
+                        min={allocateStartDate ? (() => {
+                          const startDate = new Date(allocateStartDate);
+                          const secondFriday = calculateSecondFriday(startDate);
+                          return secondFriday ? secondFriday.toISOString().split('T')[0] : undefined;
+                        })() : undefined}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                      />
+                      <p className="mt-1 text-xs text-gray-500">Select the first Friday for measurements. Typically the 2nd Friday after program start.</p>
+                      {firstMeasurementFriday && (
+                        <div className="mt-2 bg-blue-50 border border-blue-200 rounded-lg p-2">
+                          <p className="text-xs text-blue-800">
+                            <strong>Next measurements due:</strong> {new Date(firstMeasurementFriday).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                          </p>
+                          <p className="text-xs text-blue-700 mt-1">Subsequent reminders every 2 weeks</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* Action Buttons */}
               <div className="flex space-x-3 pt-4">
                 <button
@@ -4200,6 +4706,163 @@ export default function ClientProfilePage() {
                   className="flex-1 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-2xl font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                 >
                   {allocatingCheckIn ? 'Allocating...' : 'Allocate Check-in'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Allocation Summary Modal */}
+      {showAllocationSummary && allocationSummary && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="bg-orange-50 px-6 py-5 border-b-2 border-orange-200 rounded-t-3xl">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900">✓ Check-in Allocated Successfully</h3>
+                  <p className="text-gray-600 mt-1">Summary of what has been applied to {client?.firstName}</p>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowAllocationSummary(false);
+                    setAllocationSummary(null);
+                  }}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            
+            <div className="p-6 space-y-6">
+              {/* Check-in Details */}
+              <div className="bg-gray-50 rounded-xl p-5 border border-gray-200">
+                <h4 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                  <svg className="w-5 h-5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Check-in Details
+                </h4>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-start">
+                    <span className="text-sm font-medium text-gray-600">Form:</span>
+                    <span className="text-sm font-semibold text-gray-900 text-right">{allocationSummary.formTitle}</span>
+                  </div>
+                  <div className="flex justify-between items-start">
+                    <span className="text-sm font-medium text-gray-600">Frequency:</span>
+                    <span className="text-sm font-semibold text-gray-900 capitalize">{allocationSummary.frequency.replace('-', '-')}</span>
+                  </div>
+                  <div className="flex justify-between items-start">
+                    <span className="text-sm font-medium text-gray-600">Duration:</span>
+                    <span className="text-sm font-semibold text-gray-900">{allocationSummary.duration} {allocationSummary.duration === 1 ? 'week' : 'weeks'}</span>
+                  </div>
+                  <div className="flex justify-between items-start">
+                    <span className="text-sm font-medium text-gray-600">Program Start:</span>
+                    <span className="text-sm font-semibold text-gray-900">
+                      {new Date(allocationSummary.startDate).toLocaleDateString('en-US', { 
+                        weekday: 'long', 
+                        year: 'numeric', 
+                        month: 'long', 
+                        day: 'numeric' 
+                      })}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-start">
+                    <span className="text-sm font-medium text-gray-600">First Check-in:</span>
+                    <span className="text-sm font-semibold text-gray-900">
+                      {new Date(allocationSummary.firstCheckInDate).toLocaleDateString('en-US', { 
+                        weekday: 'long', 
+                        year: 'numeric', 
+                        month: 'long', 
+                        day: 'numeric' 
+                      })}
+                    </span>
+                  </div>
+                  {allocationSummary.checkInWindow && (
+                    <div className="mt-3 pt-3 border-t border-gray-200">
+                      <div className="flex justify-between items-start mb-2">
+                        <span className="text-sm font-medium text-gray-600">Check-in Window:</span>
+                        <span className="text-sm font-semibold text-gray-900 text-right">
+                          {allocationSummary.checkInWindow.startDay.charAt(0).toUpperCase() + allocationSummary.checkInWindow.startDay.slice(1)} {(() => {
+                            const [hours, minutes] = allocationSummary.checkInWindow.startTime.split(':').map(Number);
+                            const ampm = hours >= 12 ? 'PM' : 'AM';
+                            const displayHours = hours % 12 || 12;
+                            return `${displayHours}:${minutes.toString().padStart(2, '0')} ${ampm}`;
+                          })()} - {allocationSummary.checkInWindow.endDay.charAt(0).toUpperCase() + allocationSummary.checkInWindow.endDay.slice(1)} {(() => {
+                            const [hours, minutes] = allocationSummary.checkInWindow.endTime.split(':').map(Number);
+                            const ampm = hours >= 12 ? 'PM' : 'AM';
+                            const displayHours = hours % 12 || 12;
+                            return `${displayHours}:${minutes.toString().padStart(2, '0')} ${ampm}`;
+                          })()}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Measurement Schedule Details */}
+              {allocationSummary.measurementSchedule && allocationSummary.measurementSchedule.enabled && (
+                <div className="bg-blue-50 rounded-xl p-5 border-2 border-blue-200">
+                  <h4 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                    <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                    Measurement Schedule
+                  </h4>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-start">
+                      <span className="text-sm font-medium text-gray-600">Frequency:</span>
+                      <span className="text-sm font-semibold text-gray-900 capitalize">Every 2 weeks (Fortnightly)</span>
+                    </div>
+                    <div className="flex justify-between items-start">
+                      <span className="text-sm font-medium text-gray-600">First Measurement Date:</span>
+                      <span className="text-sm font-semibold text-gray-900 text-right">
+                        {new Date(allocationSummary.measurementSchedule.firstFridayDate).toLocaleDateString('en-US', { 
+                          weekday: 'long', 
+                          year: 'numeric', 
+                          month: 'long', 
+                          day: 'numeric' 
+                        })}
+                      </span>
+                    </div>
+                    {allocationSummary.measurementSchedule.nextDates && allocationSummary.measurementSchedule.nextDates.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-blue-200">
+                        <span className="text-sm font-medium text-gray-600 block mb-2">Upcoming Measurement Dates:</span>
+                        <ul className="space-y-1">
+                          {allocationSummary.measurementSchedule.nextDates.slice(0, 6).map((date, idx) => (
+                            <li key={idx} className="text-sm text-gray-700 flex items-center gap-2">
+                              <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                              </svg>
+                              {new Date(date).toLocaleDateString('en-US', { 
+                                weekday: 'long', 
+                                month: 'long', 
+                                day: 'numeric',
+                                year: 'numeric'
+                              })}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Action Button */}
+              <div className="flex justify-end pt-4 border-t border-gray-200">
+                <button
+                  onClick={() => {
+                    setShowAllocationSummary(false);
+                    setAllocationSummary(null);
+                  }}
+                  className="px-6 py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl font-semibold transition-all duration-200 shadow-sm hover:shadow-md"
+                >
+                  Done
                 </button>
               </div>
             </div>

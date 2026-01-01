@@ -40,13 +40,41 @@ export async function GET(request: NextRequest) {
     const clientDoc = await db.collection('clients').doc(clientId).get();
     const clientData = clientDoc.exists ? clientDoc.data() : null;
 
+    // Fetch AI summary from onboarding_reports collection if available
+    let aiSummary = null;
+    let aiSummaryGeneratedAt = null;
+    try {
+      const reportSnapshot = await db.collection('onboarding_reports')
+        .where('clientId', '==', clientId)
+        .limit(1)
+        .get();
+      
+      if (!reportSnapshot.empty) {
+        const reportData = reportSnapshot.docs[0].data();
+        if (reportData.aiSummary) {
+          aiSummary = reportData.aiSummary;
+          // Get the generated date if available
+          if (reportData.aiSummaryGeneratedAt) {
+            aiSummaryGeneratedAt = reportData.aiSummaryGeneratedAt?.toDate?.()?.toISOString() || reportData.aiSummaryGeneratedAt;
+          } else if (reportData.createdAt) {
+            aiSummaryGeneratedAt = reportData.createdAt?.toDate?.()?.toISOString() || reportData.createdAt;
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching AI summary:', error);
+      // Continue without AI summary if there's an error
+    }
+
     // Build formatted report with questions and answers
-    const report = {
+    const report: any = {
       clientId,
       clientName: clientData ? `${clientData.firstName || ''} ${clientData.lastName || ''}`.trim() : 'Client',
       submittedAt: onboardingData.submittedToCoachAt?.toDate?.()?.toISOString() || onboardingData.submittedToCoachAt,
       status: onboardingData.status || 'in_progress',
       progress: onboardingData.progress || {},
+      aiSummary: aiSummary, // Include AI summary if available
+      aiSummaryGeneratedAt: aiSummaryGeneratedAt, // Include generated date if available
       sections: ONBOARDING_SECTIONS.map(section => {
         const sectionQuestions = ONBOARDING_QUESTIONS.filter(q => q.section === section.id);
         return {

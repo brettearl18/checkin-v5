@@ -1,5 +1,6 @@
 // Onboarding Questionnaire Questions - 10 Sections
 // This file contains all onboarding questions organized by section
+// Section 10: Letter to Your Future Self - A motivational note to help clients stay connected to their goals
 
 export interface OnboardingQuestion {
   id: string;
@@ -38,6 +39,7 @@ export const ONBOARDING_SECTIONS = [
   { id: 7, name: 'Lifestyle Factors', icon: '🌱' },
   { id: 8, name: 'Preferences & Communication', icon: '📱' },
   { id: 9, name: 'Barriers & Challenges', icon: '🚧' },
+  { id: 10, name: 'Letter to Your Future Self', icon: '💌' },
 ];
 
 export const ONBOARDING_QUESTIONS: OnboardingQuestion[] = [
@@ -78,7 +80,7 @@ export const ONBOARDING_QUESTIONS: OnboardingQuestion[] = [
     questionText: 'What best describes your work schedule?',
     questionType: 'multiple_choice',
     required: true,
-    options: ['9-5 Office', 'Shift Work', 'Remote/Flexible', 'Retired', 'Student', 'Unemployed', 'Other'],
+    options: ['9-5 Office', 'Work from Home', 'Stay at Home', 'Shift Work', 'Remote/FIFO', 'Retired', 'Other'],
   },
   {
     id: 'q1-5',
@@ -332,6 +334,15 @@ export const ONBOARDING_QUESTIONS: OnboardingQuestion[] = [
     required: true,
     options: ['Time to prepare meals', 'Knowing what to eat', 'Cost of healthy food', 'Cravings', 'Eating out frequently', 'Lack of motivation', 'No challenges', 'Other'],
   },
+  {
+    id: 'q4-8',
+    section: 4,
+    sectionName: 'Nutrition & Eating Habits',
+    order: 8,
+    questionText: 'Are there any foods you are allergic to? or is a 100% no to eating?',
+    questionType: 'textarea',
+    required: false,
+  },
 
   // SECTION 5: Goals & Objectives
   {
@@ -369,44 +380,16 @@ export const ONBOARDING_QUESTIONS: OnboardingQuestion[] = [
     section: 5,
     sectionName: 'Goals & Objectives',
     order: 4,
-    questionText: 'If weight loss is a goal, how many kilograms would you like to lose?',
-    questionType: 'number',
-    required: false,
-    conditionalLogic: {
-      dependsOn: 'q5-1',
-      condition: 'equals',
-      value: 'Weight Loss',
-    },
+    questionText: 'What is your main motivation for making this change? (select all that apply)',
+    questionType: 'multiple_choice',
+    required: true,
+    options: ['Health reasons', 'Appearance/confidence', 'Performance/athletic goals', 'Life event (wedding, vacation, etc.)', "Doctor's recommendation", 'Family/relationships', 'General self-improvement', 'Other'],
   },
   {
     id: 'q5-5',
     section: 5,
     sectionName: 'Goals & Objectives',
     order: 5,
-    questionText: 'If muscle gain is a goal, what is your target?',
-    questionType: 'text',
-    required: false,
-    conditionalLogic: {
-      dependsOn: 'q5-1',
-      condition: 'equals',
-      value: 'Muscle Gain',
-    },
-  },
-  {
-    id: 'q5-6',
-    section: 5,
-    sectionName: 'Goals & Objectives',
-    order: 6,
-    questionText: 'What is your main motivation for making this change?',
-    questionType: 'multiple_choice',
-    required: true,
-    options: ['Health reasons', 'Appearance/confidence', 'Performance/athletic goals', 'Life event (wedding, vacation, etc.)', "Doctor's recommendation", 'Family/relationships', 'General self-improvement', 'Other'],
-  },
-  {
-    id: 'q5-7',
-    section: 5,
-    sectionName: 'Goals & Objectives',
-    order: 7,
     questionText: 'Have you tried to achieve similar goals before?',
     questionType: 'yes_no',
     required: true,
@@ -554,20 +537,9 @@ export const ONBOARDING_QUESTIONS: OnboardingQuestion[] = [
     section: 8,
     sectionName: 'Preferences & Communication',
     order: 2,
-    questionText: 'What time of day works best for check-ins?',
-    questionType: 'multiple_choice',
-    required: true,
-    options: ['Morning (before 10am)', 'Midday (10am-2pm)', 'Afternoon (2pm-6pm)', 'Evening (after 6pm)', 'No preference'],
-  },
-  {
-    id: 'q8-3',
-    section: 8,
-    sectionName: 'Preferences & Communication',
-    order: 3,
-    questionText: 'How often would you like to receive check-in reminders?',
-    questionType: 'multiple_choice',
-    required: true,
-    options: ['Daily', 'Every other day', 'Weekly', 'Bi-weekly', 'Monthly'],
+    questionText: 'Write a short statement to your coach about what you promise them and how committed you are to the journey.',
+    questionType: 'textarea',
+    required: false,
   },
 
   // SECTION 9: Barriers & Challenges
@@ -600,6 +572,17 @@ export const ONBOARDING_QUESTIONS: OnboardingQuestion[] = [
     questionType: 'multiple_choice',
     required: true,
     options: ['Less than $100', '$100-$300', '$300-$500', '$500-$1000', 'More than $1000', 'Prefer not to say'],
+  },
+
+  // SECTION 10: Letter to Your Future Self
+  {
+    id: 'q10-1',
+    section: 10,
+    sectionName: 'Letter to Your Future Self',
+    order: 1,
+    questionText: 'Write a note to your future self, thanking yourself for doing the hard work and reaching your goals. This is a powerful way to stay motivated and remind yourself why you started this journey.',
+    questionType: 'textarea',
+    required: false,
   },
 
 ];

@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase-server';
+import { getDefaultThresholds, convertLegacyThresholds } from '@/lib/scoring-utils';
+import { ONBOARDING_QUESTIONS } from '@/lib/onboarding-questions';
 
 export const dynamic = 'force-dynamic';
 
-// Initialize Firebase Admin if not already initialized
+// Use shared cache utility (Phase 1: Shared cache for cross-route invalidation)
+import { getCached, setCache, deleteCache } from '@/lib/dashboard-cache';
 
 
 
@@ -22,8 +25,26 @@ export async function GET(request: NextRequest) {
       }, { status: 400 });
     }
 
-    let clientData = null;
+    // Check cache first (Phase 1: Add basic caching)
+    // Note: We need to determine clientIdToUse first for cache key
     let clientIdToUse = clientId || userUid;
+    
+    // Quick cache check if we have clientId or userUid directly
+    if (clientIdToUse) {
+      const cachedData = getCached(`dashboard:${clientIdToUse}`);
+      if (cachedData) {
+        return NextResponse.json({
+          success: true,
+          data: cachedData,
+          cached: true
+        });
+      }
+    }
+
+    let clientData = null;
+    if (!clientIdToUse) {
+      clientIdToUse = clientId || userUid;
+    }
 
     // If we have email but no clientId, find the client by email
     if (clientEmail && !clientId) {
@@ -408,19 +429,182 @@ export async function GET(request: NextRequest) {
       console.error('Error fetching recent responses:', error);
     }
 
+    // Fetch scoring configuration (Phase 1: Remove client-side Firestore)
+    let scoringConfig = null;
+    try {
+      const scoringDoc = await db.collection('clientScoring').doc(clientIdToUse).get();
+      if (scoringDoc.exists) {
+        const scoringData = scoringDoc.data();
+        let thresholds;
+        
+        // Check if new format (redMax/orangeMax) exists
+        if (scoringData?.thresholds?.redMax !== undefined && scoringData?.thresholds?.orangeMax !== undefined) {
+          thresholds = {
+            redMax: scoringData.thresholds.redMax,
+            orangeMax: scoringData.thresholds.orangeMax
+          };
+        } else if (scoringData?.thresholds?.red !== undefined && scoringData?.thresholds?.yellow !== undefined) {
+          // Convert legacy format
+          thresholds = convertLegacyThresholds(scoringData.thresholds);
+        } else if (scoringData?.scoringProfile) {
+          // Use profile defaults
+          thresholds = getDefaultThresholds(scoringData.scoringProfile as any);
+        } else {
+          // Default to lifestyle
+          thresholds = getDefaultThresholds('lifestyle');
+        }
+        
+        scoringConfig = {
+          thresholds,
+          scoringProfile: scoringData?.scoringProfile || 'lifestyle'
+        };
+      } else {
+        // No scoring config, use default lifestyle thresholds
+        scoringConfig = {
+          thresholds: getDefaultThresholds('lifestyle'),
+          scoringProfile: 'lifestyle'
+        };
+      }
+    } catch (error) {
+      console.error('Error fetching scoring config:', error);
+      // Use default lifestyle thresholds on error
+      scoringConfig = {
+        thresholds: getDefaultThresholds('lifestyle'),
+        scoringProfile: 'lifestyle'
+      };
+    }
+
+    // Fetch onboarding questionnaire status (Phase 1: Consolidate API calls)
+    let onboardingStatus = 'not_started';
+    let onboardingProgress = 0;
+    try {
+      const clientDoc = await db.collection('clients').doc(clientIdToUse).get();
+      if (clientDoc.exists) {
+        onboardingStatus = clientDoc.data()?.onboardingStatus || 'not_started';
+      }
+      
+      // Fetch onboarding responses if they exist
+      const onboardingSnapshot = await db.collection('client_onboarding_responses')
+        .where('clientId', '==', clientIdToUse)
+        .limit(1)
+        .get();
+      
+      if (!onboardingSnapshot.empty) {
+        const onboardingData = onboardingSnapshot.docs[0].data();
+        onboardingProgress = onboardingData?.progress?.completionPercentage || 0;
+      }
+    } catch (error) {
+      console.error('Error fetching onboarding status:', error);
+    }
+
+    // Fetch onboarding todos (Phase 1: Consolidate API calls)
+    let onboardingTodos = {
+      hasWeight: false,
+      hasMeasurements: false,
+      hasBeforePhotos: false
+    };
+    
+    // Fetch measurement schedule and next task
+    let measurementSchedule = null;
+    let nextMeasurementTask = null;
+    
+    try {
+      // Fetch measurements and images in parallel
+      const [measurementsSnapshot, imagesSnapshot] = await Promise.all([
+        db.collection('client_measurements')
+          .where('clientId', '==', clientIdToUse)
+          .limit(50)
+          .get(),
+        db.collection('progress_images')
+          .where('clientId', '==', clientIdToUse)
+          .limit(50)
+          .get()
+      ]);
+      
+      const measurements = measurementsSnapshot.docs.map(doc => doc.data());
+      const images = imagesSnapshot.docs.map(doc => doc.data());
+      
+      onboardingTodos = {
+        hasWeight: measurements.some((m: any) => m.bodyWeight && m.bodyWeight > 0),
+        hasMeasurements: measurements.some((m: any) => {
+          const measurementValues = m.measurements || {};
+          return Object.keys(measurementValues).length > 0 && 
+                 Object.values(measurementValues).some((v: any) => v && v > 0);
+        }),
+        hasBeforePhotos: images.some((img: any) => img.imageType === 'before')
+      };
+
+      // Fetch measurement schedule
+      try {
+        const scheduleSnapshot = await db.collection('measurement_schedules')
+          .where('clientId', '==', clientIdToUse)
+          .where('isActive', '==', true)
+          .limit(1)
+          .get();
+
+        if (!scheduleSnapshot.empty) {
+          const scheduleDoc = scheduleSnapshot.docs[0];
+          const scheduleData = scheduleDoc.data();
+          
+          measurementSchedule = {
+            id: scheduleDoc.id,
+            clientId: scheduleData.clientId,
+            coachId: scheduleData.coachId,
+            firstFridayDate: scheduleData.firstFridayDate?.toDate?.()?.toISOString()?.split('T')[0] || 
+                            (scheduleData.firstFridayDate instanceof Date ? scheduleData.firstFridayDate.toISOString().split('T')[0] : scheduleData.firstFridayDate),
+            frequency: scheduleData.frequency || 'fortnightly',
+            isActive: scheduleData.isActive
+          };
+
+          // Calculate next measurement task date
+          if (measurementSchedule.firstFridayDate) {
+            const { getNextMeasurementDate, getMeasurementTaskStatus } = await import('@/lib/measurement-task-utils');
+            const nextDate = getNextMeasurementDate(measurementSchedule);
+            if (nextDate) {
+              const taskStatus = getMeasurementTaskStatus(nextDate);
+              nextMeasurementTask = {
+                dueDate: nextDate,
+                status: taskStatus.status,
+                daysUntil: taskStatus.days
+              };
+            }
+          }
+        }
+      } catch (scheduleError) {
+        console.error('Error fetching measurement schedule:', scheduleError);
+      }
+    } catch (error) {
+      console.error('Error fetching onboarding todos:', error);
+    }
+
+    // Prepare response data
+    const responseData = {
+      client: clientData,
+      coach: coachData,
+      checkInAssignments: checkInAssignments,
+      summary: {
+        totalAssignments: checkInAssignments.length,
+        pendingAssignments: checkInAssignments.filter(a => a.status === 'pending').length,
+        completedAssignments: checkInAssignments.filter(a => a.status === 'completed').length,
+        recentResponses: recentResponses
+      },
+      scoringConfig,
+      onboarding: {
+        status: onboardingStatus,
+        progress: onboardingProgress,
+        todos: onboardingTodos
+      },
+      measurementSchedule,
+      nextMeasurementTask
+    };
+
+    // Cache the response (Phase 1: Add basic caching)
+    const cacheKey = `dashboard:${clientIdToUse}`;
+    setCache(cacheKey, responseData);
+
     return NextResponse.json({
       success: true,
-      data: {
-        client: clientData,
-        coach: coachData,
-        checkInAssignments: checkInAssignments,
-        summary: {
-          totalAssignments: checkInAssignments.length,
-          pendingAssignments: checkInAssignments.filter(a => a.status === 'pending').length,
-          completedAssignments: checkInAssignments.filter(a => a.status === 'completed').length,
-          recentResponses: recentResponses
-        }
-      }
+      data: responseData
     });
 
   } catch (error) {

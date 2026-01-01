@@ -23,22 +23,27 @@ interface Notification {
 
 // GET - Fetch notifications for a user
 export async function GET(request: NextRequest) {
+  console.log('[Notifications API] GET request started');
   try {
     const { searchParams } = new URL(request.url);
+    console.log('[Notifications API] Parsed search params');
     const userId = searchParams.get('userId');
     const limit = parseInt(searchParams.get('limit') || '50');
     const unreadOnly = searchParams.get('unreadOnly') === 'true';
 
     if (!userId) {
+      console.log('[Notifications API] No userId provided');
       return NextResponse.json({
         success: false,
         message: 'User ID is required'
       }, { status: 400 });
     }
 
+    console.log('[Notifications API] Fetching for userId:', userId);
     let db;
     try {
       db = getDb();
+      console.log('[Notifications API] Database initialized');
       // Validate db is properly initialized
       if (!db || typeof db.collection !== 'function') {
         console.error('Database instance is invalid:', typeof db);
@@ -74,15 +79,76 @@ export async function GET(request: NextRequest) {
         const snapshot = await query.get();
         notifications = snapshot.docs.map(doc => {
           const data = doc.data();
-          return {
+          // Convert Firestore Timestamps and other non-serializable objects
+          // Serialize metadata to ensure it's JSON-safe
+          let serializedMetadata = null;
+          if (data.metadata) {
+            try {
+              // Deep clone and serialize metadata, converting any Timestamps
+              serializedMetadata = JSON.parse(JSON.stringify(data.metadata, (key, value) => {
+                // Convert Firestore Timestamps in metadata
+                if (value && typeof value === 'object') {
+                  if (value.toDate && typeof value.toDate === 'function') {
+                    return value.toDate().toISOString();
+                  }
+                  if (value._seconds) {
+                    return new Date(value._seconds * 1000).toISOString();
+                  }
+                }
+                return value;
+              }));
+            } catch (metadataError) {
+              console.error('Error serializing metadata:', metadataError);
+              // If metadata can't be serialized, return a safe version
+              serializedMetadata = {
+                error: 'Metadata could not be serialized',
+                rawKeys: Object.keys(data.metadata || {})
+              };
+            }
+          }
+
+          const serializedData: any = {
             id: doc.id,
-            ...data,
-            // Convert Firestore Timestamp to ISO string for proper serialization
-            createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : 
-                       (data.createdAt?._seconds ? new Date(data.createdAt._seconds * 1000).toISOString() : 
-                       (data.createdAt instanceof Date ? data.createdAt.toISOString() : 
-                       (typeof data.createdAt === 'string' ? data.createdAt : new Date().toISOString())))
+            userId: data.userId,
+            type: data.type,
+            title: data.title,
+            message: data.message,
+            isRead: data.isRead || false,
+            actionUrl: data.actionUrl || null,
+            metadata: serializedMetadata
           };
+          
+          // Convert createdAt Timestamp to ISO string
+          if (data.createdAt) {
+            if (data.createdAt.toDate && typeof data.createdAt.toDate === 'function') {
+              serializedData.createdAt = data.createdAt.toDate().toISOString();
+            } else if (data.createdAt._seconds) {
+              serializedData.createdAt = new Date(data.createdAt._seconds * 1000).toISOString();
+            } else if (data.createdAt instanceof Date) {
+              serializedData.createdAt = data.createdAt.toISOString();
+            } else if (typeof data.createdAt === 'string') {
+              serializedData.createdAt = data.createdAt;
+            } else {
+              serializedData.createdAt = new Date().toISOString();
+            }
+          } else {
+            serializedData.createdAt = new Date().toISOString();
+          }
+          
+          // Convert updatedAt if it exists
+          if (data.updatedAt) {
+            if (data.updatedAt.toDate && typeof data.updatedAt.toDate === 'function') {
+              serializedData.updatedAt = data.updatedAt.toDate().toISOString();
+            } else if (data.updatedAt._seconds) {
+              serializedData.updatedAt = new Date(data.updatedAt._seconds * 1000).toISOString();
+            } else if (data.updatedAt instanceof Date) {
+              serializedData.updatedAt = data.updatedAt.toISOString();
+            } else if (typeof data.updatedAt === 'string') {
+              serializedData.updatedAt = data.updatedAt;
+            }
+          }
+          
+          return serializedData;
         });
       } catch (orderByError: any) {
         // If orderBy fails (missing index), fetch without orderBy and sort client-side
@@ -98,15 +164,76 @@ export async function GET(request: NextRequest) {
         const snapshot = await query.get();
         notifications = snapshot.docs.map(doc => {
           const data = doc.data();
-          return {
+          // Convert Firestore Timestamps and other non-serializable objects
+          // Serialize metadata to ensure it's JSON-safe
+          let serializedMetadata = null;
+          if (data.metadata) {
+            try {
+              // Deep clone and serialize metadata, converting any Timestamps
+              serializedMetadata = JSON.parse(JSON.stringify(data.metadata, (key, value) => {
+                // Convert Firestore Timestamps in metadata
+                if (value && typeof value === 'object') {
+                  if (value.toDate && typeof value.toDate === 'function') {
+                    return value.toDate().toISOString();
+                  }
+                  if (value._seconds) {
+                    return new Date(value._seconds * 1000).toISOString();
+                  }
+                }
+                return value;
+              }));
+            } catch (metadataError) {
+              console.error('Error serializing metadata:', metadataError);
+              // If metadata can't be serialized, return a safe version
+              serializedMetadata = {
+                error: 'Metadata could not be serialized',
+                rawKeys: Object.keys(data.metadata || {})
+              };
+            }
+          }
+
+          const serializedData: any = {
             id: doc.id,
-            ...data,
-            // Convert Firestore Timestamp to ISO string for proper serialization
-            createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : 
-                       (data.createdAt?._seconds ? new Date(data.createdAt._seconds * 1000).toISOString() : 
-                       (data.createdAt instanceof Date ? data.createdAt.toISOString() : 
-                       (typeof data.createdAt === 'string' ? data.createdAt : new Date().toISOString())))
+            userId: data.userId,
+            type: data.type,
+            title: data.title,
+            message: data.message,
+            isRead: data.isRead || false,
+            actionUrl: data.actionUrl || null,
+            metadata: serializedMetadata
           };
+          
+          // Convert createdAt Timestamp to ISO string
+          if (data.createdAt) {
+            if (data.createdAt.toDate && typeof data.createdAt.toDate === 'function') {
+              serializedData.createdAt = data.createdAt.toDate().toISOString();
+            } else if (data.createdAt._seconds) {
+              serializedData.createdAt = new Date(data.createdAt._seconds * 1000).toISOString();
+            } else if (data.createdAt instanceof Date) {
+              serializedData.createdAt = data.createdAt.toISOString();
+            } else if (typeof data.createdAt === 'string') {
+              serializedData.createdAt = data.createdAt;
+            } else {
+              serializedData.createdAt = new Date().toISOString();
+            }
+          } else {
+            serializedData.createdAt = new Date().toISOString();
+          }
+          
+          // Convert updatedAt if it exists
+          if (data.updatedAt) {
+            if (data.updatedAt.toDate && typeof data.updatedAt.toDate === 'function') {
+              serializedData.updatedAt = data.updatedAt.toDate().toISOString();
+            } else if (data.updatedAt._seconds) {
+              serializedData.updatedAt = new Date(data.updatedAt._seconds * 1000).toISOString();
+            } else if (data.updatedAt instanceof Date) {
+              serializedData.updatedAt = data.updatedAt.toISOString();
+            } else if (typeof data.updatedAt === 'string') {
+              serializedData.updatedAt = data.updatedAt;
+            }
+          }
+          
+          return serializedData;
         });
 
         // Sort client-side by createdAt
@@ -143,16 +270,52 @@ export async function GET(request: NextRequest) {
       unreadCount = 0;
     }
 
+    // Initialize safeNotifications early to ensure it's always defined
+    let safeNotifications: any[] = [];
+
+    // Final safety check: ensure all notifications are fully serializable
+    try {
+      safeNotifications = (notifications || []).map((notification: any) => {
+      try {
+        // Test serialization
+        JSON.stringify(notification);
+        return notification;
+      } catch (serializationError) {
+        console.error('Notification failed serialization test:', serializationError);
+        // Return a minimal safe version
+        return {
+          id: notification.id || '',
+          userId: notification.userId || '',
+          type: notification.type || 'system_alert',
+          title: notification.title || 'Notification',
+          message: notification.message || '',
+          isRead: notification.isRead || false,
+          createdAt: notification.createdAt || new Date().toISOString(),
+          actionUrl: notification.actionUrl || null,
+          metadata: null // Remove problematic metadata
+        };
+      }
+    });
+    } catch (safetyCheckError: any) {
+      console.error('Error in safety check for notifications:', safetyCheckError);
+      // If safety check itself fails, just use empty array
+      safeNotifications = [];
+    }
+
     // Ensure we always return a valid response
     try {
       return NextResponse.json({
         success: true,
-        notifications: notifications || [],
+        notifications: safeNotifications,
         unreadCount: unreadCount || 0,
-        totalCount: notifications?.length || 0
+        totalCount: safeNotifications.length
       });
     } catch (jsonError: any) {
       console.error('Error serializing response:', jsonError);
+      console.error('Attempted to serialize:', {
+        notificationCount: safeNotifications.length,
+        firstNotification: safeNotifications[0]
+      });
       // Fallback to a basic response if JSON serialization fails
       return NextResponse.json(
         { 
@@ -175,19 +338,56 @@ export async function GET(request: NextRequest) {
     if (error?.code) {
       console.error('Error code:', error.code);
     }
+    if (error?.message) {
+      console.error('Error message:', error.message);
+    }
+    
     // Return 200 with error details instead of 500, since we're handling it gracefully
     // This ensures the UI doesn't break even if notifications fail to load
-    return NextResponse.json(
-      { 
-        success: false, 
-        message: 'Failed to fetch notifications', 
-        error: error instanceof Error ? error.message : (typeof error === 'string' ? error : 'Unknown error'),
-        notifications: [],
-        unreadCount: 0,
-        totalCount: 0
-      },
-      { status: 200 }
-    );
+    try {
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : (typeof error === 'string' 
+          ? error 
+          : (error?.toString ? error.toString() : 'Unknown error'));
+      
+      return NextResponse.json(
+        { 
+          success: false, 
+          message: 'Failed to fetch notifications', 
+          error: errorMessage,
+          notifications: [],
+          unreadCount: 0,
+          totalCount: 0
+        },
+        { status: 200 }
+      );
+    } catch (jsonError: any) {
+      // If even JSON serialization fails, return a plain text error with 200 status
+      // to prevent the client from seeing a 500
+      console.error('Critical: Failed to serialize error response:', jsonError);
+      try {
+        return new NextResponse(
+          JSON.stringify({ 
+            success: false, 
+            message: 'Internal Server Error',
+            notifications: [],
+            unreadCount: 0,
+            totalCount: 0
+          }),
+          { 
+            status: 200,
+            headers: { 'Content-Type': 'application/json' }
+          }
+        );
+      } catch (finalError) {
+        // Last resort: return minimal response
+        return new NextResponse('{"success":false,"notifications":[],"unreadCount":0,"totalCount":0}', { 
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+    }
   }
 }
 

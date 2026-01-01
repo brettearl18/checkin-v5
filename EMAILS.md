@@ -479,3 +479,4 @@ For scheduled emails (reminders, summaries), consider:
 - A background job processor
 - Email queue system
 
+

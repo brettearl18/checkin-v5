@@ -52,6 +52,11 @@ export default function OnboardingQuestionnairePage() {
     }
   }, [clientId]);
 
+  // Scroll to top when section changes
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [currentSection]);
+
   const fetchClientData = async () => {
     try {
       const response = await fetch(`/api/client-portal?clientEmail=${encodeURIComponent(userProfile?.email || '')}`);
@@ -87,8 +92,8 @@ export default function OnboardingQuestionnairePage() {
           setCurrentSection(savedSection);
         }
         
-        if (data.onboardingStatus === 'completed') {
-          // Redirect to dashboard if already completed
+        if (data.onboardingStatus === 'completed' || data.onboardingStatus === 'submitted') {
+          // Redirect to dashboard if already completed or submitted
           router.push('/client-portal');
         }
       }

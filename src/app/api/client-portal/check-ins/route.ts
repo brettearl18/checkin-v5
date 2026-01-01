@@ -310,8 +310,10 @@ export async function GET(request: NextRequest) {
     
     allAssignments.forEach(assignment => {
       if (assignment.isRecurring && assignment.totalWeeks > 1) {
-        // Use a unique key based on formId, clientId, and startDate/assignedAt
-        const seriesKey = `${assignment.formId}_${assignment.clientId}_${assignment.startDate || (assignment.assignedAt ? new Date(assignment.assignedAt).toISOString().split('T')[0] : 'default')}`;
+        // Use a unique key based on formId and clientId only
+        // This ensures all recurring check-ins for the same form+client are in ONE series
+        // If multiple series exist (due to different start dates), we'll merge them
+        const seriesKey = `${assignment.formId}_${assignment.clientId}`;
         if (!recurringSeriesMap.has(seriesKey)) {
           recurringSeriesMap.set(seriesKey, []);
         }
@@ -327,23 +329,54 @@ export async function GET(request: NextRequest) {
     
     // Process each recurring series and expand missing weeks
     recurringSeriesMap.forEach((seriesAssignments) => {
+      // If multiple assignments exist for the same form+client (multiple allocations), merge them
+      // Group by recurringWeek and keep only one per week (prefer completed, then most recent)
+      const weekMap = new Map<number, any>();
+      seriesAssignments.forEach(assignment => {
+        const week = assignment.recurringWeek || 1;
+        if (!weekMap.has(week)) {
+          weekMap.set(week, assignment);
+        } else {
+          // If duplicate week exists, prefer completed ones, then most recent
+          const existing = weekMap.get(week)!;
+          if (assignment.status === 'completed' && existing.status !== 'completed') {
+            weekMap.set(week, assignment);
+          } else if (assignment.status === existing.status) {
+            // Both same status, prefer most recent assignedAt
+            const existingDate = existing.assignedAt ? new Date(existing.assignedAt).getTime() : 0;
+            const currentDate = assignment.assignedAt ? new Date(assignment.assignedAt).getTime() : 0;
+            if (currentDate > existingDate) {
+              weekMap.set(week, assignment);
+            }
+          }
+        }
+      });
+      
+      // Convert back to array, sorted by week number
+      const deduplicatedSeries = Array.from(weekMap.values()).sort((a, b) => {
+        const weekA = a.recurringWeek || 1;
+        const weekB = b.recurringWeek || 1;
+        return weekA - weekB;
+      });
+      
       // Get the base assignment (prefer one with recurringWeek: 1, otherwise the first one)
-      const baseAssignment = seriesAssignments.find(a => a.recurringWeek === 1) || seriesAssignments[0];
-      const existingWeeks = new Set(seriesAssignments.map(a => a.recurringWeek || 1));
+      const baseAssignment = deduplicatedSeries.find(a => a.recurringWeek === 1) || deduplicatedSeries[0];
+      const existingWeeks = new Set(deduplicatedSeries.map(a => a.recurringWeek || 1));
       
       // Add all existing assignments from the series (these are real documents from DB)
-      seriesAssignments.forEach(assignment => {
+      deduplicatedSeries.forEach(assignment => {
         expandedAssignments.push(assignment);
       });
       
-      // If we only have one assignment in the series (base assignment), expand it into future weeks
-      // If we already have multiple assignments (one per week), we're done
-      if (seriesAssignments.length === 1 && baseAssignment.totalWeeks > 1) {
+      // Expand future weeks if there are more weeks to generate
+      // Check if we need to generate future weeks beyond the existing ones
+      if (baseAssignment.totalWeeks > 1) {
         const firstDueDate = new Date(baseAssignment.dueDate);
         const checkInWindow = baseAssignment.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
+        const maxExistingWeek = Math.max(...deduplicatedSeries.map(a => a.recurringWeek || 1));
         
-        // Generate assignments for remaining weeks (week 2 onwards, since week 1 is the base)
-        for (let week = 2; week <= baseAssignment.totalWeeks; week++) {
+        // Generate assignments for weeks beyond the existing ones
+        for (let week = maxExistingWeek + 1; week <= baseAssignment.totalWeeks; week++) {
           // Calculate due date for this week (7 days * (week - 1) from first due date)
           const weekDueDate = new Date(firstDueDate);
           weekDueDate.setDate(firstDueDate.getDate() + (7 * (week - 1)));
@@ -367,11 +400,47 @@ export async function GET(request: NextRequest) {
       }
     });
     
-    // Sort all assignments by due date
-    expandedAssignments.sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
-
-    // Show all assignments (including expanded recurring ones)
-    const assignments = expandedAssignments;
+    // Deduplicate check-ins: Remove duplicates based on recurringWeek + dueDate combination
+    // If multiple check-ins have the same week number and same/similar due date, keep only one
+    const seen = new Map<string, any>();
+    const deduplicatedAssignments: any[] = [];
+    
+    expandedAssignments.forEach(assignment => {
+      if (assignment.isRecurring && assignment.recurringWeek) {
+        // Create a key based on recurringWeek and due date (rounded to day)
+        const dueDate = new Date(assignment.dueDate);
+        dueDate.setHours(0, 0, 0, 0);
+        const key = `${assignment.recurringWeek}_${dueDate.toISOString().split('T')[0]}`;
+        
+        if (!seen.has(key)) {
+          seen.set(key, assignment);
+          deduplicatedAssignments.push(assignment);
+        } else {
+          // If duplicate found, keep the one with the most recent assignedAt date (most recent assignment)
+          const existing = seen.get(key)!;
+          const existingDate = existing.assignedAt ? new Date(existing.assignedAt).getTime() : 0;
+          const currentDate = assignment.assignedAt ? new Date(assignment.assignedAt).getTime() : 0;
+          
+          if (currentDate > existingDate) {
+            // Replace with newer assignment
+            const index = deduplicatedAssignments.indexOf(existing);
+            if (index > -1) {
+              deduplicatedAssignments[index] = assignment;
+              seen.set(key, assignment);
+            }
+          }
+        }
+      } else {
+        // Non-recurring assignments: deduplicate by id
+        if (!seen.has(assignment.id)) {
+          seen.set(assignment.id, assignment);
+          deduplicatedAssignments.push(assignment);
+        }
+      }
+    });
+    
+    // Show all assignments (including expanded recurring ones, now deduplicated)
+    const assignments = deduplicatedAssignments;
 
     // Fetch coach names for all unique coach IDs
     const coachIds = [...new Set(assignments.map(a => a.assignedBy).filter(id => id && id !== 'Coach'))];

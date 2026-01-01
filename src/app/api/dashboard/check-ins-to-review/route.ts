@@ -79,7 +79,7 @@ export async function GET(request: NextRequest) {
       };
 
       // Build check-ins to review with client data and fetch scores from responses if needed
-      checkInsToReview = await Promise.all(allAssignments.map(async (assignment) => {
+      const checkInsWithStatus = await Promise.all(allAssignments.map(async (assignment) => {
         const client = clients.find(c => c.id === assignment.clientId);
         
         // Get score from assignment, or fetch from response if missing
@@ -116,11 +116,13 @@ export async function GET(request: NextRequest) {
           }
         }
         
-        // Check if coach has responded (has feedback)
+        // Check if coach has responded (has feedback) or marked as reviewed
         let coachResponded = false;
+        let reviewedByCoach = false;
         let workflowStatus = 'completed';
         if (assignment.responseId) {
           try {
+            // Check for coach feedback
             const feedbackSnapshot = await db.collection('coachFeedback')
               .where('responseId', '==', assignment.responseId)
               .where('coachId', '==', coachId)
@@ -128,14 +130,38 @@ export async function GET(request: NextRequest) {
               .get();
             
             coachResponded = !feedbackSnapshot.empty;
+            
+            // Check if response is marked as reviewed
+            const responseDoc = await db.collection('formResponses').doc(assignment.responseId).get();
+            if (responseDoc.exists) {
+              const responseData = responseDoc.data();
+              reviewedByCoach = responseData?.reviewedByCoach || false;
+            }
+            
+            // Also check assignment for reviewed status
+            if (!reviewedByCoach) {
+              reviewedByCoach = assignment.reviewedByCoach || false;
+            }
+            
             if (coachResponded) {
               workflowStatus = 'responded';
-            } else if (assignment.reviewedByCoach) {
+            } else if (reviewedByCoach) {
               workflowStatus = 'reviewed';
             }
           } catch (error) {
             console.log('Error checking feedback:', error);
           }
+        } else {
+          // Check assignment directly if no responseId
+          reviewedByCoach = assignment.reviewedByCoach || false;
+          if (reviewedByCoach) {
+            workflowStatus = 'reviewed';
+          }
+        }
+        
+        // Skip check-ins that have been reviewed (they should not appear in "To Review")
+        if (reviewedByCoach || workflowStatus === 'reviewed') {
+          return null; // Filter this out
         }
 
         return {
@@ -156,7 +182,8 @@ export async function GET(request: NextRequest) {
         };
       }));
 
-      // Sort the results
+      // Filter out null values (reviewed check-ins) and sort the results
+      checkInsToReview = checkInsWithStatus.filter((ci): ci is NonNullable<typeof ci> => ci !== null);
       checkInsToReview.sort((a, b) => {
         let comparison = 0;
         

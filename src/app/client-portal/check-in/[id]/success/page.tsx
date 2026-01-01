@@ -5,8 +5,6 @@ import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { RoleProtected } from '@/components/ProtectedRoute';
 import ClientNavigation from '@/components/ClientNavigation';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase-client';
 import Link from 'next/link';
 import {
   getTrafficLightStatus,
@@ -86,7 +84,7 @@ export default function CheckInSuccessPage() {
     type: string;
   }>>([]);
 
-  const assignmentId = params.id as string;
+  const id = params.id as string; // Can be either assignmentId or responseId
   const scoreParam = searchParams.get('score');
 
   useEffect(() => {
@@ -94,94 +92,84 @@ export default function CheckInSuccessPage() {
       setScore(parseInt(scoreParam));
     }
     fetchData();
-  }, [assignmentId, scoreParam]);
+  }, [id, scoreParam]);
 
   const fetchData = async () => {
     try {
-      // Fetch assignment data
-      const assignmentDoc = await getDoc(doc(db, 'check_in_assignments', assignmentId));
-      if (assignmentDoc.exists()) {
-        const assignmentData = assignmentDoc.data() as CheckInAssignment;
-        setAssignment(assignmentData);
+      if (!userProfile?.uid) {
+        console.error('User not authenticated');
+        setLoading(false);
+        return;
+      }
 
-        // Fetch the form response using the responseId
-        if (assignmentData.responseId) {
-          const responseDoc = await getDoc(doc(db, 'formResponses', assignmentData.responseId));
-          if (responseDoc.exists()) {
-            const responseData = responseDoc.data() as FormResponse;
-            setFormResponse(responseData);
-            const responseScore = responseData.score || 0;
-            setScore(responseScore);
+      // Fetch data via API route (uses admin SDK, bypasses permissions)
+      const response = await fetch(`/api/client-portal/check-in/${id}/success?clientId=${userProfile.uid}`);
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Error fetching check-in data:', errorData.message);
+        setLoading(false);
+        return;
+      }
 
-            // Fetch questions from the form to calculate per-question scores
-            try {
-              const formDoc = await getDoc(doc(db, 'forms', assignmentData.formId));
-              if (formDoc.exists()) {
-                const formData = formDoc.data();
-                const questionIds = formData.questions || [];
-                
-                // Fetch questions and filter to only "Vana Check In" category
-                const questionsData: any[] = [];
-                for (const questionId of questionIds) {
-                  const questionDoc = await getDoc(doc(db, 'questions', questionId));
-                  if (questionDoc.exists()) {
-                    const questionData = { id: questionDoc.id, ...questionDoc.data() };
-                    // Only include questions from "Vana Check In" category
-                    if (questionData.category === 'Vana Check In') {
-                      questionsData.push(questionData);
-                    }
-                  }
-                }
-                setQuestions(questionsData);
-                
-                // Calculate scores for each question
-                const calculatedScores = calculateQuestionScores(questionsData, responseData.responses);
-                setQuestionScores(calculatedScores);
-              }
-            } catch (error) {
-              console.error('Error fetching questions:', error);
-            }
+      const result = await response.json();
+      
+      if (!result.success || !result.data) {
+        console.error('Failed to fetch check-in data:', result.message);
+        setLoading(false);
+        return;
+      }
 
-            // Fetch client scoring configuration
-            try {
-              const scoringDoc = await getDoc(doc(db, 'clientScoring', assignmentData.clientId));
-              if (scoringDoc.exists()) {
-                const scoringData = scoringDoc.data();
-                let clientThresholds: ScoringThresholds;
+      const { assignment, response: responseData, form, questions: questionsData, scoringConfig } = result.data;
 
-                // Check if new format (redMax/orangeMax) exists
-                if (scoringData.thresholds?.redMax !== undefined && scoringData.thresholds?.orangeMax !== undefined) {
-                  clientThresholds = {
-                    redMax: scoringData.thresholds.redMax,
-                    orangeMax: scoringData.thresholds.orangeMax
-                  };
-                } else if (scoringData.thresholds?.red !== undefined && scoringData.thresholds?.yellow !== undefined) {
-                  // Convert legacy format
-                  clientThresholds = convertLegacyThresholds(scoringData.thresholds);
-                } else if (scoringData.scoringProfile) {
-                  // Use profile defaults
-                  clientThresholds = getDefaultThresholds(scoringData.scoringProfile as any);
-                } else {
-                  // Default to lifestyle
-                  clientThresholds = getDefaultThresholds('lifestyle');
-                }
+      // Set assignment if available
+      if (assignment) {
+        setAssignment(assignment as CheckInAssignment);
+      }
 
-                setThresholds(clientThresholds);
-                setTrafficLightStatus(getTrafficLightStatus(responseScore, clientThresholds));
-              } else {
-                // No scoring config, use default lifestyle thresholds
-                const defaultThresholds = getDefaultThresholds('lifestyle');
-                setThresholds(defaultThresholds);
-                setTrafficLightStatus(getTrafficLightStatus(responseScore, defaultThresholds));
-              }
-            } catch (scoringError) {
-              console.error('Error fetching scoring config:', scoringError);
-              // Use default lifestyle thresholds on error
-              const defaultThresholds = getDefaultThresholds('lifestyle');
-              setThresholds(defaultThresholds);
-              setTrafficLightStatus(getTrafficLightStatus(responseScore, defaultThresholds));
-            }
+      // Set form response
+      if (responseData) {
+        setFormResponse(responseData as FormResponse);
+        const responseScore = responseData.score || 0;
+        setScore(responseScore);
+
+        // Set questions
+        if (questionsData && questionsData.length > 0) {
+          setQuestions(questionsData);
+          
+          // Calculate scores for each question
+          const calculatedScores = calculateQuestionScores(questionsData, responseData.responses);
+          setQuestionScores(calculatedScores);
+        }
+
+        // Set scoring configuration
+        if (scoringConfig) {
+          let clientThresholds: ScoringThresholds;
+
+          // Check if new format (redMax/orangeMax) exists
+          if (scoringConfig.thresholds?.redMax !== undefined && scoringConfig.thresholds?.orangeMax !== undefined) {
+            clientThresholds = {
+              redMax: scoringConfig.thresholds.redMax,
+              orangeMax: scoringConfig.thresholds.orangeMax
+            };
+          } else if (scoringConfig.thresholds?.red !== undefined && scoringConfig.thresholds?.yellow !== undefined) {
+            // Convert legacy format
+            clientThresholds = convertLegacyThresholds(scoringConfig.thresholds);
+          } else if (scoringConfig.scoringProfile) {
+            // Use profile defaults
+            clientThresholds = getDefaultThresholds(scoringConfig.scoringProfile as any);
+          } else {
+            // Default to lifestyle
+            clientThresholds = getDefaultThresholds('lifestyle');
           }
+
+          setThresholds(clientThresholds);
+          setTrafficLightStatus(getTrafficLightStatus(responseScore, clientThresholds));
+        } else {
+          // No scoring config, use default lifestyle thresholds
+          const defaultThresholds = getDefaultThresholds('lifestyle');
+          setThresholds(defaultThresholds);
+          setTrafficLightStatus(getTrafficLightStatus(responseScore, defaultThresholds));
         }
       }
     } catch (error) {

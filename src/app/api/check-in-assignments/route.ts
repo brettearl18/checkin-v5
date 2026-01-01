@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
     const formData = await request.json();
     
     // Validate required fields
-    const { formId, clientId, coachId, frequency, duration, startDate, firstCheckInDate, dueTime, checkInWindow, status } = formData;
+    const { formId, clientId, coachId, frequency, duration, startDate, firstCheckInDate, dueTime, checkInWindow, status, measurementSchedule } = formData;
     
     if (!formId || !clientId || !coachId) {
       return NextResponse.json({
@@ -78,6 +78,47 @@ export async function POST(request: NextRequest) {
     
     // Save to Firestore using Admin SDK
     const docRef = await db.collection('check_in_assignments').add(assignment);
+
+    // Create measurement schedule if provided
+    if (measurementSchedule && measurementSchedule.enabled && measurementSchedule.firstFridayDate) {
+      try {
+        const firstFridayDate = new Date(measurementSchedule.firstFridayDate);
+        
+        // Check if schedule already exists for this client
+        const existingScheduleSnapshot = await db.collection('measurement_schedules')
+          .where('clientId', '==', clientId)
+          .where('isActive', '==', true)
+          .limit(1)
+          .get();
+
+        if (!existingScheduleSnapshot.empty) {
+          // Update existing schedule
+          const existingDoc = existingScheduleSnapshot.docs[0];
+          await existingDoc.ref.update({
+            firstFridayDate: firstFridayDate,
+            frequency: measurementSchedule.frequency || 'fortnightly',
+            updatedAt: new Date()
+          });
+          console.log('Measurement schedule updated:', existingDoc.id);
+        } else {
+          // Create new schedule
+          const scheduleData = {
+            clientId,
+            coachId,
+            firstFridayDate: firstFridayDate,
+            frequency: measurementSchedule.frequency || 'fortnightly',
+            isActive: true,
+            createdAt: new Date(),
+            updatedAt: new Date()
+          };
+          const scheduleDocRef = await db.collection('measurement_schedules').add(scheduleData);
+          console.log('Measurement schedule created:', scheduleDocRef.id);
+        }
+      } catch (scheduleError) {
+        console.error('Error creating measurement schedule:', scheduleError);
+        // Don't fail the assignment if schedule creation fails
+      }
+    }
 
     // Create notification for client
     try {

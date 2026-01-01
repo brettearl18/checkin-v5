@@ -23,6 +23,8 @@ export async function GET(request: NextRequest) {
         .orderBy('createdAt', 'desc')
         .get();
 
+      const now = new Date();
+      
       goals = goalsSnapshot.docs.map(doc => {
         const data = doc.data();
         
@@ -54,17 +56,37 @@ export async function GET(request: NextRequest) {
           return new Date().toISOString();
         };
 
+        const targetValue = data.targetValue || 0;
+        const currentValue = data.currentValue || 0;
+        
+        // Calculate progress percentage
+        const progress = targetValue > 0 ? Math.min((currentValue / targetValue) * 100, 100) : 0;
+        
+        // Determine status based on deadline and progress
+        const deadlineDate = convertDate(data.deadline);
+        const deadline = new Date(deadlineDate);
+        let status = data.status || 'active';
+        
+        // Auto-update status if needed
+        if (status === 'active') {
+          if (progress >= 100) {
+            status = 'completed';
+          } else if (deadline < now && progress < 100) {
+            status = 'overdue';
+          }
+        }
+
         return {
           id: doc.id,
           title: data.title || '',
           description: data.description || '',
           category: data.category || 'general',
-          targetValue: data.targetValue || 0,
-          currentValue: data.currentValue || 0,
+          targetValue,
+          currentValue,
           unit: data.unit || '',
-          deadline: convertDate(data.deadline),
-          status: data.status || 'active',
-          progress: data.progress || 0,
+          deadline: deadlineDate,
+          status,
+          progress: Math.round(progress * 100) / 100, // Round to 2 decimal places
           createdAt: convertDate(data.createdAt),
           updatedAt: convertDate(data.updatedAt)
         };
@@ -140,12 +162,38 @@ export async function POST(request: NextRequest) {
 
     console.log('Creating goal with data:', goalData);
 
+    // Save to Firestore
     const docRef = await db.collection('clientGoals').add(goalData);
+    
+    console.log('Goal saved to Firestore with ID:', docRef.id);
+
+    // Also update the client document's goals array if needed (optional)
+    try {
+      const clientRef = db.collection('clients').doc(clientId);
+      const clientDoc = await clientRef.get();
+      
+      if (clientDoc.exists) {
+        // You can update a goals count or last updated timestamp here if needed
+        await clientRef.update({
+          goalsLastUpdated: new Date()
+        });
+      }
+    } catch (updateError) {
+      // Non-critical - log but don't fail the request
+      console.warn('Could not update client document:', updateError);
+    }
 
     return NextResponse.json({
       success: true,
       message: 'Goal created successfully',
-      goalId: docRef.id
+      goalId: docRef.id,
+      goal: {
+        id: docRef.id,
+        ...goalData,
+        deadline: goalData.deadline.toISOString(),
+        createdAt: goalData.createdAt.toISOString(),
+        updatedAt: goalData.updatedAt.toISOString()
+      }
     });
 
   } catch (error) {

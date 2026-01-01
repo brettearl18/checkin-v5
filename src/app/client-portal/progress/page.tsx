@@ -615,61 +615,61 @@ export default function ClientProgressPage() {
             </div>
 
             {/* Stats Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+            <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-2 md:gap-4 mb-4 md:mb-8">
+              <div className="bg-white rounded-xl md:rounded-2xl shadow-sm border border-gray-100 p-3 md:p-6">
                 <div className="flex items-center">
                   <div className="flex-shrink-0">
-                    <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#fef9e7' }}>
-                      <span className="text-xl">📊</span>
+                    <div className="w-8 h-8 md:w-12 md:h-12 rounded-lg md:rounded-xl flex items-center justify-center" style={{ backgroundColor: '#fef9e7' }}>
+                      <span className="text-base md:text-xl">📊</span>
                     </div>
                   </div>
-                  <div className="ml-4">
-                    <p className="text-xs font-medium text-gray-500">Average Score</p>
-                    <p className="text-2xl font-bold text-gray-900 mt-1">{stats.averageScore}%</p>
+                  <div className="ml-2 md:ml-4 flex-1 min-w-0">
+                    <p className="text-[10px] md:text-xs font-medium text-gray-500 truncate">Average Score</p>
+                    <p className="text-lg md:text-2xl font-bold text-gray-900 mt-0.5 md:mt-1">{stats.averageScore}%</p>
                   </div>
                 </div>
               </div>
 
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+              <div className="bg-white rounded-xl md:rounded-2xl shadow-sm border border-gray-100 p-3 md:p-6">
                 <div className="flex items-center">
                   <div className="flex-shrink-0">
-                    <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#fef9e7' }}>
-                      <span className="text-xl">🏆</span>
+                    <div className="w-8 h-8 md:w-12 md:h-12 rounded-lg md:rounded-xl flex items-center justify-center" style={{ backgroundColor: '#fef9e7' }}>
+                      <span className="text-base md:text-xl">🏆</span>
                     </div>
                   </div>
-                  <div className="ml-4">
-                    <p className="text-xs font-medium text-gray-500">Best Score</p>
-                    <p className="text-2xl font-bold text-gray-900 mt-1">{stats.bestScore}%</p>
+                  <div className="ml-2 md:ml-4 flex-1 min-w-0">
+                    <p className="text-[10px] md:text-xs font-medium text-gray-500 truncate">Best Score</p>
+                    <p className="text-lg md:text-2xl font-bold text-gray-900 mt-0.5 md:mt-1">{stats.bestScore}%</p>
                   </div>
                 </div>
               </div>
 
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+              <div className="bg-white rounded-xl md:rounded-2xl shadow-sm border border-gray-100 p-3 md:p-6">
                 <div className="flex items-center">
                   <div className="flex-shrink-0">
-                    <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#fef9e7' }}>
-                      <span className="text-xl">📈</span>
+                    <div className="w-8 h-8 md:w-12 md:h-12 rounded-lg md:rounded-xl flex items-center justify-center" style={{ backgroundColor: '#fef9e7' }}>
+                      <span className="text-base md:text-xl">📈</span>
                     </div>
                   </div>
-                  <div className="ml-4">
-                    <p className="text-xs font-medium text-gray-500">Improvement</p>
-                    <p className={`text-2xl font-bold mt-1 ${stats.improvement >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  <div className="ml-2 md:ml-4 flex-1 min-w-0">
+                    <p className="text-[10px] md:text-xs font-medium text-gray-500 truncate">Improvement</p>
+                    <p className={`text-lg md:text-2xl font-bold mt-0.5 md:mt-1 ${stats.improvement >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                       {stats.improvement >= 0 ? '+' : ''}{stats.improvement}%
                     </p>
                   </div>
                 </div>
               </div>
 
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+              <div className="bg-white rounded-xl md:rounded-2xl shadow-sm border border-gray-100 p-3 md:p-6">
                 <div className="flex items-center">
                   <div className="flex-shrink-0">
-                    <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#fef9e7' }}>
-                      <span className="text-xl">🔥</span>
+                    <div className="w-8 h-8 md:w-12 md:h-12 rounded-lg md:rounded-xl flex items-center justify-center" style={{ backgroundColor: '#fef9e7' }}>
+                      <span className="text-base md:text-xl">🔥</span>
                     </div>
                   </div>
-                  <div className="ml-4">
-                    <p className="text-xs font-medium text-gray-500">Current Streak</p>
-                    <p className="text-2xl font-bold text-gray-900 mt-1">{stats.currentStreak} days</p>
+                  <div className="ml-2 md:ml-4 flex-1 min-w-0">
+                    <p className="text-[10px] md:text-xs font-medium text-gray-500 truncate">Current Streak</p>
+                    <p className="text-lg md:text-2xl font-bold text-gray-900 mt-0.5 md:mt-1">{stats.currentStreak} days</p>
                   </div>
                 </div>
               </div>
@@ -679,29 +679,29 @@ export default function ClientProgressPage() {
               {/* Question Progress Grid */}
               {questionProgress.length > 0 ? (
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                  <div className="px-6 py-4 border-b border-gray-100" style={{ backgroundColor: '#fef9e7' }}>
-                    <h2 className="text-lg font-bold text-gray-900">Question Progress Over Time</h2>
-                    <p className="text-sm text-gray-600 mt-1">Track how each question improves week by week</p>
+                  <div className="px-3 md:px-6 py-3 md:py-4 border-b border-gray-100" style={{ backgroundColor: '#fef9e7' }}>
+                    <h2 className="text-base md:text-lg font-bold text-gray-900">Question Progress Over Time</h2>
+                    <p className="text-xs md:text-sm text-gray-600 mt-0.5 md:mt-1">Track how each question improves week by week</p>
                   </div>
                 
                   {/* Legend */}
-                  <div className="flex items-center gap-4 px-6 py-3 bg-gray-50 border-b border-gray-100">
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                      <span className="text-xs text-gray-700 font-medium">Good (7-10)</span>
+                  <div className="flex items-center gap-2 md:gap-4 px-3 md:px-6 py-2 md:py-3 bg-gray-50 border-b border-gray-100">
+                    <div className="flex items-center gap-1 md:gap-2">
+                      <div className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-full bg-green-500"></div>
+                      <span className="text-[10px] md:text-xs text-gray-700 font-medium">Good (7-10)</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-orange-500"></div>
-                      <span className="text-xs text-gray-700 font-medium">Moderate (4-6)</span>
+                    <div className="flex items-center gap-1 md:gap-2">
+                      <div className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-full bg-orange-500"></div>
+                      <span className="text-[10px] md:text-xs text-gray-700 font-medium">Moderate (4-6)</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-red-500"></div>
-                      <span className="text-xs text-gray-700 font-medium">Needs Attention (0-3)</span>
+                    <div className="flex items-center gap-1 md:gap-2">
+                      <div className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-full bg-red-500"></div>
+                      <span className="text-[10px] md:text-xs text-gray-700 font-medium">Needs Attention (0-3)</span>
                     </div>
                   </div>
 
-                {/* Progress Grid */}
-                <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
+                {/* Desktop: Table Layout */}
+                <div className="hidden md:block overflow-x-auto max-h-[500px] overflow-y-auto">
                   <table className="w-full">
                     <thead className="sticky top-0 bg-gray-50/95 backdrop-blur-sm z-10">
                       <tr className="bg-gray-50/30">
@@ -764,6 +764,50 @@ export default function ClientProgressPage() {
                       ))}
                     </tbody>
                   </table>
+                </div>
+
+                {/* Mobile: Compact Card Layout */}
+                <div className="block md:hidden space-y-2 px-3 py-2 max-h-[500px] overflow-y-auto">
+                  {questionProgress.map((question) => (
+                    <div 
+                      key={question.questionId}
+                      className="bg-white rounded-lg border border-gray-200 p-2.5"
+                    >
+                      <h4 className="text-xs font-semibold text-gray-900 mb-2 line-clamp-2 leading-tight">
+                        {question.questionText}
+                      </h4>
+                      <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                        {question.weeks.map((week, wIndex) => (
+                          <div 
+                            key={wIndex}
+                            className="flex flex-col items-center gap-0.5 flex-shrink-0"
+                          >
+                            <div
+                              className={`w-5 h-5 rounded-full ${getStatusColor(week.status)} ${getStatusBorder(week.status)} flex items-center justify-center transition-all active:scale-110 cursor-pointer shadow-sm`}
+                              title={`Week ${week.week}: Score ${week.score}/10 - ${week.date}`}
+                              onClick={() => setSelectedResponse({
+                                question: question.questionText,
+                                answer: week.answer,
+                                score: week.score,
+                                date: week.date,
+                                week: week.week,
+                                type: week.type
+                              })}
+                            >
+                            </div>
+                            <span className="text-[8px] text-gray-500 font-medium">W{week.week}</span>
+                          </div>
+                        ))}
+                        {/* Fill empty weeks if needed */}
+                        {Array.from({ length: Math.max(0, (questionProgress[0]?.weeks.length || 0) - question.weeks.length) }).map((_, emptyIndex) => (
+                          <div key={`empty-${emptyIndex}`} className="flex flex-col items-center gap-0.5 flex-shrink-0">
+                            <div className="w-5 h-5 rounded-full bg-gray-100 border border-gray-200"></div>
+                            <span className="text-[8px] text-gray-400">-</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
               ) : (

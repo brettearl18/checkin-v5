@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase-server';
 import { notificationService } from '@/lib/notification-service';
 import { ONBOARDING_QUESTIONS, ONBOARDING_SECTIONS } from '@/lib/onboarding-questions';
+import { generateOnboardingSummary } from '@/lib/openai-service';
+import { getCoachContext } from '@/lib/ai-context';
+import { clearDashboardCache } from '@/lib/dashboard-cache';
 
 export const dynamic = 'force-dynamic';
 
@@ -63,8 +66,17 @@ export async function POST(request: NextRequest) {
       lastUpdatedAt: new Date()
     });
 
-    // Generate onboarding report summary
+    // Clear dashboard cache to ensure the updated onboarding status is reflected immediately
+    // The cache is managed in /api/client-portal/route.ts, so we need to make it accessible
+    // For now, we'll rely on the cache TTL (60 seconds) or force a cache clear via environment
+    // In production, this should use a shared cache service (Redis) or event-based invalidation
+    clearDashboardCache(clientId);
+
+    // Generate onboarding report summary (structured data)
     const reportSummary = generateOnboardingReport(responses);
+
+    // AI summary will be generated manually when coach clicks "Generate AI Report" button
+    // This prevents wasteful AI calls on every submission
 
     // Create notification for coach
     const notification = {
@@ -85,7 +97,7 @@ export async function POST(request: NextRequest) {
     await db.collection('notifications').add(notification);
 
     // Store the report in a separate collection for easy access
-    const reportData = {
+    const reportData: any = {
       clientId,
       coachId,
       clientName,
@@ -95,6 +107,7 @@ export async function POST(request: NextRequest) {
       responses,
       progress: onboardingData.progress || {},
       status: 'submitted'
+      // aiSummary will be added later when coach clicks "Generate AI Report" button
     };
 
     // Check if report already exists
@@ -181,16 +194,15 @@ function generateOnboardingReport(responses: Record<string, any>) {
   report.nutrition.eatingOutFrequency = responses['q4-5'];
   report.nutrition.waterIntake = responses['q4-6'];
   report.nutrition.nutritionChallenges = responses['q4-7'];
+  report.nutrition.foodAllergies = responses['q4-8'];
 
   // Goals
   report.goals.primaryGoal = responses['q5-1'];
   report.goals.secondaryGoals = responses['q5-2'];
   report.goals.timeframe = responses['q5-3'];
-  report.goals.weightLossTarget = responses['q5-4'];
-  report.goals.muscleGainTarget = responses['q5-5'];
-  report.goals.mainMotivation = responses['q5-6'];
-  report.goals.previousAttempts = responses['q5-7'];
-  report.goals.previousExperience = responses['q5-7_followup'];
+  report.goals.mainMotivation = responses['q5-4']; // Now allows multiple selections
+  report.goals.previousAttempts = responses['q5-5']; // Re-numbered from q5-7
+  report.goals.previousExperience = responses['q5-5_followup'];
 
   // Motivation
   report.motivation.confidenceLevel = responses['q6-1'];
@@ -209,8 +221,7 @@ function generateOnboardingReport(responses: Record<string, any>) {
 
   // Preferences
   report.preferences.communicationStyle = responses['q8-1'];
-  report.preferences.checkInTime = responses['q8-2'];
-  report.preferences.reminderFrequency = responses['q8-3'];
+  report.preferences.commitmentStatement = responses['q8-2']; // Commitment statement to coach
 
   // Barriers
   report.barriers.biggestObstacle = responses['q9-1'];

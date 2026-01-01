@@ -66,9 +66,29 @@ export async function GET(
     }
 
     const formData = formDoc.data();
+    
+    // If questions are stored as IDs (strings), fetch the actual question documents
+    let questions = formData?.questions || [];
+    if (questions.length > 0 && typeof questions[0] === 'string') {
+      // Questions are IDs - fetch the actual question documents
+      const questionDocs = await Promise.all(
+        questions.map((questionId: string) => 
+          db.collection('questions').doc(questionId).get().catch(() => null)
+        )
+      );
+      
+      questions = questionDocs
+        .filter(doc => doc && doc.exists)
+        .map(doc => ({
+          id: doc!.id,
+          ...doc!.data()
+        }));
+    }
+    
     const form = {
       id: formDoc.id,
       ...formData,
+      questions: questions, // Replace with fetched questions if they were IDs
       createdAt: formData?.createdAt?.toDate?.() || formData?.createdAt,
       updatedAt: formData?.updatedAt?.toDate?.() || formData?.updatedAt
     };

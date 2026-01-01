@@ -15,6 +15,7 @@ export default function OnboardingReportPage() {
   const [client, setClient] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [generatingAiSummary, setGeneratingAiSummary] = useState(false);
 
   useEffect(() => {
     if (clientId) {
@@ -50,6 +51,36 @@ export default function OnboardingReportPage() {
       setError('Failed to load onboarding report');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGenerateAiSummary = async () => {
+    if (!clientId) return;
+    
+    setGeneratingAiSummary(true);
+    try {
+      const response = await fetch(`/api/client-portal/onboarding/regenerate-summary`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          // Refresh the report to show new summary
+          await fetchOnboardingReport();
+        } else {
+          alert('Failed to generate AI summary: ' + (data.message || 'Unknown error'));
+        }
+      } else {
+        alert('Failed to generate AI summary. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error generating AI summary:', error);
+      alert('Error generating AI summary. Please try again.');
+    } finally {
+      setGeneratingAiSummary(false);
     }
   };
 
@@ -134,6 +165,286 @@ export default function OnboardingReportPage() {
               )}
             </div>
           </div>
+
+          {/* AI Summary Section */}
+          {!onboardingData?.aiSummary && onboardingData && (
+            <div className="mb-6 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl shadow-xl border-2 border-blue-200 overflow-hidden">
+              <div className="bg-blue-600 px-8 py-6 border-b-2 border-blue-700">
+                <div className="flex items-center">
+                  <svg className="w-6 h-6 text-white mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                  </svg>
+                  <h2 className="text-2xl font-bold text-white">AI Coaching Summary</h2>
+                </div>
+              </div>
+              
+              <div className="p-8 text-center">
+                <div className="max-w-md mx-auto">
+                  <svg className="w-16 h-16 text-blue-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                  </svg>
+                  <h3 className="text-xl font-semibold text-gray-900 mb-2">Generate AI Coaching Summary</h3>
+                  <p className="text-gray-600 mb-6">
+                    Generate an AI-powered analysis of the client's onboarding questionnaire. This will provide insights on training approach, communication style, and things to watch for.
+                  </p>
+                  <button
+                    onClick={handleGenerateAiSummary}
+                    disabled={generatingAiSummary}
+                    className="px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-xl text-sm font-medium transition-colors flex items-center gap-2 mx-auto"
+                  >
+                    {generatingAiSummary ? (
+                      <>
+                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                        Generate AI Report
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {onboardingData?.aiSummary && (
+            <div className="mb-6 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl shadow-xl border-2 border-blue-200 overflow-hidden">
+              <div className="bg-blue-600 px-8 py-4 border-b-2 border-blue-700">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center">
+                    <svg className="w-6 h-6 text-white mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                    </svg>
+                    <h2 className="text-2xl font-bold text-white">AI Coaching Summary</h2>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      if (!confirm('Regenerate the AI summary? This will create a new analysis based on the current onboarding data.')) {
+                        return;
+                      }
+                      await handleGenerateAiSummary();
+                    }}
+                    disabled={generatingAiSummary}
+                    className="px-4 py-2 bg-white hover:bg-blue-50 disabled:bg-gray-200 disabled:cursor-not-allowed text-blue-600 rounded-xl text-sm font-medium transition-colors flex items-center gap-2"
+                  >
+                    {generatingAiSummary ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                        Regenerating...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        Regenerate Summary
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+              
+              <div className="p-8">
+                {/* Overall Summary */}
+                {onboardingData.aiSummary.summary && (
+                  <div className="mb-6">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-3">Overall Assessment</h3>
+                    <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                      <p className="text-gray-800 leading-relaxed whitespace-pre-line">
+                        {onboardingData.aiSummary.summary}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Goals Analysis */}
+                {onboardingData.aiSummary.goals && (
+                  <div className="mb-6 bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                      <span className="text-2xl mr-2">🎯</span>
+                      Goals Analysis
+                    </h3>
+                    <div className="space-y-4">
+                      {onboardingData.aiSummary.goals.primaryGoals?.length > 0 && (
+                        <div>
+                          <span className="font-medium text-gray-700">Primary Goals:</span>
+                          <ul className="list-disc list-inside text-gray-800 mt-2 space-y-1">
+                            {onboardingData.aiSummary.goals.primaryGoals.map((goal: string, idx: number) => (
+                              <li key={idx}>{goal}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {onboardingData.aiSummary.goals.secondaryGoals?.length > 0 && (
+                        <div>
+                          <span className="font-medium text-gray-700">Secondary Goals:</span>
+                          <ul className="list-disc list-inside text-gray-800 mt-2 space-y-1">
+                            {onboardingData.aiSummary.goals.secondaryGoals.map((goal: string, idx: number) => (
+                              <li key={idx}>{goal}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {onboardingData.aiSummary.goals.goalAnalysis && (
+                        <div>
+                          <span className="font-medium text-gray-700">Goal Analysis:</span>
+                          <p className="text-gray-800 mt-2 leading-relaxed">{onboardingData.aiSummary.goals.goalAnalysis}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* How to Work With Them */}
+                {onboardingData.aiSummary.workingApproach && (
+                  <div className="mb-6 bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                      <span className="text-2xl mr-2">💪</span>
+                      How to Work With Them Over the Program
+                    </h3>
+                    <div className="space-y-4">
+                      <div className="grid md:grid-cols-3 gap-4 mb-4">
+                        <div>
+                          <span className="font-medium text-gray-700 text-sm">Recommended Style:</span>
+                          <p className="text-gray-800 mt-1 text-sm">{onboardingData.aiSummary.workingApproach.recommendedStyle}</p>
+                        </div>
+                        <div>
+                          <span className="font-medium text-gray-700 text-sm">Intensity:</span>
+                          <p className="text-gray-800 mt-1 text-sm">{onboardingData.aiSummary.workingApproach.intensity}</p>
+                        </div>
+                        <div>
+                          <span className="font-medium text-gray-700 text-sm">Weekly Schedule:</span>
+                          <p className="text-gray-800 mt-1 text-sm">{onboardingData.aiSummary.workingApproach.weeklySchedule}</p>
+                        </div>
+                      </div>
+                      {onboardingData.aiSummary.workingApproach.howToWorkWithThem && (
+                        <div>
+                          <span className="font-medium text-gray-700">Detailed Approach:</span>
+                          <p className="text-gray-800 mt-2 leading-relaxed">{onboardingData.aiSummary.workingApproach.howToWorkWithThem}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Things to Watch */}
+                {onboardingData.aiSummary.thingsToWatch && (
+                  <div className="mb-6 bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                      <span className="text-2xl mr-2">⚠️</span>
+                      What to Watch Out For
+                    </h3>
+                    <div className="space-y-4">
+                      {onboardingData.aiSummary.thingsToWatch.watchOutFor && (
+                        <div className="mb-4">
+                          <p className="text-gray-800 leading-relaxed">{onboardingData.aiSummary.thingsToWatch.watchOutFor}</p>
+                        </div>
+                      )}
+                      <div className="grid md:grid-cols-3 gap-4">
+                        {onboardingData.aiSummary.thingsToWatch.healthConcerns?.length > 0 && (
+                          <div>
+                            <span className="font-medium text-gray-700 text-sm">Health Concerns:</span>
+                            <ul className="list-disc list-inside text-gray-800 mt-2 space-y-1 text-sm">
+                              {onboardingData.aiSummary.thingsToWatch.healthConcerns.map((concern: string, idx: number) => (
+                                <li key={idx}>{concern}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        {onboardingData.aiSummary.thingsToWatch.potentialBarriers?.length > 0 && (
+                          <div>
+                            <span className="font-medium text-gray-700 text-sm">Potential Barriers:</span>
+                            <ul className="list-disc list-inside text-gray-800 mt-2 space-y-1 text-sm">
+                              {onboardingData.aiSummary.thingsToWatch.potentialBarriers.map((barrier: string, idx: number) => (
+                                <li key={idx}>{barrier}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        {onboardingData.aiSummary.thingsToWatch.redFlags?.length > 0 && (
+                          <div>
+                            <span className="font-medium text-red-700 text-sm">Red Flags:</span>
+                            <ul className="list-disc list-inside text-red-800 mt-2 space-y-1 text-sm">
+                              {onboardingData.aiSummary.thingsToWatch.redFlags.map((flag: string, idx: number) => (
+                                <li key={idx}>{flag}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* SWOT Analysis */}
+                {onboardingData.aiSummary.swotAnalysis && (
+                  <div className="mb-6 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl p-6 shadow-sm border-2 border-indigo-200">
+                    <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center">
+                      <span className="text-2xl mr-2">📊</span>
+                      SWOT Analysis
+                    </h3>
+                    <div className="grid md:grid-cols-2 gap-4">
+                      {/* Strengths */}
+                      <div className="bg-white rounded-lg p-4 border-2 border-green-200">
+                        <h4 className="font-bold text-green-700 mb-3 flex items-center">
+                          <span className="text-lg mr-2">✅</span>
+                          Strengths
+                        </h4>
+                        <ul className="list-disc list-inside text-gray-800 space-y-1 text-sm">
+                          {onboardingData.aiSummary.swotAnalysis.strengths?.map((strength: string, idx: number) => (
+                            <li key={idx}>{strength}</li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      {/* Weaknesses */}
+                      <div className="bg-white rounded-lg p-4 border-2 border-orange-200">
+                        <h4 className="font-bold text-orange-700 mb-3 flex items-center">
+                          <span className="text-lg mr-2">⚠️</span>
+                          Weaknesses
+                        </h4>
+                        <ul className="list-disc list-inside text-gray-800 space-y-1 text-sm">
+                          {onboardingData.aiSummary.swotAnalysis.weaknesses?.map((weakness: string, idx: number) => (
+                            <li key={idx}>{weakness}</li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      {/* Opportunities */}
+                      <div className="bg-white rounded-lg p-4 border-2 border-blue-200">
+                        <h4 className="font-bold text-blue-700 mb-3 flex items-center">
+                          <span className="text-lg mr-2">🚀</span>
+                          Opportunities
+                        </h4>
+                        <ul className="list-disc list-inside text-gray-800 space-y-1 text-sm">
+                          {onboardingData.aiSummary.swotAnalysis.opportunities?.map((opportunity: string, idx: number) => (
+                            <li key={idx}>{opportunity}</li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      {/* Threats */}
+                      <div className="bg-white rounded-lg p-4 border-2 border-red-200">
+                        <h4 className="font-bold text-red-700 mb-3 flex items-center">
+                          <span className="text-lg mr-2">🔴</span>
+                          Threats
+                        </h4>
+                        <ul className="list-disc list-inside text-gray-800 space-y-1 text-sm">
+                          {onboardingData.aiSummary.swotAnalysis.threats?.map((threat: string, idx: number) => (
+                            <li key={idx}>{threat}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Onboarding Report Content */}
           {onboardingData && onboardingData.sections && onboardingData.sections.length > 0 ? (

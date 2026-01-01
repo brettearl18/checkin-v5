@@ -90,18 +90,21 @@ async function callOpenAI(
 
   const client = getOpenAIClient();
 
-  const executeCall = async () => {
-    // Prepend system prompt if provided
-    const messagesWithSystem = systemPrompt
-      ? [{ role: 'system' as const, content: systemPrompt }, ...messages]
-      : messages;
+    const executeCall = async () => {
+      // Prepend system prompt if provided
+      const messagesWithSystem = systemPrompt
+        ? [{ role: 'system' as const, content: systemPrompt }, ...messages]
+        : messages;
 
-    const response = await client.chat.completions.create({
-      model,
-      messages: messagesWithSystem,
-      temperature,
-      max_tokens,
-    });
+      // Build request config
+      const requestConfig: any = {
+        model,
+        messages: messagesWithSystem,
+        temperature,
+        max_tokens: Math.min(max_tokens, 4096), // Ensure we don't exceed model limits
+      };
+      
+      const response = await client.chat.completions.create(requestConfig);
 
     const content = response.choices[0]?.message?.content;
     if (!content) {
@@ -150,8 +153,21 @@ Ensure the JSON is valid and complete. Do not include any text outside the JSON.
     );
 
     // Parse JSON response
-    const cleaned = response.trim().replace(/^```json\n?/g, '').replace(/\n?```$/g, '');
-    return JSON.parse(cleaned) as T;
+    let cleaned = response.trim().replace(/^```json\n?/g, '').replace(/\n?```$/g, '').replace(/^```/g, '').replace(/```$/g, '');
+    
+    // Try to find JSON object in the response if it's wrapped in text
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      cleaned = jsonMatch[0];
+    }
+    
+    try {
+      return JSON.parse(cleaned) as T;
+    } catch (parseError) {
+      console.error('JSON parse error:', parseError);
+      console.error('Failed to parse response:', cleaned.substring(0, 500));
+      throw new Error(`Failed to parse JSON response: ${parseError instanceof Error ? parseError.message : 'Unknown parsing error'}`);
+    }
   } catch (error: any) {
     console.error('Error generating structured response:', error);
     
@@ -431,22 +447,30 @@ export interface OnboardingSummaryRequest {
 }
 
 export interface OnboardingSummaryResponse {
-  trainingApproach: {
+  summary: string; // Overall comprehensive analysis paragraph
+  goals: {
+    primaryGoals: string[];
+    secondaryGoals: string[];
+    goalAnalysis: string; // Analysis of their goals
+  };
+  workingApproach: {
     recommendedStyle: string;
     intensity: string;
     weeklySchedule: string;
-  };
-  communicationStyle: {
-    howToMotivate: string;
-    preferredFrequency: string;
-    supportNeeds: string;
+    howToWorkWithThem: string; // Detailed approach for working with this client
   };
   thingsToWatch: {
     healthConcerns: string[];
     potentialBarriers: string[];
     redFlags: string[];
+    watchOutFor: string; // Detailed analysis of what to watch for
   };
-  summary: string; // Overall summary paragraph
+  swotAnalysis: {
+    strengths: string[];
+    weaknesses: string[];
+    opportunities: string[];
+    threats: string[];
+  };
 }
 
 export async function generateOnboardingSummary(
@@ -456,48 +480,77 @@ export async function generateOnboardingSummary(
 
   const systemPrompt = buildOnboardingSummarySystemPrompt(coachContext);
 
-  const prompt = `Analyze this new client's onboarding questionnaire and provide a comprehensive coaching strategy.
+  const prompt = `Analyze the onboarding questionnaire for this client and provide a comprehensive analysis of their health and wellbeing at this point in time.
 
 Client: ${clientName}
 
 Onboarding Responses:
 ${JSON.stringify(onboardingResponses, null, 2)}
 
-Provide recommendations for:
-1. TRAINING APPROACH
-   - Recommended training style and intensity
-   - Exercise preferences and limitations
+Please provide:
+
+1. COMPREHENSIVE HEALTH & WELLBEING ANALYSIS
+   - Overall assessment of their current health status
+   - Their physical condition and capabilities
+   - Mental/emotional wellbeing indicators
+   - Lifestyle factors affecting their health
+   - Provide a detailed 2-3 paragraph comprehensive summary
+
+2. GOALS ANALYSIS
+   - Identify their primary goals
+   - Identify secondary goals
+   - Analyze the feasibility and alignment of their goals
+   - Assess motivation levels and commitment
+
+3. HOW TO WORK WITH THEM OVER THE PROGRAM
+   - Recommended training style and approach
+   - Appropriate intensity levels
    - Weekly schedule recommendations
-
-2. COMMUNICATION STYLE
-   - How to best motivate this client
-   - Preferred communication frequency
+   - Communication preferences
+   - Motivation strategies
    - Support needs
+   - Provide detailed recommendations on how to work with this client throughout the program
 
-3. THINGS TO WATCH
+4. WHAT TO WATCH OUT FOR
    - Health concerns or limitations
    - Potential barriers to success
    - Red flags or special considerations
+   - Risk factors
+   - Provide detailed analysis of what to monitor and watch for
 
-Also provide an overall 2-3 paragraph summary of the client and your recommendations.`;
+5. SWOT ANALYSIS
+   - STRENGTHS: Internal positive factors, what they're doing well, positive patterns or behaviors, resources/capabilities
+   - WEAKNESSES: Internal areas for improvement, challenges they're facing, barriers or limitations, habits that need work
+   - OPPORTUNITIES: External positive factors, favorable conditions or trends, potential improvements, support/resources to leverage
+   - THREATS: External risks that could derail progress, external factors that might negatively impact them, warning signs to monitor
+
+Focus on providing actionable insights that will help the coach understand the client's starting point, work effectively with them, and anticipate potential challenges.`;
 
   const structure = `{
-  "trainingApproach": {
-    "recommendedStyle": "string",
-    "intensity": "string",
-    "weeklySchedule": "string"
+  "summary": "string - 2-3 paragraph comprehensive analysis of client's health and wellbeing at this point",
+  "goals": {
+    "primaryGoals": ["string - list of primary goals identified"],
+    "secondaryGoals": ["string - list of secondary goals identified"],
+    "goalAnalysis": "string - analysis of their goals, feasibility, and alignment"
   },
-  "communicationStyle": {
-    "howToMotivate": "string",
-    "preferredFrequency": "string",
-    "supportNeeds": "string"
+  "workingApproach": {
+    "recommendedStyle": "string - recommended training style",
+    "intensity": "string - appropriate intensity level",
+    "weeklySchedule": "string - weekly schedule recommendations",
+    "howToWorkWithThem": "string - detailed approach for working with this client throughout the program"
   },
   "thingsToWatch": {
-    "healthConcerns": ["string"],
-    "potentialBarriers": ["string"],
-    "redFlags": ["string"]
+    "healthConcerns": ["string - list of health concerns"],
+    "potentialBarriers": ["string - list of potential barriers"],
+    "redFlags": ["string - list of red flags or special considerations"],
+    "watchOutFor": "string - detailed analysis of what to monitor and watch for"
   },
-  "summary": "string - 2-3 paragraph overall summary"
+  "swotAnalysis": {
+    "strengths": ["string - 3-5 internal positive factors"],
+    "weaknesses": ["string - 3-5 internal areas for improvement"],
+    "opportunities": ["string - 3-5 external positive factors"],
+    "threats": ["string - 3-5 external risks"]
+  }
 }`;
 
   return generateStructuredResponse<OnboardingSummaryResponse>(
@@ -506,6 +559,7 @@ Also provide an overall 2-3 paragraph summary of the client and your recommendat
     {
       model: 'gpt-4o-mini', // Use GPT-4o-mini for comprehensive analysis (more affordable and widely available)
       temperature: 0.7,
+      max_tokens: 4000, // Increased for comprehensive onboarding summary
       systemPrompt
     }
   );

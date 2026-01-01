@@ -6,8 +6,6 @@ import { RoleProtected } from '@/components/ProtectedRoute';
 import ClientNavigation from '@/components/ClientNavigation';
 import Link from 'next/link';
 import NotificationBell from '@/components/NotificationBell';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase-client';
 import {
   getTrafficLightStatus,
   getTrafficLightIcon,
@@ -213,8 +211,13 @@ export default function ClientPortalPage() {
     hasBeforePhotos: false,
   });
   const [loadingTodos, setLoadingTodos] = useState(true);
-  const [onboardingStatus, setOnboardingStatus] = useState<'not_started' | 'in_progress' | 'completed' | 'skipped'>('not_started');
+  const [onboardingStatus, setOnboardingStatus] = useState<'not_started' | 'in_progress' | 'completed' | 'submitted' | 'skipped'>('not_started');
   const [onboardingProgress, setOnboardingProgress] = useState(0);
+  const [nextMeasurementTask, setNextMeasurementTask] = useState<{
+    dueDate: string;
+    status: 'upcoming' | 'due' | 'overdue';
+    daysUntil: number;
+  } | null>(null);
 
   useEffect(() => {
     if (userProfile?.email) {
@@ -226,78 +229,24 @@ export default function ClientPortalPage() {
     // If userProfile is undefined, it's still loading, so we wait
   }, [userProfile?.email]);
 
-  // Fetch scoring configuration when clientId is available
+  // Update scoring config when it's loaded from API (Phase 1: Removed client-side Firestore)
   useEffect(() => {
-    const fetchScoringConfig = async () => {
-      if (!clientId) return;
-      
-      try {
-        const scoringDoc = await getDoc(doc(db, 'clientScoring', clientId));
-        if (scoringDoc.exists()) {
-          const scoringData = scoringDoc.data();
-          let clientThresholds: ScoringThresholds;
+    // Scoring config is now included in the API response
+    // This effect is handled in fetchClientData
+  }, []);
 
-          // Check if new format (redMax/orangeMax) exists
-          if (scoringData.thresholds?.redMax !== undefined && scoringData.thresholds?.orangeMax !== undefined) {
-            clientThresholds = {
-              redMax: scoringData.thresholds.redMax,
-              orangeMax: scoringData.thresholds.orangeMax
-            };
-          } else if (scoringData.thresholds?.red !== undefined && scoringData.thresholds?.yellow !== undefined) {
-            // Convert legacy format
-            clientThresholds = convertLegacyThresholds(scoringData.thresholds);
-          } else if (scoringData.scoringProfile) {
-            // Use profile defaults
-            clientThresholds = getDefaultThresholds(scoringData.scoringProfile as any);
-          } else {
-            // Default to lifestyle
-            clientThresholds = getDefaultThresholds('lifestyle');
-          }
-
-          setThresholds(clientThresholds);
-          
-          // Update average traffic light status
-          if (stats.averageScore > 0) {
-            setAverageTrafficLight(getTrafficLightStatus(stats.averageScore, clientThresholds));
-          }
-        } else {
-          // No scoring config, use default lifestyle thresholds
-          const defaultThresholds = getDefaultThresholds('lifestyle');
-          setThresholds(defaultThresholds);
-          if (stats.averageScore > 0) {
-            setAverageTrafficLight(getTrafficLightStatus(stats.averageScore, defaultThresholds));
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching scoring config:', error);
-        // Use default lifestyle thresholds on error
-        const defaultThresholds = getDefaultThresholds('lifestyle');
-        setThresholds(defaultThresholds);
-        if (stats.averageScore > 0) {
-          setAverageTrafficLight(getTrafficLightStatus(stats.averageScore, defaultThresholds));
-        }
+  // Refresh onboarding todos when page becomes visible (Phase 1: Consolidated API calls)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden && userProfile?.email) {
+        // Refetch dashboard data when page becomes visible
+        fetchClientData();
       }
     };
-
-    fetchScoringConfig();
-  }, [clientId, stats.averageScore]);
-
-  // Refresh onboarding todos when clientId changes or when page becomes visible
-  useEffect(() => {
-    if (clientId) {
-      fetchOnboardingTodos(clientId);
-      
-      // Refresh todos when page becomes visible (user returns from completing a task)
-      const handleVisibilityChange = () => {
-        if (!document.hidden && clientId) {
-          fetchOnboardingTodos(clientId);
-        }
-      };
-      
-      document.addEventListener('visibilitychange', handleVisibilityChange);
-      return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-    }
-  }, [clientId]);
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [userProfile?.email]);
 
   const fetchClientData = async () => {
     try {
@@ -317,19 +266,15 @@ export default function ClientPortalPage() {
       if (response.ok) {
         const data = await response.json();
         
-        if (data.success) {
-          const { client, coach, checkInAssignments, summary } = data.data;
+          if (data.success) {
+          const { client, coach, checkInAssignments, summary, nextMeasurementTask } = data.data;
           
-          // Store client ID for fetching scoring config
+          // Store client ID (Phase 1: All data now comes from API)
           if (client?.id) {
             setClientId(client.id);
-            // Fetch onboarding to-do status
-            fetchOnboardingTodos(client.id);
-            // Fetch onboarding questionnaire status
-            fetchOnboardingQuestionnaireStatus(client.id);
           }
           
-          // Calculate average score from recent responses if available
+          // Calculate average score from recent responses if available (must be done before using calculatedStats)
           let averageScore = 0;
           if (summary.recentResponses && summary.recentResponses.length > 0) {
             const scores = summary.recentResponses.map((r: any) => r.score || 0).filter((s: number) => s > 0);
@@ -338,13 +283,53 @@ export default function ClientPortalPage() {
             }
           }
           
-          // Calculate stats from the summary data
+          // Calculate stats from the summary data (must be done before using it)
           const calculatedStats = {
             overallProgress: summary.completedAssignments > 0 ? Math.round((summary.completedAssignments / summary.totalAssignments) * 100) : 0,
             completedCheckins: summary.completedAssignments || 0,
             totalCheckins: summary.totalAssignments || 0,
             averageScore: averageScore
           };
+          
+          // Set scoring config from API response (Phase 1: Removed client-side Firestore)
+          if (data.data.scoringConfig) {
+            setThresholds(data.data.scoringConfig.thresholds);
+            // Update average traffic light status
+            if (calculatedStats.averageScore > 0) {
+              setAverageTrafficLight(getTrafficLightStatus(calculatedStats.averageScore, data.data.scoringConfig.thresholds));
+            }
+          } else {
+            // Fallback to default thresholds if scoring config is missing
+            const defaultThresholds = getDefaultThresholds('lifestyle');
+            setThresholds(defaultThresholds);
+            if (calculatedStats.averageScore > 0) {
+              setAverageTrafficLight(getTrafficLightStatus(calculatedStats.averageScore, defaultThresholds));
+            }
+          }
+          
+          // Set onboarding data from API response (Phase 1: Consolidated API calls)
+          if (data.data.onboarding) {
+            setOnboardingStatus(data.data.onboarding.status as any);
+            setOnboardingProgress(data.data.onboarding.progress || 0);
+            setOnboardingTodos(data.data.onboarding.todos || {
+              hasWeight: false,
+              hasMeasurements: false,
+              hasBeforePhotos: false
+            });
+            setNextMeasurementTask(data.data.nextMeasurementTask || null);
+            setLoadingTodos(false);
+          } else {
+            // Fallback to defaults if onboarding data is missing
+            setOnboardingStatus('not_started');
+            setOnboardingProgress(0);
+            setOnboardingTodos({
+              hasWeight: false,
+              hasMeasurements: false,
+              hasBeforePhotos: false
+            });
+            setNextMeasurementTask(null);
+            setLoadingTodos(false);
+          }
           
           // Set recent responses if available
           console.log('Dashboard - summary.recentResponses:', summary.recentResponses);
@@ -454,72 +439,8 @@ export default function ClientPortalPage() {
     }
   };
 
-  const fetchOnboardingTodos = async (id: string) => {
-    try {
-      setLoadingTodos(true);
-      
-      // Check for weight and measurements
-      const measurementsResponse = await fetch(`/api/client-measurements?clientId=${id}`);
-      const measurementsData = await measurementsResponse.json();
-      
-      // Check for before photos
-      const imagesResponse = await fetch(`/api/progress-images?clientId=${id}&limit=50`);
-      const imagesData = await imagesResponse.json();
-      
-      const measurements = measurementsData.success ? (measurementsData.data || measurementsData.measurements || []) : [];
-      const images = imagesData.success ? (imagesData.images || imagesData.data || []) : [];
-      
-      const hasWeight = measurements.some((m: any) => m.bodyWeight && m.bodyWeight > 0);
-      const hasMeasurements = measurements.some((m: any) => {
-        const measurementValues = m.measurements || {};
-        return Object.keys(measurementValues).length > 0 && Object.values(measurementValues).some((v: any) => v && v > 0);
-      });
-      const hasBeforePhotos = images.some((img: any) => img.imageType === 'before');
-      
-      setOnboardingTodos({
-        hasWeight: !!hasWeight,
-        hasMeasurements: !!hasMeasurements,
-        hasBeforePhotos: !!hasBeforePhotos,
-      });
-    } catch (error) {
-      console.error('Error fetching onboarding todos:', error);
-    } finally {
-      setLoadingTodos(false);
-    }
-  };
-
-  const fetchOnboardingQuestionnaireStatus = async (id: string) => {
-    try {
-      console.log('[Dashboard] Fetching onboarding status for client:', id);
-      const response = await fetch(`/api/client-portal/onboarding?clientId=${id}`);
-      const data = await response.json();
-      
-      console.log('[Dashboard] Onboarding status response:', data);
-      
-      if (data.success) {
-        // Default to 'not_started' if no status is returned (for new clients)
-        const status = data.onboardingStatus || 'not_started';
-        console.log('[Dashboard] Setting onboarding status to:', status);
-        setOnboardingStatus(status);
-        if (data.onboardingData?.progress) {
-          setOnboardingProgress(data.onboardingData.progress.completionPercentage || 0);
-        } else if (status === 'not_started') {
-          // Ensure progress is 0 for new clients
-          setOnboardingProgress(0);
-        }
-      } else {
-        // If API call fails, default to 'not_started' to show the banner
-        console.warn('[Dashboard] Onboarding status API returned error, defaulting to not_started:', data.message);
-        setOnboardingStatus('not_started');
-        setOnboardingProgress(0);
-      }
-    } catch (error) {
-      console.error('[Dashboard] Error fetching onboarding questionnaire status:', error);
-      // On error, default to 'not_started' to ensure new clients see the banner
-      setOnboardingStatus('not_started');
-      setOnboardingProgress(0);
-    }
-  };
+  // Phase 1: Removed fetchOnboardingTodos and fetchOnboardingQuestionnaireStatus
+  // These are now handled in the consolidated API call
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -794,13 +715,7 @@ export default function ClientPortalPage() {
                 </div>
                 <div className="flex items-center space-x-4">
                   <NotificationBell />
-                  {coach && (
-                    <div className="text-right bg-white px-4 py-2 rounded-2xl border border-gray-100 shadow-sm">
-                    <p className="text-xs text-gray-700 font-medium">Your Coach</p>
-                    <p className="text-sm font-semibold text-gray-900">{coach.firstName} {coach.lastName}</p>
-                  </div>
-                )}
-              </div>
+                </div>
             </div>
 
             {/* Mobile Welcome - Shown only on mobile */}
@@ -809,8 +724,8 @@ export default function ClientPortalPage() {
               <p className="text-gray-600 text-xs mt-1">Track your progress and stay connected</p>
             </div>
 
-            {/* Onboarding Questionnaire Banner - Show if not completed (default to showing for new clients) */}
-            {onboardingStatus !== 'completed' && onboardingStatus !== 'skipped' && (
+            {/* Onboarding Questionnaire Banner - Show if not completed or submitted (default to showing for new clients) */}
+            {onboardingStatus !== 'completed' && onboardingStatus !== 'submitted' && onboardingStatus !== 'skipped' && (
               <div className="bg-gradient-to-r from-[#daa450] to-[#c89540] rounded-2xl lg:rounded-3xl shadow-lg mb-6 overflow-hidden border border-[#daa450]/20" style={{ display: 'block' }}>
                 <div className="px-4 py-4 sm:px-6 sm:py-6">
                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -914,7 +829,7 @@ export default function ClientPortalPage() {
                   {/* Before Photos Task */}
                   {!onboardingTodos.hasBeforePhotos && (
                     <Link
-                      href="/client-portal/progress-images"
+                      href="/client-portal/measurements"
                       className="flex items-center justify-between p-3 sm:p-4 bg-white rounded-xl sm:rounded-2xl border border-gray-200 hover:border-[#daa450] hover:shadow-md transition-all group"
                     >
                       <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
@@ -951,6 +866,70 @@ export default function ClientPortalPage() {
                 </div>
               </div>
             )}
+
+          {/* Measurement Task - Show if schedule exists and task is upcoming/due/overdue */}
+          {nextMeasurementTask && (nextMeasurementTask.status === 'upcoming' || nextMeasurementTask.status === 'due' || nextMeasurementTask.status === 'overdue') && (
+            <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 mb-6 overflow-hidden">
+              <div className="px-4 py-3 sm:px-6 sm:py-4 border-b-2" style={{ backgroundColor: '#fef9e7', borderColor: '#daa450' }}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 sm:gap-3">
+                    <div className="w-8 h-8 sm:w-10 sm:h-10 bg-white bg-opacity-20 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <svg className="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h2 className="text-base sm:text-lg font-bold text-gray-900">Measurement Reminder</h2>
+                      <p className="text-gray-600 text-[10px] sm:text-xs">Time to update your measurements and progress photos</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="p-4 sm:p-6">
+                <Link
+                  href="/client-portal/measurements"
+                  className="flex items-center justify-between p-3 sm:p-4 bg-white rounded-xl sm:rounded-2xl border-2 transition-all group"
+                  style={{ 
+                    borderColor: nextMeasurementTask.status === 'overdue' ? '#ef4444' : 
+                                 nextMeasurementTask.status === 'due' ? '#daa450' : '#daa450'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#fef9e7'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ffffff'}
+                >
+                  <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+                    <div 
+                      className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 flex items-center justify-center flex-shrink-0"
+                      style={{ borderColor: nextMeasurementTask.status === 'overdue' ? '#ef4444' : '#daa450' }}
+                    >
+                      <svg className="w-4 h-4 sm:w-5 sm:h-5" style={{ color: nextMeasurementTask.status === 'overdue' ? '#ef4444' : '#daa450' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                      </svg>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold text-sm sm:text-base text-gray-900 truncate">
+                        Update Measurements & Photos
+                      </h3>
+                      <p className="text-xs sm:text-sm text-gray-600 line-clamp-1">
+                        {nextMeasurementTask.status === 'overdue' && (
+                          <span className="text-red-600 font-medium">Overdue by {nextMeasurementTask.daysUntil} {nextMeasurementTask.daysUntil === 1 ? 'day' : 'days'}</span>
+                        )}
+                        {nextMeasurementTask.status === 'due' && (
+                          <span className="font-medium" style={{ color: '#daa450' }}>Due today - {new Date(nextMeasurementTask.dueDate).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</span>
+                        )}
+                        {nextMeasurementTask.status === 'upcoming' && (
+                          <>Due {nextMeasurementTask.daysUntil === 1 ? 'tomorrow' : `in ${nextMeasurementTask.daysUntil} days`} - {new Date(nextMeasurementTask.dueDate).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  <svg className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </Link>
+              </div>
+            </div>
+          )}
 
             {/* Check-ins Requiring Attention - Priority action items */}
             <div className="mb-6">
@@ -1490,41 +1469,6 @@ export default function ClientPortalPage() {
               {/* Desktop Sidebar - Hidden on mobile (mobile sidebar appears earlier) */}
               <div className="hidden lg:block lg:col-span-1">
                 <div className="space-y-6">
-                  {/* Coach Information */}
-                  <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
-                    <div className="px-4 py-3 sm:px-6 sm:py-4 border-b-2" style={{ backgroundColor: '#fef9e7', borderColor: '#daa450' }}>
-                      <h3 className="text-base sm:text-lg font-bold text-gray-900">Your Coach</h3>
-                    </div>
-                    <div className="p-4 sm:p-6">
-                      {coach ? (
-                        <div className="text-center">
-                          <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 shadow-sm" style={{ backgroundColor: '#daa450' }}>
-                            <span className="text-white font-bold text-base">
-                              {coach.firstName?.charAt(0) || 'C'}
-                            </span>
-                          </div>
-                          <h4 className="text-sm font-semibold text-gray-900 mb-1">
-                            {coach.firstName} {coach.lastName}
-                          </h4>
-                          <p className="text-gray-900 text-xs">{coach.email}</p>
-                          {coach.specialization && (
-                            <p className="text-gray-900 text-xs mt-1">{coach.specialization}</p>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="text-center py-3">
-                          <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                            <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                            </svg>
-                          </div>
-                          <p className="text-gray-900 text-xs mb-2">No coach assigned</p>
-                          <p className="text-gray-900 text-xs">Contact support to get assigned to a coach</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
                   {/* Quick Actions */}
                   <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
                     <div className="px-4 py-3 sm:px-6 sm:py-4 border-b-2" style={{ backgroundColor: '#fef9e7', borderColor: '#daa450' }}>
@@ -1653,7 +1597,7 @@ export default function ClientPortalPage() {
                 </div>
                 <div className="p-4 sm:p-6 space-y-3">
                   {/* Onboarding Questionnaire Task */}
-                  {onboardingStatus !== 'completed' && onboardingStatus !== 'skipped' && (
+                  {onboardingStatus !== 'completed' && onboardingStatus !== 'submitted' && onboardingStatus !== 'skipped' && (
                     <Link
                       href="/client-portal/onboarding-questionnaire"
                       className="block rounded-xl border-2 transition-all duration-200 bg-gradient-to-r from-[#daa450]/10 to-[#c89540]/10 border-[#daa450] hover:shadow-md"
@@ -1718,7 +1662,7 @@ export default function ClientPortalPage() {
                       )}
                       {!onboardingTodos.hasBeforePhotos && (
                         <Link
-                          href="/client-portal/progress-images"
+                          href="/client-portal/measurements"
                           className="flex items-center gap-2 p-3 bg-gray-50 rounded-xl border border-gray-200 hover:border-[#daa450] hover:shadow-sm transition-all"
                         >
                           <div className="w-7 h-7 rounded-full border-2 flex items-center justify-center flex-shrink-0" style={{ borderColor: '#daa450' }}>
