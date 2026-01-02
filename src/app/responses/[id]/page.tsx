@@ -64,6 +64,7 @@ export default function ResponseDetailPage() {
   const [questionHistory, setQuestionHistory] = useState<{ [questionId: string]: any[] }>({});
   const [loadingHistory, setLoadingHistory] = useState<{ [questionId: string]: boolean }>({});
   const [showHistoryFor, setShowHistoryFor] = useState<string | null>(null);
+  const [expandedQuestions, setExpandedQuestions] = useState<Set<string>>(new Set()); // Track expanded questions
 
   useEffect(() => {
     // Wait for auth to finish loading before fetching data
@@ -873,38 +874,117 @@ export default function ResponseDetailPage() {
                     const voiceFeedback = questionFeedback.find(f => f.feedbackType === 'voice');
                     const textFeedbackForQuestion = textFeedback[question.id] || '';
                     
+                    const isExpanded = expandedQuestions.has(question.id);
+                    const hasFeedback = questionFeedback.length > 0;
+                    const borderColor = questionScore !== null 
+                      ? (questionScore >= 7 ? 'border-green-300' : questionScore >= 5 ? 'border-yellow-300' : 'border-red-300')
+                      : 'border-gray-200';
+                    const borderLeftWidth = questionScore !== null && questionScore < 5 ? 'border-l-4' : 'border-l-4';
+                    
                     return (
                       <div 
                         id={`question-${question.id}`}
                         key={question.id} 
-                        className="border border-gray-200 rounded-xl p-6 bg-white shadow-sm hover:shadow-md transition-shadow scroll-mt-4"
+                        className={`border ${borderColor} ${borderLeftWidth} rounded-xl bg-white shadow-sm hover:shadow-md transition-all scroll-mt-4 ${isExpanded ? 'p-6' : 'p-4'}`}
                       >
-                        <div className="flex items-start space-x-4">
+                        {/* Collapsed Header - Always Visible */}
+                        <div 
+                          className="flex items-center space-x-4 cursor-pointer"
+                          onClick={() => {
+                            setExpandedQuestions(prev => {
+                              const newSet = new Set(prev);
+                              if (newSet.has(question.id)) {
+                                newSet.delete(question.id);
+                              } else {
+                                newSet.add(question.id);
+                              }
+                              return newSet;
+                            });
+                          }}
+                        >
                           <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
                             <span className="text-sm font-bold text-blue-600">{index + 1}</span>
                           </div>
                           <div className="flex-1">
-                            <div className="flex items-start justify-between mb-3">
-                              <div className="flex-1">
-                                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                            <div className="flex items-center justify-between">
+                              <div className="flex-1 min-w-0">
+                                <h3 className={`font-semibold text-gray-900 ${isExpanded ? 'text-lg' : 'text-base'} truncate`}>
                                   {question.text}
                                 </h3>
-                                {question.description && (
-                                  <p className="text-sm text-gray-600 italic">
-                                    {question.description}
-                                  </p>
+                                {!isExpanded && (
+                                  <div className="mt-1 flex items-center space-x-3">
+                                    <span className="text-sm text-gray-600 truncate">
+                                      {(() => {
+                                        if (answer === null || answer === undefined) return '—';
+                                        if (typeof answer === 'boolean') return answer ? 'Yes' : 'No';
+                                        if (typeof answer === 'number') return answer.toString();
+                                        if (typeof answer === 'string') {
+                                          if (answer.length > 50) return answer.substring(0, 50) + '...';
+                                          return answer;
+                                        }
+                                        return String(answer);
+                                      })()}
+                                    </span>
+                                    {questionScore !== null && (
+                                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${
+                                        questionScore >= 7 
+                                          ? 'bg-green-100 text-green-700' 
+                                          : questionScore >= 5 
+                                          ? 'bg-yellow-100 text-yellow-700' 
+                                          : 'bg-red-100 text-red-700'
+                                      }`}>
+                                        {questionScore}/10
+                                      </span>
+                                    )}
+                                    {hasFeedback && (
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                                        ✓ Reviewed
+                                      </span>
+                                    )}
+                                  </div>
                                 )}
                               </div>
-                              <button
-                                onClick={() => toggleQuestionHistory(question.id)}
-                                className="ml-4 p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex-shrink-0"
-                                title="View answer history"
-                              >
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              <div className="flex items-center space-x-2 flex-shrink-0 ml-4">
+                                {hasFeedback && (
+                                  <span className="text-green-600 text-sm font-medium">✓</span>
+                                )}
+                                <svg 
+                                  className={`w-5 h-5 text-gray-400 transition-transform ${isExpanded ? 'transform rotate-180' : ''}`}
+                                  fill="none" 
+                                  stroke="currentColor" 
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                                 </svg>
-                              </button>
+                              </div>
                             </div>
+                          </div>
+                        </div>
+
+                        {/* Expanded Content - Conditionally Rendered */}
+                        {isExpanded && (
+                          <div className="mt-4 pt-4 border-t border-gray-200">
+                                <div className="flex items-start justify-between mb-3">
+                                  <div className="flex-1">
+                                    {question.description && (
+                                      <p className="text-sm text-gray-600 italic mb-2">
+                                        {question.description}
+                                      </p>
+                                    )}
+                                  </div>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggleQuestionHistory(question.id);
+                                    }}
+                                    className="ml-4 p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex-shrink-0"
+                                    title="View answer history"
+                                  >
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                  </button>
+                                </div>
                             
                             {/* Question History */}
                             {showHistoryFor === question.id && (
@@ -1075,7 +1155,7 @@ export default function ResponseDetailPage() {
                               </div>
                             </div>
                           </div>
-                        </div>
+                        )}
                       </div>
                     );
                   })}
