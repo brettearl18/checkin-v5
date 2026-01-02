@@ -1079,25 +1079,26 @@ export default function ClientPortalPage() {
                       <div className="text-gray-600 text-sm font-medium">Needs Action</div>
                       <div className="text-2xl font-bold text-gray-900">
                         {assignedCheckins.filter(checkIn => {
-                          if (checkIn.status !== 'pending') return false;
+                          // Exclude completed check-ins
+                          if (checkIn.status === 'completed') return false;
 
                           const dueDate = new Date(checkIn.dueDate);
                           const now = new Date();
                           
-                          // Normalize dates for comparison (set to start of day)
+                          // Normalize dates for comparison (set to start of day) - matches check-ins page logic exactly
                           const normalizedDueDate = new Date(dueDate);
                           normalizedDueDate.setHours(0, 0, 0, 0);
                           const normalizedNow = new Date(now);
                           normalizedNow.setHours(0, 0, 0, 0);
                           
-                          // Include overdue check-ins (past due date - always need attention)
+                          // Include if overdue (past due date - always need attention)
                           if (normalizedDueDate < normalizedNow) return true;
                           
-                          // For check-ins due today or in the past, check if window is open
+                          // Include if due date has arrived AND window is open (available now) - matches getToDoCheckins logic
                           if (normalizedDueDate <= normalizedNow) {
                             const checkInWindow = checkIn.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
                             const windowStatus = isWithinCheckInWindow(checkInWindow);
-                            return windowStatus.isOpen;
+                            if (windowStatus.isOpen) return true;
                           }
                           
                           // Don't include future check-ins - they belong in "Scheduled", not "Requiring Attention"
@@ -1110,25 +1111,26 @@ export default function ClientPortalPage() {
               <div className="p-4 lg:p-8">
                 {(() => {
                   const upcomingCheckins = assignedCheckins.filter(checkIn => {
-                    if (checkIn.status !== 'pending') return false;
+                    // Exclude completed check-ins
+                    if (checkIn.status === 'completed') return false;
 
                     const dueDate = new Date(checkIn.dueDate);
                     const now = new Date();
                     
-                    // Normalize dates for comparison (set to start of day)
+                    // Normalize dates for comparison (set to start of day) - matches getToDoCheckins logic exactly
                     const normalizedDueDate = new Date(dueDate);
                     normalizedDueDate.setHours(0, 0, 0, 0);
                     const normalizedNow = new Date(now);
                     normalizedNow.setHours(0, 0, 0, 0);
                     
-                    // Include overdue check-ins (past due date - always need attention)
+                    // Include if overdue (past due date - always need attention)
                     if (normalizedDueDate < normalizedNow) return true;
                     
-                    // For check-ins due today or in the past, check if window is open
+                    // Include if due date has arrived AND window is open (available now)
                     if (normalizedDueDate <= normalizedNow) {
                       const checkInWindow = checkIn.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
                       const windowStatus = isWithinCheckInWindow(checkInWindow);
-                      return windowStatus.isOpen;
+                      if (windowStatus.isOpen) return true;
                     }
                     
                     // Don't include future check-ins - they belong in "Scheduled", not "Requiring Attention"
