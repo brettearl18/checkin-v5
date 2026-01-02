@@ -440,8 +440,27 @@ export default function CheckInsPage() {
               <div className="px-4 py-3 sm:px-6 sm:py-4 lg:px-10 lg:py-8 border-b-2 rounded-t-2xl lg:rounded-t-3xl" style={{ backgroundColor: '#fef9e7', borderColor: '#daa450' }}>
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
                   <h2 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900">Check-ins</h2>
-                  {/* Tab Navigation */}
-                  <div className="flex bg-white rounded-2xl p-1 shadow-sm overflow-x-auto">
+                  {/* Sort and Tab Navigation */}
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
+                    {/* Sort Dropdown - Only show on "To Review" tab */}
+                    {activeTab === 'review' && (
+                      <div className="flex items-center gap-2">
+                        <label className="text-xs sm:text-sm font-medium text-gray-700 whitespace-nowrap">
+                          Sort:
+                        </label>
+                        <select
+                          value={sortOrder}
+                          onChange={(e) => setSortOrder(e.target.value as 'asc' | 'desc')}
+                          className="border border-gray-200 rounded-xl px-3 py-2 text-xs sm:text-sm focus:outline-none focus:ring-2 transition-all duration-200 text-gray-900 bg-white min-h-[36px] sm:min-h-[40px]"
+                          style={{ focusRingColor: '#daa450' }}
+                        >
+                          <option value="asc">Oldest First</option>
+                          <option value="desc">Newest First</option>
+                        </select>
+                      </div>
+                    )}
+                    {/* Tab Navigation */}
+                    <div className="flex bg-white rounded-2xl p-1 shadow-sm overflow-x-auto">
                     <button
                       onClick={() => setActiveTab('review')}
                       className={`px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all duration-200 whitespace-nowrap min-h-[44px] flex items-center justify-center ${
