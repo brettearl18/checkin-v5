@@ -42,6 +42,8 @@ interface Question {
   weight?: number; // Alternative field name for weight
   yesIsPositive?: boolean; // For boolean questions: true if YES is positive
   description?: string; // Optional description/help text for the question
+  required?: boolean; // Whether the question is required
+  isRequired?: boolean; // Alternative field name for required
 }
 
 interface FormResponse {
@@ -338,12 +340,19 @@ export default function CheckInCompletionPage() {
 
     setSubmitting(true);
     try {
-      // Validate that all questions are answered
+      // Validate that all REQUIRED questions are answered
       const unansweredIndices: number[] = [];
       questions.forEach((question, index) => {
+        // Only validate required questions (skip optional ones)
+        const isRequired = question.required !== false && question.isRequired !== false;
+        if (!isRequired) {
+          return; // Skip optional questions
+        }
+        
         const response = responses.find(r => r.questionId === question.id);
         // Check if answer is missing, empty string, null, or undefined
         // But allow false (for boolean "No" answers)
+        // Also allow empty strings for textarea questions that are optional
         const hasAnswer = response && 
           response.answer !== undefined && 
           response.answer !== null && 

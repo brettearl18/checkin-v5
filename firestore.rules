@@ -210,9 +210,22 @@ service cloud.firestore {
         hasAdminRole()
       );
       
+      // Clients can update their own assignments (to mark as completed)
       // Coaches can create/update assignments for their clients
       // Admins can manage all assignments
-      allow write: if isAuthenticated() && (
+      allow create: if isAuthenticated() && (
+        (isCoach() && (request.resource.data.coachId == getUserId())) ||
+        hasAdminRole()
+      );
+      
+      allow update: if isAuthenticated() && (
+        // Clients can update their own assignments (to mark as completed)
+        (isClient() && (
+          resource.data.clientId == getUserId() ||
+          (exists(/databases/$(database)/documents/clients/$(resource.data.clientId)) &&
+           get(/databases/$(database)/documents/clients/$(resource.data.clientId)).data.authUid == getUserId())
+        )) ||
+        // Coaches can update assignments for their clients
         (isCoach() && (resource.data.coachId == getUserId() || 
                        request.resource.data.coachId == getUserId())) ||
         hasAdminRole()
