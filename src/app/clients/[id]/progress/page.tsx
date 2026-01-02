@@ -127,12 +127,41 @@ export default function ClientProgressPage() {
     const totalWeeks = sortedResponses.length;
     const lastWeekIndex = totalWeeks - 1;
 
+    // Helper function to check if text change is significant (not just minor wording adjustment)
+    const isSignificantTextChange = (text1: string, text2: string): boolean => {
+      const normalize = (text: string) => text.toLowerCase().trim().replace(/\s+/g, ' ');
+      const norm1 = normalize(text1);
+      const norm2 = normalize(text2);
+      
+      // If texts are identical after normalization, it's not a change
+      if (norm1 === norm2) return false;
+      
+      // Calculate similarity (simple Levenshtein-like approach)
+      // If more than 30% of characters differ, consider it significant
+      const maxLen = Math.max(norm1.length, norm2.length);
+      if (maxLen === 0) return false;
+      
+      // Count differences (simple approach)
+      let differences = 0;
+      const minLen = Math.min(norm1.length, norm2.length);
+      for (let i = 0; i < minLen; i++) {
+        if (norm1[i] !== norm2[i]) differences++;
+      }
+      differences += Math.abs(norm1.length - norm2.length);
+      
+      const changePercentage = differences / maxLen;
+      
+      // Only flag if change is > 20% (significant change)
+      // This allows minor wording tweaks, punctuation, capitalization changes
+      return changePercentage > 0.2;
+    };
+
     // Track question lifecycle metadata
     const questionMetadata = new Map<string, {
       firstSeenWeek: number;
       lastSeenWeek: number;
       isActive: boolean;
-      textChanges: Set<string>; // Track unique question texts across weeks
+      significantTextChanges: Set<string>; // Track only significant text changes
       allTexts: string[]; // Store all texts in order
     }>();
 
@@ -151,7 +180,7 @@ export default function ClientProgressPage() {
                 firstSeenWeek: weekIndex + 1,
                 lastSeenWeek: weekIndex + 1,
                 isActive: weekIndex === lastWeekIndex,
-                textChanges: new Set([questionText]),
+                significantTextChanges: new Set([questionText]),
                 allTexts: [questionText]
               });
               questionMap.set(qResp.questionId, {
@@ -164,11 +193,14 @@ export default function ClientProgressPage() {
               metadata.lastSeenWeek = Math.max(metadata.lastSeenWeek, weekIndex + 1);
               metadata.isActive = weekIndex === lastWeekIndex;
               
-              // Track text changes
-              if (questionText !== metadata.allTexts[metadata.allTexts.length - 1]) {
-                metadata.textChanges.add(questionText);
-                metadata.allTexts.push(questionText);
+              // Track only significant text changes (ignore minor wording adjustments)
+              const lastText = metadata.allTexts[metadata.allTexts.length - 1];
+              if (questionText !== lastText && isSignificantTextChange(lastText, questionText)) {
+                metadata.significantTextChanges.add(questionText);
               }
+              
+              // Always store the text (even if not significant change)
+              metadata.allTexts.push(questionText);
               
               // Update question text to latest version
               questionMap.set(qResp.questionId, {
@@ -227,7 +259,7 @@ export default function ClientProgressPage() {
         firstSeenWeek: metadata.firstSeenWeek,
         lastSeenWeek: metadata.lastSeenWeek,
         isActive: metadata.isActive,
-        textChanges: Array.from(metadata.textChanges)
+        textChanges: Array.from(metadata.significantTextChanges) // Only significant changes
       };
     });
 
