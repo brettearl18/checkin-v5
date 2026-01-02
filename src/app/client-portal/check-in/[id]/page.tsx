@@ -354,7 +354,6 @@ export default function CheckInCompletionPage() {
       return;
     }
 
-    setSubmitting(true);
     try {
       // Validate that all REQUIRED questions are answered
       const unansweredIndices: number[] = [];
