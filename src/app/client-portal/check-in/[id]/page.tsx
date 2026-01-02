@@ -66,6 +66,7 @@ export default function CheckInCompletionPage() {
   const [error, setError] = useState('');
   const [unansweredQuestionIndices, setUnansweredQuestionIndices] = useState<number[]>([]);
   const [windowStatus, setWindowStatus] = useState<{ isOpen: boolean; message: string; nextOpenTime?: Date } | null>(null);
+  const [lastSaved, setLastSaved] = useState<Date | null>(null); // Track when last saved for visual feedback
 
   const assignmentId = params.id as string;
 
@@ -253,6 +254,7 @@ export default function CheckInCompletionPage() {
           savedAt: new Date().toISOString()
         };
         localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(draftData));
+        setLastSaved(new Date()); // Update last saved time for visual feedback
         console.log('Autosaved responses to localStorage');
       } catch (error) {
         console.error('Error autosaving to localStorage:', error);
@@ -1054,9 +1056,19 @@ export default function CheckInCompletionPage() {
                   style={{ width: `${progress}%` }}
                 ></div>
               </div>
-              <p className="text-center mt-2 lg:mt-3 text-sm lg:text-base font-semibold text-gray-900">
-                Question {currentQuestion + 1} of {questions.length}
-              </p>
+              <div className="flex items-center justify-center gap-3 mt-2 lg:mt-3">
+                <p className="text-sm lg:text-base font-semibold text-gray-900">
+                  Question {currentQuestion + 1} of {questions.length}
+                </p>
+                {lastSaved && (
+                  <span className="text-xs text-gray-500 flex items-center gap-1.5">
+                    <svg className="w-3.5 h-3.5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    Saved
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 
