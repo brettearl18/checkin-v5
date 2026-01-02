@@ -25,6 +25,7 @@ interface Question {
   text: string;
   type: string;
   options?: string[];
+  description?: string;
 }
 
 interface CoachFeedback {
@@ -651,6 +652,11 @@ export default function ResponseDetailPage() {
                             <h3 className="text-lg font-semibold text-gray-900 mb-2">
                               {question.text}
                             </h3>
+                            {question.description && (
+                              <p className="text-sm text-gray-600 italic mb-3">
+                                {question.description}
+                              </p>
+                            )}
                             <div className="mt-4 mb-6">
                               <div className="flex items-center justify-between mb-2">
                                 <h4 className="text-sm font-medium text-gray-500">Answer:</h4>
