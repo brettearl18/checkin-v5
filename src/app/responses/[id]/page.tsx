@@ -61,6 +61,12 @@ export default function ResponseDetailPage() {
   const [coachResponded, setCoachResponded] = useState(false);
   const [workflowStatus, setWorkflowStatus] = useState<'completed' | 'reviewed' | 'responded'>('completed');
   const [feedbackCount, setFeedbackCount] = useState(0);
+  const [questionHistory, setQuestionHistory] = useState<{ [questionId: string]: any[] }>({});
+  const [loadingHistory, setLoadingHistory] = useState<{ [questionId: string]: boolean }>({});
+  const [showHistoryFor, setShowHistoryFor] = useState<string | null>(null);
+  const [questionHistory, setQuestionHistory] = useState<{ [questionId: string]: any[] }>({});
+  const [loadingHistory, setLoadingHistory] = useState<{ [questionId: string]: boolean }>({});
+  const [showHistoryFor, setShowHistoryFor] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchResponseData = async () => {
@@ -314,6 +320,57 @@ export default function ResponseDetailPage() {
     } else {
       setOverallTextFeedback(text);
     }
+  };
+
+  const fetchQuestionHistory = async (questionId: string) => {
+    if (!response?.clientId || questionHistory[questionId]) {
+      // Already loaded or no client ID
+      return;
+    }
+
+    setLoadingHistory(prev => ({ ...prev, [questionId]: true }));
+    try {
+      const historyResponse = await fetch(
+        `/api/questions/${questionId}/history?clientId=${response.clientId}`
+      );
+      
+      if (historyResponse.ok) {
+        const data = await historyResponse.json();
+        if (data.success) {
+          setQuestionHistory(prev => ({
+            ...prev,
+            [questionId]: data.history || []
+          }));
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching question history:', error);
+    } finally {
+      setLoadingHistory(prev => ({ ...prev, [questionId]: false }));
+    }
+  };
+
+  const toggleQuestionHistory = (questionId: string) => {
+    if (showHistoryFor === questionId) {
+      setShowHistoryFor(null);
+    } else {
+      setShowHistoryFor(questionId);
+      // Fetch history if not already loaded
+      if (!questionHistory[questionId]) {
+        fetchQuestionHistory(questionId);
+      }
+    }
+  };
+
+  const formatHistoryDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric', 
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit'
+    });
   };
 
   const handleTextFeedbackSave = (questionId: string | null) => {
@@ -643,23 +700,92 @@ export default function ResponseDetailPage() {
                     const textFeedbackForQuestion = textFeedback[question.id] || '';
                     
                     return (
-                      <div key={question.id} className="border border-gray-200 rounded-xl p-6">
+                      <div key={question.id} className="border border-gray-200 rounded-xl p-6 bg-white shadow-sm hover:shadow-md transition-shadow">
                         <div className="flex items-start space-x-4">
                           <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
                             <span className="text-sm font-bold text-blue-600">{index + 1}</span>
                           </div>
                           <div className="flex-1">
-                            <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                              {question.text}
-                            </h3>
-                            {question.description && (
-                              <p className="text-sm text-gray-600 italic mb-3">
-                                {question.description}
-                              </p>
+                            <div className="flex items-start justify-between mb-3">
+                              <div className="flex-1">
+                                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                                  {question.text}
+                                </h3>
+                                {question.description && (
+                                  <p className="text-sm text-gray-600 italic">
+                                    {question.description}
+                                  </p>
+                                )}
+                              </div>
+                              <button
+                                onClick={() => toggleQuestionHistory(question.id)}
+                                className="ml-4 p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex-shrink-0"
+                                title="View answer history"
+                              >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                              </button>
+                            </div>
+                            
+                            {/* Question History */}
+                            {showHistoryFor === question.id && (
+                              <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                                <div className="flex items-center justify-between mb-3">
+                                  <h4 className="text-sm font-semibold text-gray-900">Answer History (Last 4)</h4>
+                                  <button
+                                    onClick={() => setShowHistoryFor(null)}
+                                    className="text-gray-400 hover:text-gray-600"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                  </button>
+                                </div>
+                                {loadingHistory[question.id] ? (
+                                  <div className="text-center py-4">
+                                    <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                                  </div>
+                                ) : questionHistory[question.id] && questionHistory[question.id].length > 0 ? (
+                                  <div className="space-y-3">
+                                    {questionHistory[question.id].map((historyItem, historyIndex) => (
+                                      <div key={historyIndex} className="flex items-start justify-between p-3 bg-white rounded border border-blue-100">
+                                        <div className="flex-1">
+                                          <div className="text-sm font-medium text-gray-900 mb-1">
+                                            {renderAnswer(question, historyItem.answer)}
+                                          </div>
+                                          <div className="text-xs text-gray-500">
+                                            {formatHistoryDate(historyItem.submittedAt)}
+                                            {historyItem.weekNumber && ` • Week ${historyItem.weekNumber}`}
+                                          </div>
+                                        </div>
+                                        {historyItem.score !== undefined && (
+                                          <div className="ml-4">
+                                            <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                              historyItem.score >= 7 
+                                                ? 'bg-green-100 text-green-700' 
+                                                : historyItem.score >= 4 
+                                                ? 'bg-orange-100 text-orange-700' 
+                                                : 'bg-red-100 text-red-700'
+                                            }`}>
+                                              {historyItem.score}/10
+                                            </span>
+                                          </div>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <div className="text-center py-4 text-sm text-gray-500">
+                                    No previous answers found for this question
+                                  </div>
+                                )}
+                              </div>
                             )}
+                            
                             <div className="mt-4 mb-6">
                               <div className="flex items-center justify-between mb-2">
-                                <h4 className="text-sm font-medium text-gray-500">Answer:</h4>
+                                <h4 className="text-sm font-medium text-gray-500">Current Answer:</h4>
                                 {questionScore !== null && (
                                   <div className="flex items-center space-x-2">
                                     <span className="text-xs text-gray-500">Score:</span>
@@ -675,11 +801,13 @@ export default function ResponseDetailPage() {
                                   </div>
                                 )}
                               </div>
-                              {renderAnswer(question, answer)}
+                              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                                {renderAnswer(question, answer)}
+                              </div>
                             </div>
                             
                             {/* Coach Feedback Section */}
-                            <div className="border-t border-gray-200 pt-6">
+                            <div className="border-t border-gray-200 pt-6 mt-6">
                               <h4 className="text-lg font-semibold text-gray-900 mb-4">Coach Feedback</h4>
                               
                               {/* Voice Feedback */}
