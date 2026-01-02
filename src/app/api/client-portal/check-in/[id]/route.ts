@@ -11,7 +11,9 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
+    console.log('[Check-in API] Received request with assignment ID:', id);
     const requestData = await request.json();
+    console.log('[Check-in API] Request data keys:', Object.keys(requestData || {}));
 
     if (!id) {
       return NextResponse.json({
@@ -23,30 +25,38 @@ export async function POST(
     const db = getDb();
 
     // Get the assignment - try as document ID first, then query by 'id' field
+    console.log('[Check-in API] Attempting to find assignment by document ID:', id);
     let assignmentDoc = await db.collection('check_in_assignments').doc(id).get();
     let assignmentData = assignmentDoc.exists ? assignmentDoc.data() : null;
     let assignmentDocId = assignmentDoc.exists ? assignmentDoc.id : null;
+    console.log('[Check-in API] Found by document ID?', assignmentDoc.exists);
 
     // If not found by document ID, try querying by 'id' field
     if (!assignmentDoc.exists) {
+      console.log('[Check-in API] Not found by document ID, querying by id field:', id);
       const assignmentsQuery = await db.collection('check_in_assignments')
         .where('id', '==', id)
         .limit(1)
         .get();
       
+      console.log('[Check-in API] Query results count:', assignmentsQuery.size);
       if (!assignmentsQuery.empty) {
         assignmentDoc = assignmentsQuery.docs[0];
         assignmentData = assignmentDoc.data();
         assignmentDocId = assignmentDoc.id;
+        console.log('[Check-in API] Found by id field, document ID:', assignmentDocId);
       }
     }
 
     if (!assignmentData || !assignmentDocId) {
+      console.error('[Check-in API] Assignment not found with ID:', id);
       return NextResponse.json({
         success: false,
         message: 'Assignment not found'
       }, { status: 404 });
     }
+
+    console.log('[Check-in API] Assignment found, clientId:', assignmentData.clientId);
 
     const assignmentId = assignmentDocId; // Use the actual Firestore document ID
 
@@ -235,13 +245,16 @@ export async function POST(
       score: finalScore
     });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error completing check-in:', error);
+    console.error('Error stack:', error?.stack);
+    console.error('Request data:', { id, requestData: requestData ? Object.keys(requestData) : 'no data' });
     return NextResponse.json(
       { 
         success: false, 
         message: 'Failed to complete check-in',
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error instanceof Error ? error.message : 'Unknown error',
+        details: process.env.NODE_ENV === 'development' ? error?.stack : undefined
       },
       { status: 500 }
     );
