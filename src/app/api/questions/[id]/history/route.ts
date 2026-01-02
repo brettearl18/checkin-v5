@@ -45,10 +45,10 @@ export async function GET(
       .where('clientId', '==', clientId)
       .orderBy('submittedAt', 'desc')
       .limit(50) // Get more responses to ensure we find unique answers
+      .get();
 
     // First, deduplicate responses by assignmentId to prevent showing multiple submissions of the same check-in
-    const responseMap = new Map<string, any>(); // Map: assignmentId -> most recent response
-    const responsesWithoutAssignment: any[] = [];
+    const responseMap = new Map<string, { doc: any; data: any }>(); // Map: assignmentId -> most recent response
     
     responsesSnapshot.docs.forEach((doc: any) => {
       const responseData = doc.data();
