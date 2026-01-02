@@ -69,6 +69,10 @@ export default function CheckInCompletionPage() {
 
   const assignmentId = params.id as string;
 
+  // localStorage key for autosaving check-in responses
+  const AUTOSAVE_KEY = `checkin-draft-${assignmentId}`;
+
+
   useEffect(() => {
     // Wait for auth to finish loading before fetching assignment data
     if (authLoading) {
@@ -183,14 +187,52 @@ export default function CheckInCompletionPage() {
 
       setQuestions(questionsData);
 
-      // Initialize responses array
-      const initialResponses: FormResponse[] = questionsData.map(q => ({
+      // Initialize responses array - merge with saved draft if available
+      let initialResponses: FormResponse[] = questionsData.map(q => ({
         questionId: q.id,
         question: q.text,
         answer: '',
         type: q.type,
         comment: '' // Initialize comment field
       }));
+
+      // Check for saved draft in localStorage and merge if available
+      try {
+        const savedDraft = localStorage.getItem(AUTOSAVE_KEY);
+        if (savedDraft) {
+          const draftData = JSON.parse(savedDraft);
+          
+          if (draftData.responses && Array.isArray(draftData.responses) && draftData.responses.length > 0) {
+            const savedResponsesMap = new Map(draftData.responses.map((r: FormResponse) => [r.questionId, r]));
+            
+            // Merge saved answers/comments into initial responses
+            initialResponses = initialResponses.map(initialResponse => {
+              const savedResponse = savedResponsesMap.get(initialResponse.questionId);
+              if (savedResponse) {
+                return {
+                  ...initialResponse,
+                  answer: savedResponse.answer !== undefined ? savedResponse.answer : initialResponse.answer,
+                  comment: savedResponse.comment || initialResponse.comment
+                };
+              }
+              return initialResponse;
+            });
+            
+            console.log('Restored saved draft responses and merged with questions');
+            
+            // Restore current question position
+            if (typeof draftData.currentQuestion === 'number' && 
+                draftData.currentQuestion >= 0 && 
+                draftData.currentQuestion < questionsData.length) {
+              setCurrentQuestion(draftData.currentQuestion);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error loading draft from localStorage in loadFormAndQuestions:', error);
+        // Continue with empty responses if draft load fails
+      }
+      
       setResponses(initialResponses);
 
     } catch (error) {
@@ -200,6 +242,23 @@ export default function CheckInCompletionPage() {
       setLoading(false);
     }
   };
+
+  // Autosave responses to localStorage whenever they change
+  useEffect(() => {
+    if (assignmentId && responses.length > 0) {
+      try {
+        const draftData = {
+          responses: responses,
+          currentQuestion: currentQuestion,
+          savedAt: new Date().toISOString()
+        };
+        localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(draftData));
+        console.log('Autosaved responses to localStorage');
+      } catch (error) {
+        console.error('Error autosaving to localStorage:', error);
+      }
+    }
+  }, [responses, currentQuestion, assignmentId]);
 
   const handleAnswerChange = (questionIndex: number, answer: string | number | boolean) => {
     const question = questions[questionIndex];
@@ -247,6 +306,7 @@ export default function CheckInCompletionPage() {
       });
     }
     setResponses(updatedResponses);
+    // Note: Autosave is handled by the useEffect watching responses state
   };
 
   const handleNext = () => {
@@ -597,6 +657,15 @@ export default function CheckInCompletionPage() {
       } catch (error) {
         console.error('Error creating notification:', error);
         // Don't fail the check-in if notification fails
+      }
+
+      // Clear saved draft from localStorage on successful submission
+      try {
+        localStorage.removeItem(AUTOSAVE_KEY);
+        console.log('Cleared saved draft after successful submission');
+      } catch (error) {
+        console.error('Error clearing draft from localStorage:', error);
+        // Don't fail submission if clearing localStorage fails
       }
 
       // Redirect to success page
