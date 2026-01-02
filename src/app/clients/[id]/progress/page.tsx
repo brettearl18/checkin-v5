@@ -37,6 +37,11 @@ interface QuestionProgress {
     answer: any;
     type: string;
   }[];
+  // Lifecycle tracking
+  firstSeenWeek: number;
+  lastSeenWeek: number;
+  isActive: boolean;
+  textChanges: string[]; // Track if question text changed across weeks
 }
 
 export default function ClientProgressPage() {
@@ -47,6 +52,7 @@ export default function ClientProgressPage() {
   const [responses, setResponses] = useState<FormResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [questionProgress, setQuestionProgress] = useState<QuestionProgress[]>([]);
+  const [showAllQuestions, setShowAllQuestions] = useState(false); // Default: show active questions only
   const [selectedResponse, setSelectedResponse] = useState<{
     question: string;
     answer: any;
@@ -118,17 +124,58 @@ export default function ClientProgressPage() {
       return;
     }
 
-    // Get all unique questions
+    const totalWeeks = sortedResponses.length;
+    const lastWeekIndex = totalWeeks - 1;
+
+    // Track question lifecycle metadata
+    const questionMetadata = new Map<string, {
+      firstSeenWeek: number;
+      lastSeenWeek: number;
+      isActive: boolean;
+      textChanges: Set<string>; // Track unique question texts across weeks
+      allTexts: string[]; // Store all texts in order
+    }>();
+
+    // First pass: collect all unique questions and track their lifecycle
     const questionMap = new Map<string, { questionId: string; questionText: string }>();
     
-    sortedResponses.forEach(response => {
+    sortedResponses.forEach((response, weekIndex) => {
       if (response.responses && Array.isArray(response.responses)) {
         response.responses.forEach((qResp: QuestionResponse) => {
-          if (qResp.questionId && !questionMap.has(qResp.questionId)) {
-            questionMap.set(qResp.questionId, {
-              questionId: qResp.questionId,
-              questionText: qResp.question || `Question ${qResp.questionId.slice(0, 8)}`
-            });
+          if (qResp.questionId) {
+            const questionText = qResp.question || `Question ${qResp.questionId.slice(0, 8)}`;
+            
+            // Track metadata
+            if (!questionMetadata.has(qResp.questionId)) {
+              questionMetadata.set(qResp.questionId, {
+                firstSeenWeek: weekIndex + 1,
+                lastSeenWeek: weekIndex + 1,
+                isActive: weekIndex === lastWeekIndex,
+                textChanges: new Set([questionText]),
+                allTexts: [questionText]
+              });
+              questionMap.set(qResp.questionId, {
+                questionId: qResp.questionId,
+                questionText: questionText
+              });
+            } else {
+              const metadata = questionMetadata.get(qResp.questionId)!;
+              metadata.firstSeenWeek = Math.min(metadata.firstSeenWeek, weekIndex + 1);
+              metadata.lastSeenWeek = Math.max(metadata.lastSeenWeek, weekIndex + 1);
+              metadata.isActive = weekIndex === lastWeekIndex;
+              
+              // Track text changes
+              if (questionText !== metadata.allTexts[metadata.allTexts.length - 1]) {
+                metadata.textChanges.add(questionText);
+                metadata.allTexts.push(questionText);
+              }
+              
+              // Update question text to latest version
+              questionMap.set(qResp.questionId, {
+                questionId: qResp.questionId,
+                questionText: questionText
+              });
+            }
           }
         });
       }
@@ -136,6 +183,7 @@ export default function ClientProgressPage() {
 
     // Create progress data for each question
     const progress: QuestionProgress[] = Array.from(questionMap.values()).map(question => {
+      const metadata = questionMetadata.get(question.questionId)!;
       const weeks = sortedResponses.map((response, index) => {
         // Find this question's response in this check-in
         const qResponse = response.responses?.find(
@@ -175,7 +223,11 @@ export default function ClientProgressPage() {
       return {
         questionId: question.questionId,
         questionText: question.questionText,
-        weeks: weeks
+        weeks: weeks,
+        firstSeenWeek: metadata.firstSeenWeek,
+        lastSeenWeek: metadata.lastSeenWeek,
+        isActive: metadata.isActive,
+        textChanges: Array.from(metadata.textChanges)
       };
     });
 
@@ -242,11 +294,30 @@ export default function ClientProgressPage() {
         </div>
 
         {/* Question Progress Grid */}
-        {questionProgress.length > 0 ? (
+        {questionProgress.length > 0 ? (() => {
+          // Filter questions based on showAllQuestions preference
+          const filteredQuestions = showAllQuestions 
+            ? questionProgress 
+            : questionProgress.filter(q => q.isActive);
+
+          // Get all weeks for consistent column rendering (use first question's weeks if available)
+          const allWeeks = questionProgress[0]?.weeks || [];
+
+          return (
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="px-4 py-2.5 bg-gradient-to-r from-purple-50 to-pink-50 border-b border-gray-100">
-              <h2 className="text-base font-bold text-gray-900">Question Progress Over Time</h2>
-              <p className="text-[10px] text-gray-500 mt-0.5">Track how each question improves week by week</p>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-base font-bold text-gray-900">Question Progress Over Time</h2>
+                  <p className="text-[10px] text-gray-500 mt-0.5">Track how each question improves week by week</p>
+                </div>
+                <button
+                  onClick={() => setShowAllQuestions(!showAllQuestions)}
+                  className="px-3 py-1.5 text-xs font-medium bg-white hover:bg-gray-50 text-gray-700 rounded-lg border border-gray-300 transition-colors shadow-sm"
+                >
+                  {showAllQuestions ? 'Show Active Only' : 'Show All Questions'}
+                </button>
+              </div>
             </div>
             
             {/* Legend */}
@@ -270,10 +341,10 @@ export default function ClientProgressPage() {
               <table className="w-full">
                 <thead className="sticky top-0 bg-gray-50/95 backdrop-blur-sm z-10">
                   <tr className="bg-gray-50/30">
-                    <th className="text-left py-1.5 px-3 font-semibold text-[10px] text-gray-600 uppercase tracking-wider sticky left-0 bg-gray-50/95 backdrop-blur-sm z-20 min-w-[160px] border-r border-gray-100">
+                    <th className="text-left py-1.5 px-3 font-semibold text-[10px] text-gray-600 uppercase tracking-wider sticky left-0 bg-gray-50/95 backdrop-blur-sm z-20 min-w-[200px] border-r border-gray-100">
                       Question
                     </th>
-                    {questionProgress[0]?.weeks.map((week, index) => (
+                    {allWeeks.map((week, index) => (
                       <th
                         key={index}
                         className="text-center py-1.5 px-1 font-semibold text-[10px] text-gray-600 uppercase tracking-wider min-w-[60px]"
@@ -287,52 +358,108 @@ export default function ClientProgressPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {questionProgress.map((question, qIndex) => (
+                  {filteredQuestions.map((question, qIndex) => {
+                    const isDeprecated = !question.isActive;
+                    const isNew = question.firstSeenWeek > 1;
+                    const hasTextChanges = question.textChanges.length > 1;
+                    const isActiveInWeek = (weekNum: number) => {
+                      return weekNum >= question.firstSeenWeek && 
+                             (!question.lastSeenWeek || weekNum <= question.lastSeenWeek);
+                    };
+
+                    return (
                     <tr 
                       key={question.questionId} 
                       className={`transition-colors hover:bg-gray-50/50 ${
                         qIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'
-                      }`}
+                      } ${isDeprecated ? 'opacity-60' : ''}`}
                     >
-                      <td className="py-1.5 px-3 text-xs font-medium text-gray-900 sticky left-0 bg-inherit z-10 border-r border-gray-100">
-                        <div className="max-w-[160px] line-clamp-2 leading-tight">
-                          {question.questionText}
+                      <td className="py-1.5 px-3 text-xs font-medium sticky left-0 bg-inherit z-10 border-r border-gray-100">
+                        <div className="max-w-[200px]">
+                          <div className={`flex items-start gap-1.5 leading-tight ${isDeprecated ? 'text-gray-500 italic' : 'text-gray-900'}`}>
+                            <div className="flex-1 min-w-0">
+                              <div className="line-clamp-2">
+                                {question.questionText}
+                              </div>
+                              <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                {isNew && (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium bg-blue-100 text-blue-700 border border-blue-200">
+                                    NEW
+                                  </span>
+                                )}
+                                {isDeprecated && (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium bg-gray-200 text-gray-600 border border-gray-300">
+                                    Removed W{question.lastSeenWeek}
+                                  </span>
+                                )}
+                                {hasTextChanges && (
+                                  <span 
+                                    className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium bg-yellow-100 text-yellow-700 border border-yellow-200 cursor-help"
+                                    title="Question wording changed during program"
+                                  >
+                                    ⚠ Changed
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
                         </div>
                       </td>
-                      {question.weeks.map((week, wIndex) => (
-                        <td
-                          key={wIndex}
-                          className="text-center py-1.5 px-1"
-                        >
-                          <div
-                            className={`w-6 h-6 rounded-full ${getStatusColor(week.status)} ${getStatusBorder(week.status)} flex items-center justify-center transition-all hover:scale-125 cursor-pointer shadow-sm mx-auto`}
-                            title={`Week ${week.week}: Score ${week.score}/10 - ${week.date}`}
-                            onClick={() => setSelectedResponse({
-                              question: question.questionText,
-                              answer: week.answer,
-                              score: week.score,
-                              date: week.date,
-                              week: week.week,
-                              type: week.type
-                            })}
-                          >
-                            <span className="text-white text-[9px] font-bold">{week.score}</span>
-                          </div>
-                        </td>
-                      ))}
-                      {/* Fill empty weeks if needed */}
-                      {Array.from({ length: Math.max(0, (questionProgress[0]?.weeks.length || 0) - question.weeks.length) }).map((_, emptyIndex) => (
-                        <td key={`empty-${emptyIndex}`} className="text-center py-1.5 px-1">
-                          <div className="w-6 h-6 rounded-full bg-gray-100 border border-gray-200 mx-auto"></div>
-                        </td>
-                      ))}
+                      {allWeeks.map((week, wIndex) => {
+                        const questionWeek = question.weeks.find(w => w.week === week.week);
+                        
+                        if (questionWeek) {
+                          return (
+                            <td
+                              key={wIndex}
+                              className="text-center py-1.5 px-1"
+                            >
+                              <div
+                                className={`w-6 h-6 rounded-full ${getStatusColor(questionWeek.status)} ${getStatusBorder(questionWeek.status)} flex items-center justify-center transition-all hover:scale-125 cursor-pointer shadow-sm mx-auto`}
+                                title={`Week ${questionWeek.week}: Score ${questionWeek.score}/10 - ${questionWeek.date}`}
+                                onClick={() => setSelectedResponse({
+                                  question: question.questionText,
+                                  answer: questionWeek.answer,
+                                  score: questionWeek.score,
+                                  date: questionWeek.date,
+                                  week: questionWeek.week,
+                                  type: questionWeek.type
+                                })}
+                              >
+                                <span className="text-white text-[9px] font-bold">{questionWeek.score}</span>
+                              </div>
+                            </td>
+                          );
+                        } else {
+                          // Question not present in this week
+                          const wasActive = isActiveInWeek(week.week);
+                          return (
+                            <td key={wIndex} className="text-center py-1.5 px-1">
+                              <div 
+                                className="w-6 h-6 rounded-full bg-gray-50 border border-gray-200 mx-auto flex items-center justify-center"
+                                title={wasActive ? "Question not in this check-in" : "Question not yet added or already removed"}
+                              >
+                                <span className="text-gray-300 text-xs">—</span>
+                              </div>
+                            </td>
+                          );
+                        }
+                      })}
                     </tr>
-                  ))}
+                  )})}
+                  {filteredQuestions.length === 0 && (
+                    <tr>
+                      <td colSpan={allWeeks.length + 1} className="py-8 text-center text-gray-500 text-sm">
+                        {showAllQuestions ? 'No questions found' : 'No active questions. Enable "Show All Questions" to see historical questions.'}
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
           </div>
-        ) : (
+          );
+        })() : (
           <div className="bg-white rounded-lg shadow p-6 text-center text-gray-500">
             No question progress data available yet.
           </div>
