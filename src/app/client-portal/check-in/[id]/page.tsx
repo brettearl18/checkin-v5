@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { RoleProtected, AuthenticatedOnly } from '@/components/ProtectedRoute';
-import { doc, getDoc, addDoc, collection, updateDoc } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase-client';
 import Link from 'next/link';
 import { isWithinCheckInWindow, getCheckInWindowDescription, DEFAULT_CHECK_IN_WINDOW, CheckInWindow } from '@/lib/checkin-window-utils';
@@ -562,113 +562,29 @@ export default function CheckInCompletionPage() {
         status: 'completed'
       };
 
-      console.log('Submitting response data:', JSON.stringify(responseData, null, 2));
+      console.log('Submitting response data via API route');
 
-      const responseRef = await addDoc(collection(db, 'formResponses'), responseData);
-
-      // Update assignment status with score and response details
-      // Use the actual Firestore document ID, not the URL parameter
-      let docIdToUpdate = assignmentDocId;
-      
-      console.log('Attempting to update assignment:', {
-        assignmentDocId,
-        assignmentId,
-        docIdToUpdate,
-        assignment: assignment?.id
+      // Use API route instead of direct Firestore updates to avoid permission issues
+      const submitResponse = await fetch(`/api/client-portal/check-in/${assignmentId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          responses: filteredResponses,
+          score: score,
+          totalQuestions: questions.length,
+          answeredQuestions: answeredCount
+        })
       });
-      
-      // If we don't have the document ID, try to find it
-      if (!docIdToUpdate) {
-        console.log('No assignmentDocId stored, querying for document...');
-        const { collection, query, where, getDocs } = await import('firebase/firestore');
-        const assignmentsQuery = query(
-          collection(db, 'check_in_assignments'),
-          where('id', '==', assignmentId),
-          where('clientId', '==', userProfile.uid)
-        );
-        const querySnapshot = await getDocs(assignmentsQuery);
-        
-        if (!querySnapshot.empty) {
-          docIdToUpdate = querySnapshot.docs[0].id;
-          console.log('Found document by id field, using document ID:', docIdToUpdate);
-          setAssignmentDocId(docIdToUpdate); // Store it for future use
-        } else {
-          // Last resort: try using assignmentId as document ID
-          console.log('Trying assignmentId as document ID:', assignmentId);
-          const testDoc = await getDoc(doc(db, 'check_in_assignments', assignmentId));
-          if (testDoc.exists()) {
-            docIdToUpdate = assignmentId;
-            setAssignmentDocId(assignmentId);
-          } else {
-            throw new Error(`Check-in assignment not found. Tried id field: ${assignmentId}`);
-          }
-        }
-      }
-      
-      if (!docIdToUpdate) {
-        throw new Error('Assignment document ID not found');
-      }
-      
-      // Verify the document exists before updating
-      const docRef = doc(db, 'check_in_assignments', docIdToUpdate);
-      const docSnapshot = await getDoc(docRef);
-      
-      if (!docSnapshot.exists()) {
-        // Document doesn't exist, try querying by 'id' field one more time
-        console.log('Document not found with stored ID, querying by id field:', docIdToUpdate);
-        const { collection, query, where, getDocs } = await import('firebase/firestore');
-        const assignmentsQuery = query(
-          collection(db, 'check_in_assignments'),
-          where('id', '==', assignmentId),
-          where('clientId', '==', userProfile.uid)
-        );
-        const querySnapshot = await getDocs(assignmentsQuery);
-        
-        if (!querySnapshot.empty) {
-          docIdToUpdate = querySnapshot.docs[0].id;
-          console.log('Found document by id field, using document ID:', docIdToUpdate);
-          setAssignmentDocId(docIdToUpdate);
-        } else {
-          throw new Error(`Check-in assignment not found. Tried document ID: ${docIdToUpdate} and id field: ${assignmentId}`);
-        }
-      }
-      
-      // Now update with the correct document ID
-      console.log('Updating document with ID:', docIdToUpdate);
-      await updateDoc(doc(db, 'check_in_assignments', docIdToUpdate), {
-        status: 'completed',
-        completedAt: new Date(),
-        responseId: responseRef.id,
-        score: score, // Save the score to the assignment
-        totalQuestions: questions.length, // Save total questions
-        answeredQuestions: answeredCount // Save answered questions count
-      });
-      console.log('Successfully updated assignment document');
 
-      // Create notification for coach
-      try {
-        const notificationResponse = await fetch('/api/check-in-completed', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            clientId: userProfile.uid,
-            formId: assignment.formId,
-            responseId: responseRef.id,
-            score: score,
-            formTitle: formTitle,
-            clientName: userProfile.displayName || userProfile.firstName || 'Client'
-          })
-        });
-        
-        if (!notificationResponse.ok) {
-          console.error('Failed to create notification');
-        }
-      } catch (error) {
-        console.error('Error creating notification:', error);
-        // Don't fail the check-in if notification fails
+      if (!submitResponse.ok) {
+        const errorData = await submitResponse.json();
+        throw new Error(errorData.message || 'Failed to submit check-in');
       }
+
+      const submitResult = await submitResponse.json();
+      console.log('Successfully submitted check-in via API:', submitResult);
 
       // Clear saved draft from localStorage on successful submission
       try {

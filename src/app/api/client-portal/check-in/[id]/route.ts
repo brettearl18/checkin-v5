@@ -22,24 +22,33 @@ export async function POST(
 
     const db = getDb();
 
-    // Get the assignment
-    const assignmentDoc = await db.collection('check_in_assignments').doc(id).get();
+    // Get the assignment - try as document ID first, then query by 'id' field
+    let assignmentDoc = await db.collection('check_in_assignments').doc(id).get();
+    let assignmentData = assignmentDoc.exists ? assignmentDoc.data() : null;
+    let assignmentDocId = assignmentDoc.exists ? assignmentDoc.id : null;
+
+    // If not found by document ID, try querying by 'id' field
     if (!assignmentDoc.exists) {
+      const assignmentsQuery = await db.collection('check_in_assignments')
+        .where('id', '==', id)
+        .limit(1)
+        .get();
+      
+      if (!assignmentsQuery.empty) {
+        assignmentDoc = assignmentsQuery.docs[0];
+        assignmentData = assignmentDoc.data();
+        assignmentDocId = assignmentDoc.id;
+      }
+    }
+
+    if (!assignmentData || !assignmentDocId) {
       return NextResponse.json({
         success: false,
         message: 'Assignment not found'
       }, { status: 404 });
     }
 
-    const assignmentData = assignmentDoc.data();
-    if (!assignmentData) {
-      return NextResponse.json({
-        success: false,
-        message: 'Assignment data is invalid'
-      }, { status: 400 });
-    }
-
-    const assignmentId = assignmentDoc.id;
+    const assignmentId = assignmentDocId; // Use the actual Firestore document ID
 
     // Get the form
     const formDoc = await db.collection('forms').doc(assignmentData.formId).get();
@@ -63,24 +72,32 @@ export async function POST(
       }, { status: 400 });
     }
 
-    // Get client name
-    const clientDoc = await db.collection('clients').doc(assignmentData.clientId).get();
+    // Get client name and verify client exists
+    // clientId might be a Firestore document ID or authUid, so try both
+    let clientDoc = await db.collection('clients').doc(assignmentData.clientId).get();
+    let clientData = clientDoc.exists ? clientDoc.data() : null;
+
+    // If not found by document ID, try finding by authUid
     if (!clientDoc.exists) {
+      const clientsQuery = await db.collection('clients')
+        .where('authUid', '==', assignmentData.clientId)
+        .limit(1)
+        .get();
+      
+      if (!clientsQuery.empty) {
+        clientDoc = clientsQuery.docs[0];
+        clientData = clientDoc.data();
+      }
+    }
+
+    if (!clientData) {
       return NextResponse.json({
         success: false,
         message: 'Client not found'
       }, { status: 404 });
     }
     
-    const clientData = clientDoc.data();
-    if (!clientData) {
-      return NextResponse.json({
-        success: false,
-        message: 'Client data is invalid'
-      }, { status: 400 });
-    }
-    
-    const clientName = `${clientData.firstName} ${clientData.lastName}`;
+    const clientName = `${clientData.firstName || ''} ${clientData.lastName || ''}`.trim() || 'Client';
 
     // Calculate score - use the score from frontend if provided, otherwise recalculate
     let finalScore = requestData.score || 0;
