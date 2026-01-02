@@ -350,6 +350,7 @@ export default function CheckInCompletionPage() {
     if (!status.isOpen) {
       setError(`Check-in window is currently closed. ${status.message}`);
       setSubmitting(false);
+      isSubmittingRef.current = false;
       return;
     }
 
@@ -383,6 +384,7 @@ export default function CheckInCompletionPage() {
         const unansweredNumbers = unansweredIndices.map(i => i + 1).join(', ');
         setError(`Please answer all questions before submitting. Missing answers for questions: ${unansweredNumbers}`);
         setSubmitting(false);
+        isSubmittingRef.current = false;
         
         // Scroll to first unanswered question
         setCurrentQuestion(unansweredIndices[0]);
