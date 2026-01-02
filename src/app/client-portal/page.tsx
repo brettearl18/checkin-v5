@@ -1080,16 +1080,21 @@ export default function ClientPortalPage() {
                       <div className="text-2xl font-bold text-gray-900">
                         {assignedCheckins.filter(checkIn => {
                           if (checkIn.status !== 'pending') return false;
-                          
+
                           const dueDate = new Date(checkIn.dueDate);
                           const now = new Date();
-                          const daysDiff = Math.floor((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                          
+                          // Normalize dates for comparison (set to start of day)
+                          const normalizedDueDate = new Date(dueDate);
+                          normalizedDueDate.setHours(0, 0, 0, 0);
+                          const normalizedNow = new Date(now);
+                          normalizedNow.setHours(0, 0, 0, 0);
                           
                           // Include overdue check-ins (past due date - always need attention)
-                          if (daysDiff < 0) return true;
+                          if (normalizedDueDate < normalizedNow) return true;
                           
-                          // For check-ins due today, only include if window is open (can be completed now)
-                          if (daysDiff === 0) {
+                          // For check-ins due today or in the past, check if window is open
+                          if (normalizedDueDate <= normalizedNow) {
                             const checkInWindow = checkIn.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
                             const windowStatus = isWithinCheckInWindow(checkInWindow);
                             return windowStatus.isOpen;
@@ -1106,16 +1111,21 @@ export default function ClientPortalPage() {
                 {(() => {
                   const upcomingCheckins = assignedCheckins.filter(checkIn => {
                     if (checkIn.status !== 'pending') return false;
-                    
+
                     const dueDate = new Date(checkIn.dueDate);
                     const now = new Date();
-                    const daysDiff = Math.floor((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                    
+                    // Normalize dates for comparison (set to start of day)
+                    const normalizedDueDate = new Date(dueDate);
+                    normalizedDueDate.setHours(0, 0, 0, 0);
+                    const normalizedNow = new Date(now);
+                    normalizedNow.setHours(0, 0, 0, 0);
                     
                     // Include overdue check-ins (past due date - always need attention)
-                    if (daysDiff < 0) return true;
+                    if (normalizedDueDate < normalizedNow) return true;
                     
-                    // For check-ins due today, only include if window is open (can be completed now)
-                    if (daysDiff === 0) {
+                    // For check-ins due today or in the past, check if window is open
+                    if (normalizedDueDate <= normalizedNow) {
                       const checkInWindow = checkIn.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
                       const windowStatus = isWithinCheckInWindow(checkInWindow);
                       return windowStatus.isOpen;
