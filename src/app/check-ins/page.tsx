@@ -58,6 +58,7 @@ export default function CheckInsPage() {
   const [selectedForm, setSelectedForm] = useState('all');
   const [dateRange, setDateRange] = useState('all');
   const [activeTab, setActiveTab] = useState<'review' | 'all' | 'replied'>('review');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc'); // 'asc' = oldest first (submitted first), 'desc' = newest first
   const [metrics, setMetrics] = useState({
     totalCheckIns: 0,
     highPerformers: 0,
@@ -77,8 +78,9 @@ export default function CheckInsPage() {
         console.log('🔍 Fetching check-ins for coachId:', coachId);
         
         // Fetch both check-ins to review and all completed check-ins
+        // Sort by submittedAt with the selected sort order (default: asc = oldest first)
         const [reviewResponse, allCheckInsResponse] = await Promise.all([
-          fetch(`/api/dashboard/check-ins-to-review?coachId=${coachId}`),
+          fetch(`/api/dashboard/check-ins-to-review?coachId=${coachId}&sortBy=submittedAt&sortOrder=${sortOrder}`),
           fetch(`/api/check-ins?coachId=${coachId}`)
         ]);
         
@@ -171,7 +173,7 @@ export default function CheckInsPage() {
     if (userProfile?.uid) {
     fetchCheckIns();
     }
-  }, [userProfile?.uid]);
+  }, [userProfile?.uid, sortOrder]);
 
   const filteredCheckIns = checkIns.filter(checkIn => {
     const clientMatch = selectedClient === 'all' || checkIn.clientId === selectedClient;
