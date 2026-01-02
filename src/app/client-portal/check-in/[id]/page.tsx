@@ -899,6 +899,42 @@ export default function CheckInCompletionPage() {
             <div className="text-center">
               <h1 className="text-2xl sm:text-3xl lg:text-4xl xl:text-5xl font-bold text-gray-900 mb-2 lg:mb-3">{assignment.formTitle}</h1>
               <p className="text-sm lg:text-lg text-gray-700 font-medium">Complete your assigned check-in</p>
+              {assignment.dueDate && (
+                <div className="mt-2 flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-3">
+                  {assignment.recurringWeek && assignment.totalWeeks && (
+                    <span className="text-xs sm:text-sm lg:text-base text-purple-600 font-semibold bg-purple-50 px-3 py-1.5 rounded-lg border border-purple-200">
+                      Week {assignment.recurringWeek} of {assignment.totalWeeks}
+                    </span>
+                  )}
+                  <span className="text-xs sm:text-sm lg:text-base text-gray-600 font-medium">
+                    {(() => {
+                      let dueDate: Date;
+                      if (assignment.dueDate?.toDate && typeof assignment.dueDate.toDate === 'function') {
+                        // Firestore Timestamp
+                        dueDate = assignment.dueDate.toDate();
+                      } else if (assignment.dueDate?._seconds) {
+                        // Firebase Timestamp object with _seconds
+                        dueDate = new Date(assignment.dueDate._seconds * 1000);
+                      } else if (assignment.dueDate instanceof Date) {
+                        // Already a Date object
+                        dueDate = assignment.dueDate;
+                      } else if (typeof assignment.dueDate === 'string') {
+                        // ISO string
+                        dueDate = new Date(assignment.dueDate);
+                      } else {
+                        // Fallback
+                        dueDate = new Date();
+                      }
+                      return dueDate.toLocaleDateString('en-US', {
+                        weekday: 'long',
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                      });
+                    })()}
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Check-in Window Status */}
