@@ -4,15 +4,15 @@ import { getDb } from '@/lib/firebase-server';
 export const dynamic = 'force-dynamic';
 
 /**
- * GET /api/questions/[questionId]/history?clientId=xxx
+ * GET /api/questions/[id]/history?clientId=xxx
  * Fetches the last 4 answers for a specific question from a client's check-in history
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ questionId: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { questionId } = await params;
+    const { id: questionId } = await params;
     const { searchParams } = new URL(request.url);
     const clientId = searchParams.get('clientId');
 
