@@ -656,6 +656,169 @@ export default function ResponseDetailPage() {
             </div>
           )}
 
+          {/* Answer Summary Table - At-a-Glance View */}
+          {questions.length > 0 && (
+            <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden mb-8">
+              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-8 py-6 border-b border-gray-100">
+                <h2 className="text-2xl font-bold text-gray-900">Answer Summary</h2>
+                <p className="text-gray-600 mt-1">Quick overview of all answers. Click a row to jump to detailed view.</p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[800px]">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">#</th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Question</th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Answer</th>
+                      <th className="px-6 py-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Score</th>
+                      <th className="px-6 py-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {questions.map((question, index) => {
+                      // Find the corresponding answer for this question
+                      let answer = null;
+                      let questionScore: number | null = null;
+                      let questionResponse: any = null;
+                      if (response?.responses && Array.isArray(response.responses)) {
+                        questionResponse = response.responses.find((r: any) => 
+                          r.questionId === question.id || r.question === question.text
+                        );
+                        if (questionResponse) {
+                          answer = questionResponse.answer;
+                          questionScore = questionResponse.score !== undefined ? questionResponse.score : null;
+                        } else {
+                          const fallbackResponse = response.responses[index];
+                          questionResponse = fallbackResponse;
+                          answer = fallbackResponse?.answer || fallbackResponse;
+                          questionScore = fallbackResponse?.score !== undefined ? fallbackResponse.score : null;
+                        }
+                      }
+
+                      // Determine status based on score
+                      let statusColor = '';
+                      let statusText = '';
+                      let statusBadge = '';
+                      if (questionScore !== null) {
+                        if (questionScore >= 7) {
+                          statusColor = 'text-green-700 bg-green-50 border-green-200';
+                          statusText = 'Excellent';
+                          statusBadge = '✅';
+                        } else if (questionScore >= 5) {
+                          statusColor = 'text-yellow-700 bg-yellow-50 border-yellow-200';
+                          statusText = 'Review';
+                          statusBadge = '🟡';
+                        } else {
+                          statusColor = 'text-red-700 bg-red-50 border-red-200';
+                          statusText = 'Needs Attention';
+                          statusBadge = '🔴';
+                        }
+                      }
+
+                      // Format answer for table display (simplified version)
+                      const formatAnswerForTable = (answer: any, questionType?: string): string => {
+                        if (answer === null || answer === undefined) return '—';
+                        
+                        // Handle objects with answer property
+                        if (answer && typeof answer === 'object' && answer.answer !== undefined) {
+                          answer = answer.answer;
+                        }
+                        
+                        // Handle different types
+                        if (typeof answer === 'boolean') {
+                          return answer ? 'Yes' : 'No';
+                        }
+                        
+                        if (typeof answer === 'number') {
+                          // For scale questions, show as-is
+                          if (questionType === 'scale') {
+                            return `${answer}/10`;
+                          }
+                          return answer.toString();
+                        }
+                        
+                        if (Array.isArray(answer)) {
+                          return answer.join(', ');
+                        }
+                        
+                        if (typeof answer === 'string') {
+                          // Truncate long text answers
+                          if (answer.length > 40) {
+                            return answer.substring(0, 40) + '...';
+                          }
+                          return answer;
+                        }
+                        
+                        return String(answer);
+                      };
+
+                      const answerText = formatAnswerForTable(answer, question.type);
+
+                      return (
+                        <tr
+                          key={question.id}
+                          onClick={() => {
+                            // Scroll to the detailed question view
+                            const element = document.getElementById(`question-${question.id}`);
+                            if (element) {
+                              element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                              // Highlight briefly
+                              element.classList.add('ring-4', 'ring-blue-300', 'ring-opacity-50');
+                              setTimeout(() => {
+                                element.classList.remove('ring-4', 'ring-blue-300', 'ring-opacity-50');
+                              }, 2000);
+                            }
+                          }}
+                          className="hover:bg-blue-50 cursor-pointer transition-colors"
+                        >
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                              <span className="text-sm font-bold text-blue-600">{index + 1}</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="text-sm font-medium text-gray-900 max-w-md">
+                              {question.text.length > 60 ? question.text.substring(0, 60) + '...' : question.text}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="text-sm text-gray-700 max-w-md">
+                              {answerText}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-center">
+                            {questionScore !== null ? (
+                              <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-bold ${
+                                questionScore >= 7 
+                                  ? 'bg-green-100 text-green-700' 
+                                  : questionScore >= 5 
+                                  ? 'bg-yellow-100 text-yellow-700' 
+                                  : 'bg-red-100 text-red-700'
+                              }`}>
+                                {questionScore}/10
+                              </span>
+                            ) : (
+                              <span className="text-sm text-gray-400">—</span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-center">
+                            {questionScore !== null ? (
+                              <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border ${statusColor}`}>
+                                {statusBadge} {statusText}
+                              </span>
+                            ) : (
+                              <span className="text-sm text-gray-400">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
           {/* Questions and Answers with Coach Feedback */}
           <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden mb-8">
             <div className="bg-gradient-to-r from-green-50 to-emerald-50 px-8 py-6 border-b border-gray-100">
@@ -711,7 +874,11 @@ export default function ResponseDetailPage() {
                     const textFeedbackForQuestion = textFeedback[question.id] || '';
                     
                     return (
-                      <div key={question.id} className="border border-gray-200 rounded-xl p-6 bg-white shadow-sm hover:shadow-md transition-shadow">
+                      <div 
+                        id={`question-${question.id}`}
+                        key={question.id} 
+                        className="border border-gray-200 rounded-xl p-6 bg-white shadow-sm hover:shadow-md transition-shadow scroll-mt-4"
+                      >
                         <div className="flex items-start space-x-4">
                           <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
                             <span className="text-sm font-bold text-blue-600">{index + 1}</span>
