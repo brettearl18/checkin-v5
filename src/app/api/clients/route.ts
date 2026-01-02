@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb, getAuthInstance } from '@/lib/firebase-server';
+import { autoAllocateCheckIn, autoCreateMeasurementSchedule } from '@/lib/auto-allocate-checkin';
 import crypto from 'crypto';
 
 // Force dynamic rendering
@@ -248,6 +249,18 @@ export async function POST(request: NextRequest) {
 
     // Save to Firestore
     await db.collection('clients').doc(clientId).set(client);
+
+    // Auto-allocate check-in form and measurement schedule to new client
+    try {
+      if (coachId) {
+        // Only allocate if coach is assigned
+        await autoAllocateCheckIn(clientId, coachId, new Date());
+        await autoCreateMeasurementSchedule(clientId, coachId, new Date());
+      }
+    } catch (allocationError) {
+      console.error('Error auto-allocating check-in or measurement schedule:', allocationError);
+      // Don't fail client creation if allocation fails - log it and continue
+    }
 
     // If credentials were created, send credentials email and return them (for popup display)
     // Otherwise, send onboarding email with token

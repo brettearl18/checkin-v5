@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb, getAuthInstance } from '@/lib/firebase-server';
 import { notificationService } from '@/lib/notification-service';
+import { autoAllocateCheckIn, autoCreateMeasurementSchedule } from '@/lib/auto-allocate-checkin';
 
 // Force dynamic rendering - API routes should not be pre-rendered
 export const dynamic = 'force-dynamic';
@@ -107,6 +108,17 @@ export async function POST(request: NextRequest) {
     } catch (error) {
       console.error('Error creating welcome notification:', error);
       // Don't fail onboarding if notification fails
+    }
+
+    // Auto-allocate check-in form and measurement schedule if coach is assigned
+    if (clientData.coachId) {
+      try {
+        await autoAllocateCheckIn(clientData.id, clientData.coachId, new Date());
+        await autoCreateMeasurementSchedule(clientData.id, clientData.coachId, new Date());
+      } catch (allocationError) {
+        console.error('Error auto-allocating check-in or measurement schedule:', allocationError);
+        // Don't fail onboarding if allocation fails - log it and continue
+      }
     }
 
     return NextResponse.json({ success: true, message: 'Onboarding complete. Account activated.' });

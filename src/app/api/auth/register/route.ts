@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb, getAuthInstance } from '@/lib/firebase-server';
+import { autoAllocateCheckIn, autoCreateMeasurementSchedule } from '@/lib/auto-allocate-checkin';
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic';
@@ -457,6 +458,17 @@ export async function POST(request: NextRequest) {
 
       try {
         await db.collection('clients').doc(userRecord.uid).set(clientRecord);
+        
+        // Auto-allocate check-in form and measurement schedule to new client
+        if (coachId) {
+          try {
+            await autoAllocateCheckIn(userRecord.uid, coachId, new Date());
+            await autoCreateMeasurementSchedule(userRecord.uid, coachId, new Date());
+          } catch (allocationError) {
+            console.error('Error auto-allocating check-in or measurement schedule:', allocationError);
+            // Don't fail registration if allocation fails - log it and continue
+          }
+        }
       } catch (error: any) {
         console.error('Error saving client record:', error);
         // Try to clean up the auth user and user profile if client record save fails
