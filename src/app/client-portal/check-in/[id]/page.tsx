@@ -41,6 +41,7 @@ interface Question {
   questionWeight?: number; // Weight of the question (1-10)
   weight?: number; // Alternative field name for weight
   yesIsPositive?: boolean; // For boolean questions: true if YES is positive
+  description?: string; // Optional description/help text for the question
 }
 
 interface FormResponse {
@@ -1002,6 +1003,11 @@ export default function CheckInCompletionPage() {
                   <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 mb-2 lg:mb-3">
                     {currentQ.text}
                   </h2>
+                  {currentQ.description && (
+                    <p className="text-sm lg:text-base text-gray-600 mb-3 lg:mb-4 italic">
+                      {currentQ.description}
+                    </p>
+                  )}
                   {currentQ.category && (
                     <div className="inline-flex items-center gap-2 px-3 py-1.5 lg:px-4 lg:py-2 bg-gradient-to-r from-purple-100 to-indigo-100 rounded-full">
                       <span className="text-xs lg:text-sm font-semibold text-purple-700">Category:</span>

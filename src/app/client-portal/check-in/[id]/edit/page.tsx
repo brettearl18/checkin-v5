@@ -493,6 +493,11 @@ export default function EditCheckInPage() {
                   <h2 className="text-xl font-semibold text-gray-900 mb-2">
                     {currentQ.text}
                   </h2>
+                  {currentQ.description && (
+                    <p className="text-sm text-gray-600 mb-2 italic">
+                      {currentQ.description}
+                    </p>
+                  )}
                   {currentQ.category && (
                     <p className="text-sm text-gray-500">Category: {currentQ.category}</p>
                   )}
