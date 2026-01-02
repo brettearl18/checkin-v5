@@ -217,6 +217,17 @@ export default function EditQuestionPage() {
     }
   };
 
+  const handleUpdateOptionText = (index: number, text: string) => {
+    if (formData.options) {
+      setFormData(prev => ({
+        ...prev,
+        options: prev.options?.map((option, i) => 
+          i === index ? { ...option, text } : option
+        )
+      }));
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -658,9 +669,13 @@ export default function EditQuestionPage() {
                             <div className="space-y-3">
                               {formData.options.map((option, index) => (
                                 <div key={index} className="flex items-center space-x-3">
-                                  <span className="flex-1 px-4 py-3 bg-gray-100 rounded-lg text-gray-900 font-medium">
-                                    {option.text}
-                                  </span>
+                                  <input
+                                    type="text"
+                                    value={option.text}
+                                    onChange={(e) => handleUpdateOptionText(index, e.target.value)}
+                                    className="flex-1 px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 font-medium transition-all"
+                                    placeholder="Option text..."
+                                  />
                                   {formData.hasWeighting && (
                                     <div className="flex items-center space-x-2">
                                       <span className="text-sm text-gray-700">Weight:</span>
