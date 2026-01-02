@@ -760,6 +760,13 @@ export default function ResponseDetailPage() {
                                 ) : questionHistory[question.id] && questionHistory[question.id].length > 0 ? (
                                   <div className="space-y-3">
                                     {questionHistory[question.id].map((historyItem, historyIndex) => {
+                                      // Additional client-side deduplication by responseId (safety check)
+                                      const isDuplicate = questionHistory[question.id].slice(0, historyIndex).some(
+                                        (prevItem: any) => prevItem.responseId === historyItem.responseId
+                                      );
+                                      if (isDuplicate) {
+                                        return null;
+                                      }
                                       const hasFeedback = historyItem.coachFeedback && (
                                         historyItem.coachFeedback.voice || historyItem.coachFeedback.text
                                       );

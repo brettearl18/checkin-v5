@@ -44,8 +44,49 @@ export async function GET(
     const responsesSnapshot = await db.collection('formResponses')
       .where('clientId', '==', clientId)
       .orderBy('submittedAt', 'desc')
-      .limit(20) // Get more responses to ensure we find 4 matching answers
-      .get();
+      .limit(50) // Get more responses to ensure we find unique answers
+
+    // First, deduplicate responses by assignmentId to prevent showing multiple submissions of the same check-in
+    const responseMap = new Map<string, any>(); // Map: assignmentId -> most recent response
+    const responsesWithoutAssignment: any[] = [];
+    
+    responsesSnapshot.docs.forEach((doc: any) => {
+      const responseData = doc.data();
+      const assignmentId = responseData.assignmentId;
+      
+      if (assignmentId) {
+        // Deduplicate by assignmentId - keep only the most recent response per assignment
+        const existing = responseMap.get(assignmentId);
+        if (!existing) {
+          responseMap.set(assignmentId, { doc, data: responseData });
+        } else {
+          // Keep the one with the most recent submittedAt
+          const existingDate = new Date(existing.data.submittedAt?.toDate?.() || existing.data.submittedAt || 0);
+          const currentDate = new Date(responseData.submittedAt?.toDate?.() || responseData.submittedAt || 0);
+          if (currentDate > existingDate) {
+            responseMap.set(assignmentId, { doc, data: responseData });
+          }
+        }
+      } else {
+        // If no assignmentId, deduplicate by formId + date
+        const submittedDate = new Date(responseData.submittedAt?.toDate?.() || responseData.submittedAt || 0);
+        const dateKey = submittedDate.toISOString().split('T')[0]; // YYYY-MM-DD
+        const dedupeKey = `${responseData.formId || 'unknown'}-${dateKey}`;
+        
+        const existing = responseMap.get(dedupeKey);
+        if (!existing) {
+          responseMap.set(dedupeKey, { doc, data: responseData });
+        } else {
+          const existingDate = new Date(existing.data.submittedAt?.toDate?.() || existing.data.submittedAt || 0);
+          if (submittedDate > existingDate) {
+            responseMap.set(dedupeKey, { doc, data: responseData });
+          }
+        }
+      }
+    });
+
+    // Get deduplicated responses (only the most recent per assignment)
+    const uniqueResponses = Array.from(responseMap.values());
 
     const history: Array<{
       responseId: string; // CRITICAL: Used to match coach feedback
@@ -60,9 +101,17 @@ export async function GET(
       };
     }> = [];
 
-    // Extract answers for this specific question from all responses
-    for (const doc of responsesSnapshot.docs) {
-      const responseData = doc.data();
+    // Track unique responseIds to prevent duplicates
+    const seenResponseIds = new Set<string>();
+
+    // Extract answers for this specific question from unique responses
+    for (const { doc, data: responseData } of uniqueResponses) {
+      // Skip if we've already processed this responseId (safety check)
+      if (seenResponseIds.has(doc.id)) {
+        continue;
+      }
+      seenResponseIds.add(doc.id);
+
       const responses = responseData.responses || [];
 
       // Find the answer for this question
@@ -144,16 +193,21 @@ export async function GET(
 
         history.push(historyItem);
 
-        // Stop once we have 4 answers
+        // Stop once we have 4 unique answers
         if (history.length >= 4) {
           break;
         }
       }
     }
 
+    // Final deduplication pass by responseId (should not be needed but safety check)
+    const finalHistory = history.filter((item, index, self) =>
+      index === self.findIndex((t) => t.responseId === item.responseId)
+    );
+
     return NextResponse.json({
       success: true,
-      history: history.reverse() // Reverse to show oldest first, newest last
+      history: finalHistory.reverse() // Reverse to show oldest first, newest last
     });
 
   } catch (error: any) {
