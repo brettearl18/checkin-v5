@@ -69,6 +69,7 @@ export default function CheckInCompletionPage() {
   const [unansweredQuestionIndices, setUnansweredQuestionIndices] = useState<number[]>([]);
   const [windowStatus, setWindowStatus] = useState<{ isOpen: boolean; message: string; nextOpenTime?: Date } | null>(null);
   const [lastSaved, setLastSaved] = useState<Date | null>(null); // Track when last saved for visual feedback
+  const isSubmittingRef = useRef(false); // Ref to prevent double submissions
 
   const assignmentId = params.id as string;
 
@@ -327,6 +328,20 @@ export default function CheckInCompletionPage() {
 
   const handleSubmit = async () => {
     if (!assignment || !userProfile) return;
+
+    // Prevent double submission using ref (more reliable than state)
+    if (isSubmittingRef.current) {
+      console.log('Already submitting, ignoring duplicate call');
+      return;
+    }
+
+    // Prevent double submission
+    if (submitting) {
+      return;
+    }
+
+    isSubmittingRef.current = true;
+    setSubmitting(true);
 
     // Check if check-in window is open
     const checkInWindow = assignment.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
@@ -603,6 +618,7 @@ export default function CheckInCompletionPage() {
       setError('Failed to submit check-in. Please try again.');
     } finally {
       setSubmitting(false);
+      isSubmittingRef.current = false;
     }
   };
 
