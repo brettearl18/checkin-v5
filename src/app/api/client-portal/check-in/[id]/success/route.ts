@@ -28,17 +28,86 @@ export async function GET(
     let assignmentData: any = null;
     let responseData: any = null;
 
-    // First, try as assignment ID
+    // Helper function to verify client ownership
+    const verifyClientOwnership = async (assignmentClientId: string, providedClientId: string): Promise<boolean> => {
+      // Direct match
+      if (assignmentClientId === providedClientId) {
+        return true;
+      }
+
+      // Check if assignmentClientId is a Firestore document ID and providedClientId is authUid
+      try {
+        const clientDoc = await db.collection('clients').doc(assignmentClientId).get();
+        if (clientDoc.exists) {
+          const clientData = clientDoc.data();
+          if (clientData?.authUid === providedClientId) {
+            return true;
+          }
+        }
+      } catch (error) {
+        // Ignore errors
+      }
+
+      // Check if providedClientId is a Firestore document ID and assignmentClientId is authUid
+      try {
+        const clientDoc = await db.collection('clients').doc(providedClientId).get();
+        if (clientDoc.exists) {
+          const clientData = clientDoc.data();
+          if (clientData?.authUid === assignmentClientId) {
+            return true;
+          }
+        }
+      } catch (error) {
+        // Ignore errors
+      }
+
+      // Check if both are authUids but different document IDs
+      try {
+        const clientsQuery = await db.collection('clients')
+          .where('authUid', '==', providedClientId)
+          .limit(1)
+          .get();
+        
+        if (!clientsQuery.empty) {
+          const clientDocId = clientsQuery.docs[0].id;
+          if (clientDocId === assignmentClientId) {
+            return true;
+          }
+        }
+      } catch (error) {
+        // Ignore errors
+      }
+
+      return false;
+    };
+
+    // First, try as assignment ID (by document ID)
     try {
-      const assignmentDoc = await db.collection('check_in_assignments').doc(id).get();
-      if (assignmentDoc.exists) {
+      let assignmentDoc = await db.collection('check_in_assignments').doc(id).get();
+      let assignmentDocId = assignmentDoc.exists ? assignmentDoc.id : null;
+
+      // If not found by document ID, try querying by 'id' field
+      if (!assignmentDoc.exists) {
+        const assignmentsQuery = await db.collection('check_in_assignments')
+          .where('id', '==', id)
+          .limit(1)
+          .get();
+        
+        if (!assignmentsQuery.empty) {
+          assignmentDoc = assignmentsQuery.docs[0];
+          assignmentDocId = assignmentDoc.id;
+        }
+      }
+
+      if (assignmentDoc.exists && assignmentDocId) {
         assignmentData = {
-          id: assignmentDoc.id,
+          id: assignmentDocId,
           ...assignmentDoc.data()
         };
         
         // Verify this assignment belongs to the client
-        if (assignmentData.clientId !== clientId) {
+        const isOwner = await verifyClientOwnership(assignmentData.clientId, clientId);
+        if (!isOwner) {
           return NextResponse.json({
             success: false,
             message: 'You do not have permission to access this check-in'
@@ -62,7 +131,8 @@ export async function GET(
           };
           
           // Verify this response belongs to the client
-          if (responseData.clientId !== clientId) {
+          const isOwner = await verifyClientOwnership(responseData.clientId, clientId);
+          if (!isOwner) {
             return NextResponse.json({
               success: false,
               message: 'You do not have permission to access this response'
@@ -73,7 +143,21 @@ export async function GET(
           
           // Try to find the assignment
           if (responseData.assignmentId) {
-            const assignmentRef = await db.collection('check_in_assignments').doc(responseData.assignmentId).get();
+            // Try by document ID first
+            let assignmentRef = await db.collection('check_in_assignments').doc(responseData.assignmentId).get();
+            
+            // If not found, try by 'id' field
+            if (!assignmentRef.exists) {
+              const assignmentsQuery = await db.collection('check_in_assignments')
+                .where('id', '==', responseData.assignmentId)
+                .limit(1)
+                .get();
+              
+              if (!assignmentsQuery.empty) {
+                assignmentRef = assignmentsQuery.docs[0];
+              }
+            }
+            
             if (assignmentRef.exists) {
               assignmentData = {
                 id: assignmentRef.id,
@@ -82,18 +166,24 @@ export async function GET(
             }
           } else {
             // Search for assignment by responseId
+            // Note: We can't easily check clientId in the query when it might be either format,
+            // so we'll filter results after fetching
             const assignmentQuery = await db.collection('check_in_assignments')
               .where('responseId', '==', id)
-              .where('clientId', '==', clientId)
-              .limit(1)
+              .limit(10)
               .get();
             
-            if (!assignmentQuery.empty) {
-              const doc = assignmentQuery.docs[0];
-              assignmentData = {
-                id: doc.id,
-                ...doc.data()
-              };
+            // Find the one that matches the client
+            for (const doc of assignmentQuery.docs) {
+              const assignment = doc.data();
+              const isOwner = await verifyClientOwnership(assignment.clientId, clientId);
+              if (isOwner) {
+                assignmentData = {
+                  id: doc.id,
+                  ...assignment
+                };
+                break;
+              }
             }
           }
         }
@@ -120,7 +210,8 @@ export async function GET(
           };
           
           // Verify ownership
-          if (responseData.clientId !== clientId) {
+          const isOwner = await verifyClientOwnership(responseData.clientId, clientId);
+          if (!isOwner) {
             return NextResponse.json({
               success: false,
               message: 'You do not have permission to access this response'
