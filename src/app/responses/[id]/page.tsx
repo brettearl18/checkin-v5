@@ -759,14 +759,10 @@ export default function ResponseDetailPage() {
                                   </div>
                                 ) : questionHistory[question.id] && questionHistory[question.id].length > 0 ? (
                                   <div className="space-y-3">
-                                    {questionHistory[question.id].map((historyItem, historyIndex) => {
-                                      // Additional client-side deduplication by responseId (safety check)
-                                      const isDuplicate = questionHistory[question.id].slice(0, historyIndex).some(
-                                        (prevItem: any) => prevItem.responseId === historyItem.responseId
-                                      );
-                                      if (isDuplicate) {
-                                        return null;
-                                      }
+                                    {questionHistory[question.id].filter((historyItem, index, self) => 
+                                      // Deduplicate by responseId - only show first occurrence
+                                      index === self.findIndex((item) => item.responseId === historyItem.responseId)
+                                    ).map((historyItem, historyIndex) => {
                                       const hasFeedback = historyItem.coachFeedback && (
                                         historyItem.coachFeedback.voice || historyItem.coachFeedback.text
                                       );
