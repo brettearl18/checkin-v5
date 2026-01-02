@@ -4,8 +4,15 @@ import { getDb } from '@/lib/firebase-server';
 export const dynamic = 'force-dynamic';
 
 /**
- * GET /api/questions/[id]/history?clientId=xxx
+ * GET /api/questions/[id]/history?clientId=xxx&coachId=yyy
  * Fetches the last 4 answers for a specific question from a client's check-in history
+ * Optionally includes coach feedback if coachId is provided
+ * 
+ * MATCHING LOGIC:
+ * - responseId: Links to the formResponse document
+ * - questionId: The specific question being viewed
+ * - coachId: The coach who provided feedback (optional parameter)
+ * Coach feedback matches when ALL THREE match: responseId + questionId + coachId
  */
 export async function GET(
   request: NextRequest,
@@ -15,6 +22,7 @@ export async function GET(
     const { id: questionId } = await params;
     const { searchParams } = new URL(request.url);
     const clientId = searchParams.get('clientId');
+    const coachId = searchParams.get('coachId'); // Optional: to fetch coach's feedback
 
     if (!clientId) {
       return NextResponse.json({
@@ -40,11 +48,16 @@ export async function GET(
       .get();
 
     const history: Array<{
+      responseId: string; // CRITICAL: Used to match coach feedback
       answer: any;
       score?: number;
       submittedAt: string;
       checkInTitle?: string;
       weekNumber?: number;
+      coachFeedback?: {
+        voice?: string; // Voice feedback URL
+        text?: string;  // Text feedback content
+      };
     }> = [];
 
     // Extract answers for this specific question from all responses
@@ -86,13 +99,50 @@ export async function GET(
           }
         }
 
-        history.push({
+        // CRITICAL MATCHING LOGIC:
+        // We need responseId to match coach feedback correctly
+        // Coach feedback is stored with: responseId + questionId + coachId
+        const historyItem: any = {
+          responseId: doc.id, // The formResponse document ID - CRITICAL for matching
           answer: questionResponse.answer,
           score: questionResponse.score,
           submittedAt,
           checkInTitle: checkInTitle || responseData.formTitle,
           weekNumber
-        });
+        };
+
+        // Fetch coach feedback for this specific response and question (if coachId provided)
+        if (coachId) {
+          try {
+            // MATCHING: responseId + questionId + coachId must all match
+            const feedbackSnapshot = await db.collection('coachFeedback')
+              .where('responseId', '==', doc.id) // Match the formResponse document ID
+              .where('questionId', '==', questionId) // Match the specific question
+              .where('coachId', '==', coachId) // Match the specific coach
+              .get();
+
+            const feedback: { voice?: string; text?: string } = {};
+            
+            feedbackSnapshot.docs.forEach(feedbackDoc => {
+              const feedbackData = feedbackDoc.data();
+              if (feedbackData.feedbackType === 'voice') {
+                feedback.voice = feedbackData.content; // URL to voice recording
+              } else if (feedbackData.feedbackType === 'text') {
+                feedback.text = feedbackData.content; // Text feedback content
+              }
+            });
+
+            // Only add feedback object if we found any feedback
+            if (Object.keys(feedback).length > 0) {
+              historyItem.coachFeedback = feedback;
+            }
+          } catch (error) {
+            console.error(`Error fetching coach feedback for response ${doc.id}:`, error);
+            // Don't fail the entire request if feedback fetch fails
+          }
+        }
+
+        history.push(historyItem);
 
         // Stop once we have 4 answers
         if (history.length >= 4) {

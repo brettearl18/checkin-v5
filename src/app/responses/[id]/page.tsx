@@ -332,10 +332,17 @@ export default function ResponseDetailPage() {
       return;
     }
 
+    if (!userProfile?.uid) {
+      console.error('No user profile available for fetching coach feedback');
+      return;
+    }
+
     setLoadingHistory(prev => ({ ...prev, [questionId]: true }));
     try {
+      // Include coachId to fetch matching coach feedback
+      // MATCHING: API matches feedback by responseId + questionId + coachId
       const historyResponse = await fetch(
-        `/api/questions/${questionId}/history?clientId=${response.clientId}`
+        `/api/questions/${questionId}/history?clientId=${response.clientId}&coachId=${userProfile.uid}`
       );
       
       if (historyResponse.ok) {
@@ -752,32 +759,82 @@ export default function ResponseDetailPage() {
                                   </div>
                                 ) : questionHistory[question.id] && questionHistory[question.id].length > 0 ? (
                                   <div className="space-y-3">
-                                    {questionHistory[question.id].map((historyItem, historyIndex) => (
-                                      <div key={historyIndex} className="flex items-start justify-between p-3 bg-white rounded border border-blue-100">
-                                        <div className="flex-1">
-                                          <div className="text-sm font-medium text-gray-900 mb-1">
-                                            {renderAnswer(question, historyItem.answer)}
-                                          </div>
-                                          <div className="text-xs text-gray-500">
-                                            {formatHistoryDate(historyItem.submittedAt)}
-                                            {historyItem.weekNumber && ` • Week ${historyItem.weekNumber}`}
+                                    {questionHistory[question.id].map((historyItem, historyIndex) => {
+                                      const hasFeedback = historyItem.coachFeedback && (
+                                        historyItem.coachFeedback.voice || historyItem.coachFeedback.text
+                                      );
+                                      
+                                      return (
+                                        <div key={historyIndex} className="p-3 bg-white rounded border border-blue-100">
+                                          <div className="flex items-start justify-between">
+                                            <div className="flex-1">
+                                              <div className="text-sm font-medium text-gray-900 mb-1">
+                                                {renderAnswer(question, historyItem.answer)}
+                                              </div>
+                                              <div className="text-xs text-gray-500">
+                                                {formatHistoryDate(historyItem.submittedAt)}
+                                                {historyItem.weekNumber && ` • Week ${historyItem.weekNumber}`}
+                                              </div>
+                                              
+                                              {/* Coach Feedback Display */}
+                                              {hasFeedback && (
+                                                <div className="mt-2 pt-2 border-t border-gray-200">
+                                                  <div className="text-xs font-semibold text-gray-700 mb-1">Your Feedback:</div>
+                                                  {historyItem.coachFeedback?.voice && (
+                                                    <div className="flex items-center space-x-2 mb-1">
+                                                      <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                                                      </svg>
+                                                      <audio controls className="h-6 text-xs" src={historyItem.coachFeedback.voice}>
+                                                        Your browser does not support audio playback.
+                                                      </audio>
+                                                    </div>
+                                                  )}
+                                                  {historyItem.coachFeedback?.text && (
+                                                    <div className="text-xs text-gray-700 bg-gray-50 p-2 rounded border border-gray-200">
+                                                      {historyItem.coachFeedback.text}
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              )}
+                                            </div>
+                                            <div className="ml-4 flex items-start space-x-2">
+                                              {/* Coach Feedback Indicator */}
+                                              {hasFeedback && (
+                                                <div className="flex flex-col items-center space-y-1">
+                                                  {historyItem.coachFeedback?.voice && (
+                                                    <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center" title="Voice feedback provided">
+                                                      <svg className="w-3 h-3 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                                                      </svg>
+                                                    </div>
+                                                  )}
+                                                  {historyItem.coachFeedback?.text && (
+                                                    <div className="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center" title="Text feedback provided">
+                                                      <svg className="w-3 h-3 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                                      </svg>
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              )}
+                                              {/* Score Badge */}
+                                              {historyItem.score !== undefined && (
+                                                <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                                  historyItem.score >= 7 
+                                                    ? 'bg-green-100 text-green-700' 
+                                                    : historyItem.score >= 4 
+                                                    ? 'bg-orange-100 text-orange-700' 
+                                                    : 'bg-red-100 text-red-700'
+                                                }`}>
+                                                  {historyItem.score}/10
+                                                </span>
+                                              )}
+                                            </div>
                                           </div>
                                         </div>
-                                        {historyItem.score !== undefined && (
-                                          <div className="ml-4">
-                                            <span className={`px-2 py-1 rounded text-xs font-medium ${
-                                              historyItem.score >= 7 
-                                                ? 'bg-green-100 text-green-700' 
-                                                : historyItem.score >= 4 
-                                                ? 'bg-orange-100 text-orange-700' 
-                                                : 'bg-red-100 text-red-700'
-                                            }`}>
-                                              {historyItem.score}/10
-                                            </span>
-                                          </div>
-                                        )}
-                                      </div>
-                                    ))}
+                                      );
+                                    })}
                                   </div>
                                 ) : (
                                   <div className="text-center py-4 text-sm text-gray-500">
