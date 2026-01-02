@@ -163,6 +163,27 @@ export async function POST(
       }, { status: 400 });
     }
 
+    // Check if assignment is already completed (prevent duplicate submissions)
+    if (assignmentData.status === 'completed' && assignmentData.responseId) {
+      console.log('[Check-in API] Assignment already completed, returning existing response');
+      // Return existing response instead of creating a new one
+      try {
+        const existingResponseDoc = await db.collection('formResponses').doc(assignmentData.responseId).get();
+        if (existingResponseDoc.exists) {
+          return NextResponse.json({
+            success: true,
+            message: 'Check-in already completed',
+            responseId: assignmentData.responseId,
+            score: assignmentData.score || 0,
+            alreadyCompleted: true
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching existing response:', error);
+        // Continue to create new response if existing one can't be found
+      }
+    }
+
     // Save response to Firestore
     const docRef = await db.collection('formResponses').add(responseData);
 
