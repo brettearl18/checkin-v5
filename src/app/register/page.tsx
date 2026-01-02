@@ -12,7 +12,7 @@ interface RegistrationForm {
   confirmPassword: string;
   firstName: string;
   lastName: string;
-  role: 'coach' | 'client';
+  role: 'client'; // Only clients can register - coaches are created by admin
   coachId?: string;
 }
 
@@ -31,7 +31,7 @@ export default function RegisterPage() {
     confirmPassword: '',
     firstName: '',
     lastName: '',
-    role: 'coach'
+    role: 'client' // Always client - coach option removed
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -39,26 +39,24 @@ export default function RegisterPage() {
   const [coaches, setCoaches] = useState<Coach[]>([]);
   const [loadingCoaches, setLoadingCoaches] = useState(false);
 
-  // Fetch coaches when role is 'client'
+  // Fetch coaches on mount (role is always 'client' now)
   useEffect(() => {
     const fetchCoaches = async () => {
-      if (formData.role === 'client') {
-        setLoadingCoaches(true);
-        try {
-          const response = await fetch('/api/coaches/list');
-          const data = await response.json();
-          if (data.success && data.coaches) {
-            setCoaches(data.coaches);
-          }
-        } catch (error) {
-          console.error('Failed to fetch coaches:', error);
-        } finally {
-          setLoadingCoaches(false);
+      setLoadingCoaches(true);
+      try {
+        const response = await fetch('/api/coaches/list');
+        const data = await response.json();
+        if (data.success && data.coaches) {
+          setCoaches(data.coaches);
         }
+      } catch (error) {
+        console.error('Failed to fetch coaches:', error);
+      } finally {
+        setLoadingCoaches(false);
       }
     };
     fetchCoaches();
-  }, [formData.role]);
+  }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -185,23 +183,6 @@ export default function RegisterPage() {
                 onChange={handleInputChange}
                 className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
               />
-            </div>
-
-            <div>
-              <label htmlFor="role" className="block text-sm font-medium text-gray-700">
-                I am a
-              </label>
-              <select
-                id="role"
-                name="role"
-                required
-                value={formData.role}
-                onChange={handleInputChange}
-                className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="coach">Coach</option>
-                <option value="client">Client</option>
-              </select>
             </div>
 
             {formData.role === 'client' && (

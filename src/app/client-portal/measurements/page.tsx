@@ -223,8 +223,8 @@ export default function MeasurementsPage() {
     }
   };
 
-  const handleBaselineSave = async () => {
-    if (!clientId) return;
+  const handleBaselineSave = async (): Promise<boolean> => {
+    if (!clientId) return false;
 
     setSaving(true);
     try {
@@ -287,16 +287,30 @@ export default function MeasurementsPage() {
       // Move to next step or complete
       if (baselineStep === 'images') {
         setBaselineStep('weight');
+        return true;
       } else if (baselineStep === 'weight') {
         setBaselineStep('measurements');
+        return true;
       } else {
-        // All steps done
-        setIsBaselineSetup(false);
-        alert('Baseline setup completed!');
+        // On measurements step - check if all required data is complete
+        // Verify all requirements are met before completing
+        const hasAllPhotos = beforeImages.front && beforeImages.back && beforeImages.side;
+        const hasWeight = baselineWeight && parseFloat(baselineWeight) > 0;
+        const hasMeasurements = Object.values(baselineMeasurements).some(val => val && parseFloat(val) > 0);
+        
+        if (hasAllPhotos && hasWeight && hasMeasurements) {
+          // All requirements met - complete setup
+          setIsBaselineSetup(false);
+          return true;
+        } else {
+          // Not all requirements met - don't complete yet
+          return false;
+        }
       }
     } catch (error) {
       console.error('Error saving baseline:', error);
       alert('Failed to save baseline. Please try again.');
+      return false;
     } finally {
       setSaving(false);
     }
@@ -684,7 +698,8 @@ export default function MeasurementsPage() {
                       onFocus={(e) => e.target.style.borderColor = '#daa450'}
                       onBlur={(e) => {
                         e.target.style.borderColor = '#d1d5db';
-                        handleBaselineSave();
+                        // Auto-save on blur, but don't show completion alert
+                        handleBaselineSave().catch(err => console.error('Auto-save failed:', err));
                       }}
                       placeholder="Enter your weight"
                       className="w-full px-4 py-3 lg:py-2.5 border border-gray-300 rounded-xl lg:rounded-lg focus:ring-2 focus:outline-none transition-all text-base lg:text-lg"
@@ -753,7 +768,8 @@ export default function MeasurementsPage() {
                           onFocus={(e) => e.target.style.borderColor = '#daa450'}
                           onBlur={(e) => {
                             e.target.style.borderColor = '#d1d5db';
-                            handleBaselineSave();
+                            // Auto-save on blur, but don't show completion alert
+                            handleBaselineSave().catch(err => console.error('Auto-save failed:', err));
                           }}
                           placeholder="Enter measurement"
                           className="w-full px-4 py-3 lg:py-2.5 border border-gray-300 rounded-xl lg:rounded-lg focus:ring-2 focus:outline-none transition-all"
@@ -772,9 +788,32 @@ export default function MeasurementsPage() {
                     </button>
                     <button
                       onClick={async () => {
-                        await handleBaselineSave();
-                        setIsBaselineSetup(false);
-                        alert('Baseline setup completed! You can now track your progress over time.');
+                        // Verify all requirements are met before completing
+                        const hasAllPhotos = beforeImages.front && beforeImages.back && beforeImages.side;
+                        const hasWeight = baselineWeight && parseFloat(baselineWeight) > 0;
+                        const hasMeasurements = Object.values(baselineMeasurements).some(val => val && parseFloat(val) > 0);
+                        
+                        if (!hasAllPhotos) {
+                          alert('Please upload all three before photos (front, back, and side) to complete setup.');
+                          return;
+                        }
+                        
+                        if (!hasWeight) {
+                          alert('Please enter your body weight to complete setup.');
+                          return;
+                        }
+                        
+                        if (!hasMeasurements) {
+                          alert('Please enter at least one body measurement to complete setup.');
+                          return;
+                        }
+                        
+                        // All requirements met - save and complete
+                        const saved = await handleBaselineSave();
+                        if (saved) {
+                          setIsBaselineSetup(false);
+                          alert('Baseline setup completed! You can now track your progress over time.');
+                        }
                       }}
                       disabled={saving}
                       className="px-6 py-3 lg:py-2.5 rounded-xl lg:rounded-lg text-white font-semibold transition-all duration-200 shadow-sm hover:shadow-md min-h-[48px] lg:min-h-[44px] flex items-center justify-center disabled:opacity-50"
