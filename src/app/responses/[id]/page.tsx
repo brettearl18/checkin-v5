@@ -64,9 +64,6 @@ export default function ResponseDetailPage() {
   const [questionHistory, setQuestionHistory] = useState<{ [questionId: string]: any[] }>({});
   const [loadingHistory, setLoadingHistory] = useState<{ [questionId: string]: boolean }>({});
   const [showHistoryFor, setShowHistoryFor] = useState<string | null>(null);
-  const [questionHistory, setQuestionHistory] = useState<{ [questionId: string]: any[] }>({});
-  const [loadingHistory, setLoadingHistory] = useState<{ [questionId: string]: boolean }>({});
-  const [showHistoryFor, setShowHistoryFor] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchResponseData = async () => {
