@@ -131,6 +131,13 @@ export async function POST(
     }
 
     // Prepare response data
+    // Count answered questions - handle string, number, boolean answers
+    const answeredCount = requestData.responses ? requestData.responses.filter((r: any) => {
+      if (!r.answer && r.answer !== 0 && r.answer !== false) return false; // null, undefined, empty string
+      if (typeof r.answer === 'string') return r.answer.trim() !== ''; // non-empty string
+      return true; // number, boolean, etc. are considered answered
+    }).length : 0;
+
     const responseData = {
       assignmentId: assignmentId,
       formId: assignmentData.formId,
@@ -140,7 +147,7 @@ export async function POST(
       responses: requestData.responses || [],
       score: finalScore,
       totalQuestions: requestData.responses ? requestData.responses.length : 0,
-      answeredQuestions: requestData.responses ? requestData.responses.filter((r: any) => r.answer && r.answer.trim() !== '').length : 0,
+      answeredQuestions: answeredCount,
       submittedAt: new Date(),
       status: 'completed'
     };
@@ -248,7 +255,8 @@ export async function POST(
   } catch (error: any) {
     console.error('Error completing check-in:', error);
     console.error('Error stack:', error?.stack);
-    console.error('Request data:', { id, requestData: requestData ? Object.keys(requestData) : 'no data' });
+    const { id: assignmentIdParam } = await params;
+    console.error('Request data:', { assignmentId: assignmentIdParam, requestDataKeys: requestData ? Object.keys(requestData) : 'no data' });
     return NextResponse.json(
       { 
         success: false, 
