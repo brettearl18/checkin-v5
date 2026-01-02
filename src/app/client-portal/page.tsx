@@ -1078,32 +1078,56 @@ export default function ClientPortalPage() {
                     <div className="text-right flex-shrink-0 ml-2">
                       <div className="text-gray-600 text-sm font-medium">Needs Action</div>
                       <div className="text-2xl font-bold text-gray-900">
-                        {assignedCheckins.filter(checkIn => {
-                          // Exclude completed check-ins
-                          if (checkIn.status === 'completed') return false;
+                        {(() => {
+                          // Filter actionable check-ins
+                          const filtered = assignedCheckins.filter(checkIn => {
+                            // Exclude completed check-ins
+                            if (checkIn.status === 'completed') return false;
 
-                          const dueDate = new Date(checkIn.dueDate);
-                          const now = new Date();
-                          
-                          // Normalize dates for comparison (set to start of day) - matches check-ins page logic exactly
-                          const normalizedDueDate = new Date(dueDate);
-                          normalizedDueDate.setHours(0, 0, 0, 0);
-                          const normalizedNow = new Date(now);
-                          normalizedNow.setHours(0, 0, 0, 0);
-                          
-                          // Include if overdue (past due date - always need attention)
-                          if (normalizedDueDate < normalizedNow) return true;
-                          
-                          // Include if due date has arrived AND window is open (available now) - matches getToDoCheckins logic
-                          if (normalizedDueDate <= normalizedNow) {
-                            const checkInWindow = checkIn.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
-                            const windowStatus = isWithinCheckInWindow(checkInWindow);
-                            if (windowStatus.isOpen) return true;
-                          }
-                          
-                          // Don't include future check-ins - they belong in "Scheduled", not "Requiring Attention"
-                          return false;
-                        }).length}
+                            const dueDate = new Date(checkIn.dueDate);
+                            const now = new Date();
+                            
+                            // Normalize dates for comparison (set to start of day) - matches check-ins page logic exactly
+                            const normalizedDueDate = new Date(dueDate);
+                            normalizedDueDate.setHours(0, 0, 0, 0);
+                            const normalizedNow = new Date(now);
+                            normalizedNow.setHours(0, 0, 0, 0);
+                            
+                            // Include if overdue (past due date - always need attention)
+                            if (normalizedDueDate < normalizedNow) return true;
+                            
+                            // Include if due date has arrived AND window is open (available now) - matches getToDoCheckins logic
+                            if (normalizedDueDate <= normalizedNow) {
+                              const checkInWindow = checkIn.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
+                              const windowStatus = isWithinCheckInWindow(checkInWindow);
+                              if (windowStatus.isOpen) return true;
+                            }
+                            
+                            // Don't include future check-ins - they belong in "Scheduled", not "Requiring Attention"
+                            return false;
+                          });
+
+                          // Deduplicate by formId + normalized due date (same logic as list below)
+                          const deduplicatedMap = new Map<string, CheckIn>();
+                          filtered.forEach(checkIn => {
+                            const dueDate = new Date(checkIn.dueDate);
+                            dueDate.setHours(0, 0, 0, 0);
+                            const key = `${checkIn.formId}_${dueDate.toISOString().split('T')[0]}`;
+                            
+                            if (!deduplicatedMap.has(key)) {
+                              deduplicatedMap.set(key, checkIn);
+                            } else {
+                              const existing = deduplicatedMap.get(key)!;
+                              if (existing.status === 'completed' && checkIn.status !== 'completed') {
+                                deduplicatedMap.set(key, checkIn);
+                              } else if (checkIn.id > existing.id) {
+                                deduplicatedMap.set(key, checkIn);
+                              }
+                            }
+                          });
+
+                          return deduplicatedMap.size;
+                        })()}
                       </div>
                     </div>
                   </div>
