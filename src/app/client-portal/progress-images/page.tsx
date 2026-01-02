@@ -33,6 +33,13 @@ export default function ProgressImagesPage() {
   const [comparisonMode, setComparisonMode] = useState(false);
   const [selectedForComparison, setSelectedForComparison] = useState<string[]>([]);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [showSocialEditor, setShowSocialEditor] = useState(false);
+  const [socialEditorImages, setSocialEditorImages] = useState<{left: ProgressImage | null, right: ProgressImage | null}>({left: null, right: null});
+  const [imagePositions, setImagePositions] = useState<{left: {x: number, y: number, scale: number}, right: {x: number, y: number, scale: number}}>({
+    left: {x: 0, y: 0, scale: 1},
+    right: {x: 0, y: 0, scale: 1}
+  });
+  const [dragging, setDragging] = useState<'left' | 'right' | null>(null);
 
   useEffect(() => {
     fetchClientData();
@@ -175,6 +182,233 @@ export default function ProgressImagesPage() {
       alert('Failed to delete image. Please try again.');
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const handleSocialEditorOpen = () => {
+    if (selectedForComparison.length === 2) {
+      const selectedImages = getSelectedImages();
+      setSocialEditorImages({
+        left: selectedImages[0] || null,
+        right: selectedImages[1] || null
+      });
+      // Reset positions - will be calculated when images load
+      setImagePositions({
+        left: {x: 0, y: 0, scale: 1},
+        right: {x: 0, y: 0, scale: 1}
+      });
+      setShowSocialEditor(true);
+    }
+  };
+
+  const handleMouseDown = (side: 'left' | 'right', e: React.MouseEvent) => {
+    e.preventDefault();
+    setDragging(side);
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const currentX = imagePositions[side].x;
+    const currentY = imagePositions[side].y;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const deltaX = moveEvent.clientX - startX;
+      const deltaY = moveEvent.clientY - startY;
+      setImagePositions(prev => ({
+        ...prev,
+        [side]: { ...prev[side], x: currentX + deltaX, y: currentY + deltaY }
+      }));
+    };
+
+    const handleMouseUp = () => {
+      setDragging(null);
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  };
+
+  const handleTouchStart = (side: 'left' | 'right', e: React.TouchEvent) => {
+    e.preventDefault();
+    setDragging(side);
+    const touch = e.touches[0];
+    const startX = touch.clientX;
+    const startY = touch.clientY;
+    const currentX = imagePositions[side].x;
+    const currentY = imagePositions[side].y;
+
+    const handleTouchMove = (moveEvent: TouchEvent) => {
+      if (moveEvent.touches.length === 1) {
+        const touch = moveEvent.touches[0];
+        const deltaX = touch.clientX - startX;
+        const deltaY = touch.clientY - startY;
+        setImagePositions(prev => ({
+          ...prev,
+          [side]: { ...prev[side], x: currentX + deltaX, y: currentY + deltaY }
+        }));
+      }
+    };
+
+    const handleTouchEnd = () => {
+      setDragging(null);
+      document.removeEventListener('touchmove', handleTouchMove);
+      document.removeEventListener('touchend', handleTouchEnd);
+    };
+
+    document.addEventListener('touchmove', handleTouchMove);
+    document.addEventListener('touchend', handleTouchEnd);
+  };
+
+  const handleScaleChange = (side: 'left' | 'right', delta: number) => {
+    setImagePositions(prev => ({
+      ...prev,
+      [side]: { ...prev[side], scale: Math.max(0.5, Math.min(2, prev[side].scale + delta)) }
+    }));
+  };
+
+  const exportSocialMediaImage = async () => {
+    if (!socialEditorImages.left || !socialEditorImages.right) return;
+
+    try {
+      // Wait a brief moment for any pending renders to complete
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Find the preview container
+      const previewContainer = document.getElementById('social-editor-preview');
+      if (!previewContainer) {
+        throw new Error('Preview container not found');
+      }
+
+      // Get actual rendered dimensions
+      const previewSize = previewContainer.offsetWidth || 600;
+      const exportSize = 1080;
+      const scaleFactor = exportSize / previewSize; // Scale from preview to export
+
+      // Create export canvas
+      const canvas = document.createElement('canvas');
+      canvas.width = exportSize;
+      canvas.height = exportSize;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      // Fill white background
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, exportSize, exportSize);
+
+      // Helper to load image
+      const loadImage = (url: string): Promise<HTMLImageElement> => {
+        return new Promise(async (resolve, reject) => {
+          try {
+            const proxyUrl = `/api/progress-images/proxy?url=${encodeURIComponent(url)}`;
+            const response = await fetch(proxyUrl);
+            if (!response.ok) throw new Error(`Failed to fetch: ${response.statusText}`);
+
+            const blob = await response.blob();
+            const objectUrl = URL.createObjectURL(blob);
+            const img = new Image();
+            img.onload = () => {
+              URL.revokeObjectURL(objectUrl);
+              resolve(img);
+            };
+            img.onerror = () => {
+              URL.revokeObjectURL(objectUrl);
+              reject(new Error('Failed to load image'));
+            };
+            img.src = objectUrl;
+          } catch (error) {
+            reject(error);
+          }
+        });
+      };
+
+      // Load both images
+      const [leftImg, rightImg] = await Promise.all([
+        loadImage(socialEditorImages.left.imageUrl),
+        loadImage(socialEditorImages.right.imageUrl)
+      ]);
+
+      // Calculate dimensions
+      const exportHalfWidth = exportSize / 2; // 540px
+      const exportHalfHeight = exportSize; // 1080px (full height for each half)
+      const previewHalfHeight = previewSize; // 600px (full preview height)
+
+      // Draw left image
+      // The stored scale is: containerHeight / naturalHeight (from onLoad)
+      // This scale makes the image fit the container height (600px) when applied
+      // So: naturalHeight * scale = containerHeight (when scale = containerHeight/naturalHeight)
+      // For export, we maintain the same visual scale: naturalHeight * exportScale = exportHeight
+      // Therefore: exportScale = storedScale * (exportHeight / previewHeight)
+      const leftNaturalHeight = leftImg.naturalHeight || leftImg.height;
+      const leftNaturalWidth = leftImg.naturalWidth || leftImg.width;
+      
+      // Calculate what size the image appears in preview
+      // Preview size = naturalHeight * storedScale
+      const leftPreviewHeight = leftNaturalHeight * imagePositions.left.scale;
+      const leftPreviewWidth = leftNaturalWidth * imagePositions.left.scale;
+      
+      // Scale to export dimensions (maintain same visual size ratio)
+      const leftDisplayHeight = leftPreviewHeight * (exportHalfHeight / previewHalfHeight);
+      const leftDisplayWidth = leftPreviewWidth * (exportHalfHeight / previewHalfHeight);
+      
+      // Position calculation
+      // CSS: top: 50%, left: 50% positions top-left corner at center
+      // translate(-50%, -50%) moves it back by half its size (centers it)
+      // translate(x, y) applies the offset
+      // scale(s) scales it around the center
+      // In preview: left half center is at (previewSize/4, previewSize/2) = (150, 300)
+      // In export: left half center is at (exportSize/4, exportSize/2) = (270, 540)
+      const leftContainerCenterX = exportHalfWidth / 2; // 270px
+      const leftContainerCenterY = exportHalfHeight / 2; // 540px
+      
+      // Canvas positioning: center + offset - half image size
+      const leftX = leftContainerCenterX + (imagePositions.left.x * scaleFactor) - (leftDisplayWidth / 2);
+      const leftY = leftContainerCenterY + (imagePositions.left.y * scaleFactor) - (leftDisplayHeight / 2);
+
+      ctx.drawImage(leftImg, leftX, leftY, leftDisplayWidth, leftDisplayHeight);
+
+      // Draw divider line
+      ctx.strokeStyle = '#9ca3af';
+      ctx.lineWidth = Math.max(2, 2 * scaleFactor);
+      ctx.beginPath();
+      ctx.moveTo(exportHalfWidth, 0);
+      ctx.lineTo(exportHalfWidth, exportSize);
+      ctx.stroke();
+
+      // Draw right image
+      const rightNaturalHeight = rightImg.naturalHeight || rightImg.height;
+      const rightNaturalWidth = rightImg.naturalWidth || rightImg.width;
+      
+      const rightPreviewHeight = rightNaturalHeight * imagePositions.right.scale;
+      const rightPreviewWidth = rightNaturalWidth * imagePositions.right.scale;
+      
+      const rightDisplayHeight = rightPreviewHeight * (exportHalfHeight / previewHalfHeight);
+      const rightDisplayWidth = rightPreviewWidth * (exportHalfHeight / previewHalfHeight);
+      
+      // Right half center: (540 + 270, 540) = (810, 540)
+      const rightContainerCenterX = exportHalfWidth + exportHalfWidth / 2; // 810px
+      const rightContainerCenterY = exportHalfHeight / 2; // 540px
+      
+      const rightX = rightContainerCenterX + (imagePositions.right.x * scaleFactor) - (rightDisplayWidth / 2);
+      const rightY = rightContainerCenterY + (imagePositions.right.y * scaleFactor) - (rightDisplayHeight / 2);
+
+      ctx.drawImage(rightImg, rightX, rightY, rightDisplayWidth, rightDisplayHeight);
+
+      // Convert to blob and download
+      canvas.toBlob((blob) => {
+        if (blob) {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `progress-comparison-${Date.now()}.png`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }
+      }, 'image/png');
+    } catch (error) {
+      console.error('Error exporting image:', error);
+      alert('Failed to export image. Please try again.');
     }
   };
 
@@ -374,6 +608,15 @@ export default function ProgressImagesPage() {
                         >
                           Compare ({selectedForComparison.length})
                         </button>
+                        {selectedForComparison.length === 2 && (
+                          <button
+                            onClick={handleSocialEditorOpen}
+                            className="px-4 py-2.5 lg:px-3 lg:py-1.5 rounded-xl lg:rounded-lg text-white text-xs lg:text-sm font-semibold transition-all duration-200 shadow-sm hover:shadow-md min-h-[48px] lg:min-h-[44px] whitespace-nowrap"
+                            style={{ backgroundColor: '#daa450' }}
+                          >
+                            Create Social Media Post
+                          </button>
+                        )}
                       </>
                     )}
                     <button
@@ -473,19 +716,6 @@ export default function ProgressImagesPage() {
                                 alt={image.caption || image.imageType}
                                 className="w-full h-full object-cover"
                               />
-                              <div className="absolute top-2 left-2 flex flex-col gap-1.5">
-                                <span className={`px-2.5 py-1 rounded-lg text-xs font-medium ${getImageTypeColor(image.imageType)}`}>
-                                  {image.imageType === 'profile' ? 'Profile' :
-                                   image.imageType === 'before' ? 'Before' :
-                                   image.imageType === 'after' ? 'After' :
-                                   'Progress'}
-                                </span>
-                                {image.orientation && (
-                                  <span className={`px-2.5 py-1 rounded-lg text-xs font-medium ${getOrientationColor(image.orientation)}`}>
-                                    {image.orientation.charAt(0).toUpperCase() + image.orientation.slice(1)}
-                                  </span>
-                                )}
-                              </div>
                               <div className="absolute bottom-2 left-2 right-2">
                                 <div className="bg-black/70 backdrop-blur-sm rounded-lg px-3 py-2">
                                   <p className="text-white text-xs font-medium">
@@ -569,19 +799,6 @@ export default function ProgressImagesPage() {
                                   `)}`;
                                 }}
                               />
-                              <div className="absolute top-2 left-2 flex flex-col gap-1.5">
-                                <span className={`px-2 py-1 rounded-lg text-[10px] lg:text-xs font-medium ${getImageTypeColor(image.imageType)}`}>
-                                  {image.imageType === 'profile' ? 'Profile' :
-                                   image.imageType === 'before' ? 'Before' :
-                                   image.imageType === 'after' ? 'After' :
-                                   'Progress'}
-                                </span>
-                                {image.orientation && (
-                                  <span className={`px-2 py-1 rounded-lg text-[10px] lg:text-xs font-medium ${getOrientationColor(image.orientation)}`}>
-                                    {image.orientation.charAt(0).toUpperCase() + image.orientation.slice(1)}
-                                  </span>
-                                )}
-                              </div>
                               <div className="absolute bottom-2 right-2">
                                 <span className="px-2 py-1 rounded-lg text-[10px] lg:text-xs font-medium bg-black/70 backdrop-blur-sm text-white">
                                   {formatTimeAgo(image.uploadedAt)}
@@ -757,6 +974,242 @@ export default function ProgressImagesPage() {
           )}
         </div>
       </div>
+
+      {/* Social Media Editor Modal */}
+      {showSocialEditor && socialEditorImages.left && socialEditorImages.right && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full max-h-[95vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+              <h2 className="text-2xl font-bold text-gray-900">Create Social Media Post</h2>
+              <button
+                onClick={() => setShowSocialEditor(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="p-6">
+              <div className="mb-4">
+                <p className="text-sm text-gray-600 mb-4">
+                  Reposition and scale the images to create your 1:1 social media post. Drag images to move, use buttons to scale.
+                </p>
+              </div>
+
+              {/* Canvas Area */}
+              <div className="relative mx-auto mb-6" style={{ width: '100%', maxWidth: '600px', aspectRatio: '1/1' }}>
+                <div 
+                  id="social-editor-preview"
+                  className="absolute inset-0 bg-gray-100 rounded-2xl border-4 border-gray-300 touch-none select-none overflow-hidden"
+                >
+                  {/* Left Image */}
+                  <div 
+                    className="absolute left-0 top-0 bottom-0 w-1/2 overflow-hidden cursor-move touch-none"
+                    onMouseDown={(e) => handleMouseDown('left', e)}
+                    onTouchStart={(e) => handleTouchStart('left', e)}
+                    style={{ zIndex: dragging === 'left' ? 10 : 1 }}
+                  >
+                    <img
+                      src={socialEditorImages.left.imageUrl}
+                      alt="Left"
+                      className="pointer-events-none"
+                      style={{
+                        position: 'absolute',
+                        top: '50%',
+                        left: '50%',
+                        width: 'auto',
+                        height: 'auto',
+                        maxWidth: 'none',
+                        maxHeight: 'none',
+                        transform: `translate(-50%, -50%) translate(${imagePositions.left.x}px, ${imagePositions.left.y}px) scale(${imagePositions.left.scale})`,
+                        transformOrigin: 'center center',
+                        transition: dragging === 'left' ? 'none' : 'transform 0.1s ease-out',
+                        objectFit: 'contain'
+                      }}
+                      draggable={false}
+                      onLoad={(e) => {
+                        // Calculate initial scale to fit image height to container height
+                        const img = e.target as HTMLImageElement;
+                        const container = img.parentElement;
+                        if (container && img.naturalWidth > 0 && img.naturalHeight > 0) {
+                          const containerHeight = container.offsetHeight;
+                          
+                          // Scale to fit height of container (1:1 box height)
+                          // This scale will be applied to the natural image dimensions
+                          const initialScale = containerHeight / img.naturalHeight;
+                          
+                          // Only set initial scale if positions are at default (first load)
+                          setImagePositions(prev => {
+                            if (prev.left.scale === 1 && prev.left.x === 0 && prev.left.y === 0) {
+                              return { ...prev, left: { ...prev.left, scale: initialScale } };
+                            }
+                            return prev;
+                          });
+                        }
+                      }}
+                    />
+                  </div>
+
+                  {/* Divider Line */}
+                  <div className="absolute left-1/2 top-0 bottom-0 w-0.5 bg-gray-400 transform -translate-x-1/2 pointer-events-none z-20"></div>
+
+                  {/* Right Image */}
+                  <div 
+                    className="absolute right-0 top-0 bottom-0 w-1/2 overflow-hidden cursor-move touch-none"
+                    onMouseDown={(e) => handleMouseDown('right', e)}
+                    onTouchStart={(e) => handleTouchStart('right', e)}
+                    style={{ zIndex: dragging === 'right' ? 10 : 1 }}
+                  >
+                    <img
+                      src={socialEditorImages.right.imageUrl}
+                      alt="Right"
+                      className="pointer-events-none"
+                      style={{
+                        position: 'absolute',
+                        top: '50%',
+                        left: '50%',
+                        width: 'auto',
+                        height: 'auto',
+                        maxWidth: 'none',
+                        maxHeight: 'none',
+                        transform: `translate(-50%, -50%) translate(${imagePositions.right.x}px, ${imagePositions.right.y}px) scale(${imagePositions.right.scale})`,
+                        transformOrigin: 'center center',
+                        transition: dragging === 'right' ? 'none' : 'transform 0.1s ease-out',
+                        objectFit: 'contain'
+                      }}
+                      draggable={false}
+                      onLoad={(e) => {
+                        // Calculate initial scale to fit image height to container height
+                        const img = e.target as HTMLImageElement;
+                        const container = img.parentElement;
+                        if (container && img.naturalWidth > 0 && img.naturalHeight > 0) {
+                          const containerHeight = container.offsetHeight;
+                          
+                          // Scale to fit height of container (1:1 box height)
+                          // This scale will be applied to the natural image dimensions
+                          const initialScale = containerHeight / img.naturalHeight;
+                          
+                          // Only set initial scale if positions are at default (first load)
+                          setImagePositions(prev => {
+                            if (prev.right.scale === 1 && prev.right.x === 0 && prev.right.y === 0) {
+                              return { ...prev, right: { ...prev.right, scale: initialScale } };
+                            }
+                            return prev;
+                          });
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Controls */}
+              <div className="space-y-4 sm:space-y-6">
+                {/* Left Image Controls */}
+                <div className="bg-gray-50 rounded-xl p-4">
+                  <h3 className="text-sm font-semibold text-gray-900 mb-3">Left Image Controls</h3>
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-4">
+                    <button
+                      onClick={() => handleScaleChange('left', -0.1)}
+                      className="px-3 sm:px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 font-medium text-gray-700 text-sm"
+                    >
+                      Zoom Out
+                    </button>
+                    <span className="text-xs sm:text-sm text-gray-600">
+                      Scale: {Math.round(imagePositions.left.scale * 100)}%
+                    </span>
+                    <button
+                      onClick={() => handleScaleChange('left', 0.1)}
+                      className="px-3 sm:px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 font-medium text-gray-700 text-sm"
+                    >
+                      Zoom In
+                    </button>
+                    <button
+                      onClick={() => {
+                        // Reset to fit height of container
+                        const img = document.querySelector('[alt="Left"]') as HTMLImageElement;
+                        if (img && img.naturalHeight > 0) {
+                          const container = img.parentElement;
+                          if (container) {
+                            const containerHeight = container.offsetHeight;
+                            const resetScale = containerHeight / img.naturalHeight;
+                            setImagePositions(prev => ({ ...prev, left: {x: 0, y: 0, scale: resetScale} }));
+                          }
+                        } else {
+                          setImagePositions(prev => ({ ...prev, left: {x: 0, y: 0, scale: 1} }));
+                        }
+                      }}
+                      className="px-3 sm:px-4 py-2 bg-gray-200 border border-gray-300 rounded-lg hover:bg-gray-300 font-medium text-gray-700 text-sm"
+                    >
+                      Reset
+                    </button>
+                  </div>
+                </div>
+
+                {/* Right Image Controls */}
+                <div className="bg-gray-50 rounded-xl p-4">
+                  <h3 className="text-sm font-semibold text-gray-900 mb-3">Right Image Controls</h3>
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-4">
+                    <button
+                      onClick={() => handleScaleChange('right', -0.1)}
+                      className="px-3 sm:px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 font-medium text-gray-700 text-sm"
+                    >
+                      Zoom Out
+                    </button>
+                    <span className="text-xs sm:text-sm text-gray-600">
+                      Scale: {Math.round(imagePositions.right.scale * 100)}%
+                    </span>
+                    <button
+                      onClick={() => handleScaleChange('right', 0.1)}
+                      className="px-3 sm:px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 font-medium text-gray-700 text-sm"
+                    >
+                      Zoom In
+                    </button>
+                    <button
+                      onClick={() => {
+                        // Reset to fit height of container
+                        const img = document.querySelector('[alt="Right"]') as HTMLImageElement;
+                        if (img && img.naturalHeight > 0) {
+                          const container = img.parentElement;
+                          if (container) {
+                            const containerHeight = container.offsetHeight;
+                            const resetScale = containerHeight / img.naturalHeight;
+                            setImagePositions(prev => ({ ...prev, right: {x: 0, y: 0, scale: resetScale} }));
+                          }
+                        } else {
+                          setImagePositions(prev => ({ ...prev, right: {x: 0, y: 0, scale: 1} }));
+                        }
+                      }}
+                      className="px-3 sm:px-4 py-2 bg-gray-200 border border-gray-300 rounded-lg hover:bg-gray-300 font-medium text-gray-700 text-sm"
+                    >
+                      Reset
+                    </button>
+                  </div>
+                </div>
+
+                {/* Export Button */}
+                <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+                  <button
+                    onClick={() => setShowSocialEditor(false)}
+                    className="px-6 py-3 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-xl font-semibold transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={exportSocialMediaImage}
+                    className="px-6 py-3 text-white rounded-xl font-semibold transition-all duration-200 shadow-sm hover:shadow-md"
+                    style={{ backgroundColor: '#daa450' }}
+                  >
+                    Export Image
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </RoleProtected>
   );
 }

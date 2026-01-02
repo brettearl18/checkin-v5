@@ -23,20 +23,44 @@ interface Notification {
 
 // GET - Fetch notifications for a user
 export async function GET(request: NextRequest) {
-  console.log('[Notifications API] GET request started');
+  // Wrap entire function in try-catch to prevent any unhandled errors
+  // This ensures we NEVER return a 500 error - always return 200 with error details
   try {
-    const { searchParams } = new URL(request.url);
-    console.log('[Notifications API] Parsed search params');
-    const userId = searchParams.get('userId');
-    const limit = parseInt(searchParams.get('limit') || '50');
-    const unreadOnly = searchParams.get('unreadOnly') === 'true';
+    console.log('[Notifications API] GET request started');
+    
+    let searchParams;
+    let userId;
+    let limit;
+    let unreadOnly;
+    
+    try {
+      const url = new URL(request.url);
+      searchParams = url.searchParams;
+      console.log('[Notifications API] Parsed search params');
+      userId = searchParams.get('userId');
+      limit = parseInt(searchParams.get('limit') || '50');
+      unreadOnly = searchParams.get('unreadOnly') === 'true';
+    } catch (urlError: any) {
+      console.error('[Notifications API] Error parsing URL:', urlError);
+      return NextResponse.json({
+        success: false,
+        message: 'Invalid request URL',
+        error: urlError instanceof Error ? urlError.message : 'Unknown error',
+        notifications: [],
+        unreadCount: 0,
+        totalCount: 0
+      }, { status: 200 });
+    }
 
     if (!userId) {
       console.log('[Notifications API] No userId provided');
       return NextResponse.json({
         success: false,
-        message: 'User ID is required'
-      }, { status: 400 });
+        message: 'User ID is required',
+        notifications: [],
+        unreadCount: 0,
+        totalCount: 0
+      }, { status: 200 });
     }
 
     console.log('[Notifications API] Fetching for userId:', userId);
@@ -47,7 +71,14 @@ export async function GET(request: NextRequest) {
       // Validate db is properly initialized
       if (!db || typeof db.collection !== 'function') {
         console.error('Database instance is invalid:', typeof db);
-        throw new Error('Database instance is not properly initialized');
+        // Return 200 instead of throwing to prevent 500
+        return NextResponse.json({
+          success: false,
+          message: 'Database instance is not properly initialized',
+          notifications: [],
+          unreadCount: 0,
+          totalCount: 0
+        }, { status: 200 });
       }
     } catch (dbError: any) {
       console.error('Error getting database instance:', dbError);
@@ -265,6 +296,8 @@ export async function GET(request: NextRequest) {
 
     } catch (queryError: any) {
       console.error('Query error in notifications API:', queryError);
+      console.error('Query error stack:', queryError?.stack);
+      console.error('Query error code:', queryError?.code);
       // Return empty array instead of failing completely
       notifications = [];
       unreadCount = 0;

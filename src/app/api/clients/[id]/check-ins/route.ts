@@ -30,6 +30,7 @@ interface ClientMetrics {
   averageScore: number;
   lastActivity: string | null;
   progressScore: number;
+  completionRate: number;
 }
 
 export async function GET(
@@ -282,7 +283,8 @@ export async function GET(
       completedCheckIns: completedCount,
       averageScore,
       lastActivity,
-      progressScore // Now represents average score, not completion rate
+      progressScore, // Now represents average score, not completion rate
+      completionRate // Add completion rate to metrics
     };
     
     return NextResponse.json({
