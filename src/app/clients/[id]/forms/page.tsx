@@ -67,15 +67,56 @@ export default function ClientFormResponsesPage() {
       );
       const responsesSnapshot = await getDocs(responsesQuery);
       const responsesData: FormResponse[] = [];
+      const deduplicatedMap = new Map<string, FormResponse>();
       
       responsesSnapshot.forEach((doc) => {
         const data = doc.data();
         if (data.clientId === clientId) {
-          responsesData.push({ id: doc.id, ...data } as FormResponse);
+          const response = { id: doc.id, ...data } as FormResponse;
+          
+          // Deduplicate by assignmentId - keep only the most recent response for each assignment
+          // If no assignmentId, deduplicate by formId + date
+          const assignmentId = (data as any).assignmentId;
+          if (assignmentId) {
+            const existing = deduplicatedMap.get(assignmentId);
+            if (!existing) {
+              deduplicatedMap.set(assignmentId, response);
+            } else {
+              // Keep the one with the most recent submittedAt
+              const existingDate = new Date(existing.submittedAt);
+              const currentDate = new Date(response.submittedAt);
+              if (currentDate > existingDate) {
+                deduplicatedMap.set(assignmentId, response);
+              }
+            }
+          } else {
+            // If no assignmentId, deduplicate by formId + date (same form submitted on same day)
+            const responseDate = new Date(response.submittedAt);
+            const dateKey = responseDate.toISOString().split('T')[0]; // YYYY-MM-DD
+            const dedupeKey = `${response.formId || 'unknown'}-${dateKey}`;
+            
+            const existing = deduplicatedMap.get(dedupeKey);
+            if (!existing) {
+              deduplicatedMap.set(dedupeKey, response);
+            } else {
+              // Keep the most recent one
+              const existingDate = new Date(existing.submittedAt);
+              if (responseDate > existingDate) {
+                deduplicatedMap.set(dedupeKey, response);
+              }
+            }
+          }
         }
       });
 
-      setFormResponses(responsesData);
+      // Convert map values to array and sort by submittedAt descending
+      const deduplicatedResponses = Array.from(deduplicatedMap.values()).sort((a, b) => {
+        const dateA = new Date(a.submittedAt);
+        const dateB = new Date(b.submittedAt);
+        return dateB.getTime() - dateA.getTime();
+      });
+
+      setFormResponses(deduplicatedResponses);
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {

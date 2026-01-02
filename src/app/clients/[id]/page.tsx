@@ -288,7 +288,35 @@ export default function ClientProfilePage() {
       const response = await fetch(`/api/clients/${clientId}/check-ins`);
       if (response.ok) {
         const data = await response.json();
-        setAllocatedCheckIns(data.checkIns || []);
+        let checkIns = data.checkIns || [];
+        
+        // Deduplicate check-ins by formId + normalized dueDate (keep most recent)
+        // This prevents showing multiple entries for the same check-in form and date
+        const deduplicatedMap = new Map<string, any>();
+        checkIns.forEach((checkIn: any) => {
+          // Normalize dueDate to date string for comparison (ignore time)
+          let dueDateKey = '';
+          if (checkIn.dueDate) {
+            const dueDate = new Date(checkIn.dueDate);
+            dueDateKey = dueDate.toISOString().split('T')[0]; // YYYY-MM-DD
+          }
+          const key = `${checkIn.formId || 'unknown'}-${dueDateKey}`;
+          
+          const existing = deduplicatedMap.get(key);
+          if (!existing) {
+            deduplicatedMap.set(key, checkIn);
+          } else {
+            // Keep the one with the most recent assignedAt or completedAt
+            const existingDate = new Date(existing.assignedAt || existing.completedAt || 0);
+            const currentDate = new Date(checkIn.assignedAt || checkIn.completedAt || 0);
+            if (currentDate > existingDate) {
+              deduplicatedMap.set(key, checkIn);
+            }
+          }
+        });
+        
+        checkIns = Array.from(deduplicatedMap.values());
+        setAllocatedCheckIns(checkIns);
         
         // Update client metrics from the API response
         if (data.metrics && client) {

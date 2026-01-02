@@ -6,15 +6,21 @@ export const dynamic = 'force-dynamic';
 interface CheckIn {
   id: string;
   formTitle: string;
+  formId?: string;
   assignedAt: any;
   completedAt: any;
   status: string;
   isRecurring?: boolean;
   recurringWeek?: number;
   totalWeeks?: number;
+  duration?: number;
+  frequency?: string;
+  startDate?: any;
+  dueDate?: any;
   category: string;
   score: number;
   responseCount: number;
+  responseId?: string; // Link to formResponse document
   checkInWindow?: {
     enabled: boolean;
     startDay: string;
@@ -22,6 +28,8 @@ interface CheckIn {
     endDay: string;
     endTime: string;
   };
+  pausedUntil?: string;
+  notes?: string;
 }
 
 interface ClientMetrics {
@@ -229,6 +237,7 @@ export async function GET(
         category: data.category || 'general',
         score: data.score || 0,
         responseCount: data.responseCount || 0,
+        responseId: data.responseId || undefined, // Include responseId for linking to form response
         checkInWindow: data.checkInWindow || {
           enabled: false,
           startDay: 'monday',
