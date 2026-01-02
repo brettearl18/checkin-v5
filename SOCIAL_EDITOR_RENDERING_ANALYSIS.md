@@ -111,3 +111,4 @@ This ensures:
 ## Technical Debt
 The current approach mixes CSS percentage-based transforms with manual canvas calculations, creating an inherently difficult-to-match system. Explicit dimensions eliminate this ambiguity.
 
+

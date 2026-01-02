@@ -263,16 +263,9 @@ export default function CheckInSuccessPage() {
           break;
           
         case 'textarea':
-          const textareaAnswer = String(response.answer).trim().toLowerCase();
-          if (textareaAnswer === 'great') {
-            questionScore = 9;
-          } else if (textareaAnswer === 'average') {
-            questionScore = 5;
-          } else if (textareaAnswer === 'poor') {
-            questionScore = 2;
-          } else {
-            questionScore = 5;
-          }
+          // Textarea questions are not scored (questionWeight should be 0)
+          // They are for free-form text responses only
+          questionScore = 0;
           break;
           
         default:

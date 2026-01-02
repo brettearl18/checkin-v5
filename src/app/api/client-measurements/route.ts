@@ -96,9 +96,43 @@ export async function POST(request: NextRequest) {
 
     const db = getDb();
     
+    const measurementDate = date ? new Date(date) : new Date();
+    
+    // Prevent duplicate submissions: Check for recent measurements with same data
+    // within the last 5 seconds (to catch rapid duplicate submissions)
+    const fiveSecondsAgo = new Date(Date.now() - 5000);
+    const recentMeasurements = await db.collection('client_measurements')
+      .where('clientId', '==', clientId)
+      .where('createdAt', '>=', fiveSecondsAgo)
+      .get();
+    
+    // Check if there's a duplicate (same date, weight, and measurements)
+    for (const doc of recentMeasurements.docs) {
+      const existing = doc.data();
+      const sameDate = existing.date?.toDate?.()?.toISOString().split('T')[0] === measurementDate.toISOString().split('T')[0];
+      const sameWeight = existing.bodyWeight === bodyWeight;
+      const sameMeasurements = JSON.stringify(existing.measurements || {}) === JSON.stringify(measurements || {});
+      const sameBaseline = Boolean(existing.isBaseline) === Boolean(isBaseline);
+      
+      if (sameDate && sameWeight && sameMeasurements && sameBaseline) {
+        console.log('Duplicate measurement detected, returning existing entry');
+        return NextResponse.json({
+          success: true,
+          message: 'Measurement already saved',
+          data: {
+            id: doc.id,
+            ...existing,
+            date: existing.date?.toDate?.()?.toISOString() || existing.date,
+            createdAt: existing.createdAt?.toDate?.()?.toISOString() || existing.createdAt
+          },
+          isDuplicate: true
+        });
+      }
+    }
+    
     const measurementData: any = {
       clientId,
-      date: date ? new Date(date) : new Date(),
+      date: measurementDate,
       measurements: measurements || {},
       createdAt: new Date(),
       updatedAt: new Date()

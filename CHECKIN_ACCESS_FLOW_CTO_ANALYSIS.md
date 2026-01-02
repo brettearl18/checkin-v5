@@ -139,3 +139,4 @@
 4. Should the banner always be clickable, or only when available?
 
 
+

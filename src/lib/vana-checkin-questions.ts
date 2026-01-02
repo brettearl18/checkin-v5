@@ -79,8 +79,8 @@ export const vanaCheckInQuestions: QuestionData[] = [
     type: 'textarea',
     category: 'Vana Check In',
     required: false,
-    description: 'Provide context for your rating (scoring: positive context = higher weight, negative context = lower weight)',
-    questionWeight: 5,
+    description: 'Provide context for your rating (for reference only, not scored)',
+    questionWeight: 0, // Not scored, just for context
   },
   {
     text: "How are your energy levels over the past week?",
@@ -118,8 +118,8 @@ export const vanaCheckInQuestions: QuestionData[] = [
     type: 'textarea',
     category: 'Vana Check In',
     required: false,
-    description: 'Provide more detail about your progress (scoring: positive explanation = higher weight, negative explanation = lower weight)',
-    questionWeight: 6,
+    description: 'Provide more detail about your progress (for reference only, not scored)',
+    questionWeight: 0, // Not scored, just for context
   },
   {
     text: "How committed are you to your non-negotiables for next week?",

@@ -261,3 +261,4 @@ After questionnaire completion, automatically create goals in Firestore:
 4. **Better Outcomes:** More thoughtful, well-planned goals
 5. **Coach Insight:** Coach can see client's "why" and anticipated challenges
 
+

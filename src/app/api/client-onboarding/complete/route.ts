@@ -71,12 +71,17 @@ export async function POST(request: NextRequest) {
       coachId: clientData.coachId
     });
 
+    // Use the Firestore document ID as the client ID
+    const clientId = clientDoc.id;
+    
     // Update client record
-    await db.collection('clients').doc(clientData.id).update({
+    await db.collection('clients').doc(clientId).update({
       status: 'active',
       authUid: userRecord.uid,
       onboardingToken: null, // Clear the token
       tokenExpiry: null,
+      onboardingStatus: 'completed', // Mark onboarding as completed
+      canStartCheckIns: true, // Allow client to start check-ins
       updatedAt: new Date()
     });
 
@@ -102,7 +107,7 @@ export async function POST(request: NextRequest) {
     // Create welcome notification for client
     try {
       await notificationService.createClientOnboardingNotification(
-        clientData.id,
+        clientId,
         clientData.coachName
       );
     } catch (error) {
@@ -113,12 +118,25 @@ export async function POST(request: NextRequest) {
     // Auto-allocate check-in form and measurement schedule if coach is assigned
     if (clientData.coachId) {
       try {
-        await autoAllocateCheckIn(clientData.id, clientData.coachId, new Date());
-        await autoCreateMeasurementSchedule(clientData.id, clientData.coachId, new Date());
+        console.log('Auto-allocating check-in for client:', clientId, 'Coach:', clientData.coachId);
+        const assignmentId = await autoAllocateCheckIn(clientId, clientData.coachId, new Date());
+        if (assignmentId) {
+          console.log('Check-in allocated successfully. Assignment ID:', assignmentId);
+        } else {
+          console.warn('Check-in allocation returned null - may already exist or form not found');
+        }
+        await autoCreateMeasurementSchedule(clientId, clientData.coachId, new Date());
+        console.log('Measurement schedule created successfully');
       } catch (allocationError) {
         console.error('Error auto-allocating check-in or measurement schedule:', allocationError);
+        // Log the full error for debugging
+        if (allocationError instanceof Error) {
+          console.error('Allocation error details:', allocationError.message, allocationError.stack);
+        }
         // Don't fail onboarding if allocation fails - log it and continue
       }
+    } else {
+      console.warn('No coachId found for client, skipping auto-allocation');
     }
 
     return NextResponse.json({ success: true, message: 'Onboarding complete. Account activated.' });

@@ -35,6 +35,7 @@ export default function MeasurementsPage() {
   const { userProfile } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const isSavingRef = useRef(false); // Ref to prevent duplicate submissions
   const [clientId, setClientId] = useState<string | null>(null);
   const [coachId, setCoachId] = useState<string | null>(null);
   const [measurementHistory, setMeasurementHistory] = useState<MeasurementEntry[]>([]);
@@ -225,7 +226,14 @@ export default function MeasurementsPage() {
 
   const handleBaselineSave = async (): Promise<boolean> => {
     if (!clientId) return false;
-
+    
+    // Prevent double submission using ref (more reliable than state)
+    if (isSavingRef.current) {
+      console.log('Already saving baseline, ignoring duplicate call');
+      return false;
+    }
+    
+    isSavingRef.current = true;
     setSaving(true);
     try {
       // Save baseline measurement
@@ -292,20 +300,9 @@ export default function MeasurementsPage() {
         setBaselineStep('measurements');
         return true;
       } else {
-        // On measurements step - check if all required data is complete
-        // Verify all requirements are met before completing
-        const hasAllPhotos = beforeImages.front && beforeImages.back && beforeImages.side;
-        const hasWeight = baselineWeight && parseFloat(baselineWeight) > 0;
-        const hasMeasurements = Object.values(baselineMeasurements).some(val => val && parseFloat(val) > 0);
-        
-        if (hasAllPhotos && hasWeight && hasMeasurements) {
-          // All requirements met - complete setup
-          setIsBaselineSetup(false);
-          return true;
-        } else {
-          // Not all requirements met - don't complete yet
-          return false;
-        }
+        // On measurements step - just save, don't auto-complete
+        // Completion should only happen when user clicks "Complete Setup" button
+        return true;
       }
     } catch (error) {
       console.error('Error saving baseline:', error);
@@ -313,13 +310,23 @@ export default function MeasurementsPage() {
       return false;
     } finally {
       setSaving(false);
+      isSavingRef.current = false;
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    e.stopPropagation(); // Prevent event bubbling
+    
     if (!clientId) return;
-
+    
+    // Prevent double submission using ref (more reliable than state)
+    if (isSavingRef.current) {
+      console.log('Already saving, ignoring duplicate submit');
+      return;
+    }
+    
+    isSavingRef.current = true;
     setSaving(true);
     try {
       const measurementData: any = {
@@ -398,6 +405,7 @@ export default function MeasurementsPage() {
       alert('Failed to save measurements. Please try again.');
     } finally {
       setSaving(false);
+      isSavingRef.current = false;
     }
   };
 

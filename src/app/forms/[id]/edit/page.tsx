@@ -225,7 +225,11 @@ export default function EditFormPage() {
               estimatedTime: formDataObj.estimatedTime || 5
             });
             // Set selected questions in the order they appear in the form
-            setSelectedQuestions(formDataObj.questions || []);
+            // Handle both cases: questions as IDs (strings) or as objects
+            const questionIds = (formDataObj.questions || []).map((q: any) => 
+              typeof q === 'string' ? q : q.id
+            );
+            setSelectedQuestions(questionIds);
           }
         }
 
@@ -335,34 +339,42 @@ export default function EditFormPage() {
     setIsSaving(true);
 
     try {
+      const payload = {
+        ...formData,
+        title: formData.title.trim(),
+        description: formData.description.trim(),
+        questionIds: selectedQuestions,
+        coachId: userProfile?.uid
+      };
+
+      console.log('Saving form with questionIds:', selectedQuestions.length, 'questions');
+      
       const response = await fetch(`/api/forms/${formId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          ...formData,
-          title: formData.title.trim(),
-          description: formData.description.trim(),
-          questionIds: selectedQuestions,
-          coachId: userProfile?.uid
-        })
+        body: JSON.stringify(payload)
       });
 
       if (!response.ok) {
-        throw new Error('Failed to update form');
+        const errorText = await response.text();
+        console.error('Failed to update form. Response:', errorText);
+        throw new Error(`Failed to update form: ${response.status} ${response.statusText}`);
       }
 
       const responseData = await response.json();
 
       if (responseData.success) {
+        console.log('Form saved successfully with', selectedQuestions.length, 'questions');
         router.push('/forms?success=true&formId=' + formId);
       } else {
+        console.error('Form save returned success: false', responseData);
         throw new Error(responseData.message || 'Failed to update form');
       }
     } catch (error) {
       console.error('Error updating form:', error);
-      alert('Error updating form. Please try again.');
+      alert(`Error updating form: ${error instanceof Error ? error.message : 'Please try again.'}`);
     } finally {
       setIsSaving(false);
     }

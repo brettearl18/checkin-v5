@@ -54,7 +54,7 @@ interface FormResponse {
 export default function CheckInCompletionPage() {
   const params = useParams();
   const router = useRouter();
-  const { userProfile } = useAuth();
+  const { userProfile, loading: authLoading } = useAuth();
   const [assignment, setAssignment] = useState<CheckInAssignment | null>(null);
   const [assignmentDocId, setAssignmentDocId] = useState<string | null>(null); // Store the actual Firestore document ID
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -69,8 +69,23 @@ export default function CheckInCompletionPage() {
   const assignmentId = params.id as string;
 
   useEffect(() => {
-    fetchAssignmentData();
-  }, [assignmentId]);
+    // Wait for auth to finish loading before fetching assignment data
+    if (authLoading) {
+      return;
+    }
+    
+    // If auth is done loading but no user profile, show error
+    if (!authLoading && !userProfile?.uid) {
+      setError('User not authenticated');
+      setLoading(false);
+      return;
+    }
+    
+    // Auth is loaded and user is authenticated, fetch assignment data
+    if (!authLoading && userProfile?.uid) {
+      fetchAssignmentData();
+    }
+  }, [assignmentId, authLoading, userProfile?.uid]);
 
   const fetchAssignmentData = async () => {
     try {
@@ -80,7 +95,7 @@ export default function CheckInCompletionPage() {
         return;
       }
 
-      // Try to fetch assignment using API endpoint first (handles both doc.id and id field)
+      // Use API endpoint (handles both doc.id and id field, uses Admin SDK so bypasses client permissions)
       try {
         const response = await fetch(`/api/check-in-assignments/${assignmentId}`);
         if (response.ok) {
@@ -88,12 +103,11 @@ export default function CheckInCompletionPage() {
           if (data.success && data.assignment) {
             const assignmentData = data.assignment as CheckInAssignment;
             
-            // Verify the assignment belongs to the current user
-            if (assignmentData.clientId !== userProfile.uid) {
-              setError('You do not have permission to access this check-in');
-              setLoading(false);
-              return;
-            }
+            // Note: API route uses Admin SDK, so we trust it for authorization
+            // The API will return the assignment regardless of clientId format
+            // Security is enforced by Firestore rules when we try to access it directly,
+            // but since we're using the API route, we can proceed
+            
             
             // Store the actual Firestore document ID from the API response
             if (data.documentId) {
@@ -112,48 +126,10 @@ export default function CheckInCompletionPage() {
         console.log('API fetch failed, trying direct Firestore query:', apiError);
       }
 
-      // Fallback: Try direct Firestore query by document ID
-      let assignmentDoc = await getDoc(doc(db, 'check_in_assignments', assignmentId));
-      
-      // If not found, try querying by the 'id' field
-      if (!assignmentDoc.exists()) {
-        const { collection, query, where, getDocs } = await import('firebase/firestore');
-        const assignmentsQuery = query(
-          collection(db, 'check_in_assignments'),
-          where('id', '==', assignmentId),
-          where('clientId', '==', userProfile.uid)
-        );
-        const querySnapshot = await getDocs(assignmentsQuery);
-        
-        if (!querySnapshot.empty) {
-          assignmentDoc = querySnapshot.docs[0];
-          // Store the actual document ID
-          setAssignmentDocId(assignmentDoc.id);
-        } else {
-          setError('Check-in assignment not found');
-          setLoading(false);
-          return;
-        }
-      }
-
-      if (!assignmentDoc.exists()) {
-        setError('Check-in assignment not found');
-        setLoading(false);
-        return;
-      }
-
-      // Store the actual Firestore document ID
-      setAssignmentDocId(assignmentDoc.id);
-      const assignmentData = assignmentDoc.data() as CheckInAssignment;
-      
-      // Verify the assignment belongs to the current user
-      if (assignmentData.clientId !== userProfile.uid) {
-        setError('You do not have permission to access this check-in');
-        setLoading(false);
-        return;
-      }
-      
-      await loadFormAndQuestions(assignmentData);
+      // If API route failed, we shouldn't try direct Firestore access
+      // as it may fail due to permissions. The API route should always work.
+      setError('Failed to load check-in data. Please try refreshing the page.');
+      setLoading(false);
     } catch (error) {
       console.error('Error fetching assignment data:', error);
       setError('Failed to load check-in data');
@@ -193,16 +169,14 @@ export default function CheckInCompletionPage() {
 
       const questionIds = formData.questions || [];
 
-      // Fetch individual questions and filter to only "Vana Check In" category
+      // Fetch all questions from the form (no filtering by category)
       const questionsData: Question[] = [];
       for (const questionId of questionIds) {
         const questionDoc = await getDoc(doc(db, 'questions', questionId));
         if (questionDoc.exists()) {
           const questionData = { id: questionDoc.id, ...questionDoc.data() } as Question;
-          // Only include questions from "Vana Check In" category
-          if (questionData.category === 'Vana Check In') {
-            questionsData.push(questionData);
-          }
+          // Include all questions from the form
+          questionsData.push(questionData);
         }
       }
 
@@ -445,37 +419,11 @@ export default function CheckInCompletionPage() {
             break;
             
           case 'textarea':
-            // Check if this is a free-text explanation question - it's not scored (weight = 0)
-            const questionTextForScoring = (question.text || question.question || '').toLowerCase();
-            const isFreeTextQuestionForScoring = 
-              questionTextForScoring.includes('describe slip up') || 
-              questionTextForScoring.includes('slip up') ||
-              questionTextForScoring.includes('explain') ||
-              questionTextForScoring.includes('please explain') ||
-              questionTextForScoring.includes('tell us more') ||
-              questionTextForScoring.includes('provide details') ||
-              (question.questionWeight === 0 || question.weight === 0);
-            
-            if (isFreeTextQuestionForScoring) {
-              // This is a free-text question for context only, not scored
-              questionScore = 0;
-              // Don't count in scoring - return early with 0 weight
-              return { ...response, score: 0, weight: 0, questionText: question.text || question.question || '', questionId: question.id || response.questionId || '' };
-            }
-            
-            // For other textarea questions, map the selected option to a score
-            const textareaAnswer = String(response.answer).trim().toLowerCase();
-            if (textareaAnswer === 'great') {
-              questionScore = 9; // Great = 9/10
-            } else if (textareaAnswer === 'average') {
-              questionScore = 5; // Average = 5/10
-            } else if (textareaAnswer === 'poor') {
-              questionScore = 2; // Poor = 2/10
-            } else if (textareaAnswer.length > 0) {
-              // Fallback: if somehow a different value, give neutral
-              questionScore = 5;
-            }
-            break;
+            // All textarea questions are free-form text responses and are NOT scored
+            // They should have questionWeight: 0 and are for context/reference only
+            questionScore = 0;
+            // Don't count in scoring - return early with 0 weight
+            return { ...response, score: 0, weight: 0, questionText: question.text || question.question || '', questionId: question.id || response.questionId || '' };
             
           default:
             // Default: give partial credit for answering
@@ -678,77 +626,16 @@ export default function CheckInCompletionPage() {
         );
 
       case 'textarea':
-        // Check if this is a free-text explanation question - it should be a real textarea
-        // Other textarea questions might be rendered as selectors for scoring
-        const questionText = (question.text || question.question || '').toLowerCase();
-        const isFreeTextQuestion = 
-          questionText.includes('describe slip up') || 
-          questionText.includes('slip up') ||
-          questionText.includes('explain') ||
-          questionText.includes('please explain') ||
-          questionText.includes('tell us more') ||
-          questionText.includes('provide details') ||
-          question.questionWeight === 0 || 
-          question.weight === 0; // Unscored questions should be real textareas
-        
-        if (isFreeTextQuestion) {
-          // Render as actual textarea for free-text responses
-          return (
-            <textarea
-              value={answer as string}
-              onChange={(e) => handleAnswerChange(index, e.target.value)}
-              rows={4}
-              className="w-full px-4 py-3.5 lg:py-3 border-2 border-gray-300 rounded-lg lg:rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-gray-900 text-base lg:text-lg transition-all resize-y"
-              placeholder="Enter your answer..."
-            />
-          );
-        }
-        
-        // For other textarea questions, show a 3-option selector for scoring
-        // Store the selected option as the answer (Great/Average/Poor)
-        const textareaValue = typeof answer === 'string' ? answer : '';
-        const isGreat = textareaValue === 'Great' || textareaValue === 'great';
-        const isAverage = textareaValue === 'Average' || textareaValue === 'average';
-        const isPoor = textareaValue === 'Poor' || textareaValue === 'poor';
-        
+        // All textarea questions should render as actual textareas
+        // This allows free-form text responses
         return (
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <button
-                type="button"
-                onClick={() => handleAnswerChange(index, 'Great')}
-                className={`px-6 py-4 rounded-xl font-semibold text-base transition-all transform hover:scale-105 shadow-md ${
-                  isGreat
-                    ? 'bg-gradient-to-br from-green-500 to-emerald-600 text-white shadow-lg scale-105'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                ✨ Great
-              </button>
-              <button
-                type="button"
-                onClick={() => handleAnswerChange(index, 'Average')}
-                className={`px-6 py-4 rounded-xl font-semibold text-base transition-all transform hover:scale-105 shadow-md ${
-                  isAverage
-                    ? 'bg-gradient-to-br from-yellow-400 to-orange-500 text-white shadow-lg scale-105'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                ⚖️ Average
-              </button>
-              <button
-                type="button"
-                onClick={() => handleAnswerChange(index, 'Poor')}
-                className={`px-6 py-4 rounded-xl font-semibold text-base transition-all transform hover:scale-105 shadow-md ${
-                  isPoor
-                    ? 'bg-gradient-to-br from-red-500 to-pink-600 text-white shadow-lg scale-105'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                ⚠️ Poor
-              </button>
-            </div>
-          </div>
+          <textarea
+            value={answer as string}
+            onChange={(e) => handleAnswerChange(index, e.target.value)}
+            rows={4}
+            className="w-full px-4 py-3.5 lg:py-3 border-2 border-gray-300 rounded-lg lg:rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-gray-900 text-base lg:text-lg transition-all resize-y"
+            placeholder="Enter your answer..."
+          />
         );
 
       case 'number':

@@ -174,12 +174,12 @@ service cloud.firestore {
     // Questions Collection
     // ============================================
     match /questions/{questionId} {
+      // All authenticated users can read questions
+      // (Questions are needed for check-in forms that clients need to fill out)
       // Coaches can read their own questions
+      // Clients need to read questions to complete check-in forms
       // Admins can read all questions
-      allow read: if isAuthenticated() && (
-        (isCoach() && resource.data.coachId == getUserId()) ||
-        hasAdminRole()
-      );
+      allow read: if isAuthenticated();
       
       // Coaches can create/update/delete their own questions
       // Admins can manage all questions
@@ -195,10 +195,17 @@ service cloud.firestore {
     // ============================================
     match /check_in_assignments/{assignmentId} {
       // Clients can read their own assignments
+      // clientId can be either the Firestore document ID or the authUid
       // Coaches can read assignments for their clients
       // Admins can read all assignments
       allow read: if isAuthenticated() && (
-        (isClient() && resource.data.clientId == getUserId()) ||
+        (isClient() && (
+          // Direct match (clientId equals authUid)
+          resource.data.clientId == getUserId() ||
+          // Or clientId is a document ID that belongs to this user
+          (exists(/databases/$(database)/documents/clients/$(resource.data.clientId)) &&
+           get(/databases/$(database)/documents/clients/$(resource.data.clientId)).data.authUid == getUserId())
+        )) ||
         (isCoach() && resource.data.coachId == getUserId()) ||
         hasAdminRole()
       );

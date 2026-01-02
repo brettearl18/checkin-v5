@@ -156,12 +156,17 @@ export async function PUT(
       updateData.isActive = isActive;
     }
 
+    console.log(`Updating form ${formId} with ${(questionIds || []).length} questions`);
+
     await db.collection('forms').doc(formId).update(updateData);
+
+    console.log(`Form ${formId} updated successfully`);
 
     return NextResponse.json({
       success: true,
       message: 'Form updated successfully',
-      formId: formId
+      formId: formId,
+      questionsCount: (questionIds || []).length
     });
   } catch (error) {
     console.error('Error updating form:', error);

@@ -97,16 +97,14 @@ export default function EditCheckInPage() {
         id: responseDoc.id
       });
 
-      // Fetch questions and filter to only "Vana Check In" category
+      // Fetch all questions from the response (no filtering by category)
       const questionsData: Question[] = [];
       for (const response of responseData.responses) {
         const questionDoc = await getDoc(doc(db, 'questions', response.questionId));
         if (questionDoc.exists()) {
           const questionData = { id: questionDoc.id, ...questionDoc.data() } as Question;
-          // Only include questions from "Vana Check In" category
-          if (questionData.category === 'Vana Check In') {
-            questionsData.push(questionData);
-          }
+          // Include all questions
+          questionsData.push(questionData);
         }
       }
       setQuestions(questionsData);
@@ -251,37 +249,11 @@ export default function EditCheckInPage() {
             break;
             
           case 'textarea':
-            // Check if this is a free-text explanation question - it's not scored (weight = 0)
-            const questionTextForScoring = (question.text || question.question || '').toLowerCase();
-            const isFreeTextQuestionForScoring = 
-              questionTextForScoring.includes('describe slip up') || 
-              questionTextForScoring.includes('slip up') ||
-              questionTextForScoring.includes('explain') ||
-              questionTextForScoring.includes('please explain') ||
-              questionTextForScoring.includes('tell us more') ||
-              questionTextForScoring.includes('provide details') ||
-              (question.questionWeight === 0 || question.weight === 0);
-            
-            if (isFreeTextQuestionForScoring) {
-              // This is a free-text question for context only, not scored
-              questionScore = 0;
-              // Skip adding to weighted score for unscored questions
-              return; // Exit early, don't add to scoring
-            }
-            
-            // For other textarea questions, map the selected option to a score
-            const textareaAnswer = String(response.answer).trim().toLowerCase();
-            if (textareaAnswer === 'great') {
-              questionScore = 9; // Great = 9/10
-            } else if (textareaAnswer === 'average') {
-              questionScore = 5; // Average = 5/10
-            } else if (textareaAnswer === 'poor') {
-              questionScore = 2; // Poor = 2/10
-            } else if (textareaAnswer.length > 0) {
-              // Fallback: if somehow a different value, give neutral
-              questionScore = 5;
-            }
-            break;
+            // All textarea questions are free-form text responses and are NOT scored
+            // They should have questionWeight: 0 and are for context/reference only
+            questionScore = 0;
+            // Skip adding to weighted score for unscored questions
+            return; // Exit early, don't add to scoring
             
           default:
             questionScore = 5;
@@ -338,79 +310,16 @@ export default function EditCheckInPage() {
         );
 
       case 'textarea':
-        // Check if this is a free-text explanation question - it should be a real textarea
-        // Other textarea questions might be rendered as selectors for scoring
-        const questionText = (question.text || question.question || '').toLowerCase();
-        const isFreeTextQuestion = 
-          questionText.includes('describe slip up') || 
-          questionText.includes('slip up') ||
-          questionText.includes('explain') ||
-          questionText.includes('please explain') ||
-          questionText.includes('tell us more') ||
-          questionText.includes('provide details') ||
-          question.questionWeight === 0 || 
-          question.weight === 0; // Unscored questions should be real textareas
-        
-        if (isFreeTextQuestion) {
-          // Render as actual textarea for free-text responses
-          return (
-            <textarea
-              value={answer as string || ''}
-              onChange={(e) => handleAnswerChange(question.id, e.target.value)}
-              rows={4}
-              className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-gray-900 text-base transition-all resize-y"
-              placeholder="Enter your answer..."
-            />
-          );
-        }
-        
-        // For other textarea questions, show a 3-option selector for scoring
-        const textareaValue = typeof answer === 'string' ? answer : '';
-        const isGreat = textareaValue === 'Great' || textareaValue === 'great';
-        const isAverage = textareaValue === 'Average' || textareaValue === 'average';
-        const isPoor = textareaValue === 'Poor' || textareaValue === 'poor';
-        
+        // All textarea questions should render as actual textareas
+        // This allows free-form text responses
         return (
-          <div className="space-y-3">
-            <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={() => handleAnswerChange(question.id, 'Great')}
-                className={`flex-1 px-4 py-3 rounded-lg font-medium transition-all ${
-                  isGreat
-                    ? 'bg-green-600 text-white shadow-md'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                Great
-              </button>
-              <button
-                type="button"
-                onClick={() => handleAnswerChange(question.id, 'Average')}
-                className={`flex-1 px-4 py-3 rounded-lg font-medium transition-all ${
-                  isAverage
-                    ? 'bg-yellow-500 text-white shadow-md'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                Average
-              </button>
-              <button
-                type="button"
-                onClick={() => handleAnswerChange(question.id, 'Poor')}
-                className={`flex-1 px-4 py-3 rounded-lg font-medium transition-all ${
-                  isPoor
-                    ? 'bg-red-600 text-white shadow-md'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                Poor
-              </button>
-            </div>
-            <p className="text-xs text-gray-500 text-center">
-              Select how you would rate this
-            </p>
-          </div>
+          <textarea
+            value={answer as string || ''}
+            onChange={(e) => handleAnswerChange(question.id, e.target.value)}
+            rows={4}
+            className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-gray-900 text-base transition-all resize-y"
+            placeholder="Enter your answer..."
+          />
         );
 
       case 'number':

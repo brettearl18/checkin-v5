@@ -218,6 +218,49 @@ export default function ClientPortalPage() {
     status: 'upcoming' | 'due' | 'overdue';
     daysUntil: number;
   } | null>(null);
+  const [joiningCheckIn, setJoiningCheckIn] = useState(false);
+  const VANA_HEALTH_FORM_ID = 'form-1765694942359-sk9mu6mmr';
+
+  // Check if client already has the Vana Health 2026 Check In allocated
+  const hasVanaHealthCheckIn = assignedCheckins.some(
+    checkIn => checkIn.formId === VANA_HEALTH_FORM_ID
+  );
+
+  const handleJoinCheckIn = async () => {
+    if (!clientId) {
+      alert('Unable to join check-in. Please refresh the page and try again.');
+      return;
+    }
+
+    setJoiningCheckIn(true);
+    try {
+      const response = await fetch('/api/client-portal/join-checkin', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          formId: VANA_HEALTH_FORM_ID,
+          clientId: clientId
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        alert('Successfully joined Vana Health 2026 Check In! Your first check-in will be available soon.');
+        // Refresh the dashboard data
+        fetchClientData();
+      } else {
+        alert(data.message || 'Failed to join check-in. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error joining check-in:', error);
+      alert('An error occurred while joining the check-in. Please try again.');
+    } finally {
+      setJoiningCheckIn(false);
+    }
+  };
 
   useEffect(() => {
     if (userProfile?.email) {
@@ -724,6 +767,54 @@ export default function ClientPortalPage() {
               <p className="text-gray-600 text-xs mt-1">Track your progress and stay connected</p>
             </div>
 
+            {/* Join Vana Health 2026 Check In - Show only if not already enrolled */}
+            {!hasVanaHealthCheckIn && clientId && (
+              <div className="mb-6">
+                <div className="bg-gradient-to-r from-amber-50 to-yellow-50 rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border-2 border-amber-200 overflow-hidden">
+                  <div className="p-4 sm:p-6 lg:p-8">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                      <div className="flex-1">
+                        <h3 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900 mb-2">
+                          Join Vana Health 2026 Check In
+                        </h3>
+                        <p className="text-gray-700 text-sm sm:text-base">
+                          Start your weekly check-in journey to track your progress and stay connected with your coach.
+                        </p>
+                      </div>
+                      <button
+                        onClick={handleJoinCheckIn}
+                        disabled={joiningCheckIn}
+                        className="px-6 py-3 rounded-xl lg:rounded-lg text-white font-semibold transition-all duration-200 shadow-sm hover:shadow-md min-h-[48px] lg:min-h-[44px] flex items-center justify-center whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+                        style={{ backgroundColor: '#22c55e' }}
+                        onMouseEnter={(e) => {
+                          if (!joiningCheckIn) {
+                            e.currentTarget.style.backgroundColor = '#16a34a';
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!joiningCheckIn) {
+                            e.currentTarget.style.backgroundColor = '#22c55e';
+                          }
+                        }}
+                      >
+                        {joiningCheckIn ? (
+                          <>
+                            <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Joining...
+                          </>
+                        ) : (
+                          'Join Check In'
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Next Check-in Section - Prominent banner at top */}
             {(() => {
               // Find next scheduled check-in (not overdue, includes today and future dates)
@@ -988,11 +1079,24 @@ export default function ClientPortalPage() {
                       <div className="text-gray-600 text-sm font-medium">Needs Action</div>
                       <div className="text-2xl font-bold text-gray-900">
                         {assignedCheckins.filter(checkIn => {
+                          if (checkIn.status !== 'pending') return false;
+                          
                           const dueDate = new Date(checkIn.dueDate);
                           const now = new Date();
                           const daysDiff = Math.floor((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-                          // Include ALL overdue check-ins (any number of days) and upcoming (next 7 days) check-ins
-                          return (daysDiff < 0 || (daysDiff >= 0 && daysDiff <= 7)) && checkIn.status === 'pending';
+                          
+                          // Include overdue check-ins (past due date - always need attention)
+                          if (daysDiff < 0) return true;
+                          
+                          // For check-ins due today, only include if window is open (can be completed now)
+                          if (daysDiff === 0) {
+                            const checkInWindow = checkIn.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
+                            const windowStatus = isWithinCheckInWindow(checkInWindow);
+                            return windowStatus.isOpen;
+                          }
+                          
+                          // Don't include future check-ins - they belong in "Scheduled", not "Requiring Attention"
+                          return false;
                         }).length}
                       </div>
                     </div>
@@ -1001,11 +1105,24 @@ export default function ClientPortalPage() {
               <div className="p-4 lg:p-8">
                 {(() => {
                   const upcomingCheckins = assignedCheckins.filter(checkIn => {
+                    if (checkIn.status !== 'pending') return false;
+                    
                     const dueDate = new Date(checkIn.dueDate);
                     const now = new Date();
                     const daysDiff = Math.floor((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-                    // Include ALL overdue check-ins (any number of days overdue) and upcoming (next 7 days) check-ins
-                    return (daysDiff < 0 || (daysDiff >= 0 && daysDiff <= 7)) && checkIn.status === 'pending';
+                    
+                    // Include overdue check-ins (past due date - always need attention)
+                    if (daysDiff < 0) return true;
+                    
+                    // For check-ins due today, only include if window is open (can be completed now)
+                    if (daysDiff === 0) {
+                      const checkInWindow = checkIn.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
+                      const windowStatus = isWithinCheckInWindow(checkInWindow);
+                      return windowStatus.isOpen;
+                    }
+                    
+                    // Don't include future check-ins - they belong in "Scheduled", not "Requiring Attention"
+                    return false;
                   }).sort((a, b) => {
                     // Sort: overdue check-ins first (most overdue first), then upcoming check-ins (earliest first)
                     const aDue = new Date(a.dueDate).getTime();
@@ -1379,10 +1496,11 @@ export default function ClientPortalPage() {
                       >
                         Update Profile
                       </Link>
-                    </div>
-                  </div>
+              </div>
+            </div>
 
-                  {/* Progress Summary */}
+
+            {/* Progress Summary */}
                   <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
                     <div className="px-4 py-3 sm:px-6 sm:py-4 border-b-2" style={{ backgroundColor: '#fef9e7', borderColor: '#daa450' }}>
                       <h3 className="text-base sm:text-lg font-bold text-gray-900">Progress Summary</h3>
