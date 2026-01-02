@@ -173,6 +173,7 @@ export default function EditFormPage() {
   const [selectedTypeFilter, setSelectedTypeFilter] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [form, setForm] = useState<Form | null>(null);
+  const [hasLoadedInitialData, setHasLoadedInitialData] = useState(false); // Track if initial data has been loaded
   
   // Drag and drop sensors
   const sensors = useSensors(
@@ -200,8 +201,13 @@ export default function EditFormPage() {
     { value: 'goals', label: 'Goals & Progress Review' }
   ];
 
-  // Fetch form and questions
+  // Fetch form and questions (only on initial load)
   useEffect(() => {
+    // Only fetch if we haven't loaded initial data yet
+    if (hasLoadedInitialData) {
+      return;
+    }
+
     const fetchData = async () => {
       try {
         if (!userProfile?.uid) {
@@ -230,6 +236,7 @@ export default function EditFormPage() {
               typeof q === 'string' ? q : q.id
             );
             setSelectedQuestions(questionIds);
+            setHasLoadedInitialData(true); // Mark as loaded
           }
         }
 
@@ -252,7 +259,7 @@ export default function EditFormPage() {
     if (userProfile?.uid && formId) {
       fetchData();
     }
-  }, [userProfile?.uid, formId]);
+  }, [userProfile?.uid, formId, hasLoadedInitialData]);
 
   // Refresh questions when returning from edit page
   useEffect(() => {
@@ -298,15 +305,55 @@ export default function EditFormPage() {
     });
   };
 
-  const handleDragEnd = (event: DragEndEvent) => {
+  const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
 
     if (over && active.id !== over.id) {
-      setSelectedQuestions((items) => {
-        const oldIndex = items.indexOf(active.id as string);
-        const newIndex = items.indexOf(over.id as string);
-        return arrayMove(items, oldIndex, newIndex);
+      // Calculate new order
+      let newOrder: string[] = [];
+      
+      setSelectedQuestions((prev) => {
+        const oldIndex = prev.indexOf(active.id as string);
+        const newIndex = prev.indexOf(over.id as string);
+        newOrder = arrayMove(prev, oldIndex, newIndex);
+        return newOrder;
       });
+
+      // Autosave the new order immediately (after state update)
+      // Use a small delay to ensure state has updated
+      setTimeout(async () => {
+        try {
+          const payload = {
+            ...formData,
+            title: formData.title.trim(),
+            description: formData.description.trim(),
+            questionIds: newOrder, // Save the new order
+            coachId: userProfile?.uid
+          };
+
+          const response = await fetch(`/api/forms/${formId}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload)
+          });
+
+          if (response.ok) {
+            const responseData = await response.json();
+            if (responseData.success) {
+              console.log('Question order autosaved successfully');
+            } else {
+              console.error('Autosave failed:', responseData.message);
+            }
+          } else {
+            console.error('Autosave failed with status:', response.status);
+          }
+        } catch (error) {
+          console.error('Error autosaving question order:', error);
+          // Don't show alert for autosave failures - it's a background operation
+        }
+      }, 100);
     }
   };
 
