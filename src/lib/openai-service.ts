@@ -328,7 +328,9 @@ export async function analyzeClientRisk(
   const trend = currentScore > avgHistorical + 5 ? 'improving' :
                 currentScore < avgHistorical - 5 ? 'declining' : 'stable';
 
-  const systemPrompt = buildRiskAnalysisSystemPrompt(coachContext);
+  // Extract goals questionnaire from clientProfile if present
+  const goalsQuestionnaire = (clientProfile as any)?.goalsQuestionnaire;
+  const systemPrompt = buildRiskAnalysisSystemPrompt(coachContext, goalsQuestionnaire);
 
   const prompt = `Analyze this client's risk level based on their check-in patterns and profile.
 

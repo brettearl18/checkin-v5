@@ -407,6 +407,53 @@ export async function POST(
       }
     }
 
+    // Fetch goals questionnaire responses
+    let goalsQuestionnaire = null;
+    try {
+      const questionnaireSnapshot = await db.collection('client_goals_questionnaire_responses')
+        .where('clientId', '==', clientId)
+        .where('status', 'in', ['completed', 'submitted'])
+        .limit(1)
+        .get();
+      
+      if (!questionnaireSnapshot.empty) {
+        const questionnaireData = questionnaireSnapshot.docs[0].data();
+        goalsQuestionnaire = {
+          responses: questionnaireData.responses || {},
+          completedAt: questionnaireData.completedAt?.toDate?.()?.toISOString() || questionnaireData.completedAt,
+          goalsCreated: questionnaireData.goalsCreated || []
+        };
+      }
+    } catch (error) {
+      console.error('Error fetching goals questionnaire (continuing without it):', error);
+      // Continue without goals questionnaire if fetch fails
+    }
+
+    // Fetch client goals
+    let clientGoals: any[] = [];
+    try {
+      const goalsSnapshot = await db.collection('clientGoals')
+        .where('clientId', '==', clientId)
+        .get();
+      
+      clientGoals = goalsSnapshot.docs.map(doc => {
+        const goalData = doc.data();
+        return {
+          id: doc.id,
+          title: goalData.title || '',
+          category: goalData.category || 'general',
+          targetValue: goalData.targetValue || 0,
+          currentValue: goalData.currentValue || 0,
+          unit: goalData.unit || '',
+          progress: goalData.progress || 0,
+          status: goalData.status || 'active',
+          deadline: goalData.deadline?.toDate?.()?.toISOString() || goalData.deadline
+        };
+      });
+    } catch (error) {
+      console.error('Error fetching client goals (continuing without them):', error);
+    }
+
     // Get last check-in date for "since last check-in" period
     let lastCheckInDate: Date | undefined;
     try {
@@ -589,6 +636,27 @@ export async function POST(
         }, { status: 500 });
       }
 
+      // Build enhanced client profile with goals questionnaire data
+      const enhancedClientProfile: any = {
+        goals: clientGoals.map(g => g.title || g),
+        barriers: []
+      };
+
+      // Add goals questionnaire context if available
+      if (goalsQuestionnaire) {
+        enhancedClientProfile.goalsQuestionnaire = {
+          vision2026: goalsQuestionnaire.responses['vision-2'] || null,
+          whyItMatters: goalsQuestionnaire.responses['vision-3'] || null,
+          commitmentLevel: goalsQuestionnaire.responses['commitment-1'] || null,
+          anticipatedChallenges: goalsQuestionnaire.responses['commitment-2'] || null,
+          firstActionStep: goalsQuestionnaire.responses['nextsteps-1'] || null,
+          whenToStart: goalsQuestionnaire.responses['nextsteps-2'] || null,
+          obstaclesPlan: goalsQuestionnaire.responses['nextsteps-3'] || null,
+          celebrationPlan: goalsQuestionnaire.responses['nextsteps-4'] || null,
+          supportNeeded: goalsQuestionnaire.responses['commitment-3'] || null
+        };
+      }
+
       // Analyze risk
       let riskAnalysis;
       try {
@@ -596,10 +664,7 @@ export async function POST(
           currentScore,
           historicalScores,
           textResponses: textResponses.slice(0, 20), // Limit for API
-          clientProfile: {
-            goals: clientData?.goals || [],
-            barriers: []
-          },
+          clientProfile: enhancedClientProfile,
           coachContext: coachContext || undefined
         });
       } catch (error: any) {

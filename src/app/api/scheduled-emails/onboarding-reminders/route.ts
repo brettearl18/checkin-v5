@@ -57,6 +57,7 @@ export async function POST(request: NextRequest) {
       // Check if this client should be skipped
       const isCompleted = clientData.onboardingStatus === 'completed' || clientData.canStartCheckIns === true;
       const hasNoEmail = !clientEmail;
+      const emailNotificationsDisabled = (clientData.emailNotifications ?? true) === false && !testEmail;
       const lastReminderSent = clientData.lastOnboardingReminderSent;
       let recentlyReminded = false;
       if (lastReminderSent) {
@@ -65,7 +66,7 @@ export async function POST(request: NextRequest) {
         recentlyReminded = hoursSinceReminder < 23;
       }
       
-      const shouldSkip = isCompleted || hasNoEmail || recentlyReminded;
+      const shouldSkip = isCompleted || hasNoEmail || emailNotificationsDisabled || recentlyReminded;
 
       // If in test mode, send email even if client would normally be skipped
       if (shouldSkip && !testEmail) {

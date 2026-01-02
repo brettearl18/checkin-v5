@@ -724,6 +724,66 @@ export default function ClientPortalPage() {
               <p className="text-gray-600 text-xs mt-1">Track your progress and stay connected</p>
             </div>
 
+            {/* Next Check-in Section - Prominent banner at top */}
+            {(() => {
+              // Find next scheduled check-in (not overdue, includes today and future dates)
+              const now = new Date();
+              now.setHours(0, 0, 0, 0);
+              
+              const nextScheduled = assignedCheckins
+                .filter(checkIn => {
+                  const dueDate = new Date(checkIn.dueDate);
+                  dueDate.setHours(0, 0, 0, 0);
+                  const daysDiff = Math.floor((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                  
+                  // Include pending check-ins that are due today or in the future (not overdue)
+                  return checkIn.status === 'pending' && daysDiff >= 0;
+                })
+                .sort((a, b) => {
+                  const dateA = new Date(a.dueDate).getTime();
+                  const dateB = new Date(b.dueDate).getTime();
+                  return dateA - dateB; // Earliest first
+                })[0]; // Get the first one (next upcoming)
+
+              if (!nextScheduled) return null;
+
+              const dueDate = new Date(nextScheduled.dueDate);
+              const daysDiff = Math.floor((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+              
+              return (
+                <div className="mb-6">
+                  <div className="bg-[#fef9e7] border-2 border-[#daa450] rounded-2xl lg:rounded-3xl p-4 sm:p-6 shadow-sm">
+                    <div className="flex items-center gap-3 sm:gap-4">
+                      <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#daa450' }}>
+                        <svg className="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h2 className="text-base sm:text-lg font-bold text-gray-900 mb-1">Next Check-in</h2>
+                        <p className="text-sm sm:text-base font-medium text-gray-900 truncate">{nextScheduled.title}</p>
+                        <p className="text-xs sm:text-sm text-gray-600 mt-1">
+                          Due: {dueDate.toLocaleDateString('en-US', { 
+                            weekday: 'long', 
+                            month: 'long', 
+                            day: 'numeric' 
+                          })}
+                          {daysDiff === 0 ? ' (Today)' : daysDiff === 1 ? ' (Tomorrow)' : daysDiff > 1 ? ` (in ${daysDiff} days)` : ''}
+                        </p>
+                      </div>
+                      <Link
+                        href="/client-portal/check-ins"
+                        className="flex-shrink-0 px-4 py-2 text-sm font-semibold text-white rounded-xl hover:opacity-90 transition-opacity shadow-sm"
+                        style={{ backgroundColor: '#daa450' }}
+                      >
+                        View
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Onboarding Questionnaire Banner - Show if not completed or submitted (default to showing for new clients) */}
             {onboardingStatus !== 'completed' && onboardingStatus !== 'submitted' && onboardingStatus !== 'skipped' && (
               <div className="bg-gradient-to-r from-[#daa450] to-[#c89540] rounded-2xl lg:rounded-3xl shadow-lg mb-6 overflow-hidden border border-[#daa450]/20" style={{ display: 'block' }}>
@@ -764,172 +824,149 @@ export default function ClientPortalPage() {
               </div>
             )}
 
-            {/* Onboarding To-Do List - Show if any tasks are incomplete */}
-            {!loadingTodos && (!onboardingTodos.hasWeight || !onboardingTodos.hasMeasurements || !onboardingTodos.hasBeforePhotos) && (
-              <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 mb-6 overflow-hidden">
-                <div className="px-4 py-3 sm:px-6 sm:py-4 border-b-2" style={{ backgroundColor: '#fef9e7', borderColor: '#daa450' }}>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 sm:gap-3">
-                      <div className="w-8 h-8 sm:w-10 sm:h-10 bg-white bg-opacity-20 rounded-lg flex items-center justify-center flex-shrink-0">
-                        <svg className="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                        </svg>
-                      </div>
-                      <div>
-                        <h2 className="text-base sm:text-lg font-bold text-gray-900">Get Started</h2>
-                        <p className="text-gray-600 text-[10px] sm:text-xs">Complete these steps to begin your wellness journey</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="p-4 sm:p-6 space-y-3">
-                  {/* Weight Task */}
-                  {!onboardingTodos.hasWeight && (
-                    <Link
-                      href="/client-portal/measurements"
-                      className="flex items-center justify-between p-3 sm:p-4 bg-white rounded-xl sm:rounded-2xl border border-gray-200 hover:border-[#daa450] hover:shadow-md transition-all group"
-                    >
-                      <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
-                        <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 flex items-center justify-center flex-shrink-0" style={{ borderColor: '#daa450' }}>
-                          <span className="font-bold text-xs sm:text-sm" style={{ color: '#daa450' }}>1</span>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold text-sm sm:text-base text-gray-900 truncate">Enter Your Weight</h3>
-                          <p className="text-xs sm:text-sm text-gray-600 line-clamp-1">Record your starting weight to track progress</p>
-                        </div>
-                      </div>
-                      <svg className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                    </Link>
-                  )}
-
-                  {/* Measurements Task */}
-                  {!onboardingTodos.hasMeasurements && (
-                    <Link
-                      href="/client-portal/measurements"
-                      className="flex items-center justify-between p-3 sm:p-4 bg-white rounded-xl sm:rounded-2xl border border-gray-200 hover:border-[#daa450] hover:shadow-md transition-all group"
-                    >
-                      <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
-                        <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 flex items-center justify-center flex-shrink-0" style={{ borderColor: '#daa450' }}>
-                          <span className="font-bold text-xs sm:text-sm" style={{ color: '#daa450' }}>2</span>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold text-sm sm:text-base text-gray-900 truncate">Add Your Measurements</h3>
-                          <p className="text-xs sm:text-sm text-gray-600 line-clamp-1">Record body measurements (waist, hips, chest, etc.)</p>
-                        </div>
-                      </div>
-                      <svg className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                    </Link>
-                  )}
-
-                  {/* Before Photos Task */}
-                  {!onboardingTodos.hasBeforePhotos && (
-                    <Link
-                      href="/client-portal/measurements"
-                      className="flex items-center justify-between p-3 sm:p-4 bg-white rounded-xl sm:rounded-2xl border border-gray-200 hover:border-[#daa450] hover:shadow-md transition-all group"
-                    >
-                      <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
-                        <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 flex items-center justify-center flex-shrink-0" style={{ borderColor: '#daa450' }}>
-                          <span className="font-bold text-xs sm:text-sm" style={{ color: '#daa450' }}>3</span>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold text-sm sm:text-base text-gray-900 truncate">Upload Before Photos</h3>
-                          <p className="text-xs sm:text-sm text-gray-600 line-clamp-2">Take and upload front, back, and side photos to track your transformation</p>
-                        </div>
-                      </div>
-                      <svg className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                    </Link>
-                  )}
-
-                {/* Completion Message */}
-                {onboardingTodos.hasWeight && onboardingTodos.hasMeasurements && onboardingTodos.hasBeforePhotos && (
-                  <div className="p-4 bg-green-50 rounded-lg border-2 border-green-200">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
-                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                      </div>
-                      <div>
-                        <h3 className="font-semibold text-green-900">All Set!</h3>
-                        <p className="text-sm text-green-700">You've completed your initial setup. Keep up the great work!</p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                </div>
-              </div>
-            )}
-
-          {/* Measurement Task - Show if schedule exists and task is upcoming/due/overdue */}
-          {nextMeasurementTask && (nextMeasurementTask.status === 'upcoming' || nextMeasurementTask.status === 'due' || nextMeasurementTask.status === 'overdue') && (
-            <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 mb-6 overflow-hidden">
-              <div className="px-4 py-3 sm:px-6 sm:py-4 border-b-2" style={{ backgroundColor: '#fef9e7', borderColor: '#daa450' }}>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 sm:gap-3">
-                    <div className="w-8 h-8 sm:w-10 sm:h-10 bg-white bg-opacity-20 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <svg className="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                      </svg>
-                    </div>
-                    <div>
-                      <h2 className="text-base sm:text-lg font-bold text-gray-900">Measurement Reminder</h2>
-                      <p className="text-gray-600 text-[10px] sm:text-xs">Time to update your measurements and progress photos</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
+            {/* Next Upcoming Tasks - Unified task widget */}
+            {!loadingTodos && (() => {
+              const hasOnboardingTasks = !onboardingTodos.hasWeight || !onboardingTodos.hasMeasurements || !onboardingTodos.hasBeforePhotos;
+              const hasMeasurementTask = nextMeasurementTask && (nextMeasurementTask.status === 'upcoming' || nextMeasurementTask.status === 'due' || nextMeasurementTask.status === 'overdue');
+              const hasTasks = hasOnboardingTasks || hasMeasurementTask;
               
-              <div className="p-4 sm:p-6">
-                <Link
-                  href="/client-portal/measurements"
-                  className="flex items-center justify-between p-3 sm:p-4 bg-white rounded-xl sm:rounded-2xl border-2 transition-all group"
-                  style={{ 
-                    borderColor: nextMeasurementTask.status === 'overdue' ? '#ef4444' : 
-                                 nextMeasurementTask.status === 'due' ? '#daa450' : '#daa450'
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#fef9e7'}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ffffff'}
-                >
-                  <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
-                    <div 
-                      className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 flex items-center justify-center flex-shrink-0"
-                      style={{ borderColor: nextMeasurementTask.status === 'overdue' ? '#ef4444' : '#daa450' }}
-                    >
-                      <svg className="w-4 h-4 sm:w-5 sm:h-5" style={{ color: nextMeasurementTask.status === 'overdue' ? '#ef4444' : '#daa450' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                      </svg>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-sm sm:text-base text-gray-900 truncate">
-                        Update Measurements & Photos
-                      </h3>
-                      <p className="text-xs sm:text-sm text-gray-600 line-clamp-1">
-                        {nextMeasurementTask.status === 'overdue' && (
-                          <span className="text-red-600 font-medium">Overdue by {nextMeasurementTask.daysUntil} {nextMeasurementTask.daysUntil === 1 ? 'day' : 'days'}</span>
-                        )}
-                        {nextMeasurementTask.status === 'due' && (
-                          <span className="font-medium" style={{ color: '#daa450' }}>Due today - {new Date(nextMeasurementTask.dueDate).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</span>
-                        )}
-                        {nextMeasurementTask.status === 'upcoming' && (
-                          <>Due {nextMeasurementTask.daysUntil === 1 ? 'tomorrow' : `in ${nextMeasurementTask.daysUntil} days`} - {new Date(nextMeasurementTask.dueDate).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</>
-                        )}
-                      </p>
+              if (!hasTasks) return null;
+              
+              return (
+                <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 mb-6 overflow-hidden">
+                  <div className="px-4 py-3 sm:px-6 sm:py-4 border-b-2" style={{ backgroundColor: '#fef9e7', borderColor: '#daa450' }}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 sm:gap-3">
+                        <div className="w-8 h-8 sm:w-10 sm:h-10 bg-white bg-opacity-20 rounded-lg flex items-center justify-center flex-shrink-0">
+                          <svg className="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                          </svg>
+                        </div>
+                        <div>
+                          <h2 className="text-base sm:text-lg font-bold text-gray-900">Next Upcoming Tasks</h2>
+                          <p className="text-gray-600 text-[10px] sm:text-xs">Complete these tasks to stay on track</p>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                  <svg className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                </Link>
-              </div>
-            </div>
-          )}
+                  
+                  <div className="p-4 sm:p-6 space-y-3">
+                    {/* Measurement Task - Show first if overdue/due */}
+                    {hasMeasurementTask && (
+                      <Link
+                        href="/client-portal/measurements"
+                        className="flex items-center justify-between p-3 sm:p-4 bg-white rounded-xl sm:rounded-2xl border-2 transition-all group"
+                        style={{ 
+                          borderColor: nextMeasurementTask!.status === 'overdue' ? '#ef4444' : 
+                                       nextMeasurementTask!.status === 'due' ? '#daa450' : '#daa450'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#fef9e7'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ffffff'}
+                      >
+                        <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+                          <div 
+                            className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 flex items-center justify-center flex-shrink-0"
+                            style={{ borderColor: nextMeasurementTask!.status === 'overdue' ? '#ef4444' : '#daa450' }}
+                          >
+                            <svg className="w-4 h-4 sm:w-5 sm:h-5" style={{ color: nextMeasurementTask!.status === 'overdue' ? '#ef4444' : '#daa450' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                            </svg>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-semibold text-sm sm:text-base text-gray-900 truncate">
+                              Update Measurements & Photos
+                            </h3>
+                            <p className="text-xs sm:text-sm text-gray-600 line-clamp-1">
+                              {nextMeasurementTask!.status === 'overdue' && (
+                                <span className="text-red-600 font-medium">Overdue by {nextMeasurementTask!.daysUntil} {nextMeasurementTask!.daysUntil === 1 ? 'day' : 'days'}</span>
+                              )}
+                              {nextMeasurementTask!.status === 'due' && (
+                                <span className="font-medium" style={{ color: '#daa450' }}>Due today - {new Date(nextMeasurementTask!.dueDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+                              )}
+                              {nextMeasurementTask!.status === 'upcoming' && (
+                                <>Due {nextMeasurementTask!.daysUntil === 1 ? 'tomorrow' : `in ${nextMeasurementTask!.daysUntil} days`} - {new Date(nextMeasurementTask!.dueDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</>
+                              )}
+                            </p>
+                          </div>
+                        </div>
+                        <svg className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </Link>
+                    )}
+
+                    {/* Weight Task */}
+                    {!onboardingTodos.hasWeight && (
+                      <Link
+                        href="/client-portal/measurements"
+                        className="flex items-center justify-between p-3 sm:p-4 bg-white rounded-xl sm:rounded-2xl border border-gray-200 hover:border-[#daa450] hover:shadow-md transition-all group"
+                      >
+                        <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+                          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 flex items-center justify-center flex-shrink-0" style={{ borderColor: '#daa450' }}>
+                            <svg className="w-4 h-4 sm:w-5 sm:h-5" style={{ color: '#daa450' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                            </svg>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-semibold text-sm sm:text-base text-gray-900 truncate">Enter Your Weight</h3>
+                            <p className="text-xs sm:text-sm text-gray-600 line-clamp-1">Record your starting weight to track progress</p>
+                          </div>
+                        </div>
+                        <svg className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </Link>
+                    )}
+
+                    {/* Measurements Task */}
+                    {!onboardingTodos.hasMeasurements && (
+                      <Link
+                        href="/client-portal/measurements"
+                        className="flex items-center justify-between p-3 sm:p-4 bg-white rounded-xl sm:rounded-2xl border border-gray-200 hover:border-[#daa450] hover:shadow-md transition-all group"
+                      >
+                        <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+                          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 flex items-center justify-center flex-shrink-0" style={{ borderColor: '#daa450' }}>
+                            <svg className="w-4 h-4 sm:w-5 sm:h-5" style={{ color: '#daa450' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                            </svg>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-semibold text-sm sm:text-base text-gray-900 truncate">Add Your Measurements</h3>
+                            <p className="text-xs sm:text-sm text-gray-600 line-clamp-1">Record body measurements (waist, hips, chest, etc.)</p>
+                          </div>
+                        </div>
+                        <svg className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </Link>
+                    )}
+
+                    {/* Before Photos Task */}
+                    {!onboardingTodos.hasBeforePhotos && (
+                      <Link
+                        href="/client-portal/measurements"
+                        className="flex items-center justify-between p-3 sm:p-4 bg-white rounded-xl sm:rounded-2xl border border-gray-200 hover:border-[#daa450] hover:shadow-md transition-all group"
+                      >
+                        <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+                          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 flex items-center justify-center flex-shrink-0" style={{ borderColor: '#daa450' }}>
+                            <svg className="w-4 h-4 sm:w-5 sm:h-5" style={{ color: '#daa450' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-semibold text-sm sm:text-base text-gray-900 truncate">Upload Before Photos</h3>
+                            <p className="text-xs sm:text-sm text-gray-600 line-clamp-2">Take and upload front, back, and side photos to track your transformation</p>
+                          </div>
+                        </div>
+                        <svg className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </Link>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Check-ins Requiring Attention - Priority action items */}
             <div className="mb-6">
@@ -1094,36 +1131,8 @@ export default function ClientPortalPage() {
               </div>
             </div>
 
-            {/* Stats Overview - Always visible */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
-              <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
-                <div className="px-3 py-3 sm:px-4 sm:py-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl flex items-center justify-center shadow-sm" style={{ backgroundColor: '#daa450' }}>
-                      <svg className="w-4 h-4 sm:w-5 sm:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
-                    </div>
-                  </div>
-                  <div className="text-2xl sm:text-3xl font-bold text-gray-900">{stats?.totalCheckins || 0}</div>
-                  <div className="text-[10px] sm:text-xs text-gray-600 mt-1 font-medium">Total Check-ins</div>
-                </div>
-              </div>
-
-              <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
-                <div className="px-3 py-3 sm:px-4 sm:py-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="w-8 h-8 sm:w-10 sm:h-10 bg-[#34C759] rounded-xl sm:rounded-2xl flex items-center justify-center shadow-sm">
-                      <svg className="w-4 h-4 sm:w-5 sm:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                    </div>
-                  </div>
-                  <div className="text-2xl sm:text-3xl font-bold text-gray-900">{stats?.completedCheckins || 0}</div>
-                  <div className="text-[10px] sm:text-xs text-gray-600 mt-1 font-medium">Completed</div>
-                </div>
-              </div>
-
+            {/* Stats Overview - Simplified to 2 cards */}
+            <div className="grid grid-cols-2 gap-3 sm:gap-4 mb-6">
               <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
                 <div className="px-3 py-3 sm:px-4 sm:py-4">
                   <div className="flex items-center justify-between mb-2">
@@ -1140,8 +1149,8 @@ export default function ClientPortalPage() {
                     )}
                   </div>
                   <div className="text-[10px] sm:text-xs text-gray-600 font-medium">Average Score</div>
-                  {stats?.averageScore > 0 && recentResponses.length > 0 && (
-                    <div className="text-[10px] sm:text-xs text-gray-500 mt-1">Based on {recentResponses.length} check-in{recentResponses.length !== 1 ? 's' : ''}</div>
+                  {stats?.averageScore > 0 && stats?.completedCheckins > 0 && (
+                    <div className="text-[10px] sm:text-xs text-gray-500 mt-1">Based on {stats.completedCheckins} check-in{stats.completedCheckins !== 1 ? 's' : ''}</div>
                   )}
                 </div>
               </div>
@@ -1149,160 +1158,23 @@ export default function ClientPortalPage() {
               <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
                 <div className="px-3 py-3 sm:px-4 sm:py-4">
                   <div className="flex items-center justify-between mb-2">
-                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl flex items-center justify-center shadow-sm" style={{ backgroundColor: '#daa450' }}>
+                    <div className="w-8 h-8 sm:w-10 sm:h-10 bg-[#34C759] rounded-xl sm:rounded-2xl flex items-center justify-center shadow-sm">
                       <svg className="w-4 h-4 sm:w-5 sm:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                     </div>
                   </div>
-                  <div className="text-lg sm:text-xl font-bold text-gray-900">
-                    {stats?.lastActivity ? new Date(stats.lastActivity).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'N/A'}
+                  <div className="text-2xl sm:text-3xl font-bold text-gray-900">
+                    {stats?.totalCheckins > 0 ? Math.round((stats.completedCheckins / stats.totalCheckins) * 100) : 0}%
                   </div>
-                  <div className="text-[10px] sm:text-xs text-gray-600 mt-1 font-medium">Last Activity</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Recent Responses - Priority activity feed */}
-            <div className="hidden lg:block bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden mb-6">
-              <div className="px-4 py-4 sm:px-6 sm:py-5 lg:px-8 lg:py-6 border-b-2" style={{ backgroundColor: '#fef9e7', borderColor: '#daa450' }}>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h2 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900">Recent Responses</h2>
-                    <p className="text-gray-600 text-xs sm:text-sm mt-1 hidden sm:block">Your latest check-in responses and feedback</p>
-                  </div>
-                  {recentResponses.length > 0 && (
-                    <Link
-                      href="/client-portal/check-ins?filter=completed"
-                      className="text-sm font-semibold flex items-center gap-1"
-                      style={{ color: '#daa450' }}
-                    >
-                      View All
-                      <svg className="w-3.5 h-3.5 lg:w-4 lg:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                    </Link>
+                  <div className="text-[10px] sm:text-xs text-gray-600 mt-1 font-medium">Completion Rate</div>
+                  {stats?.totalCheckins > 0 && (
+                    <div className="text-[10px] sm:text-xs text-gray-500 mt-1">{stats.completedCheckins} of {stats.totalCheckins} completed</div>
                   )}
                 </div>
               </div>
-              <div className="p-4 sm:p-6 lg:p-8">
-                {recentResponses.length === 0 ? (
-                  <div className="text-center py-12">
-                    <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
-                    </div>
-                    <p className="text-gray-700 text-lg mb-4">No recent responses</p>
-                    <p className="text-gray-900 text-sm">Your responses will appear here</p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {recentResponses.map((response: any) => {
-                      const hasCoachFeedback = response.hasFeedback || response.feedbackCount > 0;
-                      const responseLink = hasCoachFeedback && response.id 
-                        ? `/client-portal/feedback/${response.id}` 
-                        : response.id 
-                        ? `/client-portal/check-in/${response.id}/success`
-                        : null;
-                      const CardWrapper = responseLink ? Link : 'div';
-                      const cardProps = responseLink ? { href: responseLink } : {};
-
-                      return (
-                        <CardWrapper
-                          key={response.id}
-                          {...cardProps}
-                          className={`block rounded-2xl border-2 transition-all duration-200 hover:shadow-lg ${
-                            hasCoachFeedback 
-                              ? 'bg-[#34C759]/10 border-[#34C759]/20 hover:border-[#34C759]/40' 
-                              : 'bg-white border-gray-200 hover:border-gray-300'
-                          }`}
-                        >
-                          <div className="p-5">
-                            <div className="flex items-start justify-between gap-3 mb-3">
-                              <div className="flex items-center space-x-3 flex-1 min-w-0">
-                                <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shadow-sm flex-shrink-0 ${
-                                  hasCoachFeedback 
-                                    ? 'bg-[#34C759]' 
-                                    : ''
-                                }`}
-                                style={!hasCoachFeedback ? { backgroundColor: '#daa450' } : {}}
-                                >
-                                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                  </svg>
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 mb-1 flex-wrap">
-                                    <h3 className="text-base font-bold text-gray-900 truncate">{response.formTitle || response.checkInTitle}</h3>
-                                    {hasCoachFeedback && (
-                                      <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-green-500 text-white rounded-full text-xs font-bold shadow-sm flex-shrink-0">
-                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                        </svg>
-                                        Coach Replied
-                                      </span>
-                                    )}
-                                  </div>
-                                  <div className="flex items-center gap-3 text-sm text-gray-600">
-                                    <div className="flex items-center gap-1">
-                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                      </svg>
-                                      <span>{new Date(response.submittedAt).toLocaleDateString('en-US', { 
-                                        month: 'short', 
-                                        day: 'numeric',
-                                        year: 'numeric'
-                                      })}</span>
-                                    </div>
-                                    <div className={`px-2 py-1 rounded-lg text-xs font-semibold ${(() => {
-                                      const status = getTrafficLightStatus(response.score, thresholds);
-                                      return getTrafficLightColor(status);
-                                    })()}`}>
-                                      Score: {response.score}%
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                            
-                            {hasCoachFeedback ? (
-                              <div className="mt-4 pt-4 border-t-2 border-green-200">
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-2">
-                                    <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                                      <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                                      </svg>
-                                    </div>
-                                    <div>
-                                      <p className="text-sm font-bold text-green-900">Coach has provided feedback!</p>
-                                      <p className="text-xs text-green-700">Click to view their response</p>
-                                    </div>
-                                  </div>
-                                  <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                  </svg>
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="mt-4 pt-4 border-t border-gray-200">
-                                <div className="flex items-center gap-2 text-sm text-gray-500">
-                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                  </svg>
-                                  <span>Waiting for coach feedback</span>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </CardWrapper>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
             </div>
+
 
             {/* Progress Images */}
             <div className="hidden lg:block bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden mb-6">
@@ -1585,313 +1457,7 @@ export default function ClientPortalPage() {
                 </div>
               </div>
 
-              {/* Upcoming Tasks - Mobile only - Consolidates onboarding and check-ins */}
-              <div className="bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
-                <div className="px-4 py-3 sm:px-6 sm:py-4 border-b-2" style={{ backgroundColor: '#fef9e7', borderColor: '#daa450' }}>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-base sm:text-lg font-bold text-gray-900">Upcoming Tasks</h3>
-                      <p className="text-gray-600 text-[10px] sm:text-xs mt-1">Actions requiring your attention</p>
-                    </div>
-                  </div>
-                </div>
-                <div className="p-4 sm:p-6 space-y-3">
-                  {/* Onboarding Questionnaire Task */}
-                  {onboardingStatus !== 'completed' && onboardingStatus !== 'submitted' && onboardingStatus !== 'skipped' && (
-                    <Link
-                      href="/client-portal/onboarding-questionnaire"
-                      className="block rounded-xl border-2 transition-all duration-200 bg-gradient-to-r from-[#daa450]/10 to-[#c89540]/10 border-[#daa450] hover:shadow-md"
-                    >
-                      <div className="p-3">
-                        <div className="flex items-center gap-2 mb-2">
-                          <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 bg-gradient-to-r from-[#daa450] to-[#c89540]">
-                            <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                            </svg>
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <h4 className="text-sm font-bold text-gray-900">Complete Onboarding Questionnaire</h4>
-                            <p className="text-xs text-gray-600 mt-0.5">
-                              {onboardingStatus === 'not_started' 
-                                ? 'Required before receiving check-ins'
-                                : `${onboardingProgress}% complete - Continue now`
-                              }
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    </Link>
-                  )}
-
-                  {/* Onboarding Todos */}
-                  {!loadingTodos && (!onboardingTodos.hasWeight || !onboardingTodos.hasMeasurements || !onboardingTodos.hasBeforePhotos) && (
-                    <>
-                      {!onboardingTodos.hasWeight && (
-                        <Link
-                          href="/client-portal/measurements"
-                          className="flex items-center gap-2 p-3 bg-gray-50 rounded-xl border border-gray-200 hover:border-[#daa450] hover:shadow-sm transition-all"
-                        >
-                          <div className="w-7 h-7 rounded-full border-2 flex items-center justify-center flex-shrink-0" style={{ borderColor: '#daa450' }}>
-                            <span className="font-bold text-xs" style={{ color: '#daa450' }}>1</span>
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <h4 className="text-sm font-semibold text-gray-900">Enter Your Weight</h4>
-                            <p className="text-xs text-gray-600">Record your starting weight</p>
-                          </div>
-                          <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                          </svg>
-                        </Link>
-                      )}
-                      {!onboardingTodos.hasMeasurements && (
-                        <Link
-                          href="/client-portal/measurements"
-                          className="flex items-center gap-2 p-3 bg-gray-50 rounded-xl border border-gray-200 hover:border-[#daa450] hover:shadow-sm transition-all"
-                        >
-                          <div className="w-7 h-7 rounded-full border-2 flex items-center justify-center flex-shrink-0" style={{ borderColor: '#daa450' }}>
-                            <span className="font-bold text-xs" style={{ color: '#daa450' }}>2</span>
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <h4 className="text-sm font-semibold text-gray-900">Add Measurements</h4>
-                            <p className="text-xs text-gray-600">Record body measurements</p>
-                          </div>
-                          <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                          </svg>
-                        </Link>
-                      )}
-                      {!onboardingTodos.hasBeforePhotos && (
-                        <Link
-                          href="/client-portal/measurements"
-                          className="flex items-center gap-2 p-3 bg-gray-50 rounded-xl border border-gray-200 hover:border-[#daa450] hover:shadow-sm transition-all"
-                        >
-                          <div className="w-7 h-7 rounded-full border-2 flex items-center justify-center flex-shrink-0" style={{ borderColor: '#daa450' }}>
-                            <span className="font-bold text-xs" style={{ color: '#daa450' }}>3</span>
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <h4 className="text-sm font-semibold text-gray-900">Upload Before Photos</h4>
-                            <p className="text-xs text-gray-600">Take front, back, and side photos</p>
-                          </div>
-                          <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                          </svg>
-                        </Link>
-                      )}
-                    </>
-                  )}
-
-                  {/* Upcoming Check-ins */}
-                  {(() => {
-                    const upcomingCheckins = assignedCheckins.filter(checkIn => {
-                      const dueDate = new Date(checkIn.dueDate);
-                      const now = new Date();
-                      const daysDiff = Math.floor((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-                      return (daysDiff < 0 || (daysDiff >= 0 && daysDiff <= 7)) && checkIn.status === 'pending';
-                    }).sort((a, b) => {
-                      const aDue = new Date(a.dueDate).getTime();
-                      const bDue = new Date(b.dueDate).getTime();
-                      const now = new Date().getTime();
-                      const aIsOverdue = aDue < now;
-                      const bIsOverdue = bDue < now;
-                      if (aIsOverdue && !bIsOverdue) return -1;
-                      if (!aIsOverdue && bIsOverdue) return 1;
-                      if (aIsOverdue && bIsOverdue) return aDue - bDue;
-                      return aDue - bDue;
-                    }).slice(0, 3); // Show max 3 check-ins
-
-                    if (upcomingCheckins.length === 0) {
-                      return null;
-                    }
-
-                    return (
-                      <>
-                        {upcomingCheckins.map((checkIn) => {
-                          const dueDate = new Date(checkIn.dueDate);
-                          const now = new Date();
-                          const daysDiff = Math.floor((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-                          const isOverdue = daysDiff < 0;
-                          const colorStatus = getCheckInColorStatus(checkIn);
-                          const borderColor = colorStatus === 'red' ? 'border-red-300' :
-                                            colorStatus === 'orange' ? 'border-orange-300' :
-                                            'border-green-300';
-                          const bgColor = colorStatus === 'red' ? 'bg-red-50' :
-                                         colorStatus === 'orange' ? 'bg-orange-50' :
-                                         'bg-green-50';
-                          const textColor = colorStatus === 'red' ? 'text-red-700' :
-                                          colorStatus === 'orange' ? 'text-orange-700' :
-                                          'text-green-700';
-
-                          return (
-                            <Link
-                              key={checkIn.id}
-                              href={`/client-portal/check-in/${checkIn.id}`}
-                              className={`flex items-center gap-2 p-3 rounded-xl border-2 transition-all hover:shadow-sm ${borderColor} ${bgColor}`}
-                            >
-                              <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 bg-white">
-                                <svg className="w-4 h-4" style={{ color: colorStatus === 'red' ? '#ef4444' : colorStatus === 'orange' ? '#f97316' : '#22c55e' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                </svg>
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <h4 className="text-sm font-semibold text-gray-900 truncate">{checkIn.title}</h4>
-                                <p className={`text-xs font-medium mt-0.5 ${textColor}`}>
-                                  {isOverdue ? `${Math.abs(daysDiff)} day${Math.abs(daysDiff) !== 1 ? 's' : ''} overdue` :
-                                   daysDiff === 0 ? 'Due today' :
-                                   daysDiff === 1 ? 'Due tomorrow' :
-                                   `Due in ${daysDiff} days`}
-                                </p>
-                              </div>
-                              <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                              </svg>
-                            </Link>
-                          );
-                        })}
-                      </>
-                    );
-                  })()}
-
-                  {/* Empty State */}
-                  {onboardingStatus === 'completed' && 
-                   (!loadingTodos && onboardingTodos.hasWeight && onboardingTodos.hasMeasurements && onboardingTodos.hasBeforePhotos) &&
-                   assignedCheckins.filter(checkIn => {
-                     const dueDate = new Date(checkIn.dueDate);
-                     const now = new Date();
-                     const daysDiff = Math.floor((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-                     return (daysDiff < 0 || (daysDiff >= 0 && daysDiff <= 7)) && checkIn.status === 'pending';
-                   }).length === 0 && (
-                    <div className="text-center py-6">
-                      <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-2">
-                        <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                      </div>
-                      <p className="text-sm font-semibold text-gray-900 mb-1">All caught up!</p>
-                      <p className="text-xs text-gray-600">No tasks requiring attention</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Recent Responses - Mobile only */}
-              <div className="bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
-                <div className="px-4 py-3 sm:px-6 sm:py-4 border-b-2" style={{ backgroundColor: '#fef9e7', borderColor: '#daa450' }}>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-base sm:text-lg font-bold text-gray-900">Recent Responses</h3>
-                      <p className="text-gray-600 text-[10px] sm:text-xs mt-1">Your latest check-in responses</p>
-                    </div>
-                    {recentResponses.length > 0 && (
-                      <Link
-                        href="/client-portal/check-ins?filter=completed"
-                        className="text-xs font-semibold flex items-center gap-1"
-                        style={{ color: '#daa450' }}
-                      >
-                        View All
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                        </svg>
-                      </Link>
-                    )}
-                  </div>
-                </div>
-                <div className="p-4 sm:p-6">
-                  {recentResponses.length === 0 ? (
-                    <div className="text-center py-8">
-                      <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                        <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                        </svg>
-                      </div>
-                      <p className="text-gray-700 text-sm mb-2">No recent responses</p>
-                      <p className="text-gray-600 text-xs">Your responses will appear here</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {recentResponses.slice(0, 3).map((response: any) => {
-                        const hasCoachFeedback = response.hasFeedback || response.feedbackCount > 0;
-                        const responseLink = hasCoachFeedback && response.id 
-                          ? `/client-portal/feedback/${response.id}` 
-                          : response.id 
-                          ? `/client-portal/check-in/${response.id}/success`
-                          : null;
-                        const CardWrapper = responseLink ? Link : 'div';
-                        const cardProps = responseLink ? { href: responseLink } : {};
-
-                        return (
-                          <CardWrapper
-                            key={response.id}
-                            {...cardProps}
-                            className={`block rounded-xl border-2 transition-all duration-200 ${
-                              hasCoachFeedback 
-                                ? 'bg-[#34C759]/10 border-[#34C759]/20' 
-                                : 'bg-white border-gray-200'
-                            }`}
-                          >
-                            <div className="p-3">
-                              <div className="flex items-center gap-2 mb-2">
-                                <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                                  hasCoachFeedback ? 'bg-[#34C759]' : ''
-                                }`}
-                                style={!hasCoachFeedback ? { backgroundColor: '#daa450' } : {}}
-                                >
-                                  <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                  </svg>
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <h4 className="text-sm font-bold text-gray-900 truncate">{response.formTitle || response.checkInTitle}</h4>
-                                  <div className="flex items-center gap-2 text-xs text-gray-600 mt-0.5">
-                                    <span>{new Date(response.submittedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
-                                    <span className={`px-2 py-0.5 rounded text-xs font-semibold ${(() => {
-                                      const status = getTrafficLightStatus(response.score, thresholds);
-                                      return getTrafficLightColor(status);
-                                    })()}`}>
-                                      {response.score}%
-                                    </span>
-                                    {hasCoachFeedback && (
-                                      <span className="inline-flex items-center gap-0.5 px-2 py-0.5 bg-green-500 text-white rounded-full text-[10px] font-bold">
-                                        <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                        </svg>
-                                        Feedback
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </CardWrapper>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Progress Images - Mobile only */}
-              <div className="bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
-                <div className="px-4 py-3 sm:px-6 sm:py-4 border-b-2" style={{ backgroundColor: '#fef9e7', borderColor: '#daa450' }}>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-base sm:text-lg font-bold text-gray-900">Progress Images</h3>
-                      <p className="text-gray-600 text-[10px] sm:text-xs mt-1">Track your transformation</p>
-                    </div>
-                    <Link
-                      href="/client-portal/progress-images"
-                      className="px-3 py-1.5 text-white rounded-xl hover:opacity-90 transition-all duration-200 text-xs font-medium shadow-sm"
-                      style={{ backgroundColor: '#daa450' }}
-                    >
-                      Manage
-                    </Link>
-                  </div>
-                </div>
-                <div className="p-4 sm:p-6">
-                  <ProgressImagesPreview clientEmail={userProfile?.email || ''} />
-                </div>
-              </div>
-
-              {/* Progress Summary */}
+              {/* Progress Summary - Mobile only */}
               <div className="bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
                 <div className="px-4 py-3 sm:px-6 sm:py-4 border-b-2" style={{ backgroundColor: '#fef9e7', borderColor: '#daa450' }}>
                   <h3 className="text-base sm:text-lg font-bold text-gray-900">Progress Summary</h3>
@@ -1916,6 +1482,28 @@ export default function ClientPortalPage() {
                       {stats.lastActivity ? 'Current' : 'None'}
                     </span>
                   </div>
+                </div>
+              </div>
+
+              {/* Progress Images - Mobile only */}
+              <div className="bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                <div className="px-4 py-3 sm:px-6 sm:py-4 border-b-2" style={{ backgroundColor: '#fef9e7', borderColor: '#daa450' }}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-base sm:text-lg font-bold text-gray-900">Progress Images</h3>
+                      <p className="text-gray-600 text-[10px] sm:text-xs mt-1">Track your transformation</p>
+                    </div>
+                    <Link
+                      href="/client-portal/progress-images"
+                      className="px-3 py-1.5 text-white rounded-xl hover:opacity-90 transition-all duration-200 text-xs font-medium shadow-sm"
+                      style={{ backgroundColor: '#daa450' }}
+                    >
+                      Manage
+                    </Link>
+                  </div>
+                </div>
+                <div className="p-4 sm:p-6">
+                  <ProgressImagesPreview clientEmail={userProfile?.email || ''} />
                 </div>
               </div>
             </div>

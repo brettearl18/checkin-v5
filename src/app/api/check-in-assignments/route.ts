@@ -141,6 +141,9 @@ export async function POST(request: NextRequest) {
         const clientEmail = clientData?.email;
         const clientName = `${clientData?.firstName || ''} ${clientData?.lastName || ''}`.trim() || 'there';
         
+        // Check if client has email notifications enabled (default to true)
+        const emailNotificationsEnabled = clientData?.emailNotifications ?? true;
+        
         // Get coach information
         let coachName: string | undefined;
         try {
@@ -153,7 +156,7 @@ export async function POST(request: NextRequest) {
           console.log('Could not fetch coach information for email');
         }
 
-        if (clientEmail) {
+        if (clientEmail && emailNotificationsEnabled) {
           const { sendEmail, getCheckInAssignmentEmailTemplate } = await import('@/lib/email-service');
           const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
           const checkInUrl = `${baseUrl}/client-portal/check-in/${docRef.id}`;

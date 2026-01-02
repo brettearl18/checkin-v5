@@ -159,7 +159,8 @@ export async function POST(
     // Send completion confirmation email to client
     try {
       const clientEmail = clientData.email;
-      if (clientEmail) {
+      const emailNotificationsEnabled = clientData.emailNotifications ?? true;
+      if (clientEmail && emailNotificationsEnabled) {
         const { sendEmail } = await import('@/lib/email-service');
         const { getCheckInCompletedEmailTemplate } = await import('@/lib/email-templates');
         const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://checkinv5.web.app';
@@ -196,6 +197,18 @@ export async function POST(
     } catch (error) {
       console.error('Error sending completion email:', error);
       // Don't fail the check-in if email fails
+    }
+
+    // Track goal progress after check-in completion (async, don't wait)
+    if (assignmentData.clientId) {
+      fetch('/api/goals/track-progress', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId: assignmentData.clientId })
+      }).catch(error => {
+        console.error('Error tracking goal progress after check-in:', error);
+        // Don't fail the check-in if goal tracking fails
+      });
     }
 
     return NextResponse.json({

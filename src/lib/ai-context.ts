@@ -113,14 +113,11 @@ Your approach should:
 /**
  * Build system prompt for risk analysis
  */
-export function buildRiskAnalysisSystemPrompt(coachContext?: CoachContext): string {
-  const basePrompt = `You are an AI assistant helping a Health Coach analyze client risk factors and predict potential outcomes. Your analysis should consider functional health principles and holistic wellness factors.`;
+export function buildRiskAnalysisSystemPrompt(coachContext?: CoachContext, goalsQuestionnaire?: any): string {
+  let basePrompt = `You are an AI assistant helping a Health Coach analyze client risk factors and predict potential outcomes. Your analysis should consider functional health principles and holistic wellness factors.`;
 
-  if (!coachContext || !coachContext.specialization) {
-    return basePrompt;
-  }
-
-  return `You are an AI assistant helping a ${coachContext.specialization} Coach analyze client risk factors and predict potential outcomes. 
+  if (coachContext?.specialization) {
+    basePrompt = `You are an AI assistant helping a ${coachContext.specialization} Coach analyze client risk factors and predict potential outcomes. 
 
 Your analysis should:
 - Consider factors relevant to ${coachContext.specialization}
@@ -128,6 +125,32 @@ Your analysis should:
 - Identify early warning signs before they become major issues
 - Consider both physical and mental/emotional risk factors
 - Provide actionable intervention recommendations specific to the coach's specialty`;
+  }
+
+  // Add goals questionnaire context if available
+  if (goalsQuestionnaire) {
+    basePrompt += `\n\n## Client's 2026 Goals & Vision (from Goals Questionnaire)
+
+Vision for 2026: ${goalsQuestionnaire.vision2026 || 'Not provided'}
+Why It Matters: ${goalsQuestionnaire.whyItMatters || 'Not provided'}
+Commitment Level: ${goalsQuestionnaire.commitmentLevel || 'Not provided'}/10
+Anticipated Challenges: ${goalsQuestionnaire.anticipatedChallenges || 'Not provided'}
+First Action Step: ${goalsQuestionnaire.firstActionStep || 'Not provided'}
+When to Start: ${goalsQuestionnaire.whenToStart || 'Not provided'}
+Obstacles Plan: ${goalsQuestionnaire.obstaclesPlan || 'Not provided'}
+Celebration Plan: ${goalsQuestionnaire.celebrationPlan || 'Not provided'}
+Support Needed: ${goalsQuestionnaire.supportNeeded || 'Not provided'}
+
+When analyzing risk and providing recommendations, consider:
+1. Whether client's current performance aligns with their stated goals and vision
+2. If they're on track to meet their goals by their deadlines
+3. Whether their commitment level matches their progress
+4. How to address their anticipated challenges
+5. Whether they've taken their first action step as planned
+6. How to provide the support they've requested`;
+  }
+
+  return basePrompt;
 }
 
 /**

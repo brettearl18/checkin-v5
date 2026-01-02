@@ -115,6 +115,16 @@ export async function POST(request: NextRequest) {
 
     const docRef = await db.collection('client_measurements').add(measurementData);
 
+    // Track goal progress after measurement save (async, don't wait)
+    fetch('/api/goals/track-progress', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clientId })
+    }).catch(error => {
+      console.error('Error tracking goal progress after measurement:', error);
+      // Don't fail the measurement save if goal tracking fails
+    });
+
     return NextResponse.json({
       success: true,
       message: 'Measurement saved successfully',

@@ -84,6 +84,14 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
+      // Skip if client has disabled email notifications (default to true if not set)
+      const emailNotificationsEnabled = clientData?.emailNotifications ?? true;
+      if (!emailNotificationsEnabled && !testEmail) {
+        results.skipped++;
+        console.log(`Skipping email for ${clientData?.email}: email notifications disabled`);
+        continue;
+      }
+
       const clientEmail = clientData?.email;
       const clientName = `${clientData?.firstName || ''} ${clientData?.lastName || ''}`.trim() || 'there';
 
