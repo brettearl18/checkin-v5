@@ -492,6 +492,7 @@ export default function CheckInsPage() {
                     >
                       All ({filteredCheckIns.length})
                     </button>
+                    </div>
                   </div>
                 </div>
               </div>
