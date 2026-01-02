@@ -41,7 +41,7 @@ interface CoachFeedback {
 }
 
 export default function ResponseDetailPage() {
-  const { userProfile } = useAuth();
+  const { userProfile, loading: authLoading } = useAuth();
   const params = useParams();
   const router = useRouter();
   const responseId = params.id as string;
@@ -66,34 +66,41 @@ export default function ResponseDetailPage() {
   const [showHistoryFor, setShowHistoryFor] = useState<string | null>(null);
 
   useEffect(() => {
+    // Wait for auth to finish loading before fetching data
+    if (authLoading) {
+      return;
+    }
+
     const fetchResponseData = async () => {
       try {
         setLoading(true);
         setError(null);
 
+        // Check if user profile is available
+        if (!userProfile?.uid) {
+          console.error('No user profile found');
+          setError('Authentication required. Please log in.');
+          setLoading(false);
+          return;
+        }
+
         // Fetch the list of check-ins to review for navigation
         let checkIns: any[] = [];
-        if (userProfile?.uid) {
-          try {
-            const checkInsRes = await fetch(`/api/dashboard/check-ins-to-review?coachId=${userProfile.uid}`);
-            if (checkInsRes.ok) {
-              const checkInsData = await checkInsRes.json();
-              if (checkInsData.success && checkInsData.data?.checkIns) {
-                checkIns = checkInsData.data.checkIns;
-                setCheckInsList(checkIns);
-              }
+        try {
+          const checkInsRes = await fetch(`/api/dashboard/check-ins-to-review?coachId=${userProfile.uid}`);
+          if (checkInsRes.ok) {
+            const checkInsData = await checkInsRes.json();
+            if (checkInsData.success && checkInsData.data?.checkIns) {
+              checkIns = checkInsData.data.checkIns;
+              setCheckInsList(checkIns);
             }
-          } catch (error) {
-            console.log('Error fetching check-ins list:', error);
-            // Don't fail if this fails
           }
+        } catch (error) {
+          console.log('Error fetching check-ins list:', error);
+          // Don't fail if this fails
         }
 
         // Fetch the specific response
-        if (!userProfile?.uid) {
-          console.error('No user profile found');
-          return;
-        }
         const responseRes = await fetch(`/api/responses/${responseId}?coachId=${userProfile.uid}`);
         
         if (!responseRes.ok) {
@@ -137,10 +144,10 @@ export default function ResponseDetailPage() {
       }
     };
 
-    if (responseId) {
+    if (responseId && !authLoading) {
       fetchResponseData();
     }
-  }, [responseId, userProfile?.uid]);
+  }, [responseId, userProfile?.uid, authLoading]);
 
   const fetchFeedbackForResponse = async (actualResponseId: string) => {
     try {
