@@ -29,6 +29,17 @@ export async function POST(request: NextRequest) {
     try {
       userRecord = await auth.getUser(userId);
       console.log(`✅ User ${userId} exists in Firebase Auth`);
+      
+      // Update password if provided for existing user
+      if (password) {
+        try {
+          await auth.updateUser(userId, { password });
+          console.log(`✅ Password updated for user ${userId}`);
+        } catch (updateError: any) {
+          console.error('Error updating password:', updateError);
+          // Continue even if password update fails
+        }
+      }
     } catch (error: any) {
       if (error.code === 'auth/user-not-found') {
         // User doesn't exist in Firebase Auth - create account if email and password provided
@@ -95,7 +106,7 @@ export async function POST(request: NextRequest) {
     };
 
     // If user exists, merge with existing data
-    if (userDoc.exists()) {
+    if (userDoc.exists) {
       const existingData = userDoc.data();
       await userRef.update({
         ...userData,
