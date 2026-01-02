@@ -110,9 +110,48 @@ export default function ClientProgressPage() {
         throw new Error(data.message || 'Failed to fetch progress data');
       }
 
-      const responsesData: FormResponse[] = data.history || [];
+      let responsesData: FormResponse[] = data.history || [];
       
-      console.log('Fetched responses:', responsesData.length);
+      // Deduplicate responses by assignmentId - keep only the most recent one for each assignment
+      // This prevents showing multiple entries when user submits the same check-in multiple times
+      const deduplicatedMap = new Map<string, FormResponse>();
+      
+      responsesData.forEach(response => {
+        const assignmentId = (response as any).assignmentId;
+        if (assignmentId) {
+          const existing = deduplicatedMap.get(assignmentId);
+          if (!existing) {
+            deduplicatedMap.set(assignmentId, response);
+          } else {
+            // Keep the one with the most recent submittedAt
+            const existingDate = new Date(existing.submittedAt);
+            const currentDate = new Date(response.submittedAt);
+            if (currentDate > existingDate) {
+              deduplicatedMap.set(assignmentId, response);
+            }
+          }
+        } else {
+          // If no assignmentId, deduplicate by formId + date (same form submitted on same day)
+          const responseDate = new Date(response.submittedAt);
+          const dateKey = responseDate.toISOString().split('T')[0]; // YYYY-MM-DD
+          const dedupeKey = `${response.formId || 'unknown'}-${dateKey}`;
+          
+          const existing = deduplicatedMap.get(dedupeKey);
+          if (!existing) {
+            deduplicatedMap.set(dedupeKey, response);
+          } else {
+            // Keep the most recent one
+            const existingDate = new Date(existing.submittedAt);
+            if (responseDate > existingDate) {
+              deduplicatedMap.set(dedupeKey, response);
+            }
+          }
+        }
+      });
+      
+      responsesData = Array.from(deduplicatedMap.values());
+      
+      console.log('Fetched responses (after deduplication):', responsesData.length);
       console.log('Sample response structure:', responsesData[0]);
       console.log('Sample response.responses:', responsesData[0]?.responses?.[0]);
       setResponses(responsesData);
