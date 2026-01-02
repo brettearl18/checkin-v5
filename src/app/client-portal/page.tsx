@@ -1110,7 +1110,8 @@ export default function ClientPortalPage() {
                 </div>
               <div className="p-4 lg:p-8">
                 {(() => {
-                  const upcomingCheckins = assignedCheckins.filter(checkIn => {
+                  // Filter actionable check-ins
+                  const filteredCheckins = assignedCheckins.filter(checkIn => {
                     // Exclude completed check-ins
                     if (checkIn.status === 'completed') return false;
 
@@ -1135,7 +1136,33 @@ export default function ClientPortalPage() {
                     
                     // Don't include future check-ins - they belong in "Scheduled", not "Requiring Attention"
                     return false;
-                  }).sort((a, b) => {
+                  });
+
+                  // Deduplicate: Group by formId + normalized due date, keep only one per group
+                  // This handles cases where duplicate assignments exist for the same form/date
+                  const deduplicatedMap = new Map<string, CheckIn>();
+                  filteredCheckins.forEach(checkIn => {
+                    const dueDate = new Date(checkIn.dueDate);
+                    dueDate.setHours(0, 0, 0, 0);
+                    const key = `${checkIn.formId}_${dueDate.toISOString().split('T')[0]}`;
+                    
+                    // If we already have one for this key, keep the one that's not completed and has earlier ID (more recently created)
+                    if (!deduplicatedMap.has(key)) {
+                      deduplicatedMap.set(key, checkIn);
+                    } else {
+                      const existing = deduplicatedMap.get(key)!;
+                      // Prefer non-completed over completed (shouldn't happen as we filtered, but safety check)
+                      if (existing.status === 'completed' && checkIn.status !== 'completed') {
+                        deduplicatedMap.set(key, checkIn);
+                      }
+                      // If both have same status, prefer the one with later ID (more recent assignment)
+                      else if (checkIn.id > existing.id) {
+                        deduplicatedMap.set(key, checkIn);
+                      }
+                    }
+                  });
+
+                  const upcomingCheckins = Array.from(deduplicatedMap.values()).sort((a, b) => {
                     // Sort: overdue check-ins first (most overdue first), then upcoming check-ins (earliest first)
                     const aDue = new Date(a.dueDate).getTime();
                     const bDue = new Date(b.dueDate).getTime();
