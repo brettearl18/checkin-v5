@@ -20,6 +20,7 @@ interface Question {
   questionWeight?: number; // Weight of the question (1-10)
   weight?: number; // Alternative field name for weight
   yesIsPositive?: boolean; // For boolean questions: true if YES is positive
+  description?: string; // Optional description/help text for the question
 }
 
 interface FormResponse {
