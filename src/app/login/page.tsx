@@ -305,17 +305,7 @@ function LoginContent() {
           </div>
 
           {/* Registration Links */}
-          <div className="mt-6 grid grid-cols-1 gap-3">
-            <Link
-              href="/register?role=coach"
-              className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-900 hover:bg-gray-50"
-            >
-              <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              </svg>
-              Register as Coach
-            </Link>
-            
+          <div className="mt-6">
             <Link
               href="/register?role=client"
               className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-900 hover:bg-gray-50"
