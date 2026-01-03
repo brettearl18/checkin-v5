@@ -1007,8 +1007,8 @@ export default function ClientPortalPage() {
               );
             })()}
 
-            {/* Check-ins Requiring Attention - Priority action items */}
-            <div className="mb-6">
+            {/* Check-ins Requiring Attention - Priority action items - Always visible on mobile */}
+            <div className="mb-6 block">
               <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
                 <div className="px-4 py-4 sm:px-6 sm:py-5 lg:px-8 lg:py-6 border-b-2" style={{ backgroundColor: '#fef9e7', borderColor: '#daa450' }}>
                   <div className="flex items-center justify-between">
@@ -1405,8 +1405,8 @@ export default function ClientPortalPage() {
               </div>
             </div>
 
-            {/* Stats Overview - Simplified to 2 cards - Always visible */}
-            <div className="grid grid-cols-2 gap-3 sm:gap-4 mb-6">
+            {/* Stats Overview - Simplified to 2 cards - Always visible on mobile */}
+            <div className="grid grid-cols-2 gap-3 sm:gap-4 mb-6 block">
               <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
                 <div className="px-3 py-3 sm:px-4 sm:py-4">
                   <div className="flex items-center justify-between mb-2">
