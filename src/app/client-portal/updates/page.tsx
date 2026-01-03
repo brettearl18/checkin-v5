@@ -44,10 +44,18 @@ export default function PlatformUpdatesPage() {
   const fetchUpdates = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/client-portal/platform-updates');
+      setError(null);
+      
+      const response = await fetch('/api/client-portal/platform-updates', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
       
       if (!response.ok) {
-        throw new Error('Failed to fetch updates');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `Failed to fetch updates: ${response.status}`);
       }
 
       const data = await response.json();
@@ -58,7 +66,7 @@ export default function PlatformUpdatesPage() {
       }
     } catch (err: any) {
       console.error('Error fetching updates:', err);
-      setError(err.message || 'Failed to load platform updates');
+      setError(err.message || 'Failed to load platform updates. Please try again later.');
     } finally {
       setLoading(false);
     }
