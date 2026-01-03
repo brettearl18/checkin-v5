@@ -41,9 +41,9 @@ ENV_VARS+="NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=${NEXT_PUBLIC_FIREBASE_STORAGE_BU
 ENV_VARS+="NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=${NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID},"
 ENV_VARS+="NEXT_PUBLIC_FIREBASE_APP_ID=${NEXT_PUBLIC_FIREBASE_APP_ID}"
 
-# Update Cloud Run service
-gcloud run services update checkinv5 \
-  --region australia-southeast2 \
+# Update Cloud Run service (using correct service name and region)
+gcloud run services update checkin-v5-api \
+  --region us-central1 \
   --update-env-vars="$ENV_VARS"
 
 echo ""
@@ -73,8 +73,8 @@ if [ -n "$FIREBASE_SERVICE_ACCOUNT" ]; then
   echo "🔐 Granting Cloud Run access to the secret..."
   
   # Get the Cloud Run service account
-  SERVICE_ACCOUNT=$(gcloud run services describe checkinv5 \
-    --region=australia-southeast2 \
+  SERVICE_ACCOUNT=$(gcloud run services describe checkin-v5-api \
+    --region=us-central1 \
     --format="value(spec.template.spec.serviceAccountName)")
   
   if [ -z "$SERVICE_ACCOUNT" ]; then
@@ -91,8 +91,8 @@ if [ -n "$FIREBASE_SERVICE_ACCOUNT" ]; then
   
   echo ""
   echo "🔗 Linking secret to Cloud Run service..."
-  gcloud run services update checkinv5 \
-    --region=australia-southeast2 \
+  gcloud run services update checkin-v5-api \
+    --region=us-central1 \
     --update-secrets="FIREBASE_SERVICE_ACCOUNT=firebase-service-account:latest"
   
   echo ""
