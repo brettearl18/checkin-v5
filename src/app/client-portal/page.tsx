@@ -1008,7 +1008,7 @@ export default function ClientPortalPage() {
                       </div>
                       <div className="min-w-0 flex-1">
                         <h2 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900">Check-ins Requiring Attention</h2>
-                        <p className="text-gray-600 text-xs sm:text-sm hidden sm:block">Complete overdue and upcoming check-ins to stay on track</p>
+                        <p className="text-gray-600 text-xs sm:text-sm">Complete overdue and upcoming check-ins to stay on track</p>
                       </div>
                     </div>
                     <div className="text-right flex-shrink-0 ml-2">
