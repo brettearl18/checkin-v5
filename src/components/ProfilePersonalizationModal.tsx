@@ -202,51 +202,60 @@ export default function ProfilePersonalizationModal({
           const offsetX = imagePosition.x;
           const offsetY = imagePosition.y;
 
-          // Calculate image dimensions to fill container
-          const imgAspect = img.width / img.height;
-          let fitWidth, fitHeight;
+          // Image natural dimensions
+          const imgWidth = img.width;
+          const imgHeight = img.height;
+          const imgAspect = imgWidth / imgHeight;
+
+          // Calculate how the image is displayed in the 200px container
+          // The image is displayed at its natural size, then scaled
+          // We need to calculate the display size based on how it fits
+          let displayWidth = imgWidth;
+          let displayHeight = imgHeight;
           
-          if (imgAspect > 1) {
-            // Wider than tall - fit to height
-            fitHeight = containerSize;
-            fitWidth = containerSize * imgAspect;
-          } else {
-            // Taller than wide - fit to width
-            fitWidth = containerSize;
-            fitHeight = containerSize / imgAspect;
+          // If image is larger than container, scale it down to fit
+          const maxDimension = Math.max(imgWidth, imgHeight);
+          if (maxDimension > containerSize) {
+            const scaleDown = containerSize / maxDimension;
+            displayWidth = imgWidth * scaleDown;
+            displayHeight = imgHeight * scaleDown;
           }
 
-          // Apply user's scale
-          const scaledWidth = fitWidth * scale;
-          const scaledHeight = fitHeight * scale;
+          // Apply user's scale transform
+          const scaledWidth = displayWidth * scale;
+          const scaledHeight = displayHeight * scale;
 
-          // Calculate where to draw the image
-          // In the cropper, the image is centered and then offset
-          const containerCenter = containerSize / 2;
-          
-          // Calculate the image center position in the container
-          const imageCenterX = containerCenter + offsetX;
-          const imageCenterY = containerCenter + offsetY;
-          
-          // Map to canvas coordinates (scale up from 200px container to outputSize)
+          // Calculate the center of the canvas (where the circle center is)
+          const canvasCenterX = outputSize / 2;
+          const canvasCenterY = outputSize / 2;
+
+          // Calculate where the image center should be on the canvas
+          // The offset is in pixels in the 200px container, so scale it to outputSize
           const scaleFactor = outputSize / containerSize;
-          const canvasImageCenterX = imageCenterX * scaleFactor;
-          const canvasImageCenterY = imageCenterY * scaleFactor;
+          const canvasOffsetX = offsetX * scaleFactor;
+          const canvasOffsetY = offsetY * scaleFactor;
+          
+          // Image center position on canvas
+          const imageCenterX = canvasCenterX + canvasOffsetX;
+          const imageCenterY = canvasCenterY + canvasOffsetY;
+
+          // Scale the display dimensions to canvas size
           const canvasScaledWidth = scaledWidth * scaleFactor;
           const canvasScaledHeight = scaledHeight * scaleFactor;
-          
-          // Draw image centered at calculated position
+
+          // Draw the full image, centered at the calculated position
           ctx.drawImage(
             img,
-            canvasImageCenterX - canvasScaledWidth / 2,
-            canvasImageCenterY - canvasScaledHeight / 2,
+            imageCenterX - canvasScaledWidth / 2,
+            imageCenterY - canvasScaledHeight / 2,
             canvasScaledWidth,
             canvasScaledHeight
           );
 
           ctx.restore();
           resolve(canvas.toDataURL('image/png'));
-        } catch (error) {
+        } catch (error: any) {
+          console.error('Error cropping image:', error);
           reject(error);
         }
       };
