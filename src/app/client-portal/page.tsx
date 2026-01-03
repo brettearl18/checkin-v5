@@ -862,7 +862,9 @@ export default function ClientPortalPage() {
             )}
 
             {/* Next Upcoming Tasks - Unified task widget */}
-            {!loadingTodos && (() => {
+            {(() => {
+              if (loadingTodos) return null;
+              
               const hasOnboardingTasks = !onboardingTodos.hasWeight || !onboardingTodos.hasMeasurements || !onboardingTodos.hasBeforePhotos;
               const hasMeasurementTask = nextMeasurementTask && (nextMeasurementTask.status === 'upcoming' || nextMeasurementTask.status === 'due' || nextMeasurementTask.status === 'overdue');
               const hasTasks = hasOnboardingTasks || hasMeasurementTask;
