@@ -11,7 +11,7 @@
 ### 1. Google Cloud Run (API Hosting)
 **Service:** Next.js API routes and server-side rendering  
 **Configuration:**
-- Region: us-central1
+- Region: australia-southeast2
 - CPU: 1 vCPU (auto-scaling)
 - Memory: 512 MB (auto-scaling)
 - Requests: Variable based on usage
