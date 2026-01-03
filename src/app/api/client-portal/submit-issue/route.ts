@@ -63,8 +63,8 @@ export async function POST(request: NextRequest) {
       attachments = [],
     } = body;
 
-    // Validate required fields
-    if (!issueType || !title || !description || !pageUrl || !browserInfo) {
+    // Validate required fields (pageUrl is optional)
+    if (!issueType || !title || !description || !browserInfo) {
       return NextResponse.json(
         { success: false, message: 'Missing required fields' },
         { status: 400 }

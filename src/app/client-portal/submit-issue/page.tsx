@@ -27,13 +27,8 @@ export default function SubmitIssuePage() {
   const [success, setSuccess] = useState(false);
 
   useEffect(() => {
-    // Auto-populate browser info and current URL
+    // Auto-populate browser info only (not URL)
     if (typeof window !== 'undefined') {
-      setFormData(prev => ({
-        ...prev,
-        pageUrl: window.location.href,
-      }));
-
       setBrowserInfo({
         userAgent: navigator.userAgent,
         screenResolution: `${window.screen.width}x${window.screen.height}`,
@@ -98,7 +93,7 @@ export default function SubmitIssuePage() {
         description: '',
         stepsToReproduce: '',
         consoleErrors: '',
-        pageUrl: window.location.href,
+        pageUrl: '',
       });
 
       // Redirect after 3 seconds
@@ -275,16 +270,19 @@ export default function SubmitIssuePage() {
               {/* Page URL */}
               <div className="mb-6">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Page URL
+                  Page URL (Optional)
                 </label>
                 <input
                   type="text"
                   value={formData.pageUrl}
                   onChange={(e) => setFormData({ ...formData, pageUrl: e.target.value })}
-                  className="w-full px-4 py-3 lg:py-2.5 border border-gray-300 rounded-xl lg:rounded-lg bg-gray-50 text-sm lg:text-base min-h-[48px] lg:min-h-[44px]"
-                  readOnly
+                  placeholder="e.g., https://checkinv5.web.app/client-portal/check-ins"
+                  className="w-full px-4 py-3 lg:py-2.5 border border-gray-300 rounded-xl lg:rounded-lg bg-white focus:ring-2 focus:outline-none transition-all text-sm lg:text-base min-h-[48px] lg:min-h-[44px]"
+                  style={{ focusRingColor: '#daa450' }}
+                  onFocus={(e) => e.target.style.borderColor = '#daa450'}
+                  onBlur={(e) => e.target.style.borderColor = '#d1d5db'}
                 />
-                <p className="text-xs text-gray-500 mt-1">Auto-populated with current page URL</p>
+                <p className="text-xs text-gray-500 mt-1">Optional: Enter the URL where you encountered the issue</p>
               </div>
 
               {/* Browser Info (Hidden but will be sent) */}
