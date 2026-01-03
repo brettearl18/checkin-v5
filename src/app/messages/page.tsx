@@ -5,6 +5,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { RoleProtected } from '@/components/ProtectedRoute';
 import CoachNavigation from '@/components/CoachNavigation';
 import Link from 'next/link';
+import { collection, query, where, orderBy, onSnapshot, Timestamp } from 'firebase/firestore';
+import { db } from '@/lib/firebase-client';
 
 interface Message {
   id: string;
@@ -65,11 +67,106 @@ export default function CoachMessagesPage() {
   }, []);
 
   useEffect(() => {
-    if (selectedClientId) {
+    if (selectedClientId && userProfile?.uid) {
+      // Set up real-time listener for messages
+      const unsubscribe = setupRealTimeMessages(selectedClientId, userProfile.uid);
+      
+      // Also fetch once to ensure we have initial data
       fetchMessages(selectedClientId);
       setShowClientList(false); // Hide client list on mobile when client selected
+      
+      // Cleanup listener on unmount or when selectedClientId changes
+      return () => {
+        if (unsubscribe) unsubscribe();
+      };
     }
-  }, [selectedClientId]);
+  }, [selectedClientId, userProfile?.uid]);
+
+  const setupRealTimeMessages = (clientId: string, coachId: string) => {
+    if (!db) {
+      console.error('Firestore db not initialized');
+      return null;
+    }
+
+    try {
+      // Query messages where participants include both client and coach
+      // Try with orderBy first, fallback to without orderBy if index doesn't exist
+      let messagesQuery;
+      try {
+        messagesQuery = query(
+          collection(db, 'messages'),
+          where('participants', 'array-contains', clientId),
+          orderBy('timestamp', 'asc')
+        );
+      } catch (queryError: any) {
+        // If index doesn't exist, use query without orderBy and sort client-side
+        console.log('OrderBy not available, using query without orderBy:', queryError);
+        messagesQuery = query(
+          collection(db, 'messages'),
+          where('participants', 'array-contains', clientId)
+        );
+      }
+
+      const unsubscribe = onSnapshot(
+        messagesQuery,
+        (snapshot) => {
+          const realTimeMessages: Message[] = [];
+          
+          snapshot.docs.forEach((doc) => {
+            const data = doc.data();
+            // Filter to only include messages between this coach and client
+            if (data.participants?.includes(coachId) && data.participants?.includes(clientId)) {
+              let timestamp: string;
+              if (data.timestamp?.toDate) {
+                timestamp = data.timestamp.toDate().toISOString();
+              } else if (data.timestamp?._seconds) {
+                timestamp = new Date(data.timestamp._seconds * 1000).toISOString();
+              } else if (data.timestamp instanceof Timestamp) {
+                timestamp = data.timestamp.toDate().toISOString();
+              } else {
+                timestamp = data.timestamp || new Date().toISOString();
+              }
+
+              realTimeMessages.push({
+                id: doc.id,
+                senderId: data.senderId || '',
+                senderName: data.senderName || 'Unknown',
+                content: data.content || '',
+                timestamp: timestamp,
+                isRead: data.isRead || false,
+                type: data.type || 'text',
+                participants: data.participants || [],
+                conversationId: data.conversationId || ''
+              });
+            }
+          });
+
+          // Sort by timestamp if we didn't use orderBy in the query
+          realTimeMessages.sort((a, b) => {
+            return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+          });
+
+          // Update messages state with real-time data
+          setMessages(realTimeMessages);
+          
+          // Auto-scroll to bottom when new messages arrive
+          setTimeout(() => scrollToBottom(), 100);
+        },
+        (error) => {
+          console.error('Error in real-time messages listener:', error);
+          // Fallback to regular fetch on error
+          fetchMessages(clientId);
+        }
+      );
+
+      return unsubscribe;
+    } catch (error) {
+      console.error('Error setting up real-time messages:', error);
+      // Fallback to regular fetch on error
+      fetchMessages(clientId);
+      return null;
+    }
+  };
 
   const fetchConversations = async () => {
     try {
@@ -146,7 +243,7 @@ export default function CoachMessagesPage() {
 
       if (response.ok) {
         setNewMessage('');
-        await fetchMessages(selectedClientId);
+        // No need to manually fetch messages - real-time listener will update automatically
         await fetchConversations();
         setTimeout(() => scrollToBottom(), 100);
       }
