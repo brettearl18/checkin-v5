@@ -5,6 +5,74 @@ import { useAuth } from '@/contexts/AuthContext';
 import { RoleProtected } from '@/components/ProtectedRoute';
 import ClientNavigation from '@/components/ClientNavigation';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+
+// Recent Fixes Component
+function RecentFixesSection() {
+  const [recentFixes, setRecentFixes] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchRecentFixes = async () => {
+      try {
+        const response = await fetch('/api/client-portal/platform-updates');
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success) {
+            // Filter for completed bug fixes, limit to 3 most recent
+            const fixes = (data.updates || [])
+              .filter((update: any) => 
+                update.category === 'bug-fix' && 
+                update.status === 'completed'
+              )
+              .slice(0, 3);
+            setRecentFixes(fixes);
+          }
+        }
+      } catch (error) {
+        // Silently fail - this is just a teaser
+        console.debug('Could not fetch recent fixes:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchRecentFixes();
+  }, []);
+
+  if (loading || recentFixes.length === 0) {
+    return null;
+  }
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+    });
+  };
+
+  return (
+    <div className="mb-6 bg-green-50 border-2 border-green-200 rounded-xl p-5">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-lg font-semibold text-gray-900">✓ Recent Fixes</h3>
+        <Link
+          href="/client-portal/updates"
+          className="text-sm text-blue-600 hover:text-blue-800 font-medium underline"
+        >
+          View All Updates →
+        </Link>
+      </div>
+      <ul className="space-y-2">
+        {recentFixes.map((fix) => (
+          <li key={fix.id} className="text-sm text-gray-700">
+            • {fix.title} <span className="text-gray-500">({formatDate(fix.date)})</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 export default function SubmitIssuePage() {
   const { userProfile } = useAuth();
@@ -151,6 +219,9 @@ export default function SubmitIssuePage() {
                 </p>
               </div>
             </div>
+
+            {/* Recent Fixes Teaser */}
+            <RecentFixesSection />
 
             {/* Form */}
             <form onSubmit={handleSubmit} className="bg-white rounded-2xl lg:rounded-3xl shadow-xl border border-gray-100 p-6 lg:p-8">
