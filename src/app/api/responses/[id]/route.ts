@@ -125,14 +125,24 @@ export async function GET(
           
           // Fetch questions if they exist
           if (questionIds.length > 0) {
+            // Note: Firestore 'in' query doesn't preserve order, so we need to re-order manually
             const questionsSnapshot = await db.collection('questions')
               .where('__name__', 'in', questionIds)
               .get();
             
-            questions = questionsSnapshot.docs.map(doc => ({
-              id: doc.id,
-              ...doc.data()
-            }));
+            // Create a map of questionId -> question for fast lookup
+            const questionsMap = new Map<string, any>();
+            questionsSnapshot.docs.forEach(doc => {
+              questionsMap.set(doc.id, {
+                id: doc.id,
+                ...doc.data()
+              });
+            });
+            
+            // Re-order questions according to the form's questionIds array order
+            questions = questionIds
+              .map((questionId: string) => questionsMap.get(questionId))
+              .filter((q: any) => q !== undefined); // Filter out any missing questions
           }
         }
       } catch (error) {
