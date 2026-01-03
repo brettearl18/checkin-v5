@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Script to set up daily Firestore backups
-# This creates a Cloud Storage bucket and configures Cloud Scheduler to run daily exports
+# Tries native Firestore backup schedules first, falls back to Cloud Scheduler
 
 set -e
 

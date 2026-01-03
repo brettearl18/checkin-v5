@@ -19,15 +19,23 @@ This guide will help you set up automated daily backups for your Firestore datab
 Run the setup script:
 
 ```bash
-./setup-firestore-backups.sh
+./setup-firestore-backups-simple.sh
+```
+
+Or use the simple command (if bucket already exists):
+
+```bash
+gcloud firestore backups schedules create \
+  --database="(default)" \
+  --recurrence="daily" \
+  --retention="90d" \
+  --project=checkinv5
 ```
 
 This will:
 1. Create a Cloud Storage bucket for backups
 2. Set up 90-day retention policy
-3. Enable required APIs
-4. Grant necessary permissions
-5. Guide you through Cloud Scheduler setup
+3. Create native Firestore daily backup schedule
 
 ---
 
