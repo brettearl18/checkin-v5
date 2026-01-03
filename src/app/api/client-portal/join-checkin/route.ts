@@ -79,9 +79,7 @@ export async function POST(request: NextRequest) {
     const week1StartDateString = '2026-01-05';
     
     let firstCheckInDate: Date;
-    
     let firstCheckInDateString: string;
-    let firstCheckInDate: Date;
     
     // Check if signup is between Jan 3-5, 2026 (inclusive)
     if (todayDateString >= signupStartDateString && todayDateString <= signupEndDateString) {

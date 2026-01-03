@@ -186,7 +186,7 @@ export async function POST(request: NextRequest) {
               id: existingDoc.id,
               ...updateData,
               isBaseline: true,
-              date: updateData.date.toISOString(),
+              date: updateData.date instanceof Timestamp ? updateData.date.toDate().toISOString() : updateData.date?.toISOString?.() || updateData.date,
               createdAt: existingData.createdAt?.toDate?.()?.toISOString() || existingData.createdAt
             },
             wasUpdate: true
@@ -288,8 +288,9 @@ export async function POST(request: NextRequest) {
       data: {
         id: docRef.id,
         ...measurementData,
-        date: measurementData.date.toISOString(),
-        createdAt: measurementData.createdAt.toISOString()
+        date: measurementData.date instanceof Timestamp ? measurementData.date.toDate().toISOString() : measurementData.date?.toISOString?.() || measurementData.date,
+        createdAt: measurementData.createdAt instanceof Timestamp ? measurementData.createdAt.toDate().toISOString() : measurementData.createdAt?.toISOString?.() || measurementData.createdAt,
+        updatedAt: measurementData.updatedAt instanceof Timestamp ? measurementData.updatedAt.toDate().toISOString() : measurementData.updatedAt?.toISOString?.() || measurementData.updatedAt
       }
     });
 
