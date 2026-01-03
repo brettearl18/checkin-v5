@@ -205,45 +205,35 @@ export default function ProfilePersonalizationModal({
           // Image natural dimensions
           const imgWidth = img.width;
           const imgHeight = img.height;
-          const imgAspect = imgWidth / imgHeight;
 
-          // Calculate how the image is displayed in the 200px container
-          // The image is displayed at its natural size, then scaled
-          // We need to calculate the display size based on how it fits
-          let displayWidth = imgWidth;
-          let displayHeight = imgHeight;
+          // The image is displayed at its NATURAL dimensions with CSS transforms:
+          // transform: translate(-50%, -50%) translate(x, y) scale(scale)
+          // So the image is centered, then offset, then scaled
           
-          // If image is larger than container, scale it down to fit
-          const maxDimension = Math.max(imgWidth, imgHeight);
-          if (maxDimension > containerSize) {
-            const scaleDown = containerSize / maxDimension;
-            displayWidth = imgWidth * scaleDown;
-            displayHeight = imgHeight * scaleDown;
-          }
-
-          // Apply user's scale transform
-          const scaledWidth = displayWidth * scale;
-          const scaledHeight = displayHeight * scale;
+          // Calculate the final displayed dimensions after scale
+          const scaledWidth = imgWidth * scale;
+          const scaledHeight = imgHeight * scale;
 
           // Calculate the center of the canvas (where the circle center is)
           const canvasCenterX = outputSize / 2;
           const canvasCenterY = outputSize / 2;
 
-          // Calculate where the image center should be on the canvas
-          // The offset is in pixels in the 200px container, so scale it to outputSize
+          // The offset is in pixels relative to the 200px container
+          // Scale it to the output canvas size
           const scaleFactor = outputSize / containerSize;
           const canvasOffsetX = offsetX * scaleFactor;
           const canvasOffsetY = offsetY * scaleFactor;
           
-          // Image center position on canvas
+          // Image center position on canvas (center + offset)
           const imageCenterX = canvasCenterX + canvasOffsetX;
           const imageCenterY = canvasCenterY + canvasOffsetY;
 
-          // Scale the display dimensions to canvas size
+          // Scale the dimensions to canvas size
           const canvasScaledWidth = scaledWidth * scaleFactor;
           const canvasScaledHeight = scaledHeight * scaleFactor;
 
-          // Draw the full image, centered at the calculated position
+          // Draw the image centered at the calculated position
+          // drawImage(img, dx, dy, dWidth, dHeight)
           ctx.drawImage(
             img,
             imageCenterX - canvasScaledWidth / 2,
