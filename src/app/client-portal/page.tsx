@@ -740,8 +740,8 @@ export default function ClientPortalPage() {
           <div className="max-w-7xl mx-auto w-full">
             {/* Desktop: Grid layout with main content and sidebar */}
             <div className="lg:grid lg:grid-cols-3 lg:gap-6">
-              {/* Main Content Column */}
-              <div className="lg:col-span-2">
+              {/* Main Content Column - Full width on mobile, 2/3 on desktop */}
+              <div className="w-full lg:col-span-2">
             {/* Header - Hidden on mobile, shown on desktop */}
             <div className="mb-6 hidden lg:block">
               <div className="flex items-center justify-between">
