@@ -242,12 +242,18 @@ export default function MeasurementsPage() {
     };
 
     if (baselineWeight && baselineWeight.trim() !== '') {
-      measurementData.bodyWeight = parseFloat(baselineWeight);
+      const weight = parseFloat(baselineWeight);
+      if (!isNaN(weight) && weight > 0) {
+        measurementData.bodyWeight = weight;
+      }
     }
 
     Object.entries(baselineMeasurements).forEach(([key, value]) => {
       if (value && value.trim() !== '') {
-        measurementData.measurements[key] = parseFloat(value);
+        const numValue = parseFloat(value);
+        if (!isNaN(numValue) && numValue > 0) {
+          measurementData.measurements[key] = numValue;
+        }
       }
     });
 
@@ -272,6 +278,19 @@ export default function MeasurementsPage() {
         },
         body: JSON.stringify(measurementData)
       });
+      
+      // Check if response is ok before trying to parse JSON
+      if (!response.ok) {
+        let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.message || errorMessage;
+        } catch (e) {
+          // Response is not JSON, use status text
+        }
+        throw new Error(errorMessage);
+      }
+      
       const data = await response.json();
       if (!data.success) {
         throw new Error(data.message || 'Failed to save baseline');
@@ -294,11 +313,27 @@ export default function MeasurementsPage() {
         return true;
       }
     } catch (error: any) {
+      // Log full error details for debugging
+      console.error('Error saving baseline:', {
+        error,
+        message: error?.message,
+        stack: error?.stack,
+        measurementData: {
+          hasBodyWeight: measurementData.bodyWeight !== undefined,
+          hasMeasurements: Object.keys(measurementData.measurements).length > 0,
+          isBaseline: measurementData.isBaseline,
+          clientId: measurementData.clientId
+        }
+      });
+      
       // Only show alert if it's not a "no data" error
       const errorMsg = error?.message || String(error);
       if (!errorMsg.includes('must be provided') && !errorMsg.includes('No data to save')) {
-        console.error('Error saving baseline:', error);
-        alert('Failed to save baseline. Please try again.');
+        // Show more descriptive error message
+        const userMessage = errorMsg.includes('HTTP') 
+          ? `Failed to save baseline: ${errorMsg}` 
+          : 'Failed to save baseline. Please try again.';
+        alert(userMessage);
       }
       return false;
     } finally {
