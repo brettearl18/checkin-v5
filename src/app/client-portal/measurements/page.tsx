@@ -233,14 +233,14 @@ export default function MeasurementsPage() {
       return false;
     }
     
-    // Build measurement data
+    // Build measurement data - only include fields that have values
     const measurementData: any = {
       clientId,
       date: new Date().toISOString(),
-      isBaseline: true,
-      measurements: {}
+      isBaseline: true
     };
 
+    // Add bodyWeight only if it's valid
     if (baselineWeight && baselineWeight.trim() !== '') {
       const weight = parseFloat(baselineWeight);
       if (!isNaN(weight) && weight > 0) {
@@ -248,21 +248,33 @@ export default function MeasurementsPage() {
       }
     }
 
+    // Build measurements object - only include non-empty values
+    const validMeasurements: any = {};
     Object.entries(baselineMeasurements).forEach(([key, value]) => {
       if (value && value.trim() !== '') {
         const numValue = parseFloat(value);
         if (!isNaN(numValue) && numValue > 0) {
-          measurementData.measurements[key] = numValue;
+          validMeasurements[key] = numValue;
         }
       }
     });
 
-    // Only save if there's at least bodyWeight OR at least one measurement
+    // Only add measurements object if it has at least one value
+    if (Object.keys(validMeasurements).length > 0) {
+      measurementData.measurements = validMeasurements;
+    }
+
+    // Validate: must have at least bodyWeight OR at least one measurement
     const hasBodyWeight = measurementData.bodyWeight !== undefined && !isNaN(measurementData.bodyWeight);
-    const hasMeasurements = Object.keys(measurementData.measurements).length > 0;
+    const hasMeasurements = measurementData.measurements && Object.keys(measurementData.measurements).length > 0;
     
     if (!hasBodyWeight && !hasMeasurements) {
       // No data to save yet - this is fine, just return true without saving
+      console.warn('handleBaselineSave: No valid data to save', {
+        baselineWeight,
+        baselineMeasurements,
+        measurementData
+      });
       return true;
     }
     
