@@ -285,16 +285,22 @@ export async function POST(request: NextRequest) {
       // Don't fail the measurement save if goal tracking fails
     });
 
+    // Convert Timestamps to ISO strings for JSON response
+    const responseData = {
+      id: docRef.id,
+      clientId: measurementData.clientId,
+      date: measurementData.date instanceof Timestamp ? measurementData.date.toDate().toISOString() : (measurementData.date?.toISOString?.() || measurementData.date),
+      bodyWeight: measurementData.bodyWeight,
+      measurements: measurementData.measurements || {},
+      isBaseline: measurementData.isBaseline,
+      createdAt: measurementData.createdAt instanceof Timestamp ? measurementData.createdAt.toDate().toISOString() : (measurementData.createdAt?.toISOString?.() || measurementData.createdAt),
+      updatedAt: measurementData.updatedAt instanceof Timestamp ? measurementData.updatedAt.toDate().toISOString() : (measurementData.updatedAt?.toISOString?.() || measurementData.updatedAt)
+    };
+
     return NextResponse.json({
       success: true,
       message: 'Measurement saved successfully',
-      data: {
-        id: docRef.id,
-        ...measurementData,
-        date: measurementData.date instanceof Timestamp ? measurementData.date.toDate().toISOString() : measurementData.date?.toISOString?.() || measurementData.date,
-        createdAt: measurementData.createdAt instanceof Timestamp ? measurementData.createdAt.toDate().toISOString() : measurementData.createdAt?.toISOString?.() || measurementData.createdAt,
-        updatedAt: measurementData.updatedAt instanceof Timestamp ? measurementData.updatedAt.toDate().toISOString() : measurementData.updatedAt?.toISOString?.() || measurementData.updatedAt
-      }
+      data: responseData
     });
 
   } catch (error) {

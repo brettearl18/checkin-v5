@@ -762,7 +762,9 @@ export default function MeasurementsPage() {
                       onFocus={(e) => e.target.style.borderColor = '#daa450'}
                       onBlur={(e) => {
                         e.target.style.borderColor = '#d1d5db';
-                        // Don't auto-save on blur - only save on explicit actions (Next button, Complete Setup)
+                        // NO AUTO-SAVE - only save on Complete Setup button click
+                        e.preventDefault();
+                        e.stopPropagation();
                       }}
                       placeholder="Enter your weight"
                       className="w-full px-4 py-3 lg:py-2.5 border border-gray-300 rounded-xl lg:rounded-lg focus:ring-2 focus:outline-none transition-all text-base lg:text-lg"
