@@ -6,8 +6,17 @@ export const dynamic = 'force-dynamic';
 /**
  * POST /api/seed-test-data
  * Seeds 5 check-ins and measurements for info@vanahealth.com.au
+ * DISABLED IN PRODUCTION - For development/testing only
  */
 export async function POST(request: NextRequest) {
+  // Disable in production
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json(
+      { success: false, message: 'Not Found' },
+      { status: 404 }
+    );
+  }
+
   try {
     const db = getDb();
 

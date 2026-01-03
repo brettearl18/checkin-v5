@@ -1,14 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase-server';
+import { requireAdmin } from '@/lib/api-auth';
+import { logSafeError } from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 
 /**
  * GET /api/admin/find-client-by-email?email=xxx
  * Finds a client by email address and returns their ID and info
+ * 
+ * Requires: Admin authentication
  */
 export async function GET(request: NextRequest) {
   try {
+    // Require admin authentication
+    const authResult = await requireAdmin(request);
+    if (authResult instanceof NextResponse) {
+      return authResult;
+    }
+
     const { searchParams } = new URL(request.url);
     const email = searchParams.get('email');
     
@@ -53,7 +63,7 @@ export async function GET(request: NextRequest) {
     });
     
   } catch (error: any) {
-    console.error('Error finding client:', error);
+    logSafeError('Error finding client', error);
     return NextResponse.json({
       success: false,
       message: 'Failed to find client',
@@ -61,4 +71,5 @@ export async function GET(request: NextRequest) {
     }, { status: 500 });
   }
 }
+
 

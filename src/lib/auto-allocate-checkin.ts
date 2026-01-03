@@ -116,21 +116,35 @@ export async function autoAllocateCheckIn(
     const today = startDate || new Date();
     const programStartDate = today.toISOString().split('T')[0];
     
-    // For "open straight away", set first check-in date to today (if Friday) or next Friday
-    // Check if today is Friday - if so, use today; otherwise use next Friday
+    // Special case: For signups between Jan 3-5, 2026, Week 1 starts on Jan 5 (Monday)
+    // and they can access it immediately once Jan 5 arrives
+    // Compare using date strings (YYYY-MM-DD) to avoid timezone issues
+    const todayDateString = today.toISOString().split('T')[0];
+    const signupStartDateString = '2026-01-03';
+    const signupEndDateString = '2026-01-05';
+    const week1StartDateString = '2026-01-05';
+    
+    let firstCheckInDateString: string;
     let firstCheckInDate: Date;
-    if (today.getDay() === 5) {
+    
+    // Check if signup is between Jan 3-5, 2026 (inclusive)
+    if (todayDateString >= signupStartDateString && todayDateString <= signupEndDateString) {
+      // Special case: Week 1 starts on Jan 5, 2026 (Monday)
+      // Use the date string directly to avoid timezone conversion issues
+      firstCheckInDateString = week1StartDateString; // '2026-01-05'
+      firstCheckInDate = new Date(week1StartDateString + 'T09:00:00'); // 9:00 AM local time
+    } else if (today.getDay() === 5) {
       // Today is Friday - use today so it's immediately available
       firstCheckInDate = new Date(today);
+      firstCheckInDateString = firstCheckInDate.toISOString().split('T')[0];
     } else {
       // Use next Friday
       firstCheckInDate = getNextFriday(today);
+      firstCheckInDateString = firstCheckInDate.toISOString().split('T')[0];
     }
-    const firstCheckInDateString = firstCheckInDate.toISOString().split('T')[0];
     
     // Set due date to the first check-in date at 9:00 AM (so it's immediately available)
-    const dueDate = new Date(firstCheckInDate);
-    dueDate.setHours(9, 0, 0, 0);
+    const dueDate = new Date(firstCheckInDateString + 'T09:00:00');
     
     // Generate unique assignment ID
     const assignmentId = `assignment-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;

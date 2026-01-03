@@ -3,7 +3,19 @@ import { sendEmail } from '@/lib/email-service';
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * Test email endpoint
+ * DISABLED IN PRODUCTION - For development/testing only
+ */
 export async function POST(request: NextRequest) {
+  // Disable in production
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json(
+      { success: false, message: 'Not Found' },
+      { status: 404 }
+    );
+  }
+
   try {
     const { to, subject, html } = await request.json();
 
@@ -112,6 +124,7 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
 
 
 

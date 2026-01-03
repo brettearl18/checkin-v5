@@ -221,7 +221,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await sendPasswordResetEmail(auth, email);
     } catch (error) {
-      console.error('Password reset error:', error);
+      // Log error but don't expose sensitive details to user
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Password reset error:', error);
+      }
       throw error;
     }
   };

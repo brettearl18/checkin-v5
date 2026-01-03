@@ -233,59 +233,48 @@ export default function MeasurementsPage() {
       return false;
     }
     
+    // Build measurement data
+    const measurementData: any = {
+      clientId,
+      date: new Date().toISOString(),
+      isBaseline: true,
+      measurements: {}
+    };
+
+    if (baselineWeight && baselineWeight.trim() !== '') {
+      measurementData.bodyWeight = parseFloat(baselineWeight);
+    }
+
+    Object.entries(baselineMeasurements).forEach(([key, value]) => {
+      if (value && value.trim() !== '') {
+        measurementData.measurements[key] = parseFloat(value);
+      }
+    });
+
+    // Only save if there's at least bodyWeight OR at least one measurement
+    const hasBodyWeight = measurementData.bodyWeight !== undefined && !isNaN(measurementData.bodyWeight);
+    const hasMeasurements = Object.keys(measurementData.measurements).length > 0;
+    
+    if (!hasBodyWeight && !hasMeasurements) {
+      // No data to save yet - this is fine, just return true without saving
+      return true;
+    }
+    
     isSavingRef.current = true;
     setSaving(true);
     try {
-      // Save baseline measurement
-      const measurementData: any = {
-        clientId,
-        date: new Date().toISOString(),
-        isBaseline: true,
-        measurements: {}
-      };
-
-      if (baselineWeight) {
-        measurementData.bodyWeight = parseFloat(baselineWeight);
-      }
-
-      Object.entries(baselineMeasurements).forEach(([key, value]) => {
-        if (value) {
-          measurementData.measurements[key] = parseFloat(value);
-        }
+      // Always use POST - the API will handle updating existing baseline automatically
+      // This prevents race conditions where the client-side state might be stale
+      const response = await fetch('/api/client-measurements', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(measurementData)
       });
-
-      // Check if baseline entry already exists
-      const existingBaseline = measurementHistory.find(m => m.isBaseline);
-      
-      if (existingBaseline) {
-        // Update existing baseline
-        const response = await fetch('/api/client-measurements', {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            id: existingBaseline.id,
-            ...measurementData
-          })
-        });
-        const data = await response.json();
-        if (!data.success) {
-          throw new Error(data.message || 'Failed to update baseline');
-        }
-      } else {
-        // Create new baseline
-        const response = await fetch('/api/client-measurements', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(measurementData)
-        });
-        const data = await response.json();
-        if (!data.success) {
-          throw new Error(data.message || 'Failed to save baseline');
-        }
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(data.message || 'Failed to save baseline');
       }
 
       // Refresh data
@@ -304,9 +293,13 @@ export default function MeasurementsPage() {
         // Completion should only happen when user clicks "Complete Setup" button
         return true;
       }
-    } catch (error) {
-      console.error('Error saving baseline:', error);
-      alert('Failed to save baseline. Please try again.');
+    } catch (error: any) {
+      // Only show alert if it's not a "no data" error
+      const errorMsg = error?.message || String(error);
+      if (!errorMsg.includes('must be provided') && !errorMsg.includes('No data to save')) {
+        console.error('Error saving baseline:', error);
+        alert('Failed to save baseline. Please try again.');
+      }
       return false;
     } finally {
       setSaving(false);
@@ -669,8 +662,8 @@ export default function MeasurementsPage() {
                   <div className="flex justify-end pt-4">
                     <button
                       onClick={() => {
+                        // Just navigate - NO saving until Complete Setup button is clicked
                         setBaselineStep('weight');
-                        handleBaselineSave();
                       }}
                       className="px-6 py-3 lg:py-2.5 rounded-xl lg:rounded-lg text-white font-semibold transition-all duration-200 shadow-sm hover:shadow-md min-h-[48px] lg:min-h-[44px] flex items-center justify-center"
                       style={{ backgroundColor: '#daa450' }}
@@ -706,8 +699,7 @@ export default function MeasurementsPage() {
                       onFocus={(e) => e.target.style.borderColor = '#daa450'}
                       onBlur={(e) => {
                         e.target.style.borderColor = '#d1d5db';
-                        // Auto-save on blur, but don't show completion alert
-                        handleBaselineSave().catch(err => console.error('Auto-save failed:', err));
+                        // Don't auto-save on blur - only save on explicit actions (Next button, Complete Setup)
                       }}
                       placeholder="Enter your weight"
                       className="w-full px-4 py-3 lg:py-2.5 border border-gray-300 rounded-xl lg:rounded-lg focus:ring-2 focus:outline-none transition-all text-base lg:text-lg"
@@ -724,8 +716,8 @@ export default function MeasurementsPage() {
                     </button>
                     <button
                       onClick={() => {
+                        // Just navigate - NO saving until Complete Setup button is clicked
                         setBaselineStep('measurements');
-                        handleBaselineSave();
                       }}
                       className="px-6 py-3 lg:py-2.5 rounded-xl lg:rounded-lg text-white font-semibold transition-all duration-200 shadow-sm hover:shadow-md min-h-[48px] lg:min-h-[44px] flex items-center justify-center"
                       style={{ backgroundColor: '#daa450' }}
@@ -776,8 +768,7 @@ export default function MeasurementsPage() {
                           onFocus={(e) => e.target.style.borderColor = '#daa450'}
                           onBlur={(e) => {
                             e.target.style.borderColor = '#d1d5db';
-                            // Auto-save on blur, but don't show completion alert
-                            handleBaselineSave().catch(err => console.error('Auto-save failed:', err));
+                            // Don't auto-save on blur - only save on explicit actions (Next button, Complete Setup)
                           }}
                           placeholder="Enter measurement"
                           className="w-full px-4 py-3 lg:py-2.5 border border-gray-300 rounded-xl lg:rounded-lg focus:ring-2 focus:outline-none transition-all"
@@ -795,11 +786,19 @@ export default function MeasurementsPage() {
                       ← Back
                     </button>
                     <button
-                      onClick={async () => {
+                      onClick={async (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        
+                        // Prevent double-clicks
+                        if (isSavingRef.current || saving) {
+                          return;
+                        }
+                        
                         // Verify all requirements are met before completing
                         const hasAllPhotos = beforeImages.front && beforeImages.back && beforeImages.side;
-                        const hasWeight = baselineWeight && parseFloat(baselineWeight) > 0;
-                        const hasMeasurements = Object.values(baselineMeasurements).some(val => val && parseFloat(val) > 0);
+                        const hasWeight = baselineWeight && baselineWeight.trim() && !isNaN(parseFloat(baselineWeight)) && parseFloat(baselineWeight) > 0;
+                        const hasMeasurements = Object.values(baselineMeasurements).some(val => val && val.trim() && !isNaN(parseFloat(val)) && parseFloat(val) > 0);
                         
                         if (!hasAllPhotos) {
                           alert('Please upload all three before photos (front, back, and side) to complete setup.');
@@ -816,14 +815,20 @@ export default function MeasurementsPage() {
                           return;
                         }
                         
-                        // All requirements met - save and complete
-                        const saved = await handleBaselineSave();
-                        if (saved) {
-                          setIsBaselineSetup(false);
-                          alert('Baseline setup completed! You can now track your progress over time.');
+                        // All requirements met - THIS IS THE ONLY PLACE WE SAVE
+                        try {
+                          const saved = await handleBaselineSave();
+                          if (saved) {
+                            setIsBaselineSetup(false);
+                            alert('Baseline setup completed! You can now track your progress over time.');
+                          }
+                        } catch (error) {
+                          console.error('Failed to save baseline:', error);
+                          alert('Failed to save baseline. Please try again.');
                         }
                       }}
                       disabled={saving}
+                      type="button"
                       className="px-6 py-3 lg:py-2.5 rounded-xl lg:rounded-lg text-white font-semibold transition-all duration-200 shadow-sm hover:shadow-md min-h-[48px] lg:min-h-[44px] flex items-center justify-center disabled:opacity-50"
                       style={{ backgroundColor: '#22c55e' }}
                       onMouseEnter={(e) => {

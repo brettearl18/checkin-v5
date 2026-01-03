@@ -19,10 +19,11 @@ This audit identified **3 critical security vulnerabilities** and **multiple cod
 
 ### 1. Dependency Vulnerabilities (CRITICAL)
 
-**Found:** 3 vulnerabilities in npm dependencies
+**Found:** 4 vulnerabilities in npm dependencies
 - **Next.js 15.4.5**: Critical vulnerabilities (SSRF, RCE, Source Code Exposure, DoS)
 - **jws 4.0.0+**: High severity (HMAC signature verification issues)
 - **node-forge ≤1.3.1**: High severity (ASN.1 vulnerabilities)
+- **js-yaml 4.0.0-4.1.0**: Moderate severity (prototype pollution)
 
 **Impact:**
 - Potential Remote Code Execution (RCE)
@@ -33,11 +34,13 @@ This audit identified **3 critical security vulnerabilities** and **multiple cod
 **Fix:**
 ```bash
 npm audit fix
-# For Next.js, may need:
-npm audit fix --force  # (will upgrade to next@15.5.9)
+npm audit fix --force  # Upgraded Next.js to 15.5.9
 ```
 
-**Status:** 🔴 **MUST FIX BEFORE LAUNCH**
+**Status:** ✅ **FIXED** - All vulnerabilities resolved
+- Next.js upgraded from 15.4.5 → 15.5.9
+- All 4 vulnerabilities fixed (0 remaining)
+- Build verified and passing
 
 ---
 
@@ -47,22 +50,24 @@ npm audit fix --force  # (will upgrade to next@15.5.9)
 - `/api/test-ai` - Exposes AI functionality
 - `/api/test-email` - Email testing endpoint
 - `/api/seed-test-data` - Data seeding endpoint
+- `/api/clear-client-data` - Data deletion endpoint
 
 **Risk:** These endpoints could be abused or expose sensitive functionality
 
-**Recommendation:**
-- Disable in production via environment variable check
-- Or remove entirely if not needed
-- Or protect with admin-only access
+**Fix Applied:**
+- Added `NODE_ENV === 'production'` check to all test endpoints
+- Endpoints return 404 (Not Found) in production to avoid revealing their existence
+- Endpoints remain functional in development for testing purposes
 
-**Files:**
-- `src/app/api/test-ai/route.ts`
-- `src/app/api/test-email/route.ts`
-- `src/app/api/seed-test-data/route.ts`
-- `src/app/test-email/page.tsx`
-- `src/app/test-scheduled-emails/page.tsx`
+**Files Secured:**
+- `src/app/api/test-ai/route.ts` ✅
+- `src/app/api/test-email/route.ts` ✅
+- `src/app/api/seed-test-data/route.ts` ✅
+- `src/app/api/clear-client-data/route.ts` ✅
 
-**Status:** 🟡 **HIGH PRIORITY - Should disable/secure**
+**Note:** Test pages (`/test-email`, `/test-scheduled-emails`, `/test-seed-data`) still exist but API endpoints they call are now secured. Pages will receive 404 errors when calling APIs in production.
+
+**Status:** ✅ **FIXED** - All test endpoints disabled in production
 
 ---
 
@@ -85,7 +90,20 @@ npm audit fix --force  # (will upgrade to next@15.5.9)
 - Database queries logged with potentially sensitive IDs
 - Error messages may contain sensitive information
 
-**Status:** 🟡 **HIGH PRIORITY - Review and sanitize**
+**Fix Applied:**
+- ✅ Created environment-aware logging utility (`src/lib/logger.ts`)
+  - Only logs in development mode
+  - Automatic sanitization of sensitive data (passwords, tokens, secrets, API keys)
+  - Safe error logging without exposing stack traces in production
+- ✅ Fixed critical API routes:
+  - `src/app/api/admin/set-admin/route.ts` - Removed password/user ID logging
+  - `src/app/api/auth/register/route.ts` - Sanitized error logging
+  - `src/app/api/clients/route.ts` - Removed sensitive data from logs
+  - `src/app/api/admin/delete-client-by-email/route.ts` - Removed email/ID logging
+  - `src/app/api/notifications/route.ts` - Removed userId logging
+  - `src/app/api/client-portal/check-in/[id]/route.ts` - Removed clientId/assignmentId logging
+
+**Status:** 🟡 **IN PROGRESS** - Critical routes fixed, ~80 API routes remaining
 
 ---
 
@@ -105,7 +123,28 @@ npm audit fix --force  # (will upgrade to next@15.5.9)
 - Verify user permissions server-side, not just client-side
 - Consider middleware for authentication
 
-**Status:** 🟡 **Review all admin routes for explicit auth checks**
+**Fix Applied:**
+- ✅ Created API authentication utility (`src/lib/api-auth.ts`)
+  - `requireAuth()` - Requires any authenticated user
+  - `requireAdmin()` - Requires admin role
+  - `requireCoach()` - Requires coach role
+  - `requireRole()` - Requires specific role(s)
+  - `verifyClientAccess()` - Verifies user can access specific client data
+  - `optionalAuth()` - Optional authentication (returns user if authenticated)
+- ✅ Added admin authentication to all 11 admin routes:
+  - `src/app/api/admin/set-admin/route.ts` ✅
+  - `src/app/api/admin/delete-client-by-email/route.ts` ✅
+  - `src/app/api/admin/find-user-by-email/route.ts` ✅
+  - `src/app/api/admin/find-client-by-email/route.ts` ✅
+  - `src/app/api/admin/cleanup-coaches/route.ts` ✅
+  - `src/app/api/admin/set-vana-form-questions-final/route.ts` ✅
+  - `src/app/api/admin/add-questions-to-form/route.ts` ✅
+  - `src/app/api/admin/fix-vana-form-order/route.ts` ✅
+  - `src/app/api/admin/reorder-form-questions/route.ts` ✅
+  - `src/app/api/admin/check-form-questions/route.ts` ✅
+  - `src/app/api/admin/fix-vana-form-questions/route.ts` ✅
+
+**Status:** ✅ **FIXED** - All admin routes now require explicit admin authentication
 
 ---
 
@@ -131,7 +170,22 @@ if (password && password.length < 6) {
 - Consider password strength meter
 - Enforce password policies
 
-**Status:** 🟡 **Should strengthen before launch**
+**Fix Applied:**
+- ✅ Created password validation utility (`src/lib/password-validation.ts`)
+  - Minimum 8 characters (increased from 6)
+  - Requires uppercase letter
+  - Requires lowercase letter
+  - Requires number
+  - Returns detailed validation results with requirements checklist
+- ✅ Updated all password validation points:
+  - `src/app/api/clients/route.ts` - Now uses strong password validation
+  - `src/app/api/auth/register/route.ts` - Added password validation
+  - `src/app/api/client-onboarding/complete/route.ts` - Added password validation
+  - `src/app/register/page.tsx` - Client-side validation updated
+  - `src/app/client-onboarding/page.tsx` - Client-side validation updated
+  - `src/app/clients/create/page.tsx` - Updated UI text and minLength attribute
+
+**Status:** ✅ **FIXED** - Strong password requirements now enforced (8+ chars, uppercase, lowercase, number)
 
 ---
 
@@ -371,4 +425,5 @@ Update password validation to require:
    - Add comprehensive logging
    - Monitor for security issues
    - Regular security reviews
+
 

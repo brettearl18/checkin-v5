@@ -1,15 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase-server';
 import { vanaCheckInQuestions } from '@/lib/vana-checkin-questions';
+import { requireAdmin } from '@/lib/api-auth';
+import { logInfo, logSafeError } from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 
 /**
  * POST /api/admin/fix-vana-form-questions
  * Seeds all Vana Check In questions and adds them to the form
+ * 
+ * Requires: Admin authentication
  */
 export async function POST(request: NextRequest) {
   try {
+    // Require admin authentication
+    const authResult = await requireAdmin(request);
+    if (authResult instanceof NextResponse) {
+      return authResult;
+    }
+
     const { formId } = await request.json();
     
     if (!formId) {
@@ -40,7 +50,7 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
     
-    console.log(`Form coachId: ${coachId}`);
+    logInfo('Processing form questions fix');
     
     // Find all existing questions with category "Vana Check In" for this coach
     const existingQuestionsSnapshot = await db.collection('questions')
@@ -58,7 +68,7 @@ export async function POST(request: NextRequest) {
       });
     });
     
-    console.log(`Found ${existingQuestions.size} existing Vana Check In questions`);
+    logInfo(`Found ${existingQuestions.size} existing Vana Check In questions`);
     
     // Create missing questions
     const questionIds = [];
@@ -128,8 +138,8 @@ export async function POST(request: NextRequest) {
       }
     }
     
-    console.log(`Created ${created.length} new questions, reused ${reused.length} existing questions`);
-    console.log(`Total question IDs: ${questionIds.length}`);
+    logInfo(`Created ${created.length} new questions, reused ${reused.length} existing questions`);
+    logInfo(`Total question IDs: ${questionIds.length}`);
     
     // Update the form with all question IDs
     await db.collection('forms').doc(formId).update({
@@ -147,7 +157,7 @@ export async function POST(request: NextRequest) {
     });
     
   } catch (error: any) {
-    console.error('Error fixing form questions:', error);
+    logSafeError('Error fixing form questions', error);
     return NextResponse.json({
       success: false,
       message: 'Failed to fix form questions',
@@ -155,4 +165,5 @@ export async function POST(request: NextRequest) {
     }, { status: 500 });
   }
 }
+
 

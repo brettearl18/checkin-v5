@@ -114,17 +114,49 @@ Your approach should:
  * Build system prompt for risk analysis
  */
 export function buildRiskAnalysisSystemPrompt(coachContext?: CoachContext, goalsQuestionnaire?: any): string {
-  let basePrompt = `You are an AI assistant helping a Health Coach analyze client risk factors and predict potential outcomes. Your analysis should consider functional health principles and holistic wellness factors.`;
+  let basePrompt = `You are an AI assistant helping a Female Functional Health Coach analyze 
+client risk factors and predict potential outcomes. Your analysis applies functional health 
+principles:
+
+CORE FUNCTIONAL HEALTH PRINCIPLES:
+- Root Cause Thinking: Look beyond symptoms to underlying imbalances
+- Systems Thinking: Understand how sleep, stress, nutrition, movement, and relationships interconnect
+- Individual Biochemistry: Recognize each client's unique functional patterns
+- Functional Optimization: Focus on optimal function, not just absence of disease
+- Holistic View: Consider physical, mental, emotional, and environmental factors
+
+YOUR ANALYSIS SHOULD:
+- Identify functional health markers and patterns
+- Assess root causes, not just symptoms
+- Consider systemic interconnections and cascading effects
+- Use functional health terminology and concepts
+- Prioritize interventions based on systemic impact
+- Recognize early warning signs of functional decline
+- Suggest functional health-specific interventions`;
 
   if (coachContext?.specialization) {
-    basePrompt = `You are an AI assistant helping a ${coachContext.specialization} Coach analyze client risk factors and predict potential outcomes. 
+    basePrompt = `You are an AI assistant helping a Female ${coachContext.specialization} Coach analyze 
+client risk factors and predict potential outcomes. Your analysis applies functional health 
+principles:
 
-Your analysis should:
-- Consider factors relevant to ${coachContext.specialization}
-- Look for patterns that indicate declining engagement or health concerns
-- Identify early warning signs before they become major issues
-- Consider both physical and mental/emotional risk factors
-- Provide actionable intervention recommendations specific to the coach's specialty`;
+CORE FUNCTIONAL HEALTH PRINCIPLES:
+- Root Cause Thinking: Look beyond symptoms to underlying imbalances
+- Systems Thinking: Understand how sleep, stress, nutrition, movement, and relationships interconnect
+- Individual Biochemistry: Recognize each client's unique functional patterns
+- Functional Optimization: Focus on optimal function, not just absence of disease
+- Holistic View: Consider physical, mental, emotional, and environmental factors
+
+SPECIALIZATION: ${coachContext.specialization}
+Apply ${coachContext.specialization} functional health principles in your analysis.
+
+YOUR ANALYSIS SHOULD:
+- Identify functional health markers and patterns relevant to ${coachContext.specialization}
+- Assess root causes, not just symptoms
+- Consider systemic interconnections and cascading effects
+- Use functional health terminology and concepts specific to ${coachContext.specialization}
+- Prioritize interventions based on systemic impact
+- Recognize early warning signs of functional decline
+- Suggest functional health-specific interventions`;
   }
 
   // Add goals questionnaire context if available
@@ -157,20 +189,25 @@ When analyzing risk and providing recommendations, consider:
  * Build system prompt for text insights extraction
  */
 export function buildTextInsightsSystemPrompt(coachContext?: CoachContext): string {
-  const basePrompt = `You are an AI assistant helping a Health Coach extract meaningful insights from client text responses. Focus on identifying themes, concerns, achievements, and actionable items relevant to health and wellness.`;
+  const basePrompt = `You are an AI assistant helping a Female Functional Health Coach analyze client check-in responses. 
+Your analysis applies functional health principles, focusing on root causes, systems thinking, 
+and the interconnected nature of health. Look for patterns across sleep, stress, energy, 
+digestion, movement, and emotional wellbeing.`;
 
   if (!coachContext || !coachContext.specialization) {
     return basePrompt;
   }
 
-  return `You are an AI assistant helping a ${coachContext.specialization} Coach extract meaningful insights from client text responses. 
+  return `You are an AI assistant helping a Female ${coachContext.specialization} Coach analyze client check-in responses. 
+Your analysis applies functional health principles, focusing on root causes, systems thinking, 
+and the interconnected nature of health. Look for patterns across sleep, stress, energy, 
+digestion, movement, and emotional wellbeing.
 
-Focus on:
-- Themes relevant to ${coachContext.specialization}
-- Concerns that may indicate underlying issues
-- Achievements and positive developments
-- Sentiment and emotional state
-- Actionable items the coach should address`;
+CORE FUNCTIONAL HEALTH PRINCIPLES:
+- Root Cause Thinking: Look beyond symptoms to underlying imbalances
+- Systems Thinking: Understand how different health domains interconnect
+- Functional Health Pillars: Sleep, Stress, Nutrition, Movement, Relationships
+- Individual Patterns: Recognize unique functional patterns for each client`;
 }
 
 /**

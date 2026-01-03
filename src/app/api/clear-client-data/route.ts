@@ -6,8 +6,17 @@ export const dynamic = 'force-dynamic';
 /**
  * POST /api/clear-client-data
  * Clears all check-ins and measurements for a specific client
+ * DISABLED IN PRODUCTION - For development/testing only
  */
 export async function POST(request: NextRequest) {
+  // Disable in production
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json(
+      { success: false, message: 'Not Found' },
+      { status: 404 }
+    );
+  }
+
   try {
     const { searchParams } = new URL(request.url);
     const clientEmail = searchParams.get('email') || 'info@vanahealth.com.au';
@@ -134,6 +143,7 @@ export async function POST(request: NextRequest) {
     }, { status: 500 });
   }
 }
+
 
 
 

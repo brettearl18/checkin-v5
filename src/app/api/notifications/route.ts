@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase-server';
+import { logInfo, logSafeError } from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,11 +23,11 @@ interface Notification {
 }
 
 // GET - Fetch notifications for a user
-export async function GET(request: NextRequest) {
+export async function GET(request: NextRequest): Promise<NextResponse> {
   // Wrap entire function in try-catch to prevent any unhandled errors
   // This ensures we NEVER return a 500 error - always return 200 with error details
   try {
-    console.log('[Notifications API] GET request started');
+    logInfo('[Notifications API] GET request started');
     
     let searchParams;
     let userId;
@@ -36,12 +37,12 @@ export async function GET(request: NextRequest) {
     try {
       const url = new URL(request.url);
       searchParams = url.searchParams;
-      console.log('[Notifications API] Parsed search params');
+      logInfo('[Notifications API] Parsed search params');
       userId = searchParams.get('userId');
       limit = parseInt(searchParams.get('limit') || '50');
       unreadOnly = searchParams.get('unreadOnly') === 'true';
     } catch (urlError: any) {
-      console.error('[Notifications API] Error parsing URL:', urlError);
+      logSafeError('[Notifications API] Error parsing URL', urlError);
       return NextResponse.json({
         success: false,
         message: 'Invalid request URL',
@@ -53,7 +54,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (!userId) {
-      console.log('[Notifications API] No userId provided');
+      logInfo('[Notifications API] No userId provided');
       return NextResponse.json({
         success: false,
         message: 'User ID is required',
@@ -63,14 +64,14 @@ export async function GET(request: NextRequest) {
       }, { status: 200 });
     }
 
-    console.log('[Notifications API] Fetching for userId:', userId);
+    logInfo('[Notifications API] Fetching notifications');
     let db;
     try {
       db = getDb();
-      console.log('[Notifications API] Database initialized');
+      logInfo('[Notifications API] Database initialized');
       // Validate db is properly initialized
       if (!db || typeof db.collection !== 'function') {
-        console.error('Database instance is invalid:', typeof db);
+        logSafeError('Database instance is invalid', { type: typeof db });
         // Return 200 instead of throwing to prevent 500
         return NextResponse.json({
           success: false,
@@ -81,7 +82,7 @@ export async function GET(request: NextRequest) {
         }, { status: 200 });
       }
     } catch (dbError: any) {
-      console.error('Error getting database instance:', dbError);
+      logSafeError('Error getting database instance', dbError);
       return NextResponse.json({
         success: false,
         message: 'Database connection failed',
@@ -129,7 +130,7 @@ export async function GET(request: NextRequest) {
                 return value;
               }));
             } catch (metadataError) {
-              console.error('Error serializing metadata:', metadataError);
+              logSafeError('Error serializing metadata', metadataError);
               // If metadata can't be serialized, return a safe version
               serializedMetadata = {
                 error: 'Metadata could not be serialized',
@@ -183,7 +184,7 @@ export async function GET(request: NextRequest) {
         });
       } catch (orderByError: any) {
         // If orderBy fails (missing index), fetch without orderBy and sort client-side
-        console.log('OrderBy failed, fetching without orderBy:', orderByError.message);
+        logInfo('OrderBy failed, fetching without orderBy');
         
         // Rebuild query without orderBy
         query = db.collection('notifications').where('userId', '==', userId);
@@ -214,7 +215,7 @@ export async function GET(request: NextRequest) {
                 return value;
               }));
             } catch (metadataError) {
-              console.error('Error serializing metadata:', metadataError);
+              logSafeError('Error serializing metadata', metadataError);
               // If metadata can't be serialized, return a safe version
               serializedMetadata = {
                 error: 'Metadata could not be serialized',
@@ -290,14 +291,12 @@ export async function GET(request: NextRequest) {
           .get();
         unreadCount = unreadSnapshot.size;
       } catch (unreadError) {
-        console.log('Error getting unread count, defaulting to 0:', unreadError);
+        logInfo('Error getting unread count, defaulting to 0');
         unreadCount = notifications.filter(n => !n.isRead).length;
       }
 
     } catch (queryError: any) {
-      console.error('Query error in notifications API:', queryError);
-      console.error('Query error stack:', queryError?.stack);
-      console.error('Query error code:', queryError?.code);
+      logSafeError('Query error in notifications API', queryError);
       // Return empty array instead of failing completely
       notifications = [];
       unreadCount = 0;
@@ -314,7 +313,7 @@ export async function GET(request: NextRequest) {
         JSON.stringify(notification);
         return notification;
       } catch (serializationError) {
-        console.error('Notification failed serialization test:', serializationError);
+        logSafeError('Notification failed serialization test', serializationError);
         // Return a minimal safe version
         return {
           id: notification.id || '',
@@ -330,7 +329,7 @@ export async function GET(request: NextRequest) {
       }
     });
     } catch (safetyCheckError: any) {
-      console.error('Error in safety check for notifications:', safetyCheckError);
+      logSafeError('Error in safety check for notifications', safetyCheckError);
       // If safety check itself fails, just use empty array
       safeNotifications = [];
     }
@@ -344,11 +343,7 @@ export async function GET(request: NextRequest) {
         totalCount: safeNotifications.length
       });
     } catch (jsonError: any) {
-      console.error('Error serializing response:', jsonError);
-      console.error('Attempted to serialize:', {
-        notificationCount: safeNotifications.length,
-        firstNotification: safeNotifications[0]
-      });
+      logSafeError('Error serializing response', jsonError);
       // Fallback to a basic response if JSON serialization fails
       return NextResponse.json(
         { 
@@ -363,17 +358,7 @@ export async function GET(request: NextRequest) {
     }
 
   } catch (error: any) {
-    console.error('Error fetching notifications:', error);
-    // Log the full error for debugging
-    if (error?.stack) {
-      console.error('Error stack:', error.stack);
-    }
-    if (error?.code) {
-      console.error('Error code:', error.code);
-    }
-    if (error?.message) {
-      console.error('Error message:', error.message);
-    }
+    logSafeError('Error fetching notifications', error);
     
     // Return 200 with error details instead of 500, since we're handling it gracefully
     // This ensures the UI doesn't break even if notifications fail to load
@@ -398,7 +383,7 @@ export async function GET(request: NextRequest) {
     } catch (jsonError: any) {
       // If even JSON serialization fails, return a plain text error with 200 status
       // to prevent the client from seeing a 500
-      console.error('Critical: Failed to serialize error response:', jsonError);
+      logSafeError('Critical: Failed to serialize error response', jsonError);
       try {
         return new NextResponse(
           JSON.stringify({ 
@@ -458,7 +443,7 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Error creating notification:', error);
+    logSafeError('Error creating notification', error);
     return NextResponse.json(
       { success: false, message: 'Failed to create notification', error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
@@ -520,7 +505,7 @@ export async function PATCH(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Error updating notification:', error);
+    logSafeError('Error updating notification', error);
     return NextResponse.json(
       { success: false, message: 'Failed to update notification', error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
@@ -550,7 +535,7 @@ export async function DELETE(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Error deleting notification:', error);
+    logSafeError('Error deleting notification', error);
     return NextResponse.json(
       { success: false, message: 'Failed to delete notification', error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }

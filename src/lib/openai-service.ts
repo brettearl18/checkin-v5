@@ -332,7 +332,7 @@ export async function analyzeClientRisk(
   const goalsQuestionnaire = (clientProfile as any)?.goalsQuestionnaire;
   const systemPrompt = buildRiskAnalysisSystemPrompt(coachContext, goalsQuestionnaire);
 
-  const prompt = `Analyze this client's risk level based on their check-in patterns and profile.
+  const prompt = `Analyze this client's risk level using functional health principles.
 
 Client Profile:
 - Goals: ${clientProfile.goals.join(', ')}
@@ -347,13 +347,46 @@ ${engagementMetrics ? `- Completion Rate: ${engagementMetrics.completionRate}%` 
 
 ${textResponses && textResponses.length > 0 ? `Recent Text Responses:\n${textResponses.slice(-3).join('\n\n')}` : ''}
 
-Assess the risk level (low/medium/high/critical) and provide:
-1. Specific reasons for the risk assessment
-2. Predicted outcome if current trend continues
-3. Recommended interventions
-4. Confidence level in the assessment
+FUNCTIONAL HEALTH RISK ASSESSMENT:
 
-Consider factors like: score trends, engagement, text sentiment, alignment with goals, known barriers.`;
+1. **SYSTEMIC RISK FACTORS:**
+   - Are there patterns suggesting functional imbalances? (adrenal fatigue, inflammation, gut issues)
+   - What root causes might be driving declining scores?
+   - Which health pillars (sleep, stress, nutrition, movement) show dysfunction?
+   - Are there cascading patterns? (e.g., stress → poor sleep → low energy → reduced motivation → declining scores)
+
+2. **FUNCTIONAL HEALTH MARKERS:**
+   - Energy patterns (crashes, difficulty waking, afternoon slumps)
+   - Sleep quality patterns and correlations
+   - Stress response patterns
+   - Recovery patterns
+   - Any mentions of inflammation, digestive issues, brain fog
+
+3. **ROOT CAUSE ANALYSIS:**
+   - What underlying systems might be compromised?
+   - Are symptoms being managed vs. root causes addressed?
+   - What functional investigations might be needed?
+
+4. **PREDICTED OUTCOME:**
+   - If current functional patterns continue, what's the trajectory?
+   - What functional health complications could develop?
+   - What systemic impacts might cascade?
+
+5. **FUNCTIONAL HEALTH INTERVENTIONS:**
+   - Specific functional health strategies (not generic wellness)
+   - Root cause interventions vs. symptom management
+   - Priority order based on systemic impact
+   - Lifestyle interventions addressing functional pillars
+
+Assess the risk level (low/medium/high/critical) from a functional health perspective and provide:
+1. Specific functional health risk factors identified
+2. Root causes that need attention
+3. Predicted functional health trajectory if trend continues
+4. Functional health-specific intervention recommendations
+5. Confidence level in the assessment
+
+Consider: functional health markers, root cause patterns, systems interconnections, 
+alignment with functional health goals, and barriers to functional optimization.`;
 
   const structure = `{
   "riskLevel": "low" | "medium" | "high" | "critical",
@@ -403,29 +436,65 @@ export async function extractTextInsights(
 
   const systemPrompt = buildTextInsightsSystemPrompt(coachContext);
 
-  const prompt = `Analyze these check-in text responses and extract key insights.
+  const prompt = `Analyze these check-in text responses through a functional health lens and extract key insights.
 
-Context:
-${context ? `- Score: ${context.score}%\n- Week: ${context.weekNumber}` : 'No additional context'}
+Client Context:
+${context ? `- Score: ${context.score}%\n- Week: ${context.weekNumber || 'N/A'}\n- Check-in Count: ${context.checkInCount || 'N/A'}\n- Measurements: ${context.measurementsCount || 0}` : 'No additional context'}
 
 Text Responses:
 ${textResponses.join('\n\n---\n\n')}
 
-Extract:
-1. Main themes discussed
-2. Any concerns or challenges mentioned
-3. Achievements or positive developments
-4. Overall sentiment
-5. Action items or next steps implied
-6. A brief summary (2-3 sentences)`;
+Analyze using functional health principles:
+
+1. **ROOT CAUSE PATTERNS** (not just symptoms):
+   - What underlying systems or imbalances might be causing reported issues?
+   - Identify any recurring patterns that suggest systemic root causes
+   - Note any interconnected factors (e.g., stress → sleep → energy → motivation)
+
+2. **FUNCTIONAL HEALTH PILLARS** (assess each):
+   - **Sleep Quality:** Patterns, disruptions, energy correlation
+   - **Stress Levels:** Sources, impact on other systems, management strategies mentioned
+   - **Energy Patterns:** When energy is high/low, what correlates?
+   - **Digestive Health:** Any mentions of bloating, discomfort, food reactions?
+   - **Movement/Exercise:** How movement affects energy, mood, sleep
+   - **Relationships/Social:** Impact on stress, motivation, accountability
+
+3. **SYSTEMS INTERCONNECTIONS:**
+   - How do different health domains affect each other?
+   - Example: "Client mentions stress → also reports poor sleep → low energy → reduced exercise"
+   - Identify cascading effects and feedback loops
+
+4. **FUNCTIONAL HEALTH MARKERS:**
+   - Signs of inflammation (stiffness, aches, brain fog)
+   - Adrenal/stress patterns (energy crashes, difficulty waking)
+   - Recovery patterns (how well they bounce back)
+   - Metabolic signals (cravings, blood sugar stability mentions)
+
+5. **ACHIEVEMENTS & POSITIVE DEVELOPMENTS:**
+   - What functional improvements are evident?
+   - Which systems are showing optimization?
+
+6. **CONCERNS & RED FLAGS:**
+   - Warning signs that need deeper investigation
+   - Patterns suggesting functional imbalances
+
+7. **COACHING OPPORTUNITIES:**
+   - Where can root cause investigation be beneficial?
+   - What lifestyle interventions might address root causes?
+   - Functional health strategies to suggest
+
+8. **OVERALL SUMMARY** (2-3 sentences):
+   - Functional health perspective on current state
+   - Key systems to focus on
+   - Priority interventions from functional health approach`;
 
   const structure = `{
-  "themes": ["string - main topics discussed"],
-  "concerns": ["string - concerns or challenges mentioned"],
-  "achievements": ["string - positive developments"],
+  "themes": ["string - main topics discussed through functional health lens"],
+  "concerns": ["string - concerns indicating functional imbalances or root causes"],
+  "achievements": ["string - positive functional health developments"],
   "sentiment": "positive" | "neutral" | "negative",
-  "actionItems": ["string - implied or suggested actions"],
-  "summary": "string - 2-3 sentence summary"
+  "actionItems": ["string - functional health interventions or root cause investigations suggested"],
+  "summary": "string - 2-3 sentence summary from functional health perspective, including key systems to focus on"
 }`;
 
   return generateStructuredResponse<TextInsightsResponse>(

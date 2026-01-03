@@ -3,6 +3,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { validatePassword } from '@/lib/password-validation';
 
 interface OnboardingData {
   token: string;
@@ -70,8 +71,10 @@ function ClientOnboardingContent() {
       return;
     }
 
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters long.');
+    // Validate password strength
+    const passwordValidation = validatePassword(password);
+    if (!passwordValidation.valid) {
+      setError(passwordValidation.message || 'Password does not meet requirements.');
       return;
     }
 

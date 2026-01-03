@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase-server';
 import { notificationService } from '@/lib/notification-service';
+import { logInfo, logSafeError } from '@/lib/logger';
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic';
@@ -11,9 +12,9 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
-    console.log('[Check-in API] Received request with assignment ID:', id);
+    logInfo('[Check-in API] Received check-in submission request');
     const requestData = await request.json();
-    console.log('[Check-in API] Request data keys:', Object.keys(requestData || {}));
+    logInfo('[Check-in API] Processing check-in submission');
 
     if (!id) {
       return NextResponse.json({
@@ -25,38 +26,36 @@ export async function POST(
     const db = getDb();
 
     // Get the assignment - try as document ID first, then query by 'id' field
-    console.log('[Check-in API] Attempting to find assignment by document ID:', id);
+    logInfo('[Check-in API] Attempting to find assignment');
     let assignmentDoc = await db.collection('check_in_assignments').doc(id).get();
     let assignmentData = assignmentDoc.exists ? assignmentDoc.data() : null;
     let assignmentDocId = assignmentDoc.exists ? assignmentDoc.id : null;
-    console.log('[Check-in API] Found by document ID?', assignmentDoc.exists);
 
     // If not found by document ID, try querying by 'id' field
     if (!assignmentDoc.exists) {
-      console.log('[Check-in API] Not found by document ID, querying by id field:', id);
+      logInfo('[Check-in API] Not found by document ID, querying by id field');
       const assignmentsQuery = await db.collection('check_in_assignments')
         .where('id', '==', id)
         .limit(1)
         .get();
       
-      console.log('[Check-in API] Query results count:', assignmentsQuery.size);
       if (!assignmentsQuery.empty) {
         assignmentDoc = assignmentsQuery.docs[0];
         assignmentData = assignmentDoc.data();
         assignmentDocId = assignmentDoc.id;
-        console.log('[Check-in API] Found by id field, document ID:', assignmentDocId);
+        logInfo('[Check-in API] Found by id field');
       }
     }
 
     if (!assignmentData || !assignmentDocId) {
-      console.error('[Check-in API] Assignment not found with ID:', id);
+      logInfo('[Check-in API] Assignment not found');
       return NextResponse.json({
         success: false,
         message: 'Assignment not found'
       }, { status: 404 });
     }
 
-    console.log('[Check-in API] Assignment found, clientId:', assignmentData.clientId);
+    logInfo('[Check-in API] Assignment found');
 
     const assignmentId = assignmentDocId; // Use the actual Firestore document ID
 
@@ -70,12 +69,11 @@ export async function POST(
     }
 
     const formData = formDoc.data();
-    console.log('Form data retrieved:', formData);
-    console.log('Assignment data:', assignmentData);
+    logInfo('Form and assignment data retrieved');
 
     // Validate form data
     if (!formData || !formData.title) {
-      console.error('Form data is missing or invalid:', { formData, assignmentData });
+      logSafeError('Form data is missing or invalid', { hasFormData: !!formData, hasAssignmentData: !!assignmentData });
       return NextResponse.json({
         success: false,
         message: 'Form data is invalid or missing title'
@@ -152,11 +150,11 @@ export async function POST(
       status: 'completed'
     };
 
-    console.log('Prepared response data:', responseData);
+    logInfo('Prepared response data');
 
     // Validate response data before saving
     if (!responseData.formTitle || responseData.formTitle === 'Unknown Form') {
-      console.error('Invalid form title in response data:', responseData);
+      logSafeError('Invalid form title in response data', { hasFormTitle: !!responseData?.formTitle });
       return NextResponse.json({
         success: false,
         message: 'Form title is invalid'
@@ -165,7 +163,7 @@ export async function POST(
 
     // Check if assignment is already completed (prevent duplicate submissions)
     if (assignmentData.status === 'completed' && assignmentData.responseId) {
-      console.log('[Check-in API] Assignment already completed, returning existing response');
+      logInfo('[Check-in API] Assignment already completed, returning existing response');
       // Return existing response instead of creating a new one
       try {
         const existingResponseDoc = await db.collection('formResponses').doc(assignmentData.responseId).get();
@@ -179,7 +177,7 @@ export async function POST(
           });
         }
       } catch (error) {
-        console.error('Error fetching existing response:', error);
+        logSafeError('Error fetching existing response', error);
         // Continue to create new response if existing one can't be found
       }
     }
@@ -207,7 +205,7 @@ export async function POST(
         assignmentData.formId // formId
       );
     } catch (error) {
-      console.error('Error creating notification:', error);
+      logSafeError('Error creating notification', error);
       // Don't fail the check-in if notification fails
     }
 
@@ -231,7 +229,7 @@ export async function POST(
               coachName = `${coachData?.firstName || ''} ${coachData?.lastName || ''}`.trim() || undefined;
             }
           } catch (error) {
-            console.log('Could not fetch coach information for completion email');
+            logInfo('Could not fetch coach information for completion email');
           }
         }
 
@@ -250,7 +248,7 @@ export async function POST(
         });
       }
     } catch (error) {
-      console.error('Error sending completion email:', error);
+      logSafeError('Error sending completion email', error);
       // Don't fail the check-in if email fails
     }
 
@@ -261,7 +259,7 @@ export async function POST(
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ clientId: assignmentData.clientId })
       }).catch(error => {
-        console.error('Error tracking goal progress after check-in:', error);
+        logSafeError('Error tracking goal progress after check-in', error);
         // Don't fail the check-in if goal tracking fails
       });
     }
@@ -274,10 +272,7 @@ export async function POST(
     });
 
   } catch (error: any) {
-    console.error('Error completing check-in:', error);
-    console.error('Error stack:', error?.stack);
-    const { id: assignmentIdParam } = await params;
-    console.error('Request data:', { assignmentId: assignmentIdParam, requestDataKeys: requestData ? Object.keys(requestData) : 'no data' });
+    logSafeError('Error completing check-in', error);
     return NextResponse.json(
       { 
         success: false, 

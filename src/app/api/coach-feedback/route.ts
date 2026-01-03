@@ -18,8 +18,8 @@ interface CoachFeedback {
 }
 
 export async function POST(request: NextRequest) {
-  const db = getDb();
   try {
+    const db = getDb();
     const body = await request.json();
     const { responseId, coachId, clientId, questionId, feedbackType, content } = body;
 
@@ -31,19 +31,42 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if feedback already exists for this combination
-    let existingFeedbackQuery = db.collection('coachFeedback')
-      .where('responseId', '==', responseId)
-      .where('coachId', '==', coachId)
-      .where('feedbackType', '==', feedbackType);
+    let existingFeedbackSnapshot;
     
-    // If questionId is provided, filter by it; otherwise filter for null questionId (overall feedback)
     if (questionId) {
-      existingFeedbackQuery = existingFeedbackQuery.where('questionId', '==', questionId);
+      // Query with questionId filter
+      existingFeedbackSnapshot = await db.collection('coachFeedback')
+        .where('responseId', '==', responseId)
+        .where('coachId', '==', coachId)
+        .where('questionId', '==', questionId)
+        .where('feedbackType', '==', feedbackType)
+        .get();
     } else {
-      existingFeedbackQuery = existingFeedbackQuery.where('questionId', '==', null);
+      // For overall feedback (no questionId), query for documents where questionId doesn't exist or is null
+      // Note: Firestore doesn't support == null directly, so we need to fetch all and filter client-side
+      // OR use a different approach: store overall feedback with a special questionId value
+      // For now, we'll query all feedback and filter client-side for null questionId
+      const allFeedback = await db.collection('coachFeedback')
+        .where('responseId', '==', responseId)
+        .where('coachId', '==', coachId)
+        .where('feedbackType', '==', feedbackType)
+        .get();
+      
+      // Filter for documents where questionId is null or doesn't exist
+      existingFeedbackSnapshot = {
+        empty: true,
+        docs: []
+      } as any;
+      
+      for (const doc of allFeedback.docs) {
+        const data = doc.data();
+        if (!data.questionId || data.questionId === null) {
+          existingFeedbackSnapshot.empty = false;
+          existingFeedbackSnapshot.docs = [doc];
+          break;
+        }
+      }
     }
-
-    const existingFeedbackSnapshot = await existingFeedbackQuery.get();
 
     let feedbackId: string;
     const now = new Date();
@@ -218,8 +241,8 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
-  const db = getDb();
   try {
+    const db = getDb();
     const { searchParams } = new URL(request.url);
     let responseId = searchParams.get('responseId');
     const coachId = searchParams.get('coachId');
@@ -352,8 +375,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  const db = getDb();
   try {
+    const db = getDb();
     const body = await request.json();
     const { feedbackId, content } = body;
 
@@ -386,8 +409,8 @@ export async function PUT(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const db = getDb();
   try {
+    const db = getDb();
     const { searchParams } = new URL(request.url);
     const feedbackId = searchParams.get('feedbackId');
 

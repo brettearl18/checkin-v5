@@ -347,7 +347,12 @@ export default function CheckInCompletionPage() {
     const checkInWindow = assignment.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
     const status = isWithinCheckInWindow(checkInWindow);
     
-    if (!status.isOpen) {
+    // Special case: Week 1 (first check-in) can be submitted even if window is closed
+    // This allows clients who signed up Jan 3-5 to submit their Week 1 check-in on Jan 5
+    // regardless of window hours.
+    const isFirstCheckIn = assignment.recurringWeek === 1;
+    
+    if (!status.isOpen && !isFirstCheckIn) {
       setError(`Check-in window is currently closed. ${status.message}`);
       setSubmitting(false);
       isSubmittingRef.current = false;

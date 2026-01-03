@@ -232,10 +232,10 @@ export async function GET(
 
     // Build context for SWOT analysis
     const systemPrompt = coachContext 
-      ? `You are an AI assistant helping a ${coachContext.specialization} Coach perform a SWOT analysis on client progress.`
-      : 'You are an AI assistant helping a Health Coach perform a SWOT analysis on client progress.';
+      ? `You are an AI assistant helping a Female ${coachContext.specialization} Coach perform a comprehensive SWOT analysis. Apply functional health principles: root cause thinking, systems interconnection, and personalized optimization. Focus on how different health domains (sleep, stress, nutrition, movement, relationships) interconnect and impact overall function.`
+      : 'You are an AI assistant helping a Female Functional Health Coach perform a comprehensive SWOT analysis. Apply functional health principles: root cause thinking, systems interconnection, and personalized optimization. Focus on how different health domains (sleep, stress, nutrition, movement, relationships) interconnect and impact overall function.';
 
-    const prompt = `Perform a comprehensive SWOT analysis for this client based on their current progress and data.
+    const prompt = `Perform a comprehensive SWOT analysis for this client using a functional health framework.
 
 Client: ${clientName}
 Current Progress Score: ${currentScore || 'N/A'}%
@@ -256,29 +256,42 @@ Recent Check-in Responses (last ${Math.min(10, textResponses.length)}):
 ${textResponses.slice(0, 10).join('\n\n---\n\n')}
 ` : 'No detailed text responses available.'}
 
-Analyze the client's overall progress and provide:
+Analyze through the lens of functional health:
 
-**STRENGTHS** (Internal positive factors):
-- What is the client doing well?
-- What positive patterns or behaviors have emerged?
-- What resources or capabilities does the client have?
+**STRENGTHS** (Internal positive factors - functional health perspective):
+- What functional systems are working well?
+- Which health pillars are optimized (sleep, stress management, energy, digestion, movement)?
+- What positive patterns suggest strong foundational health?
+- What resources or capabilities support functional optimization?
+- Which root causes are well-managed?
 
-**WEAKNESSES** (Internal areas for improvement):
-- What challenges is the client facing?
-- What barriers or limitations exist?
-- What habits or patterns need work?
+**WEAKNESSES** (Internal areas for improvement - root cause focus):
+- What functional imbalances or deficiencies exist?
+- Which health pillars need attention?
+- What underlying systems (adrenal, digestive, hormonal) might be compromised?
+- What root causes need investigation vs. symptom management?
+- Where are cascading negative patterns (e.g., stress → poor sleep → low energy)?
 
-**OPPORTUNITIES** (External positive factors):
-- What favorable conditions or trends exist?
-- What potential improvements could be made?
-- What support or resources could be leveraged?
+**OPPORTUNITIES** (External positive factors - functional health optimization):
+- What lifestyle interventions could optimize function?
+- What environmental or social factors support functional health?
+- What functional health tools or strategies could be leveraged?
+- Where are opportunities to address root causes rather than symptoms?
+- What systemic improvements could create positive cascades?
 
-**THREATS** (External risks):
-- What risks could derail progress?
-- What external factors might negatively impact the client?
-- What warning signs should be monitored?
+**THREATS** (External risks - functional health perspective):
+- What factors could derail functional optimization?
+- What environmental toxins or stressors threaten systems?
+- What lifestyle patterns could lead to functional decline?
+- What systemic risks could cascade into multiple health domains?
+- What early warning signs suggest functional imbalances developing?
 
-Provide 3-5 specific, actionable items for each SWOT category.`;
+**FUNCTIONAL HEALTH PRIORITY ASSESSMENT:**
+- Rank health pillars by priority for intervention
+- Identify which root causes, if addressed, would have the greatest systemic impact
+- Suggest order of functional health investigation
+
+Provide 3-5 specific, actionable items for each SWOT category, framed in functional health terms.`;
 
     const structure = `{
   "strengths": ["string - internal positive factors"],

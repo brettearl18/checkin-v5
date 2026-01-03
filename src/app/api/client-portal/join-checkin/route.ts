@@ -71,21 +71,38 @@ export async function POST(request: NextRequest) {
     const today = new Date();
     const programStartDate = today.toISOString().split('T')[0];
     
+    // Special case: For signups between Jan 3-5, 2026, Week 1 starts on Jan 5 (Monday)
+    // Compare using date strings (YYYY-MM-DD) to avoid timezone issues
+    const todayDateString = today.toISOString().split('T')[0];
+    const signupStartDateString = '2026-01-03';
+    const signupEndDateString = '2026-01-05';
+    const week1StartDateString = '2026-01-05';
+    
     let firstCheckInDate: Date;
-    if (today.getDay() === 5) {
+    
+    let firstCheckInDateString: string;
+    let firstCheckInDate: Date;
+    
+    // Check if signup is between Jan 3-5, 2026 (inclusive)
+    if (todayDateString >= signupStartDateString && todayDateString <= signupEndDateString) {
+      // Special case: Week 1 starts on Jan 5, 2026 (Monday)
+      // Use the date string directly to avoid timezone conversion issues
+      firstCheckInDateString = week1StartDateString; // '2026-01-05'
+      firstCheckInDate = new Date(week1StartDateString + 'T09:00:00'); // 9:00 AM local time
+    } else if (today.getDay() === 5) {
       // Today is Friday - use today
       firstCheckInDate = new Date(today);
+      firstCheckInDateString = firstCheckInDate.toISOString().split('T')[0];
     } else {
       // Calculate next Friday
       const daysUntilFriday = (5 - today.getDay() + 7) % 7 || 7;
       firstCheckInDate = new Date(today);
       firstCheckInDate.setDate(today.getDate() + daysUntilFriday);
+      firstCheckInDateString = firstCheckInDate.toISOString().split('T')[0];
     }
-    const firstCheckInDateString = firstCheckInDate.toISOString().split('T')[0];
     
     // Set due date to the first check-in date at 9:00 AM
-    const dueDate = new Date(firstCheckInDate);
-    dueDate.setHours(9, 0, 0, 0);
+    const dueDate = new Date(firstCheckInDateString + 'T09:00:00');
     
     // Create assignment
     const assignment = {
@@ -130,4 +147,6 @@ export async function POST(request: NextRequest) {
     }, { status: 500 });
   }
 }
+
+
 

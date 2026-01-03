@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb, getAuthInstance } from '@/lib/firebase-server';
+import { logInfo, logSafeError, logWarn } from '@/lib/logger';
+import { requireAdmin } from '@/lib/api-auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -7,9 +9,17 @@ export const dynamic = 'force-dynamic';
  * DELETE /api/admin/delete-client-by-email?email=xxx
  * Deletes a client and all related data by email address
  * Also deletes the Firebase Auth user if it exists
+ * 
+ * Requires: Admin authentication
  */
 export async function DELETE(request: NextRequest) {
   try {
+    // Require admin authentication
+    const authResult = await requireAdmin(request);
+    if (authResult instanceof NextResponse) {
+      return authResult;
+    }
+
     const { searchParams } = new URL(request.url);
     const email = searchParams.get('email');
     
@@ -23,7 +33,7 @@ export async function DELETE(request: NextRequest) {
     const db = getDb();
     const auth = getAuthInstance();
     
-    console.log(`Looking for client with email: ${email}`);
+    logInfo('Looking for client by email');
     
     // Find client by email
     const clientsSnapshot = await db.collection('clients')
@@ -43,20 +53,18 @@ export async function DELETE(request: NextRequest) {
     const clientData = clientDoc.data();
     const authUid = clientData?.authUid;
     
-    console.log(`Found client: ${clientData.firstName} ${clientData.lastName}`);
-    console.log(`Client ID: ${clientId}`);
-    console.log(`Auth UID: ${authUid || 'None'}`);
+    logInfo('Found client');
     
     // Delete Firebase Auth user if it exists
     if (authUid) {
       try {
         await auth.deleteUser(authUid);
-        console.log('✅ Firebase Auth user deleted:', authUid);
+        logInfo('✅ Firebase Auth user deleted');
       } catch (authError: any) {
         if (authError.code === 'auth/user-not-found') {
-          console.log('ℹ️  Firebase Auth user not found (may have been deleted already)');
+          logInfo('ℹ️  Firebase Auth user not found (may have been deleted already)');
         } else {
-          console.error('❌ Error deleting Firebase Auth user:', authError.message);
+          logSafeError('❌ Error deleting Firebase Auth user', authError);
           // Continue with Firestore deletion even if Auth deletion fails
         }
       }
@@ -80,7 +88,7 @@ export async function DELETE(request: NextRequest) {
         deletions.push({ collection: 'check_in_assignments', count: assignmentsSnapshot.size });
       }
     } catch (error) {
-      console.error('Error fetching check-in assignments:', error);
+      logSafeError('Error fetching check-in assignments', error);
     }
     
     // 2. Delete form responses
@@ -259,14 +267,14 @@ export async function DELETE(request: NextRequest) {
       if (deletionCount <= 500) {
         await batch.commit();
       } else {
-        console.warn(`⚠️  Large deletion detected (${deletionCount} operations)`);
+        logWarn(`⚠️  Large deletion detected (${deletionCount} operations)`);
         await batch.commit();
       }
     }
     
     return NextResponse.json({
       success: true,
-      message: `Client ${clientData.firstName} ${clientData.lastName} (${email}) and all related data deleted successfully. The email can now be used to register a new account.`,
+      message: `Client and all related data deleted successfully. The email can now be used to register a new account.`,
       deleted: {
         total: deletionCount,
         collections: deletions,
@@ -275,7 +283,7 @@ export async function DELETE(request: NextRequest) {
     });
     
   } catch (error: any) {
-    console.error('Error deleting client:', error);
+    logSafeError('Error deleting client', error);
     return NextResponse.json({
       success: false,
       message: 'Failed to delete client',
@@ -283,4 +291,5 @@ export async function DELETE(request: NextRequest) {
     }, { status: 500 });
   }
 }
+
 

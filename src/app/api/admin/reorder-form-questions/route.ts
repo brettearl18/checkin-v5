@@ -1,14 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase-server';
+import { requireAdmin } from '@/lib/api-auth';
+import { logSafeError } from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 
 /**
  * POST /api/admin/reorder-form-questions
  * Reorders questions in the form to put "Did you complete all your training sessions?" first
+ * 
+ * Requires: Admin authentication
  */
 export async function POST(request: NextRequest) {
   try {
+    // Require admin authentication
+    const authResult = await requireAdmin(request);
+    if (authResult instanceof NextResponse) {
+      return authResult;
+    }
+
     const { formId } = await request.json();
     
     if (!formId) {
@@ -53,7 +63,7 @@ export async function POST(request: NextRequest) {
           }
         }
       } catch (error) {
-        console.error(`Error checking question ${questionId}:`, error);
+        logSafeError(`Error checking question`, error);
         // Still include it in otherQuestionIds to preserve it
         otherQuestionIds.push(questionId);
       }
@@ -84,7 +94,7 @@ export async function POST(request: NextRequest) {
     });
     
   } catch (error: any) {
-    console.error('Error reordering form questions:', error);
+    logSafeError('Error reordering form questions', error);
     return NextResponse.json({
       success: false,
       message: 'Failed to reorder form questions',

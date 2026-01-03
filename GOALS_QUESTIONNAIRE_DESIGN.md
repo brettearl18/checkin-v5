@@ -262,3 +262,5 @@ After questionnaire completion, automatically create goals in Firestore:
 5. **Coach Insight:** Coach can see client's "why" and anticipated challenges
 
 
+
+

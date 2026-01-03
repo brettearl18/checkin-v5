@@ -504,6 +504,18 @@ export default function ResponseDetailPage() {
     }
   };
 
+  // Calculate progress indicator data
+  const reviewedQuestionsCount = questions.length > 0 ? questions.filter(q => {
+    const questionFeedback = feedback.filter(f => f.questionId === q.id);
+    return questionFeedback.length > 0 || textFeedback[q.id];
+  }).length : 0;
+  const totalQuestionsCount = questions.length;
+  const progressPercentage = totalQuestionsCount > 0 ? (reviewedQuestionsCount / totalQuestionsCount) * 100 : 0;
+  const firstUnreviewedQuestion = questions.length > 0 ? questions.find(q => {
+    const questionFeedback = feedback.filter(f => f.questionId === q.id);
+    return questionFeedback.length === 0 && !textFeedback[q.id];
+  }) : null;
+
   if (loading) {
     return (
       <RoleProtected requiredRole="coach">
@@ -651,6 +663,64 @@ export default function ResponseDetailPage() {
                       <h2 className="text-2xl font-bold text-gray-900">Action Required: Provide Feedback</h2>
                       <p className="text-gray-700 mt-1">Your client is waiting for your feedback. Add voice notes or text feedback below.</p>
                     </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Progress Indicator - Review Progress */}
+          {questions.length > 0 && (
+            <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden mb-8">
+              <div className="px-8 py-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-900">Review Progress</h2>
+                    <p className="text-gray-600 mt-1">
+                      {reviewedQuestionsCount} of {totalQuestionsCount} questions reviewed
+                    </p>
+                  </div>
+                  {firstUnreviewedQuestion && (
+                    <button
+                      onClick={() => {
+                        // Expand the question if it's collapsed
+                        setExpandedQuestions(prev => {
+                          const newSet = new Set(prev);
+                          newSet.add(firstUnreviewedQuestion.id);
+                          return newSet;
+                        });
+                        // Scroll to the question
+                        setTimeout(() => {
+                          const element = document.getElementById(`question-${firstUnreviewedQuestion.id}`);
+                          if (element) {
+                            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            // Highlight briefly
+                            element.classList.add('ring-4', 'ring-blue-300', 'ring-opacity-50');
+                            setTimeout(() => {
+                              element.classList.remove('ring-4', 'ring-blue-300', 'ring-opacity-50');
+                            }, 2000);
+                          }
+                        }, 100);
+                      }}
+                      className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                    >
+                      <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                      </svg>
+                      Jump to Next Unreviewed
+                    </button>
+                  )}
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
+                  <div 
+                    className="h-full bg-gradient-to-r from-blue-500 to-indigo-600 transition-all duration-500 ease-out flex items-center justify-end pr-2"
+                    style={{ width: `${progressPercentage}%` }}
+                  >
+                    {progressPercentage > 10 && (
+                      <span className="text-xs font-bold text-white">
+                        {Math.round(progressPercentage)}%
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>

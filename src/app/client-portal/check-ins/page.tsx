@@ -318,10 +318,12 @@ export default function ClientCheckInsPage() {
       if (dueDate < today) return true;
       
       // Include if due date has arrived AND window is open (available now)
+      // Special case: Week 1 check-ins are accessible immediately once due date arrives
       if (dueDate <= today) {
         const checkInWindow = checkin.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
         const windowStatus = isWithinCheckInWindow(checkInWindow);
-        if (windowStatus.isOpen) return true;
+        const isFirstCheckIn = checkin.recurringWeek === 1;
+        if (windowStatus.isOpen || isFirstCheckIn) return true;
       }
       
       // Do NOT include future check-ins - they belong in "Scheduled" tab
@@ -627,7 +629,14 @@ export default function ClientCheckInsPage() {
                 today.setHours(0, 0, 0, 0);
                 dueDateHasArrived = dueDate <= today;
               }
-              const isAvailable = currentCheckin && dueDateHasArrived && windowStatus.isOpen && currentCheckin.status !== 'completed';
+              
+              // Special case: Week 1 (first check-in) is accessible immediately once due date arrives,
+              // bypassing window restrictions. This allows clients who signed up Jan 3-5 to access
+              // their Week 1 check-in on Jan 5 regardless of window hours.
+              const isFirstCheckIn = currentCheckin?.recurringWeek === 1;
+              const isAvailable = currentCheckin && dueDateHasArrived && 
+                (isFirstCheckIn || windowStatus.isOpen) && 
+                currentCheckin.status !== 'completed';
               
               // Check if next scheduled check-in is available
               const nextDueDate = nextScheduled ? new Date(nextScheduled.dueDate) : null;
@@ -950,7 +959,7 @@ export default function ClientCheckInsPage() {
                       
                       // A check-in is only available if:
                       // 1. The due date has arrived (today >= due date)
-                      // 2. AND we're currently within the check-in window period
+                      // 2. AND we're currently within the check-in window period (or it's Week 1)
                       // 3. AND the check-in is not completed
                       const now = new Date();
                       const dueDate = new Date(checkin.dueDate);
@@ -959,7 +968,12 @@ export default function ClientCheckInsPage() {
                       today.setHours(0, 0, 0, 0);
                       
                       const dueDateHasArrived = dueDate <= today;
-                      const isAvailable = dueDateHasArrived && windowStatus.isOpen && checkin.status !== 'completed';
+                      // Special case: Week 1 (first check-in) is accessible immediately once due date arrives,
+                      // bypassing window restrictions for clients who signed up Jan 3-5, 2026
+                      const isFirstCheckIn = checkin.recurringWeek === 1;
+                      const isAvailable = dueDateHasArrived && 
+                        (isFirstCheckIn || windowStatus.isOpen) && 
+                        checkin.status !== 'completed';
                       const isOverdue = checkin.status === 'overdue';
                       const isCompleted = checkin.status === 'completed';
                       

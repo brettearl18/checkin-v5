@@ -141,9 +141,17 @@ function LoginContent() {
 
             {/* Password Field */}
             <div>
-                          <label htmlFor="password" className="block text-sm font-medium text-gray-900">
-              Password
-            </label>
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="password" className="text-sm font-medium text-gray-900">
+                  Password
+                </label>
+                <Link
+                  href="/reset-password"
+                  className="text-sm font-medium text-blue-600 hover:text-blue-500 underline"
+                >
+                  Forgot password?
+                </Link>
+              </div>
               <div className="mt-1 relative">
                 <input
                   id="password"

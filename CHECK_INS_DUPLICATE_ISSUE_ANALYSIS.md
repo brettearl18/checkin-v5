@@ -89,3 +89,5 @@ const displayedScheduled = currentCheckin && !toDoCheckins[0]
 **HIGH** - This is confusing UX and data integrity issue. Users see the same check-in twice with conflicting information.
 
 
+
+

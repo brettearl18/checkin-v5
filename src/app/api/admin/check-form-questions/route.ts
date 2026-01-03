@@ -1,14 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase-server';
+import { requireAdmin } from '@/lib/api-auth';
+import { logSafeError } from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 
 /**
  * GET /api/admin/check-form-questions
  * Check what questions are currently in a form
+ * 
+ * Requires: Admin authentication
  */
 export async function GET(request: NextRequest) {
   try {
+    // Require admin authentication
+    const authResult = await requireAdmin(request);
+    if (authResult instanceof NextResponse) {
+      return authResult;
+    }
+
     const { searchParams } = new URL(request.url);
     const formId = searchParams.get('formId');
     
@@ -54,7 +64,7 @@ export async function GET(request: NextRequest) {
             });
           }
         } catch (error) {
-          console.error(`Error fetching question ${questionId}:`, error);
+          logSafeError(`Error fetching question`, error);
         }
       }
     }
@@ -74,7 +84,7 @@ export async function GET(request: NextRequest) {
     });
     
   } catch (error: any) {
-    console.error('Error checking form questions:', error);
+    logSafeError('Error checking form questions', error);
     return NextResponse.json({
       success: false,
       message: 'Failed to check form questions',
@@ -82,4 +92,5 @@ export async function GET(request: NextRequest) {
     }, { status: 500 });
   }
 }
+
 

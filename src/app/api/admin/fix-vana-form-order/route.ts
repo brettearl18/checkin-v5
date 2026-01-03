@@ -1,15 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase-server';
 import { vanaCheckInQuestions } from '@/lib/vana-checkin-questions';
+import { requireAdmin } from '@/lib/api-auth';
+import { logWarn, logSafeError } from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 
 /**
  * POST /api/admin/fix-vana-form-order
  * Reorders questions in the form to match the vanaCheckInQuestions array order
+ * 
+ * Requires: Admin authentication
  */
 export async function POST(request: NextRequest) {
   try {
+    // Require admin authentication
+    const authResult = await requireAdmin(request);
+    if (authResult instanceof NextResponse) {
+      return authResult;
+    }
+
     const { formId } = await request.json();
     
     if (!formId) {
@@ -66,7 +76,7 @@ export async function POST(request: NextRequest) {
         orderedQuestionIds.push(questionId);
       } else {
         notFound.push(questionData.text);
-        console.warn(`Question not found in database: "${questionData.text}"`);
+        logWarn(`Question not found in database: "${questionData.text}"`);
       }
     }
     
@@ -86,7 +96,7 @@ export async function POST(request: NextRequest) {
     });
     
   } catch (error: any) {
-    console.error('Error fixing form question order:', error);
+    logSafeError('Error fixing form question order', error);
     return NextResponse.json({
       success: false,
       message: 'Failed to fix form question order',
@@ -94,4 +104,5 @@ export async function POST(request: NextRequest) {
     }, { status: 500 });
   }
 }
+
 

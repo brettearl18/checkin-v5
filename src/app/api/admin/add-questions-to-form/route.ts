@@ -1,14 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase-server';
+import { requireAdmin } from '@/lib/api-auth';
 
 export const dynamic = 'force-dynamic';
 
 /**
  * POST /api/admin/add-questions-to-form
  * Adds all "Vana Check In" category questions to a specific form
+ * 
+ * Requires: Admin authentication
  */
 export async function POST(request: NextRequest) {
   try {
+    // Require admin authentication
+    const authResult = await requireAdmin(request);
+    if (authResult instanceof NextResponse) {
+      return authResult;
+    }
+
     const { formId } = await request.json();
     
     if (!formId) {
@@ -70,4 +79,5 @@ export async function POST(request: NextRequest) {
     }, { status: 500 });
   }
 }
+
 

@@ -21,6 +21,7 @@ interface CheckIn {
   score: number;
   responseCount: number;
   responseId?: string; // Link to formResponse document
+  coachResponded?: boolean; // Whether coach has provided feedback
   checkInWindow?: {
     enabled: boolean;
     startDay: string;
@@ -173,7 +174,8 @@ export async function GET(
       formTitlesMap.set(formId, title);
     });
 
-    assignmentsSnapshot.forEach((doc) => {
+    // Process all assignments - need to use Promise.all since we're checking coach feedback
+    const checkInsPromises = assignmentsSnapshot.docs.map(async (doc) => {
       const data = doc.data();
       // Get form title from the map, or use stored formTitle, or fallback to 'Unknown Form'
       const formTitle = data.formTitle || (data.formId ? formTitlesMap.get(data.formId) : null) || 'Unknown Form';
@@ -204,7 +206,11 @@ export async function GET(
       let status = data.status || 'active';
       let pausedUntil = data.pausedUntil;
       
-      if (status === 'inactive' && pausedUntil) {
+      // If check-in has a responseId or completedAt, it should be marked as completed
+      // This takes priority over other status logic
+      if (data.responseId || data.completedAt) {
+        status = 'completed';
+      } else if (status === 'inactive' && pausedUntil) {
         const pausedUntilDate = pausedUntil?.toDate ? pausedUntil.toDate() : new Date(pausedUntil);
         const now = new Date();
         
@@ -217,6 +223,24 @@ export async function GET(
             status: 'active',
             pausedUntil: null
           }).catch(err => console.error('Error auto-reactivating check-in:', err));
+        }
+      }
+
+      // Check if coach has responded (has feedback)
+      let coachResponded = false;
+      const responseId = data.responseId;
+      
+      if (responseId) {
+        try {
+          const feedbackSnapshot = await db.collection('coachFeedback')
+            .where('responseId', '==', responseId)
+            .limit(1)
+            .get();
+          
+          coachResponded = !feedbackSnapshot.empty || data.coachResponded || false;
+        } catch (error) {
+          console.log('Error checking feedback:', error);
+          coachResponded = data.coachResponded || false;
         }
       }
 
@@ -238,6 +262,7 @@ export async function GET(
         score: data.score || 0,
         responseCount: data.responseCount || 0,
         responseId: data.responseId || undefined, // Include responseId for linking to form response
+        coachResponded: coachResponded, // Include coach response status
         checkInWindow: data.checkInWindow || {
           enabled: false,
           startDay: 'monday',
@@ -249,6 +274,12 @@ export async function GET(
         notes: data.notes || ''
       };
       
+      return checkIn;
+    });
+    
+    const allCheckIns = await Promise.all(checkInsPromises);
+    
+    allCheckIns.forEach((checkIn) => {
       checkIns.push(checkIn);
       
       if (checkIn.status === 'completed') {

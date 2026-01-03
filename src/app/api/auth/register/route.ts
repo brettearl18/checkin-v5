@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb, getAuthInstance } from '@/lib/firebase-server';
-import { autoAllocateCheckIn, autoCreateMeasurementSchedule } from '@/lib/auto-allocate-checkin';
+import { autoCreateMeasurementSchedule } from '@/lib/auto-allocate-checkin';
+import { logSafeError } from '@/lib/logger';
+import { validatePassword } from '@/lib/password-validation';
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic';
@@ -296,6 +298,15 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
+    // Validate password strength
+    const passwordValidation = validatePassword(password);
+    if (!passwordValidation.valid) {
+      return NextResponse.json({
+        success: false,
+        message: passwordValidation.message || 'Password does not meet requirements'
+      }, { status: 400 });
+    }
+
     // Validate role
     if (!['admin', 'coach', 'client'].includes(role)) {
       return NextResponse.json({
@@ -369,7 +380,7 @@ export async function POST(request: NextRequest) {
         emailVerified: false
       });
     } catch (authError: any) {
-      console.error('Error creating Firebase Auth user:', authError);
+      logSafeError('Error creating Firebase Auth user', authError);
       // Handle specific Firebase Auth errors
       if (authError.code === 'auth/email-already-exists') {
         return NextResponse.json({
@@ -412,12 +423,12 @@ export async function POST(request: NextRequest) {
     try {
       await db.collection('users').doc(userRecord.uid).set(userProfile);
     } catch (error: any) {
-      console.error('Error saving user profile:', error);
+      logSafeError('Error saving user profile', error);
       // Try to clean up the auth user if profile save fails
       try {
         await auth.deleteUser(userRecord.uid);
       } catch (deleteError) {
-        console.error('Error cleaning up auth user:', deleteError);
+        logSafeError('Error cleaning up auth user', deleteError);
       }
       return NextResponse.json({
         success: false,
@@ -459,13 +470,13 @@ export async function POST(request: NextRequest) {
       try {
         await db.collection('clients').doc(userRecord.uid).set(clientRecord);
         
-        // Auto-allocate check-in form and measurement schedule to new client
+        // Note: Check-ins are now allocated manually by coaches after client signs up
+        // Auto-create measurement schedule only (check-ins allocated manually)
         if (coachId) {
           try {
-            await autoAllocateCheckIn(userRecord.uid, coachId, new Date());
             await autoCreateMeasurementSchedule(userRecord.uid, coachId, new Date());
           } catch (allocationError) {
-            console.error('Error auto-allocating check-in or measurement schedule:', allocationError);
+            console.error('Error auto-creating measurement schedule:', allocationError);
             // Don't fail registration if allocation fails - log it and continue
           }
         }

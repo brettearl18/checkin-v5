@@ -5,6 +5,7 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { validatePassword, getPasswordRequirementsText } from '@/lib/password-validation';
 
 interface RegistrationForm {
   email: string;
@@ -79,8 +80,10 @@ export default function RegisterPage() {
       return;
     }
 
-    if (formData.password.length < 6) {
-      setError('Password must be at least 6 characters long');
+    // Validate password strength
+    const passwordValidation = validatePassword(formData.password);
+    if (!passwordValidation.valid) {
+      setError(passwordValidation.message || 'Password does not meet requirements');
       setLoading(false);
       return;
     }

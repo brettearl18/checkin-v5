@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb, getAuthInstance } from '@/lib/firebase-server';
 import { notificationService } from '@/lib/notification-service';
-import { autoAllocateCheckIn, autoCreateMeasurementSchedule } from '@/lib/auto-allocate-checkin';
+import { autoCreateMeasurementSchedule } from '@/lib/auto-allocate-checkin';
+import { validatePassword } from '@/lib/password-validation';
 
 // Force dynamic rendering - API routes should not be pre-rendered
 export const dynamic = 'force-dynamic';
@@ -21,6 +22,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         success: false,
         message: 'Token, email, and password are required'
+      }, { status: 400 });
+    }
+
+    // Validate password strength
+    const passwordValidation = validatePassword(password);
+    if (!passwordValidation.valid) {
+      return NextResponse.json({
+        success: false,
+        message: passwordValidation.message || 'Password does not meet requirements'
       }, { status: 400 });
     }
 
@@ -115,20 +125,14 @@ export async function POST(request: NextRequest) {
       // Don't fail onboarding if notification fails
     }
 
-    // Auto-allocate check-in form and measurement schedule if coach is assigned
+    // Note: Check-ins are now allocated manually by coaches after client completes onboarding
+    // Auto-create measurement schedule only (check-ins allocated manually)
     if (clientData.coachId) {
       try {
-        console.log('Auto-allocating check-in for client:', clientId, 'Coach:', clientData.coachId);
-        const assignmentId = await autoAllocateCheckIn(clientId, clientData.coachId, new Date());
-        if (assignmentId) {
-          console.log('Check-in allocated successfully. Assignment ID:', assignmentId);
-        } else {
-          console.warn('Check-in allocation returned null - may already exist or form not found');
-        }
         await autoCreateMeasurementSchedule(clientId, clientData.coachId, new Date());
         console.log('Measurement schedule created successfully');
       } catch (allocationError) {
-        console.error('Error auto-allocating check-in or measurement schedule:', allocationError);
+        console.error('Error auto-creating measurement schedule:', allocationError);
         // Log the full error for debugging
         if (allocationError instanceof Error) {
           console.error('Allocation error details:', allocationError.message, allocationError.stack);
@@ -136,7 +140,7 @@ export async function POST(request: NextRequest) {
         // Don't fail onboarding if allocation fails - log it and continue
       }
     } else {
-      console.warn('No coachId found for client, skipping auto-allocation');
+      console.warn('No coachId found for client, skipping measurement schedule creation');
     }
 
     return NextResponse.json({ success: true, message: 'Onboarding complete. Account activated.' });

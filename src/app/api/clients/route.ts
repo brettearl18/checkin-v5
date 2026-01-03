@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb, getAuthInstance } from '@/lib/firebase-server';
-import { autoAllocateCheckIn, autoCreateMeasurementSchedule } from '@/lib/auto-allocate-checkin';
+import { autoCreateMeasurementSchedule } from '@/lib/auto-allocate-checkin';
+import { logSafeError, logInfo } from '@/lib/logger';
+import { validatePassword } from '@/lib/password-validation';
 import crypto from 'crypto';
 
 // Force dynamic rendering
@@ -32,7 +34,7 @@ async function sendOnboardingEmail(email: string, onboardingToken: string, coach
 
     return true;
   } catch (error) {
-    console.error('Error sending onboarding email:', error);
+    logSafeError('Error sending onboarding email', error);
     // Don't fail the client creation if email fails
     return false;
   }
@@ -128,11 +130,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate password if provided
-    if (password && password.length < 6) {
-      return NextResponse.json({
-        success: false,
-        message: 'Password must be at least 6 characters long'
-      }, { status: 400 });
+    if (password) {
+      const passwordValidation = validatePassword(password);
+      if (!passwordValidation.valid) {
+        return NextResponse.json({
+          success: false,
+          message: passwordValidation.message || 'Password does not meet requirements'
+        }, { status: 400 });
+      }
     }
 
     // Check if client already exists by email
@@ -218,7 +223,7 @@ export async function POST(request: NextRequest) {
         };
 
       } catch (authError: any) {
-        console.error('Error creating Firebase Auth user:', authError);
+        logSafeError('Error creating Firebase Auth user', authError);
         return NextResponse.json({
           success: false,
           message: `Failed to create user account: ${authError.message}`
@@ -250,17 +255,17 @@ export async function POST(request: NextRequest) {
     // Save to Firestore
     await db.collection('clients').doc(clientId).set(client);
 
-    // Auto-allocate check-in form and measurement schedule to new client
+    // Note: Check-ins are now allocated manually by coaches after client signs up
+    // Auto-create measurement schedule only (check-ins allocated manually)
     try {
       if (coachId) {
-        // Only allocate if coach is assigned
-        await autoAllocateCheckIn(clientId, coachId, new Date());
+        // Only create measurement schedule if coach is assigned
         await autoCreateMeasurementSchedule(clientId, coachId, new Date());
       }
-    } catch (allocationError) {
-      console.error('Error auto-allocating check-in or measurement schedule:', allocationError);
-      // Don't fail client creation if allocation fails - log it and continue
-    }
+      } catch (allocationError) {
+        logSafeError('Error auto-creating measurement schedule', allocationError);
+        // Don't fail client creation if allocation fails - log it and continue
+      }
 
     // If credentials were created, send credentials email and return them (for popup display)
     // Otherwise, send onboarding email with token
@@ -284,7 +289,7 @@ export async function POST(request: NextRequest) {
           html,
         });
       } catch (emailError) {
-        console.error('Error sending credentials email:', emailError);
+        logSafeError('Error sending credentials email', emailError);
         // Don't fail the client creation if email fails
       }
 

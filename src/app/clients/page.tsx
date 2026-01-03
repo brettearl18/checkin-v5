@@ -137,15 +137,33 @@ export default function ClientsPage() {
                   ? getTrafficLightStatus(lastCheckInScore, thresholds)
                   : undefined;
                 
+                // Use lastActivity from metrics as lastCheckIn if it exists (overrides client.lastCheckIn)
+                const updatedLastCheckIn = checkInsData.metrics?.lastActivity || client.lastCheckIn;
+                
+                // Recalculate daysSinceLastCheckIn if we updated lastCheckIn from metrics
+                let updatedDaysSinceLastCheckIn = daysSinceLastCheckIn;
+                if (checkInsData.metrics?.lastActivity) {
+                  try {
+                    const lastCheckInDate = new Date(checkInsData.metrics.lastActivity);
+                    if (!isNaN(lastCheckInDate.getTime())) {
+                      const diffTime = now.getTime() - lastCheckInDate.getTime();
+                      updatedDaysSinceLastCheckIn = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+                    }
+                  } catch (error) {
+                    console.error('Error calculating daysSinceLastCheckIn:', error);
+                  }
+                }
+                
                 return {
                   ...client,
                   overdueCheckIns: overdueCount,
-                  daysSinceLastCheckIn,
+                  daysSinceLastCheckIn: updatedDaysSinceLastCheckIn,
                   scoringThresholds: thresholds,
                   recentCheckIns,
                   lastCheckInScore,
                   lastCheckInTrafficLight,
-                  ...checkInsData.metrics
+                  ...checkInsData.metrics,
+                  lastCheckIn: updatedLastCheckIn
                 };
               }
             } catch (error) {
@@ -589,6 +607,7 @@ export default function ClientsPage() {
                   <thead className="bg-gray-50 border-b border-gray-200">
                     <tr>
                       <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Name</th>
+                      <th className="px-4 py-2.5 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Status</th>
                       <th className="px-4 py-2.5 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Progress Status</th>
                       <th className="px-4 py-2.5 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Recent Trend</th>
                       <th className="px-4 py-2.5 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Weeks</th>
@@ -696,7 +715,7 @@ export default function ClientsPage() {
                       if (sortedClients.length === 0) {
                         return (
                           <tr>
-                            <td colSpan={8} className="px-4 py-8 text-center">
+                            <td colSpan={9} className="px-4 py-8 text-center">
                               <div className="text-gray-500">
                                 <svg className="w-12 h-12 mx-auto mb-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
@@ -718,6 +737,43 @@ export default function ClientsPage() {
                         if (diffInHours < 24) return `${diffInHours}h ago`;
                         const diffInDays = Math.floor(diffInHours / 24);
                         return `${diffInDays}d ago`;
+                      };
+
+                      const getStatusBadge = (status: string) => {
+                        const statusLower = status?.toLowerCase() || 'active';
+                        const statusConfig: { [key: string]: { label: string; className: string } } = {
+                          active: {
+                            label: 'Active',
+                            className: 'bg-green-100 text-green-800 border-green-200'
+                          },
+                          pending: {
+                            label: 'Pending',
+                            className: 'bg-orange-100 text-orange-800 border-orange-200'
+                          },
+                          inactive: {
+                            label: 'Inactive',
+                            className: 'bg-gray-100 text-gray-800 border-gray-200'
+                          },
+                          paused: {
+                            label: 'Paused',
+                            className: 'bg-yellow-100 text-yellow-800 border-yellow-200'
+                          },
+                          completed: {
+                            label: 'Completed',
+                            className: 'bg-blue-100 text-blue-800 border-blue-200'
+                          },
+                          archived: {
+                            label: 'Archived',
+                            className: 'bg-gray-100 text-gray-600 border-gray-300'
+                          }
+                        };
+                        
+                        const config = statusConfig[statusLower] || statusConfig.active;
+                        return (
+                          <span className={`px-2.5 py-1 text-xs font-medium rounded-full border ${config.className}`}>
+                            {config.label}
+                          </span>
+                        );
                       };
 
                       return sortedClients.map((client) => {
@@ -760,6 +816,9 @@ export default function ClientsPage() {
                                   )}
                                 </div>
                               </div>
+                            </td>
+                            <td className="px-4 py-2.5 whitespace-nowrap text-center">
+                              {getStatusBadge(client.status || 'active')}
                             </td>
                             <td className="px-4 py-2.5 whitespace-nowrap text-center">
                               {trafficLightStatus ? (
@@ -847,7 +906,7 @@ export default function ClientsPage() {
                                     <span className="text-[10px] text-gray-500">
                                       {formatTimeAgo(client.lastCheckInDate.toISOString())}
                                     </span>
-                                    {daysSinceLastCheckIn !== undefined && (
+                                    {daysSinceLastCheckIn !== undefined && !isNaN(daysSinceLastCheckIn) && (
                                       <span className={`px-1.5 py-0.5 text-[10px] font-medium rounded-full ${
                                         daysSinceLastCheckIn > 14 ? 'bg-[#FF3B30]/10 text-[#FF3B30] border border-[#FF3B30]/20' :
                                         daysSinceLastCheckIn > 7 ? 'bg-orange-100 text-orange-700 border border-orange-200' :
@@ -1020,6 +1079,43 @@ export default function ClientsPage() {
                     return `${diffInDays}d ago`;
                   };
 
+                  const getStatusBadge = (status: string) => {
+                    const statusLower = status?.toLowerCase() || 'active';
+                    const statusConfig: { [key: string]: { label: string; className: string } } = {
+                      active: {
+                        label: 'Active',
+                        className: 'bg-green-100 text-green-800 border-green-200'
+                      },
+                      pending: {
+                        label: 'Pending',
+                        className: 'bg-orange-100 text-orange-800 border-orange-200'
+                      },
+                      inactive: {
+                        label: 'Inactive',
+                        className: 'bg-gray-100 text-gray-800 border-gray-200'
+                      },
+                      paused: {
+                        label: 'Paused',
+                        className: 'bg-yellow-100 text-yellow-800 border-yellow-200'
+                      },
+                      completed: {
+                        label: 'Completed',
+                        className: 'bg-blue-100 text-blue-800 border-blue-200'
+                      },
+                      archived: {
+                        label: 'Archived',
+                        className: 'bg-gray-100 text-gray-600 border-gray-300'
+                      }
+                    };
+                    
+                    const config = statusConfig[statusLower] || statusConfig.active;
+                    return (
+                      <span className={`px-2.5 py-1 text-xs font-medium rounded-full border ${config.className}`}>
+                        {config.label}
+                      </span>
+                    );
+                  };
+
                   return sortedClients.map((client) => {
                     const score = typeof client.progressScore === 'number' && !isNaN(client.progressScore) ? client.progressScore : 0;
                     const completionRate = typeof client.completionRate === 'number' && !isNaN(client.completionRate) ? client.completionRate : 0;
@@ -1057,7 +1153,10 @@ export default function ClientsPage() {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-start justify-between gap-2 mb-2">
                               <div className="flex-1 min-w-0">
-                                <h3 className="text-base font-semibold text-gray-900 truncate">{client.displayName}</h3>
+                                <div className="flex items-center gap-2 mb-1">
+                                  <h3 className="text-base font-semibold text-gray-900 truncate">{client.displayName}</h3>
+                                  {getStatusBadge(client.status || 'active')}
+                                </div>
                                 {client.phone && (
                                   <p className="text-xs text-gray-500 mt-0.5">{client.phone}</p>
                                 )}
@@ -1155,7 +1254,7 @@ export default function ClientsPage() {
                                     {client.overdueCheckIns} overdue
                                   </span>
                                 )}
-                                {daysSinceLastCheckIn !== undefined && (
+                                {daysSinceLastCheckIn !== undefined && !isNaN(daysSinceLastCheckIn) && (
                                   <span className={`px-2 py-0.5 text-[10px] font-medium rounded-full ${
                                     daysSinceLastCheckIn > 14 ? 'bg-[#FF3B30]/10 text-[#FF3B30] border border-[#FF3B30]/20' :
                                     daysSinceLastCheckIn > 7 ? 'bg-orange-100 text-orange-700 border border-orange-200' :

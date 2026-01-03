@@ -59,6 +59,7 @@ export default function CheckInsPage() {
   const [dateRange, setDateRange] = useState('all');
   const [activeTab, setActiveTab] = useState<'review' | 'all' | 'replied'>('review');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc'); // 'asc' = oldest first (submitted first), 'desc' = newest first
+  const [repliedTimeFilter, setRepliedTimeFilter] = useState<'week' | 'month' | 'all'>('week'); // Filter for replied tab
   const [metrics, setMetrics] = useState({
     totalCheckIns: 0,
     highPerformers: 0,
@@ -601,19 +602,88 @@ export default function CheckInsPage() {
                 {/* Replied Tab */}
                 {activeTab === 'replied' && (
                   <>
-                    {checkInsToReview.filter(ci => ci.coachResponded).length === 0 ? (
-                      <div className="text-center py-12">
-                        <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                          <svg className="w-8 h-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                          </svg>
-                        </div>
-                        <p className="text-gray-700 text-lg mb-4">No replied check-ins</p>
-                        <p className="text-gray-600 text-sm">Check-ins you've replied to will appear here</p>
+                    {/* Time Filter for Replied Tab */}
+                    <div className="mb-4 flex items-center gap-3">
+                      <label className="text-xs sm:text-sm font-medium text-gray-700 whitespace-nowrap">
+                        Filter:
+                      </label>
+                      <div className="flex bg-white rounded-2xl p-1 shadow-sm border border-gray-200">
+                        <button
+                          onClick={() => setRepliedTimeFilter('week')}
+                          className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-medium transition-all ${
+                            repliedTimeFilter === 'week'
+                              ? 'bg-[#007AFF] text-white shadow-sm'
+                              : 'text-gray-600 hover:text-gray-900'
+                          }`}
+                        >
+                          This Week
+                        </button>
+                        <button
+                          onClick={() => setRepliedTimeFilter('month')}
+                          className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-medium transition-all ${
+                            repliedTimeFilter === 'month'
+                              ? 'bg-[#007AFF] text-white shadow-sm'
+                              : 'text-gray-600 hover:text-gray-900'
+                          }`}
+                        >
+                          This Month
+                        </button>
+                        <button
+                          onClick={() => setRepliedTimeFilter('all')}
+                          className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-medium transition-all ${
+                            repliedTimeFilter === 'all'
+                              ? 'bg-[#007AFF] text-white shadow-sm'
+                              : 'text-gray-600 hover:text-gray-900'
+                          }`}
+                        >
+                          All Time
+                        </button>
                       </div>
-                    ) : (
-                      <div className="space-y-3 sm:space-y-2">
-                        {checkInsToReview.filter(ci => ci.coachResponded).map((checkIn) => {
+                    </div>
+
+                    {(() => {
+                      // Filter replied check-ins by time period
+                      let repliedCheckIns = checkInsToReview.filter(ci => ci.coachResponded);
+                      
+                      const now = new Date();
+                      if (repliedTimeFilter === 'week') {
+                        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                        repliedCheckIns = repliedCheckIns.filter(ci => {
+                          const submittedDate = ci.submittedAt?.toDate ? ci.submittedAt.toDate() : new Date(ci.submittedAt);
+                          return submittedDate >= weekAgo;
+                        });
+                      } else if (repliedTimeFilter === 'month') {
+                        const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+                        repliedCheckIns = repliedCheckIns.filter(ci => {
+                          const submittedDate = ci.submittedAt?.toDate ? ci.submittedAt.toDate() : new Date(ci.submittedAt);
+                          return submittedDate >= monthAgo;
+                        });
+                      }
+                      
+                      // Sort by submitted date (newest first)
+                      repliedCheckIns.sort((a, b) => {
+                        const dateA = a.submittedAt?.toDate ? a.submittedAt.toDate() : new Date(a.submittedAt);
+                        const dateB = b.submittedAt?.toDate ? b.submittedAt.toDate() : new Date(b.submittedAt);
+                        return dateB.getTime() - dateA.getTime();
+                      });
+
+                      return repliedCheckIns.length === 0 ? (
+                        <div className="text-center py-12">
+                          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <svg className="w-8 h-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                            </svg>
+                          </div>
+                          <p className="text-gray-700 text-lg mb-4">No replied check-ins</p>
+                          <p className="text-gray-600 text-sm">
+                            {repliedTimeFilter === 'week' ? 'No check-ins replied to this week' :
+                             repliedTimeFilter === 'month' ? 'No check-ins replied to this month' :
+                             "Check-ins you've replied to will appear here"}
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="space-y-3 sm:space-y-2">
+                          {repliedCheckIns.map((checkIn) => {
                           return (
                             <div
                               key={checkIn.id}
@@ -664,7 +734,8 @@ export default function CheckInsPage() {
                           );
                         })}
                       </div>
-                    )}
+                      );
+                    })()}
                   </>
                 )}
 

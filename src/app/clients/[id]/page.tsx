@@ -177,7 +177,7 @@ export default function ClientProfilePage() {
   const [unpausingSeries, setUnpausingSeries] = useState(false);
   const [scoringThresholds, setScoringThresholds] = useState<ScoringThresholds>(getDefaultThresholds('lifestyle'));
   const [progressTrafficLight, setProgressTrafficLight] = useState<TrafficLightStatus>('orange');
-  const [checkInTab, setCheckInTab] = useState<'all' | 'completed'>('all');
+  const [checkInTab, setCheckInTab] = useState<'all' | 'completed' | 'coachResponses' | 'pendingReview'>('all');
   const [activeTab, setActiveTab] = useState<'overview' | 'progress' | 'checkins' | 'history' | 'ai-analytics'>('overview');
   const [aiAnalytics, setAiAnalytics] = useState<any>(null);
   const [loadingAiAnalytics, setLoadingAiAnalytics] = useState(false);
@@ -1073,6 +1073,10 @@ export default function ClientProfilePage() {
     setAllocateFirstCheckInDate('');
     setAllocateDuration(4);
     setAllocateFrequency('weekly');
+    // Set default dates when opening modal: today for both start and first check-in
+    const today = new Date().toISOString().split('T')[0];
+    setAllocateStartDate(today);
+    setAllocateFirstCheckInDate(today);
     setShowAllocateModal(true);
     fetchForms(); // Fetch forms when modal opens
   };
@@ -2318,10 +2322,12 @@ export default function ClientProfilePage() {
                     {(() => {
                       // Only show completed check-ins that haven't been reviewed yet
                       const pendingCheckIns = allocatedCheckIns.filter(ci => 
-                        ci.status === 'completed' && !ci.reviewedByCoach
+                        ci.status === 'completed' && !ci.coachResponded
                       );
                       const overdueCheckIns = allocatedCheckIns.filter(ci => {
-                        if (ci.status !== 'pending') return false;
+                        // Exclude completed check-ins
+                        if (ci.status === 'completed') return false;
+                        if (!ci.dueDate) return false;
                         const dueDate = ci.dueDate?.toDate ? ci.dueDate.toDate() : new Date(ci.dueDate);
                         return dueDate < new Date();
                       });
@@ -2336,7 +2342,10 @@ export default function ClientProfilePage() {
                                 <p className="font-semibold text-gray-900 text-sm">Check-ins Pending Review</p>
                                 <p className="text-xs text-gray-600 mt-1">{pendingCheckIns.length} check-in{pendingCheckIns.length !== 1 ? 's' : ''} need your attention</p>
                                 <button
-                                  onClick={() => setActiveTab('checkins')}
+                                  onClick={() => {
+                                    setActiveTab('checkins');
+                                    setCheckInTab('pendingReview');
+                                  }}
                                   className="text-xs text-orange-600 hover:text-orange-700 font-medium mt-2"
                                 >
                                   Review now →
@@ -2361,6 +2370,69 @@ export default function ClientProfilePage() {
                               </div>
                             </div>
                           )}
+                          {(() => {
+                            // Find the next pending check-in
+                            const nextCheckIn = allocatedCheckIns
+                              .filter(c => c.status === 'pending' || c.status === 'active')
+                              .sort((a, b) => {
+                                const dateA = a.dueDate ? new Date(a.dueDate).getTime() : 0;
+                                const dateB = b.dueDate ? new Date(b.dueDate).getTime() : 0;
+                                return dateA - dateB; // Sort ascending (earliest first)
+                              })[0];
+                            
+                            if (nextCheckIn && nextCheckIn.dueDate) {
+                              const dueDate = new Date(nextCheckIn.dueDate);
+                              const now = new Date();
+                              const isOverdue = dueDate < now;
+                              const weekInfo = nextCheckIn.isRecurring && nextCheckIn.recurringWeek
+                                ? `Week ${nextCheckIn.recurringWeek}${nextCheckIn.totalWeeks ? `/${nextCheckIn.totalWeeks}` : ''}`
+                                : '';
+                              
+                              return (
+                                <div className={`flex items-start space-x-3 p-4 rounded-xl border ${
+                                  isOverdue 
+                                    ? 'bg-red-50 border-red-200' 
+                                    : 'bg-blue-50 border-blue-200'
+                                }`}>
+                                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                                    isOverdue ? 'bg-red-500' : 'bg-blue-500'
+                                  }`}>
+                                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                  </div>
+                                  <div className="flex-1">
+                                    <p className="font-semibold text-gray-900 text-sm">Next Check-in</p>
+                                    <div className="flex items-center gap-2 mt-1">
+                                      {weekInfo && (
+                                        <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
+                                          isOverdue 
+                                            ? 'bg-red-100 text-red-800' 
+                                            : 'bg-blue-100 text-blue-800'
+                                        }`}>
+                                          {weekInfo}
+                                        </span>
+                                      )}
+                                      <p className={`text-xs font-medium ${
+                                        isOverdue ? 'text-red-700' : 'text-blue-700'
+                                      }`}>
+                                        Due: {formatDate(dueDate)}
+                                      </p>
+                                    </div>
+                                    {!isOverdue && (
+                                      <button
+                                        onClick={() => setActiveTab('checkins')}
+                                        className="text-xs text-blue-600 hover:text-blue-700 font-medium mt-2"
+                                      >
+                                        View check-ins →
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            }
+                            return null;
+                          })()}
                         </>
                       );
                     })()}
@@ -3427,7 +3499,57 @@ export default function ClientProfilePage() {
                 <div className="bg-orange-50 px-8 py-6 border-b-2 border-orange-200">
                   <div className="flex items-center justify-between">
                     <h2 className="text-2xl font-bold text-gray-900">Check-ins Overview</h2>
-                    <div className="flex space-x-4">
+                    <div className="flex items-center space-x-4">
+                      {(() => {
+                        // Find the next pending check-in
+                        const nextCheckIn = allocatedCheckIns
+                          .filter(c => c.status === 'pending' || c.status === 'active')
+                          .sort((a, b) => {
+                            const dateA = a.dueDate ? new Date(a.dueDate).getTime() : 0;
+                            const dateB = b.dueDate ? new Date(b.dueDate).getTime() : 0;
+                            return dateA - dateB; // Sort ascending (earliest first)
+                          })[0];
+                        
+                        if (nextCheckIn && nextCheckIn.dueDate) {
+                          const dueDate = new Date(nextCheckIn.dueDate);
+                          const now = new Date();
+                          const isOverdue = dueDate < now;
+                          const weekInfo = nextCheckIn.isRecurring && nextCheckIn.recurringWeek
+                            ? `Week ${nextCheckIn.recurringWeek}${nextCheckIn.totalWeeks ? `/${nextCheckIn.totalWeeks}` : ''}`
+                            : '';
+                          
+                          return (
+                            <div className={`px-4 py-2 rounded-full shadow-sm border ${
+                              isOverdue 
+                                ? 'bg-red-50 border-red-200' 
+                                : 'bg-blue-50 border-blue-200'
+                            }`}>
+                              <div className="flex items-center space-x-2">
+                                <span className={`text-xs font-semibold ${
+                                  isOverdue ? 'text-red-700' : 'text-blue-700'
+                                }`}>
+                                  Next Check-in:
+                                </span>
+                                {weekInfo && (
+                                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                                    isOverdue 
+                                      ? 'bg-red-100 text-red-800' 
+                                      : 'bg-blue-100 text-blue-800'
+                                  }`}>
+                                    {weekInfo}
+                                  </span>
+                                )}
+                                <span className={`text-xs font-medium ${
+                                  isOverdue ? 'text-red-700' : 'text-blue-700'
+                                }`}>
+                                  {formatDate(dueDate)}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
                       <span className="text-sm text-gray-600 bg-white px-4 py-2 rounded-full shadow-sm border border-gray-200">
                         {allocatedCheckIns.length} total allocated
                       </span>
@@ -3496,6 +3618,26 @@ export default function ClientProfilePage() {
                                 }`}
                               >
                                 Completed ({allocatedCheckIns.filter(c => c.status === 'completed').length})
+                              </button>
+                              <button
+                                onClick={() => setCheckInTab('coachResponses')}
+                                className={`px-4 py-2 rounded-2xl text-sm font-medium transition-colors ${
+                                  checkInTab === 'coachResponses'
+                                    ? 'bg-[#007AFF] text-white shadow-sm'
+                                    : 'text-gray-600 hover:text-gray-900'
+                                }`}
+                              >
+                                Coach Responses ({allocatedCheckIns.filter(c => c.status === 'completed' && c.coachResponded).length})
+                              </button>
+                              <button
+                                onClick={() => setCheckInTab('pendingReview')}
+                                className={`px-4 py-2 rounded-2xl text-sm font-medium transition-colors ${
+                                  checkInTab === 'pendingReview'
+                                    ? 'bg-orange-500 text-white shadow-sm'
+                                    : 'text-gray-600 hover:text-gray-900'
+                                }`}
+                              >
+                                Pending Review ({allocatedCheckIns.filter(c => c.status === 'completed' && !c.coachResponded).length})
                               </button>
                             </div>
                           </div>
@@ -3877,12 +4019,182 @@ export default function ClientProfilePage() {
                             )}
                           </div>
                         )}
+
+                        {/* Coach Responses Tab */}
+                        {checkInTab === 'coachResponses' && (
+                          <div className="p-6 space-y-6">
+                            {allocatedCheckIns.filter(c => c.status === 'completed' && c.coachResponded).length > 0 ? (
+                              <div>
+                                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                                  <span className="w-2 h-2 bg-blue-500 rounded-full mr-3"></span>
+                                  Coach Responses ({allocatedCheckIns.filter(c => c.status === 'completed' && c.coachResponded).length})
+                                </h3>
+                                <p className="text-sm text-gray-600 mb-6">Check-ins where you've provided feedback to the client</p>
+                                <div className="space-y-4">
+                                  {allocatedCheckIns.filter(c => c.status === 'completed' && c.coachResponded).sort((a, b) => {
+                                    const dateA = a.completedAt?.toDate ? a.completedAt.toDate() : new Date(a.completedAt);
+                                    const dateB = b.completedAt?.toDate ? b.completedAt.toDate() : new Date(b.completedAt);
+                                    return dateB.getTime() - dateA.getTime(); // Newest first
+                                  }).map((checkIn, index) => (
+                                    <div key={checkIn.id || `coach-response-${index}`} className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-200 hover:shadow-lg transition-all duration-200">
+                                      <div className="flex items-center justify-between mb-4">
+                                        <div className="flex items-center space-x-4">
+                                          <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
+                                            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                                            </svg>
+                                          </div>
+                                          <div>
+                                            <h4 className="text-lg font-bold text-gray-900">{checkIn.formTitle}</h4>
+                                            <p className="text-gray-600">{checkIn.responseCount || 0} questions</p>
+                                          </div>
+                                        </div>
+                                        <div className="text-right">
+                                          <div className="px-4 py-2 text-sm font-medium rounded-full bg-blue-100 text-blue-800">
+                                            {checkIn.score}%
+                                          </div>
+                                          <div className="mt-2">
+                                            <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800 border border-green-200">
+                                              ✓ Responded
+                                            </span>
+                                          </div>
+                                        </div>
+                                      </div>
+                                      
+                                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                        <div className="flex items-center space-x-2">
+                                          <span className={`px-3 py-1 text-xs font-medium rounded-full ${getCategoryColor(checkIn.category)}`}>
+                                            {checkIn.category}
+                                          </span>
+                                          {checkIn.isRecurring && (
+                                            <span className="px-2 py-1 text-xs font-medium rounded-full bg-purple-100 text-purple-800">
+                                              Week {checkIn.recurringWeek} of {checkIn.totalWeeks}
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div className="text-sm text-gray-600">
+                                          <span className="font-medium">Completed:</span> {formatDate(checkIn.completedAt)}
+                                        </div>
+                                        <div className="text-sm text-gray-600">
+                                          <span className="font-medium">Response ID:</span> {checkIn.responseId ? checkIn.responseId.substring(0, 8) + '...' : 'N/A'}
+                                        </div>
+                                        <div className="flex space-x-2">
+                                          <Link
+                                            href={`/responses/${checkIn.responseId || checkIn.id}`}
+                                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-sm transition-colors"
+                                          >
+                                            View Response
+                                          </Link>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="text-center py-12">
+                                <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                  <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                                  </svg>
+                                </div>
+                                <p className="text-gray-500 text-lg mb-2">No coach responses yet</p>
+                                <p className="text-gray-400 text-sm">Check-ins where you've provided feedback will appear here</p>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Pending Review Tab */}
+                        {checkInTab === 'pendingReview' && (
+                          <div className="p-6 space-y-6">
+                            {allocatedCheckIns.filter(c => c.status === 'completed' && !c.coachResponded).length > 0 ? (
+                              <div>
+                                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                                  <span className="w-2 h-2 bg-orange-500 rounded-full mr-3"></span>
+                                  Pending Review ({allocatedCheckIns.filter(c => c.status === 'completed' && !c.coachResponded).length})
+                                </h3>
+                                <p className="text-sm text-gray-600 mb-6">Completed check-ins that need your review and feedback</p>
+                                <div className="space-y-4">
+                                  {allocatedCheckIns.filter(c => c.status === 'completed' && !c.coachResponded).sort((a, b) => {
+                                    const dateA = a.completedAt?.toDate ? a.completedAt.toDate() : new Date(a.completedAt);
+                                    const dateB = b.completedAt?.toDate ? b.completedAt.toDate() : new Date(b.completedAt);
+                                    return dateB.getTime() - dateA.getTime(); // Newest first
+                                  }).map((checkIn, index) => (
+                                    <div key={checkIn.id || `pending-review-${index}`} className="bg-gradient-to-r from-orange-50 to-yellow-50 rounded-xl p-6 border border-orange-200 hover:shadow-lg transition-all duration-200">
+                                      <div className="flex items-center justify-between mb-4">
+                                        <div className="flex items-center space-x-4">
+                                          <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-yellow-600 rounded-xl flex items-center justify-center shadow-lg">
+                                            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
+                                          </div>
+                                          <div>
+                                            <h4 className="text-lg font-bold text-gray-900">{checkIn.formTitle}</h4>
+                                            <p className="text-gray-600">{checkIn.responseCount || 0} questions</p>
+                                          </div>
+                                        </div>
+                                        <div className="text-right">
+                                          <div className="px-4 py-2 text-sm font-medium rounded-full bg-orange-100 text-orange-800">
+                                            {checkIn.score}%
+                                          </div>
+                                          <div className="mt-2">
+                                            <span className="px-2 py-1 text-xs font-medium rounded-full bg-orange-100 text-orange-800 border border-orange-200">
+                                              ⏳ Needs Review
+                                            </span>
+                                          </div>
+                                        </div>
+                                      </div>
+                                      
+                                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                        <div className="flex items-center space-x-2">
+                                          <span className={`px-3 py-1 text-xs font-medium rounded-full ${getCategoryColor(checkIn.category)}`}>
+                                            {checkIn.category}
+                                          </span>
+                                          {checkIn.isRecurring && (
+                                            <span className="px-2 py-1 text-xs font-medium rounded-full bg-purple-100 text-purple-800">
+                                              Week {checkIn.recurringWeek} of {checkIn.totalWeeks}
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div className="text-sm text-gray-600">
+                                          <span className="font-medium">Completed:</span> {formatDate(checkIn.completedAt)}
+                                        </div>
+                                        <div className="text-sm text-gray-600">
+                                          <span className="font-medium">Response ID:</span> {checkIn.responseId ? checkIn.responseId.substring(0, 8) + '...' : 'N/A'}
+                                        </div>
+                                        <div className="flex space-x-2">
+                                          <Link
+                                            href={`/responses/${checkIn.responseId || checkIn.id}`}
+                                            className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 font-medium text-sm transition-colors"
+                                          >
+                                            Review Now
+                                          </Link>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="text-center py-12">
+                                <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                  <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                  </svg>
+                                </div>
+                                <p className="text-gray-500 text-lg mb-2">No check-ins pending review</p>
+                                <p className="text-gray-400 text-sm">All completed check-ins have been reviewed</p>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
                 </div>
-              </div>
                 </div>
+              </div>
               )}
 
               {/* HISTORY TAB */}
@@ -4453,14 +4765,14 @@ export default function ClientProfilePage() {
                   value={allocateStartDate}
                   onChange={(e) => {
                     setAllocateStartDate(e.target.value);
-                    // Auto-calculate first check-in date (1 week after start date)
+                    // If first check-in date is not set or is earlier than new start date, suggest start date
                     if (e.target.value) {
-                      const startDate = new Date(e.target.value);
-                      const firstCheckInDate = new Date(startDate);
-                      firstCheckInDate.setDate(startDate.getDate() + 7); // Add 7 days
-                      setAllocateFirstCheckInDate(firstCheckInDate.toISOString().split('T')[0]);
+                      if (!allocateFirstCheckInDate || (allocateFirstCheckInDate < e.target.value)) {
+                        setAllocateFirstCheckInDate(e.target.value);
+                      }
                     }
                   }}
+                  min={new Date().toISOString().split('T')[0]}
                   className="w-full px-3 py-2 border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                 />
                 <p className="mt-1 text-xs text-gray-500">The week the program begins</p>
@@ -4475,11 +4787,7 @@ export default function ClientProfilePage() {
                   type="date"
                   value={allocateFirstCheckInDate}
                   onChange={(e) => setAllocateFirstCheckInDate(e.target.value)}
-                  min={allocateStartDate ? (() => {
-                    const startDate = new Date(allocateStartDate);
-                    startDate.setDate(startDate.getDate() + 7);
-                    return startDate.toISOString().split('T')[0];
-                  })() : new Date().toISOString().split('T')[0]}
+                  min={allocateStartDate || new Date().toISOString().split('T')[0]}
                   max={(() => {
                     const maxDate = new Date();
                     maxDate.setFullYear(maxDate.getFullYear() + 2); // Allow up to 2 years in the future
@@ -4487,7 +4795,7 @@ export default function ClientProfilePage() {
                   })()}
                   className="w-full px-3 py-2 border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                 />
-                <p className="mt-1 text-xs text-gray-500">When is their first check-in? (typically 1 week after start date)</p>
+                <p className="mt-1 text-xs text-gray-500">When is their first check-in? Can be the same day as program start or anytime after.</p>
               </div>
 
               {/* Frequency */}

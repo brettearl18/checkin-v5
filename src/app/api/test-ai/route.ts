@@ -6,8 +6,17 @@ export const dynamic = 'force-dynamic';
 /**
  * Test endpoint for AI integration
  * POST /api/test-ai
+ * DISABLED IN PRODUCTION - For development/testing only
  */
 export async function POST(request: NextRequest) {
+  // Disable in production
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json(
+      { success: false, message: 'Not Found' },
+      { status: 404 }
+    );
+  }
+
   try {
     // Check if OpenAI API key is configured
     if (!process.env.OPENAI_API_KEY) {
@@ -74,8 +83,17 @@ export async function POST(request: NextRequest) {
 
 /**
  * GET endpoint to check if AI is configured
+ * DISABLED IN PRODUCTION - For development/testing only
  */
 export async function GET(request: NextRequest) {
+  // Disable in production
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json(
+      { success: false, message: 'Not Found' },
+      { status: 404 }
+    );
+  }
+
   const isConfigured = !!process.env.OPENAI_API_KEY;
   
   return NextResponse.json({
@@ -87,6 +105,7 @@ export async function GET(request: NextRequest) {
     timestamp: new Date().toISOString()
   });
 }
+
 
 
 

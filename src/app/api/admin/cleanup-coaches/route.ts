@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb, getAuthInstance } from '@/lib/firebase-server';
+import { requireAdmin } from '@/lib/api-auth';
+import { logInfo, logSafeError } from '@/lib/logger';
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic';
@@ -8,12 +10,20 @@ export const dynamic = 'force-dynamic';
  * POST /api/admin/cleanup-coaches
  * Removes all coaches except Silvana Earl (silvi@vanahealth.com.au)
  * Reassigns all clients from deleted coaches to Silvana Earl
+ * 
+ * Requires: Admin authentication
  */
 export async function POST(request: NextRequest) {
-  const db = getDb();
-  const auth = getAuthInstance();
-  
   try {
+    // Require admin authentication
+    const authResult = await requireAdmin(request);
+    if (authResult instanceof NextResponse) {
+      return authResult;
+    }
+
+    const db = getDb();
+    const auth = getAuthInstance();
+
     // Find Silvana Earl's coach record
     const silvanaEmail = 'silvi@vanahealth.com.au';
     const coachesSnapshot = await db.collection('coaches')
@@ -32,7 +42,7 @@ export async function POST(request: NextRequest) {
     const silvanaCoachId = silvanaCoachDoc.id;
     const silvanaCoachData = silvanaCoachDoc.data();
 
-    console.log(`Found Silvana Earl: ${silvanaCoachId} (${silvanaCoachData.firstName} ${silvanaCoachData.lastName})`);
+    logInfo('Found Silvana Earl for cleanup operation');
 
     // Get all coaches
     const allCoachesSnapshot = await db.collection('coaches').get();
@@ -40,7 +50,7 @@ export async function POST(request: NextRequest) {
       doc => doc.id !== silvanaCoachId
     );
 
-    console.log(`Found ${coachesToDelete.length} coaches to delete (keeping Silvana Earl)`);
+    logInfo(`Found ${coachesToDelete.length} coaches to delete (keeping Silvana Earl)`);
 
     if (coachesToDelete.length === 0) {
       return NextResponse.json({
@@ -90,11 +100,11 @@ export async function POST(request: NextRequest) {
       return responseData.coachId && coachIdsToDelete.includes(responseData.coachId);
     });
 
-    console.log(`Found ${clientsToReassign.length} clients to reassign to Silvana Earl`);
-    console.log(`Found ${assignmentsToReassign.length} check-in assignments to reassign`);
-    console.log(`Found ${formsToReassign.length} forms to reassign`);
-    console.log(`Found ${questionsToReassign.length} questions to reassign`);
-    console.log(`Found ${responsesToReassign.length} form responses to reassign`);
+    logInfo(`Found ${clientsToReassign.length} clients to reassign to Silvana Earl`);
+    logInfo(`Found ${assignmentsToReassign.length} check-in assignments to reassign`);
+    logInfo(`Found ${formsToReassign.length} forms to reassign`);
+    logInfo(`Found ${questionsToReassign.length} questions to reassign`);
+    logInfo(`Found ${responsesToReassign.length} form responses to reassign`);
 
     // Use batch operations for efficiency (Firestore batch limit is 500 operations)
     // We'll need multiple batches if we exceed 500 operations
@@ -176,7 +186,7 @@ export async function POST(request: NextRequest) {
       }
 
       await batch.commit();
-      console.log(`Committed batch ${Math.floor(i / BATCH_SIZE) + 1} (${batchUpdates.length} operations)`);
+      logInfo(`Committed batch ${Math.floor(i / BATCH_SIZE) + 1} (${batchUpdates.length} operations)`);
     }
 
     // Also update users collection if they have coach role
@@ -201,7 +211,7 @@ export async function POST(request: NextRequest) {
           }
         }
       } catch (error) {
-        console.error(`Error updating user record for coach ${coachId}:`, error);
+        logSafeError(`Error updating user record for coach`, error);
         // Continue with other coaches
       }
     }
@@ -222,7 +232,7 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Error cleaning up coaches:', error);
+    logSafeError('Error cleaning up coaches', error);
     return NextResponse.json({
       success: false,
       message: 'Failed to clean up coaches',

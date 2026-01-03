@@ -447,13 +447,13 @@ export default function CreateClientPage() {
                             id="password"
                             name="password"
                             required
-                            minLength={6}
+                            minLength={8}
                             value={formData.password}
                             onChange={handleInputChange}
                             className="w-full border border-gray-200 rounded-2xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 text-gray-900 placeholder-gray-500 bg-white"
-                            placeholder="Enter password (min 6 characters)"
+                            placeholder="Enter password (min 8 characters, uppercase, lowercase, number)"
                           />
-                          <p className="mt-1 text-xs text-gray-500">Minimum 6 characters</p>
+                          <p className="mt-1 text-xs text-gray-500">Minimum 8 characters with uppercase, lowercase, and number</p>
                         </div>
                       </div>
                     </div>

@@ -1,14 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthInstance } from '@/lib/firebase-server';
+import { requireAdmin } from '@/lib/api-auth';
+import { logSafeError } from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 
 /**
  * GET /api/admin/find-user-by-email?email=xxx
  * Finds a Firebase Auth user by email and returns their UID
+ * 
+ * Requires: Admin authentication
  */
 export async function GET(request: NextRequest) {
   try {
+    // Require admin authentication
+    const authResult = await requireAdmin(request);
+    if (authResult instanceof NextResponse) {
+      return authResult;
+    }
+
     const { searchParams } = new URL(request.url);
     const email = searchParams.get('email');
     
@@ -50,7 +60,7 @@ export async function GET(request: NextRequest) {
     }
     
   } catch (error: any) {
-    console.error('Error finding user by email:', error);
+    logSafeError('Error finding user by email', error);
     return NextResponse.json({
       success: false,
       message: 'Failed to find user',
@@ -58,4 +68,5 @@ export async function GET(request: NextRequest) {
     }, { status: 500 });
   }
 }
+
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase-server';
 import { vanaCheckInQuestions } from '@/lib/vana-checkin-questions';
+import { requireAdmin } from '@/lib/api-auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,9 +15,17 @@ export const dynamic = 'force-dynamic';
  * 4. Saved to the form
  * 
  * Order: Training sessions question first, then rest in vanaCheckInQuestions order
+ * 
+ * Requires: Admin authentication
  */
 export async function POST(request: NextRequest) {
   try {
+    // Require admin authentication
+    const authResult = await requireAdmin(request);
+    if (authResult instanceof NextResponse) {
+      return authResult;
+    }
+
     const { formId, coachId } = await request.json();
     
     if (!formId) {

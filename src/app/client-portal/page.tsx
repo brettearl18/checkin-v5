@@ -1100,7 +1100,8 @@ export default function ClientPortalPage() {
                             if (normalizedDueDate <= normalizedNow) {
                               const checkInWindow = checkIn.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
                               const windowStatus = isWithinCheckInWindow(checkInWindow);
-                              if (windowStatus.isOpen) return true;
+                              const isFirstCheckIn = checkIn.recurringWeek === 1;
+                              if (windowStatus.isOpen || isFirstCheckIn) return true;
                             }
                             
                             // Don't include future check-ins - they belong in "Scheduled", not "Requiring Attention"
@@ -1152,10 +1153,12 @@ export default function ClientPortalPage() {
                     if (normalizedDueDate < normalizedNow) return true;
                     
                     // Include if due date has arrived AND window is open (available now)
+                    // Special case: Week 1 check-ins are accessible immediately once due date arrives
                     if (normalizedDueDate <= normalizedNow) {
                       const checkInWindow = checkIn.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
                       const windowStatus = isWithinCheckInWindow(checkInWindow);
-                      if (windowStatus.isOpen) return true;
+                      const isFirstCheckIn = checkIn.recurringWeek === 1;
+                      if (windowStatus.isOpen || isFirstCheckIn) return true;
                     }
                     
                     // Don't include future check-ins - they belong in "Scheduled", not "Requiring Attention"
