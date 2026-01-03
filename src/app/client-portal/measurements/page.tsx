@@ -364,10 +364,8 @@ export default function MeasurementsPage() {
         alert(userMessage);
       }
       return false;
-    } finally {
-      setSaving(false);
-      isSavingRef.current = false;
     }
+    // NOTE: Saving state is managed in button onClick handler's finally block
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
