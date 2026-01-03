@@ -60,7 +60,7 @@ function RecentFixesSection() {
             const event = new CustomEvent('switchTab', { detail: 'updates' });
             window.dispatchEvent(event);
           }}
-          className="text-sm text-blue-600 hover:text-blue-800 font-medium underline"
+          className="text-sm text-blue-600 hover:text-blue-800 font-medium underline cursor-pointer"
         >
           View All Updates →
         </button>
@@ -177,10 +177,7 @@ export default function SubmitIssueForm() {
         pageUrl: '',
       });
 
-      // Redirect after 3 seconds
-      setTimeout(() => {
-        router.push('/client-portal');
-      }, 3000);
+      // Stay on support page, just show success
     } catch (err: any) {
       console.error('Error submitting issue:', err);
       setError(err.message || 'Failed to submit issue report. Please try again.');
@@ -202,9 +199,22 @@ export default function SubmitIssueForm() {
           <p className="text-gray-600 text-base lg:text-lg mb-6">
             Thank you for reporting this issue. We've received your report and will look into it as soon as possible.
           </p>
-          <p className="text-sm text-gray-500">
-            Redirecting you to your dashboard...
-          </p>
+          <button
+            onClick={() => {
+              setSuccess(false);
+              setFormData({
+                issueType: 'bug',
+                title: '',
+                description: '',
+                stepsToReproduce: '',
+                consoleErrors: '',
+                pageUrl: '',
+              });
+            }}
+            className="px-6 py-3 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors font-semibold"
+          >
+            Submit Another Issue
+          </button>
         </div>
       </div>
     );
@@ -365,7 +375,10 @@ export default function SubmitIssueForm() {
           <div className="flex gap-4">
             <button
               type="button"
-              onClick={() => router.back()}
+              onClick={() => {
+                const event = new CustomEvent('switchTab', { detail: 'help' });
+                window.dispatchEvent(event);
+              }}
               className="px-6 py-3 lg:py-2.5 border border-gray-300 rounded-xl lg:rounded-lg bg-white text-gray-700 hover:bg-gray-50 transition-colors font-semibold text-sm lg:text-base min-h-[48px] lg:min-h-[44px]"
             >
               Cancel
