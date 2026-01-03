@@ -288,8 +288,8 @@ export default function MeasurementsPage() {
       throw new Error('No valid data to save. Please ensure weight is entered.');
     }
     
-    isSavingRef.current = true;
-    setSaving(true);
+    // NOTE: Saving flag is already set in button handler
+    // This function is ONLY called from the Complete Setup button
     try {
       // Always use POST - the API will handle updating existing baseline automatically
       // This prevents race conditions where the client-side state might be stale
