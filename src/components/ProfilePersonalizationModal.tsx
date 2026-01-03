@@ -206,34 +206,46 @@ export default function ProfilePersonalizationModal({
           const imgWidth = img.width;
           const imgHeight = img.height;
 
-          // The image is displayed at its NATURAL dimensions with CSS transforms:
+          // The image is displayed with:
+          // width: imgWidth, height: imgHeight (natural dimensions)
           // transform: translate(-50%, -50%) translate(x, y) scale(scale)
-          // So the image is centered, then offset, then scaled
+          // 
+          // CSS transform order:
+          // 1. translate(-50%, -50%) moves back by 50% of explicit width/height
+          // 2. translate(x, y) applies the pixel offset
+          // 3. scale(scale) scales everything
+          //
+          // For canvas, we need to:
+          // 1. Calculate the final scaled dimensions
+          // 2. Calculate the final position (center + offset, then scale)
           
-          // Calculate the final displayed dimensions after scale
+          // Final displayed dimensions after scale
           const scaledWidth = imgWidth * scale;
           const scaledHeight = imgHeight * scale;
 
-          // Calculate the center of the canvas (where the circle center is)
+          // Scale factor from container (200px) to output canvas (400px)
+          const scaleFactor = outputSize / containerSize;
+
+          // Canvas center (circle center)
           const canvasCenterX = outputSize / 2;
           const canvasCenterY = outputSize / 2;
 
-          // The offset is in pixels relative to the 200px container
-          // Scale it to the output canvas size
-          const scaleFactor = outputSize / containerSize;
+          // The offset is in pixels in the container space
+          // Scale it to canvas space
           const canvasOffsetX = offsetX * scaleFactor;
           const canvasOffsetY = offsetY * scaleFactor;
-          
-          // Image center position on canvas (center + offset)
+
+          // Final image center position on canvas
+          // In CSS: center (100px) + offset, then scale
+          // In canvas: center (200px) + scaled offset
           const imageCenterX = canvasCenterX + canvasOffsetX;
           const imageCenterY = canvasCenterY + canvasOffsetY;
 
-          // Scale the dimensions to canvas size
+          // Final dimensions on canvas
           const canvasScaledWidth = scaledWidth * scaleFactor;
           const canvasScaledHeight = scaledHeight * scaleFactor;
 
           // Draw the image centered at the calculated position
-          // drawImage(img, dx, dy, dWidth, dHeight)
           ctx.drawImage(
             img,
             imageCenterX - canvasScaledWidth / 2,
