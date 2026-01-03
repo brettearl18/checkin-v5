@@ -1405,7 +1405,7 @@ export default function ClientPortalPage() {
               </div>
             </div>
 
-            {/* Stats Overview - Simplified to 2 cards */}
+            {/* Stats Overview - Simplified to 2 cards - Always visible */}
             <div className="grid grid-cols-2 gap-3 sm:gap-4 mb-6">
               <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
                 <div className="px-3 py-3 sm:px-4 sm:py-4">
