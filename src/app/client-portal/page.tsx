@@ -860,7 +860,7 @@ export default function ClientPortalPage() {
               if (!hasTasks) return null;
               
               return (
-                <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 mb-6 overflow-hidden">
+                <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 mb-4 sm:mb-6 overflow-hidden w-full">
                   <div className="px-4 py-3 sm:px-6 sm:py-4 border-b-2" style={{ backgroundColor: '#fef9e7', borderColor: '#daa450' }}>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 sm:gap-3">
@@ -870,14 +870,14 @@ export default function ClientPortalPage() {
                           </svg>
                         </div>
                         <div>
-                          <h2 className="text-base sm:text-lg font-bold text-gray-900">Next Upcoming Tasks</h2>
-                          <p className="text-gray-600 text-[10px] sm:text-xs">Complete these tasks to stay on track</p>
+                          <h2 className="text-sm sm:text-base lg:text-lg font-bold text-gray-900">Next Upcoming Tasks</h2>
+                          <p className="text-gray-600 text-[10px] sm:text-xs mt-0.5">Complete these tasks to stay on track</p>
                         </div>
                       </div>
                     </div>
                   </div>
                   
-                  <div className="p-4 sm:p-6 space-y-3">
+                  <div className="p-3 sm:p-4 lg:p-6 space-y-2 sm:space-y-3">
                     {/* Measurement Task - Show first if overdue/due */}
                     {hasMeasurementTask && (
                       <Link
