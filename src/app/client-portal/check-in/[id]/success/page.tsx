@@ -70,7 +70,7 @@ export default function CheckInSuccessPage() {
   const [formResponse, setFormResponse] = useState<FormResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [score, setScore] = useState(0);
-  const [thresholds, setThresholds] = useState<ScoringThresholds>(getDefaultThresholds('lifestyle'));
+  const [thresholds, setThresholds] = useState<ScoringThresholds>(getDefaultThresholds('moderate'));
   const [trafficLightStatus, setTrafficLightStatus] = useState<TrafficLightStatus>('orange');
   const [showScoringInfo, setShowScoringInfo] = useState(false);
   const [questions, setQuestions] = useState<any[]>([]);
