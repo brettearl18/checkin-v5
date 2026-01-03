@@ -3041,9 +3041,9 @@ export default function ClientProfilePage() {
                                             </span>
                                           )}
                                         </div>
-                                        <div className="absolute bottom-2 right-2">
-                                          <div className="bg-black/90 backdrop-blur-sm rounded-lg px-3 py-1.5 shadow-lg border border-white/10">
-                                            <p className="text-white text-sm font-semibold leading-tight">
+                                        <div className="absolute bottom-2 right-2 z-10">
+                                          <div className="bg-black/95 backdrop-blur-md rounded-lg px-4 py-2 shadow-xl border-2 border-white/20">
+                                            <p className="text-white text-base font-bold leading-tight whitespace-nowrap">
                                               {new Date(image.uploadedAt).toLocaleDateString('en-US', { 
                                                 month: 'short', 
                                                 day: 'numeric',

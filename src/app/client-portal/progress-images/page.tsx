@@ -810,9 +810,9 @@ export default function ProgressImagesPage() {
                                   `)}`;
                                 }}
                               />
-                              <div className="absolute bottom-2 right-2">
-                                <div className="bg-black/85 backdrop-blur-sm rounded-lg px-3 py-1.5 shadow-lg">
-                                  <p className="text-white text-xs lg:text-sm font-semibold leading-tight">
+                              <div className="absolute bottom-2 right-2 z-10">
+                                <div className="bg-black/95 backdrop-blur-md rounded-lg px-4 py-2 shadow-xl border-2 border-white/20">
+                                  <p className="text-white text-sm lg:text-base font-bold leading-tight whitespace-nowrap">
                                     {new Date(image.uploadedAt).toLocaleDateString('en-US', { 
                                       month: 'short', 
                                       day: 'numeric',
