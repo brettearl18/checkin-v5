@@ -451,8 +451,13 @@ export default function ClientPortalPage() {
         setRecentResponses([]);
         setCoach(null);
       }
-    } catch (error) {
-      console.error('Error in fetchClientData:', error);
+    } catch (error: any) {
+      // Handle errors gracefully - don't log network errors as they're often transient
+      // Only log in development or if it's not a network error
+      if (process.env.NODE_ENV === 'development' || (error?.name !== 'TypeError' && error?.message !== 'Failed to fetch')) {
+        console.error('Error in fetchClientData:', error);
+      }
+      
       // Fallback to empty data
       setStats({
         overallProgress: 0,
