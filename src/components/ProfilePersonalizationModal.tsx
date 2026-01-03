@@ -58,11 +58,13 @@ export default function ProfilePersonalizationModal({
   // Image upload and cropping state
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [imagePosition, setImagePosition] = useState({ x: 0, y: 0, scale: 1 });
+  const [imageDimensions, setImageDimensions] = useState({ width: 0, height: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [uploadingImage, setUploadingImage] = useState(false);
   const imageContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageRef = useRef<HTMLImageElement>(null);
 
   useEffect(() => {
     if (currentPersonalization) {
@@ -98,8 +100,19 @@ export default function ProfilePersonalizationModal({
     // Read file as data URL
     const reader = new FileReader();
     reader.onload = (event) => {
-      setSelectedImage(event.target?.result as string);
-      setImagePosition({ x: 0, y: 0, scale: 1 });
+      const dataUrl = event.target?.result as string;
+      setSelectedImage(dataUrl);
+      
+      // Load image to get dimensions
+      const img = new Image();
+      img.onload = () => {
+        setImageDimensions({ width: img.width, height: img.height });
+        // Calculate initial scale to fit image in 200px circle
+        const containerSize = 200;
+        const scale = Math.max(containerSize / img.width, containerSize / img.height);
+        setImagePosition({ x: 0, y: 0, scale: scale });
+      };
+      img.src = dataUrl;
     };
     reader.readAsDataURL(file);
   };
@@ -436,6 +449,7 @@ export default function ProfilePersonalizationModal({
                     >
                       {selectedImage && (
                         <img
+                          ref={imageRef}
                           src={selectedImage}
                           alt="Profile preview"
                           className="absolute select-none"
@@ -443,17 +457,28 @@ export default function ProfilePersonalizationModal({
                             top: '50%',
                             left: '50%',
                             transform: `translate(-50%, -50%) translate(${imagePosition.x}px, ${imagePosition.y}px) scale(${imagePosition.scale})`,
-                            minWidth: '200px',
-                            minHeight: '200px',
-                            width: 'auto',
-                            height: 'auto',
-                            maxWidth: '400px',
-                            maxHeight: '400px',
+                            width: imageDimensions.width > 0 ? `${imageDimensions.width}px` : '200px',
+                            height: imageDimensions.height > 0 ? `${imageDimensions.height}px` : '200px',
+                            maxWidth: 'none',
+                            maxHeight: 'none',
                             objectFit: 'cover',
                             userSelect: 'none',
                             pointerEvents: 'none',
+                            transformOrigin: 'center center',
                           }}
                           draggable={false}
+                          onLoad={(e) => {
+                            const img = e.target as HTMLImageElement;
+                            if (img && img.naturalWidth > 0 && img.naturalHeight > 0) {
+                              setImageDimensions({ width: img.naturalWidth, height: img.naturalHeight });
+                              // Set initial scale to fit
+                              const containerSize = 200;
+                              const scale = Math.max(containerSize / img.naturalWidth, containerSize / img.naturalHeight);
+                              if (imagePosition.scale === 1 && imagePosition.x === 0 && imagePosition.y === 0) {
+                                setImagePosition({ x: 0, y: 0, scale: scale });
+                              }
+                            }
+                          }}
                         />
                       )}
                     </div>
