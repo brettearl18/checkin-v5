@@ -31,22 +31,56 @@ export async function POST(request: NextRequest) {
 
     const db = getDb();
 
-    // Get client information
-    const clientsSnapshot = await db.collection('clients')
-      .where('authUid', '==', user.uid)
-      .limit(1)
-      .get();
+    // Get client information - try multiple methods
+    // First, try by document ID (clientId might be the doc ID)
+    let clientDoc = await db.collection('clients').doc(user.uid).get();
+    let clientData = clientDoc.exists ? clientDoc.data() : null;
+    let clientId = user.uid;
 
-    if (clientsSnapshot.empty) {
-      return NextResponse.json(
-        { success: false, message: 'Client not found' },
-        { status: 404 }
-      );
+    // If not found by document ID, try finding by authUid
+    if (!clientDoc.exists) {
+      const clientsQuery = await db.collection('clients')
+        .where('authUid', '==', user.uid)
+        .limit(1)
+        .get();
+      
+      if (!clientsQuery.empty) {
+        clientDoc = clientsQuery.docs[0];
+        clientData = clientDoc.data();
+        clientId = clientDoc.id;
+      }
     }
 
-    const clientDoc = clientsSnapshot.docs[0];
-    const clientData = clientDoc.data();
-    const clientId = clientDoc.id;
+    // If still not found, try by email as a fallback
+    if (!clientData && user.email) {
+      const clientsQuery = await db.collection('clients')
+        .where('email', '==', user.email)
+        .limit(1)
+        .get();
+      
+      if (!clientsQuery.empty) {
+        clientDoc = clientsQuery.docs[0];
+        clientData = clientDoc.data();
+        clientId = clientDoc.id;
+      }
+    }
+
+    // If still not found, create a minimal client record for reporting purposes
+    if (!clientData) {
+      logInfo('Client not found in database, using user info for issue report', {
+        uid: user.uid,
+        email: user.email,
+      });
+      
+      // Use user info directly if client document doesn't exist
+      clientData = {
+        email: user.email,
+        firstName: '',
+        lastName: '',
+      };
+      clientId = user.uid;
+    }
+
     const clientName = `${clientData.firstName || ''} ${clientData.lastName || ''}`.trim() || 'Unknown Client';
     const clientEmail = clientData.email || user.email || 'Unknown Email';
 
