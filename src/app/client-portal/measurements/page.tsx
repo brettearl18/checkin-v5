@@ -876,11 +876,15 @@ export default function MeasurementsPage() {
                           
                           if (!hasAllPhotos) {
                             alert('Please upload all three before photos (front, back, and side) to complete setup.');
+                            isSavingRef.current = false;
+                            setSaving(false);
                             return;
                           }
                           
                           if (!hasWeight) {
                             alert('Please enter your body weight to complete setup.');
+                            isSavingRef.current = false;
+                            setSaving(false);
                             return;
                           }
                           
