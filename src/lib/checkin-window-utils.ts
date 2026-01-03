@@ -149,8 +149,8 @@ export function getCheckInWindowDescription(window?: CheckInWindow): string {
   }
 
   const startDay = window.startDay.charAt(0).toUpperCase() + window.startDay.slice(1);
-  const endDay = window.endDay.charAt(0).toUpperCase() + window.endDay.slice(1);
   const startTime = formatTime(window.startTime);
+  const endDay = window.endDay.charAt(0).toUpperCase() + window.endDay.slice(1);
   const endTime = formatTime(window.endTime);
 
   return `${startDay} ${startTime} - ${endDay} ${endTime}`;
@@ -172,19 +172,39 @@ export function getNextCheckInWindowTime(window?: CheckInWindow): Date | null {
   return result.nextOpenTime || null;
 }
 
+/**
+ * Calculate the window close time based on due date and window configuration
+ * The window closes on the endDay at endTime of the week containing the due date
+ */
+export function calculateWindowCloseTime(
+  dueDate: Date,
+  window: CheckInWindow
+): Date {
+  if (!window || !window.enabled) {
+    // If no window, assume it closes at the due date
+    return new Date(dueDate);
+  }
 
+  const endDay = getDayOfWeek(window.endDay);
+  const { hours: endHours, minutes: endMinutes } = parseTime(window.endTime);
 
+  // Start from the due date and find the endDay in that week
+  const dueDayOfWeek = dueDate.getDay();
+  
+  // Calculate days to add/subtract to get to the endDay
+  let daysToAdd = endDay - dueDayOfWeek;
+  
+  // If endDay is before dueDayOfWeek in the week (e.g., Monday is endDay but dueDate is Friday),
+  // we need to go to the previous occurrence, which means subtracting days
+  // But since windows typically span forward (Friday to Monday), we want the endDay after the due date
+  // So if endDay < dueDayOfWeek, we go forward to next week's endDay
+  if (endDay < dueDayOfWeek) {
+    daysToAdd = (7 - dueDayOfWeek) + endDay; // Go to next week
+  }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+  const closeTime = new Date(dueDate);
+  closeTime.setDate(dueDate.getDate() + daysToAdd);
+  closeTime.setHours(endHours, endMinutes, 0, 0);
+  
+  return closeTime;
+}

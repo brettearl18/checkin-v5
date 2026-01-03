@@ -151,7 +151,7 @@ export default function CoachNavigation() {
         overflow-y-auto flex flex-col
       `}>
         {/* Sidebar Header */}
-        <div className="bg-gradient-to-br from-orange-500 to-orange-600 px-6 py-8">
+        <div className="bg-[#daa450] px-6 py-8">
           <div className="flex items-center space-x-3">
             <div className="w-12 h-12 bg-white bg-opacity-20 rounded-xl flex items-center justify-center">
               <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -176,10 +176,11 @@ export default function CoachNavigation() {
                 className={`
                   flex items-center space-x-3 px-4 py-3 rounded-2xl font-medium transition-all duration-200
                   ${isActive(item.href)
-                    ? 'bg-orange-50 text-orange-700 border-l-4 border-orange-500'
-                    : 'text-gray-700 hover:bg-orange-50 hover:text-orange-700'
+                    ? 'bg-[#fef9e7] text-gray-900 border-l-4'
+                    : 'text-gray-700 hover:bg-[#fef9e7] hover:text-[#daa450]'
                   }
                 `}
+                style={isActive(item.href) ? { borderLeftColor: '#daa450' } : {}}
               >
                 <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${
                   isActive(item.href) ? 'bg-orange-100' : 'bg-gray-100'
@@ -243,10 +244,10 @@ export default function CoachNavigation() {
                   : 'text-gray-700 hover:bg-orange-50 hover:text-orange-700'
               }`}
             >
-              <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${
-                isActive('/test-scheduled-emails') ? 'bg-orange-100' : 'bg-gray-100'
+              <div className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors duration-200 ${
+                isActive('/test-scheduled-emails') ? 'bg-[#daa450]' : 'bg-gray-100'
               }`}>
-                <svg className={`w-4 h-4 ${isActive('/test-scheduled-emails') ? 'text-orange-600' : 'text-gray-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className={`w-4 h-4 ${isActive('/test-scheduled-emails') ? 'text-white' : 'text-gray-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                 </svg>
               </div>
@@ -258,14 +259,15 @@ export default function CoachNavigation() {
               onClick={() => setIsOpen(false)}
               className={`flex items-center space-x-3 px-4 py-3 rounded-2xl font-medium transition-all duration-200 ${
                 isActive('/test-email')
-                  ? 'bg-orange-50 text-orange-700 border-l-4 border-orange-500'
-                  : 'text-gray-700 hover:bg-orange-50 hover:text-orange-700'
+                  ? 'bg-[#fef9e7] text-gray-900 border-l-4'
+                  : 'text-gray-700 hover:bg-[#fef9e7] hover:text-[#daa450]'
               }`}
+              style={isActive('/test-email') ? { borderLeftColor: '#daa450' } : {}}
             >
-              <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${
-                isActive('/test-email') ? 'bg-orange-100' : 'bg-gray-100'
+              <div className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors duration-200 ${
+                isActive('/test-email') ? 'bg-[#daa450]' : 'bg-gray-100'
               }`}>
-                <svg className={`w-4 h-4 ${isActive('/test-email') ? 'text-orange-600' : 'text-gray-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className={`w-4 h-4 ${isActive('/test-email') ? 'text-white' : 'text-gray-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>

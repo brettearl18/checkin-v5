@@ -1,5 +1,7 @@
 import formData from 'form-data';
 import Mailgun from 'mailgun.js';
+import { getDb } from './firebase-server';
+import { Timestamp } from 'firebase-admin/firestore';
 
 // Initialize Mailgun client
 const mailgun = new Mailgun(formData);
@@ -25,6 +27,8 @@ export interface EmailOptions {
   text?: string;
   from?: string;
   replyTo?: string;
+  emailType?: string; // Added for audit log
+  metadata?: Record<string, any>; // Added for audit log
 }
 
 /**
@@ -38,12 +42,28 @@ export async function sendEmail(options: EmailOptions): Promise<boolean> {
     : originalRecipients;
 
   // If Mailgun is not configured, log the email and return true (for development)
+  // BUT also log to audit log so we can track failed email attempts
   if (!mg || !DOMAIN) {
     console.log('📧 EMAIL NOT SENT (Mailgun not configured):');
     console.log('To:', TEST_EMAIL_OVERRIDE ? `${originalRecipients.join(', ')} (redirected to ${TEST_EMAIL_OVERRIDE})` : originalRecipients.join(', '));
     console.log('Subject:', options.subject);
     console.log('HTML:', options.html);
     console.log('---');
+    
+    // Log to audit even if Mailgun is not configured, but mark as not sent via Mailgun
+    logEmailToAudit({
+      originalRecipients,
+      actualRecipients: TEST_EMAIL_OVERRIDE ? [TEST_EMAIL_OVERRIDE] : originalRecipients,
+      subject: options.subject,
+      emailType: options.emailType || 'unknown',
+      metadata: options.metadata || {},
+      testMode: !!TEST_EMAIL_OVERRIDE,
+      sentAt: new Date(),
+      mailgunSent: false, // Indicate it wasn't sent via Mailgun
+    }).catch(error => {
+      console.error('Error logging unsent email to audit log:', error);
+    });
+    
     return true;
   }
 
@@ -69,6 +89,21 @@ export async function sendEmail(options: EmailOptions): Promise<boolean> {
     } else {
       console.log(`📧 Email sent successfully to: ${actualRecipients.join(', ')}`);
     }
+
+    // Log email to audit log (async, don't block email sending)
+    logEmailToAudit({
+      originalRecipients,
+      actualRecipients,
+      subject: options.subject,
+      emailType: options.emailType || 'unknown',
+      metadata: options.metadata || {},
+      testMode: !!TEST_EMAIL_OVERRIDE,
+      sentAt: new Date(),
+    }).catch(error => {
+      // Log error but don't fail email sending
+      console.error('Error logging email to audit log:', error);
+    });
+
     return true;
   } catch (error) {
     console.error('Error sending email:', error);
@@ -410,5 +445,40 @@ export function getCheckInAssignmentEmailTemplate(
   `;
 
   return { subject, html };
+}
+
+/**
+ * Log email to audit log in Firestore
+ * This is called asynchronously and won't block email sending
+ */
+async function logEmailToAudit(logData: {
+  originalRecipients: string[];
+  actualRecipients: string[];
+  subject: string;
+  emailType: string;
+  metadata: Record<string, any>;
+  testMode: boolean;
+  sentAt: Date;
+}): Promise<void> {
+  try {
+    const db = getDb();
+    
+    // Create audit log entry
+    const auditEntry = {
+      originalRecipients: logData.originalRecipients,
+      actualRecipients: logData.actualRecipients,
+      subject: logData.subject,
+      emailType: logData.emailType,
+      metadata: logData.metadata,
+      testMode: logData.testMode,
+      sentAt: Timestamp.fromDate(logData.sentAt),
+      createdAt: Timestamp.now(),
+    };
+
+    await db.collection('email_audit_log').add(auditEntry);
+  } catch (error) {
+    // Silently fail - we don't want to break email sending if logging fails
+    console.error('Failed to log email to audit log:', error);
+  }
 }
 

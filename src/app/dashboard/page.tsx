@@ -7,6 +7,7 @@ import { RoleProtected } from '@/components/ProtectedRoute';
 import Link from 'next/link';
 import CoachNavigation from '@/components/CoachNavigation';
 import NotificationBell from '@/components/NotificationBell';
+import AggregateMeasurementsPanel from '@/components/AggregateMeasurementsPanel';
 
 interface DashboardStats {
   totalClients: number;
@@ -768,7 +769,7 @@ export default function DashboardPage() {
         {/* Desktop sidebar */}
         <div className={`hidden lg:flex ${isSidebarCollapsed ? 'w-16' : 'w-64'} bg-white shadow-[0_1px_3px_rgba(0,0,0,0.1)] border-r border-gray-100 flex-col transition-all duration-300 ease-in-out`}>
           {/* Sidebar Header */}
-          <div className={`bg-gradient-to-br from-orange-500 to-orange-600 ${isSidebarCollapsed ? 'px-2 py-4' : 'px-6 py-8'} relative`}>
+          <div className={`bg-[#daa450] ${isSidebarCollapsed ? 'px-2 py-4' : 'px-6 py-8'} relative`}>
             {!isSidebarCollapsed ? (
               <>
                 <div className="flex items-center space-x-3">
@@ -1004,11 +1005,11 @@ export default function DashboardPage() {
               <div className="space-y-2">
                 <Link
                   href="/clients/create"
-                  className="flex items-center justify-center px-2 py-3 text-gray-700 hover:bg-gradient-to-r hover:from-green-50 hover:to-emerald-50 hover:text-green-700 rounded-xl font-medium transition-all duration-200 group relative"
+                  className="flex items-center justify-center px-2 py-3 text-gray-700 hover:bg-[#fef9e7] hover:text-[#daa450] rounded-xl font-medium transition-all duration-200 group relative"
                   title="Add Client"
                 >
-                  <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="w-8 h-8 bg-[#fef9e7] rounded-lg flex items-center justify-center flex-shrink-0 group-hover:bg-[#daa450] transition-all duration-200">
+                    <svg className="w-4 h-4 text-[#daa450] group-hover:text-white transition-colors duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                     </svg>
                   </div>
@@ -1019,11 +1020,11 @@ export default function DashboardPage() {
 
                 <Link
                   href="/forms/create"
-                  className="flex items-center justify-center px-2 py-3 text-gray-700 hover:bg-gradient-to-r hover:from-purple-50 hover:to-pink-50 hover:text-purple-700 rounded-xl font-medium transition-all duration-200 group relative"
+                  className="flex items-center justify-center px-2 py-3 text-gray-700 hover:bg-[#fef9e7] hover:text-[#daa450] rounded-xl font-medium transition-all duration-200 group relative"
                   title="Create Form"
                 >
-                  <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="w-8 h-8 bg-[#fef9e7] rounded-lg flex items-center justify-center flex-shrink-0 group-hover:bg-[#daa450] transition-all duration-200">
+                    <svg className="w-4 h-4 text-[#daa450] group-hover:text-white transition-colors duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                     </svg>
                   </div>
@@ -1039,8 +1040,8 @@ export default function DashboardPage() {
 
             {/* User Profile */}
             <div className={`${isSidebarCollapsed ? 'px-2' : 'px-4'} mt-auto`}>
-              <div className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'space-x-3'} p-3 bg-gradient-to-r from-gray-50 to-blue-50 rounded-xl border border-gray-200`}>
-                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center flex-shrink-0">
+              <div className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'space-x-3'} p-3 bg-gradient-to-r from-gray-50 to-[#fef9e7] rounded-xl border border-gray-200 transition-all duration-200`}>
+                <div className="w-10 h-10 bg-[#daa450] rounded-xl flex items-center justify-center flex-shrink-0 transition-all duration-200">
                   <span className="text-white font-bold text-sm">
                     {userProfile?.firstName?.charAt(0) || 'C'}
                   </span>
@@ -1095,10 +1096,10 @@ export default function DashboardPage() {
                 <div className="flex items-center space-x-3">
                   {/* Coach's Code */}
                   {coachData?.shortUID && (
-                    <div className="hidden md:flex items-center space-x-2 bg-orange-50 border border-orange-200 rounded-xl px-4 py-2">
-                      <span className="text-xs font-semibold text-orange-700">Coach's Code:</span>
+                    <div className="hidden md:flex items-center space-x-2 bg-[#fef9e7] border border-[#daa450]/20 rounded-xl px-4 py-2 shadow-sm">
+                      <span className="text-xs font-semibold text-[#daa450]">Coach's Code:</span>
                       <div className="flex items-center space-x-2">
-                        <span className="text-sm font-mono font-bold text-orange-900 tracking-wider">
+                        <span className="text-sm font-mono font-bold text-gray-900 tracking-wider">
                           {coachData.shortUID}
                         </span>
                         <button
@@ -1108,15 +1109,15 @@ export default function DashboardPage() {
                             setCopiedCode(true);
                             setTimeout(() => setCopiedCode(false), 2000);
                           }}
-                          className="p-1.5 hover:bg-orange-100 rounded-lg transition-colors"
+                          className="p-1.5 hover:bg-[#daa450]/10 rounded-lg transition-colors duration-200"
                           title="Copy code"
                         >
                           {copiedCode ? (
-                            <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-4 h-4 text-[#34C759]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                             </svg>
                           ) : (
-                            <svg className="w-4 h-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-4 h-4 text-[#daa450]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                             </svg>
                           )}
@@ -1252,9 +1253,14 @@ export default function DashboardPage() {
             <div className="grid grid-cols-1 gap-10">
               {/* Main Content */}
               <div className="space-y-10">
+                {/* Weight & Measurements Tracking */}
+                {userProfile?.uid && (
+                  <AggregateMeasurementsPanel coachId={userProfile.uid} />
+                )}
+
                 {/* Unified Check-ins Management */}
-                <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
-                  <div className="bg-orange-50 px-10 py-8 border-b-2 border-orange-200">
+                <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1),0_1px_2px_rgba(0,0,0,0.06)] border border-gray-100 overflow-hidden">
+                  <div className="bg-[#fef9e7] px-10 py-8 border-b-2 border-[#daa450]/20">
                     <div className="flex items-center justify-between">
                       <h2 className="text-2xl font-bold text-gray-900">Check-ins Management</h2>
                       <div className="flex items-center space-x-2">

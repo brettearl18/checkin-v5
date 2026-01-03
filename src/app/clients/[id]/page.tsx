@@ -1945,6 +1945,18 @@ export default function ClientProfilePage() {
                   </svg>
                   Status
                 </button>
+                {client.email && (
+                  <Link
+                    href={`/coach/email-audit-log?recipient=${encodeURIComponent(client.email)}`}
+                    className="px-3 py-1.5 text-sm text-gray-700 hover:text-gray-900 hover:bg-white rounded-lg border border-gray-200 transition-colors"
+                    title="View Sent Emails"
+                  >
+                    <svg className="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                    Sent Emails
+                  </Link>
+                )}
                 <Link
                   href={`/clients/${clientId}/edit`}
                   className="px-4 py-1.5 text-sm bg-orange-500 hover:bg-orange-600 text-white rounded-2xl font-medium transition-all duration-200 shadow-sm"

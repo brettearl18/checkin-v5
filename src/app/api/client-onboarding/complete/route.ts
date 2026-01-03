@@ -125,6 +125,54 @@ export async function POST(request: NextRequest) {
       // Don't fail onboarding if notification fails
     }
 
+    // Send notification to admin/coach about client completing onboarding
+    try {
+      const { sendEmail } = await import('@/lib/email-service');
+      const { getClientOnboardingCompleteNotificationTemplate } = await import('@/lib/email-templates');
+      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://checkinv5.web.app';
+      
+      // Get coach name if available
+      let coachName: string | undefined;
+      if (clientData.coachId) {
+        try {
+          const coachDoc = await db.collection('coaches').doc(clientData.coachId).get();
+          if (coachDoc.exists) {
+            const coachData = coachDoc.data();
+            coachName = `${coachData?.firstName || ''} ${coachData?.lastName || ''}`.trim() || undefined;
+          }
+        } catch (coachError) {
+          // Ignore coach fetch errors
+        }
+      }
+
+      const clientName = `${clientData?.firstName || ''} ${clientData?.lastName || ''}`.trim() || 'Client';
+      const { subject, html } = getClientOnboardingCompleteNotificationTemplate(
+        clientName,
+        email,
+        clientId,
+        coachName
+      );
+
+      // Send to admin/coach notification emails
+      const notificationEmails = ['silvi@vanahealth.com.au', 'brett.earl@gmail.com'];
+      await sendEmail({
+        to: notificationEmails,
+        subject,
+        html,
+        emailType: 'admin-notification',
+        metadata: {
+          notificationType: 'client-onboarding-complete',
+          clientId: clientId,
+          clientName: clientName,
+          clientEmail: email,
+          coachId: clientData.coachId || '',
+        },
+      });
+    } catch (notificationError) {
+      console.error('Error sending onboarding complete notification:', notificationError);
+      // Don't fail onboarding if notification fails
+    }
+
     // Note: Check-ins are now allocated manually by coaches after client completes onboarding
     // Auto-create measurement schedule only (check-ins allocated manually)
     if (clientData.coachId) {

@@ -14,7 +14,7 @@ function generateOnboardingToken(): string {
 }
 
 // Send onboarding email using Mailgun
-async function sendOnboardingEmail(email: string, onboardingToken: string, coachName: string, clientName?: string) {
+async function sendOnboardingEmail(email: string, onboardingToken: string, coachName: string, clientName?: string, clientId?: string, coachId?: string) {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
   const onboardingUrl = `${baseUrl}/client-onboarding?token=${onboardingToken}&email=${encodeURIComponent(email)}`;
 
@@ -30,6 +30,12 @@ async function sendOnboardingEmail(email: string, onboardingToken: string, coach
       to: email,
       subject,
       html,
+      emailType: 'onboarding',
+      metadata: {
+        clientId: clientId || '',
+        clientName: clientName || 'there',
+        coachId: coachId || '',
+      },
     });
 
     return true;
@@ -304,10 +310,48 @@ export async function POST(request: NextRequest) {
           to: email,
           subject,
           html,
+          emailType: 'credentials',
+          metadata: {
+            clientId: clientId,
+            clientName: `${firstName} ${lastName}`,
+            coachId: coachId,
+          },
         });
       } catch (emailError) {
         logSafeError('Error sending credentials email', emailError);
         // Don't fail the client creation if email fails
+      }
+
+      // Send notification to admin/coach about new client signup
+      try {
+        const { sendEmail } = await import('@/lib/email-service');
+        const { getClientSignupNotificationTemplate } = await import('@/lib/email-templates');
+        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://checkinv5.web.app';
+        const { subject, html } = getClientSignupNotificationTemplate(
+          `${firstName} ${lastName}`,
+          email,
+          clientId,
+          coachName
+        );
+
+        // Send to admin/coach notification emails
+        const notificationEmails = ['silvi@vanahealth.com.au', 'brett.earl@gmail.com'];
+        await sendEmail({
+          to: notificationEmails,
+          subject,
+          html,
+          emailType: 'admin-notification',
+          metadata: {
+            notificationType: 'client-signup',
+            clientId: clientId,
+            clientName: `${firstName} ${lastName}`,
+            clientEmail: email,
+            coachId: coachId,
+          },
+        });
+      } catch (notificationError) {
+        logSafeError('Error sending client signup notification', notificationError);
+        // Don't fail the client creation if notification fails
       }
 
       return NextResponse.json({
@@ -327,7 +371,39 @@ export async function POST(request: NextRequest) {
         tokenExpiry
       });
 
-      await sendOnboardingEmail(email, onboardingToken, coachName, `${firstName} ${lastName}`);
+      await sendOnboardingEmail(email, onboardingToken, coachName, `${firstName} ${lastName}`, clientId, coachId);
+
+      // Send notification to admin/coach about new client signup
+      try {
+        const { sendEmail } = await import('@/lib/email-service');
+        const { getClientSignupNotificationTemplate } = await import('@/lib/email-templates');
+        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://checkinv5.web.app';
+        const { subject, html } = getClientSignupNotificationTemplate(
+          `${firstName} ${lastName}`,
+          email,
+          clientId,
+          coachName
+        );
+
+        // Send to admin/coach notification emails
+        const notificationEmails = ['silvi@vanahealth.com.au', 'brett.earl@gmail.com'];
+        await sendEmail({
+          to: notificationEmails,
+          subject,
+          html,
+          emailType: 'admin-notification',
+          metadata: {
+            notificationType: 'client-signup',
+            clientId: clientId,
+            clientName: `${firstName} ${lastName}`,
+            clientEmail: email,
+            coachId: coachId,
+          },
+        });
+      } catch (notificationError) {
+        logSafeError('Error sending client signup notification', notificationError);
+        // Don't fail the client creation if notification fails
+      }
 
       return NextResponse.json({
         success: true,
