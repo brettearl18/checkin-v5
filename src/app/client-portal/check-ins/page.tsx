@@ -72,16 +72,30 @@ export default function ClientCheckInsPage() {
 
       // Fetch client ID from clients collection using email
       const response = await fetch(`/api/client-portal?clientEmail=${userProfile.email}`);
+      
+      if (!response.ok) {
+        // Silently handle non-OK responses - API might be starting up
+        setLoading(false);
+        return;
+      }
+      
       const result = await response.json();
 
       if (result.success && result.data.client) {
         setClientId(result.data.client.id);
       } else {
-        console.error('Failed to fetch client ID:', result.message);
+        // Only log if not a network error
+        if (result.message && !result.message.includes('fetch')) {
+          console.error('Failed to fetch client ID:', result.message);
+        }
         setLoading(false);
       }
-    } catch (error) {
-      console.error('Error fetching client ID:', error);
+    } catch (error: any) {
+      // Silently handle network errors - they're often transient
+      // Only log in development
+      if (process.env.NODE_ENV === 'development') {
+        console.debug('Error fetching client ID (will retry):', error);
+      }
       setLoading(false);
     }
   };

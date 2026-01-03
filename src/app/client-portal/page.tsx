@@ -269,6 +269,11 @@ export default function ClientPortalPage() {
           signal: controller.signal
         });
         clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+          // Handle non-OK responses gracefully
+          throw new Error(`API returned ${response.status}: ${response.statusText}`);
+        }
       
       if (response.ok) {
         const data = await response.json();

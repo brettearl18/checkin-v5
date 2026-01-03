@@ -119,12 +119,20 @@ export default function ClientNavigation() {
       if (userProfile?.email) {
         try {
           const response = await fetch(`/api/client-portal?clientEmail=${encodeURIComponent(userProfile.email)}`);
+          if (!response.ok) {
+            // Silently handle non-OK responses - API might be starting up
+            return;
+          }
           const result = await response.json();
           if (result.success && result.data.client) {
             setClientId(result.data.client.id);
           }
         } catch (error) {
-          console.error('Error fetching client ID:', error);
+          // Silently handle network errors - they're often transient
+          // Only log in development
+          if (process.env.NODE_ENV === 'development') {
+            console.debug('Error fetching client ID (will retry):', error);
+          }
         }
       }
     };

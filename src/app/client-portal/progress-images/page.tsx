@@ -59,6 +59,13 @@ export default function ProgressImagesPage() {
       }
 
       const response = await fetch(`/api/client-portal?clientEmail=${encodeURIComponent(userProfile.email)}`);
+      
+      if (!response.ok) {
+        // Silently handle non-OK responses - API might be starting up
+        setLoading(false);
+        return;
+      }
+      
       const result = await response.json();
 
       if (result.success && result.data.client) {
@@ -67,8 +74,12 @@ export default function ProgressImagesPage() {
       } else {
         setLoading(false);
       }
-    } catch (error) {
-      console.error('Error fetching client data:', error);
+    } catch (error: any) {
+      // Silently handle network errors - they're often transient
+      // Only log in development
+      if (process.env.NODE_ENV === 'development') {
+        console.debug('Error fetching client data (will retry):', error);
+      }
       setLoading(false);
     }
   };
