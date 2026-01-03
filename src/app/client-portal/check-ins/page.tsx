@@ -461,13 +461,9 @@ export default function ClientCheckInsPage() {
           return weekA - weekB;
         });
         
-        // Exclude the check-in shown in the banner (if it's from scheduled list)
-        // Only exclude if banner is showing nextScheduled (when there's no current/available check-in)
-        if (nextScheduledForBanner && !bannerCheckin) {
-          result = result.filter(c => c.id !== bannerCheckinId);
-        }
-        
-        // Show only the next upcoming check-in (after excluding banner check-in)
+        // Always show at least the next upcoming check-in in the scheduled tab
+        // Don't exclude the banner check-in - show it here too so users can see it
+        // Show the first check-in (next upcoming)
         return result.slice(0, 1);
       case 'completed':
         // For completed tab, we'll use completedResponses (formResponses) instead of assignments
