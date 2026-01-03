@@ -711,3 +711,228 @@ export function getCoachFeedbackEmailTemplate(
   return { subject, html };
 }
 
+/**
+ * Email template for issue report submission
+ */
+export function getIssueReportEmailTemplate(
+  clientName: string,
+  clientEmail: string,
+  clientId: string,
+  issueData: {
+    type: string;
+    title: string;
+    description: string;
+    stepsToReproduce?: string;
+    consoleErrors?: string;
+    pageUrl: string;
+    browserInfo: {
+      userAgent: string;
+      screenResolution: string;
+      timezone: string;
+    };
+    attachments?: string[];
+  }
+): { subject: string; html: string } {
+  const issueTypeLabels: { [key: string]: string } = {
+    bug: 'Bug/Error',
+    feature: 'Feature Request',
+    performance: 'Performance Issue',
+    other: 'Other'
+  };
+
+  const subject = `[Issue Report] ${issueData.title} - ${clientName}`;
+  
+  // Escape HTML to prevent XSS
+  const escapeHtml = (text: string) => {
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  };
+  
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <style>
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+          line-height: 1.6;
+          color: #333;
+          max-width: 800px;
+          margin: 0 auto;
+          padding: 20px;
+        }
+        .container {
+          background-color: #ffffff;
+          border-radius: 8px;
+          padding: 30px;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .header {
+          background: linear-gradient(135deg, #f59e0b 0%, #f97316 100%);
+          color: white;
+          padding: 30px;
+          border-radius: 8px 8px 0 0;
+          text-align: center;
+          margin: -30px -30px 30px -30px;
+        }
+        .section {
+          margin: 20px 0;
+          padding: 15px;
+          background-color: #f9fafb;
+          border-left: 4px solid #f59e0b;
+          border-radius: 4px;
+        }
+        .section h3 {
+          margin-top: 0;
+          color: #f59e0b;
+          font-size: 18px;
+        }
+        .info-row {
+          margin: 10px 0;
+          padding: 8px 0;
+          border-bottom: 1px solid #e5e7eb;
+        }
+        .info-label {
+          font-weight: 600;
+          color: #6b7280;
+          display: inline-block;
+          min-width: 150px;
+        }
+        .info-value {
+          color: #111827;
+        }
+        .console-errors {
+          background-color: #1f2937;
+          color: #f3f4f6;
+          padding: 15px;
+          border-radius: 4px;
+          font-family: 'Courier New', monospace;
+          font-size: 12px;
+          white-space: pre-wrap;
+          word-wrap: break-word;
+          overflow-x: auto;
+        }
+        .footer {
+          margin-top: 30px;
+          padding-top: 20px;
+          border-top: 1px solid #e5e7eb;
+          font-size: 12px;
+          color: #6b7280;
+          text-align: center;
+        }
+        a {
+          color: #3b82f6;
+          word-break: break-all;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>Issue Report from CheckInV5 Platform</h1>
+        </div>
+        
+        <div class="section">
+          <h3>Client Information</h3>
+          <div class="info-row">
+            <span class="info-label">Name:</span>
+            <span class="info-value">${escapeHtml(clientName)}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Email:</span>
+            <span class="info-value">${escapeHtml(clientEmail)}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Client ID:</span>
+            <span class="info-value">${escapeHtml(clientId)}</span>
+          </div>
+        </div>
+
+        <div class="section">
+          <h3>Issue Details</h3>
+          <div class="info-row">
+            <span class="info-label">Type:</span>
+            <span class="info-value">${issueTypeLabels[issueData.type] || escapeHtml(issueData.type)}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Title:</span>
+            <span class="info-value">${escapeHtml(issueData.title)}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Page URL:</span>
+            <span class="info-value"><a href="${escapeHtml(issueData.pageUrl)}">${escapeHtml(issueData.pageUrl)}</a></span>
+          </div>
+        </div>
+
+        <div class="section">
+          <h3>Description</h3>
+          <p style="white-space: pre-wrap; margin: 0;">${escapeHtml(issueData.description)}</p>
+        </div>
+
+        ${issueData.stepsToReproduce ? `
+        <div class="section">
+          <h3>Steps to Reproduce</h3>
+          <p style="white-space: pre-wrap; margin: 0;">${escapeHtml(issueData.stepsToReproduce)}</p>
+        </div>
+        ` : ''}
+
+        ${issueData.consoleErrors ? `
+        <div class="section">
+          <h3>Browser Console Errors</h3>
+          <div class="console-errors">${escapeHtml(issueData.consoleErrors)}</div>
+        </div>
+        ` : ''}
+
+        <div class="section">
+          <h3>Browser Information</h3>
+          <div class="info-row">
+            <span class="info-label">User Agent:</span>
+            <span class="info-value" style="font-size: 11px; word-break: break-all;">${escapeHtml(issueData.browserInfo.userAgent)}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Screen Resolution:</span>
+            <span class="info-value">${escapeHtml(issueData.browserInfo.screenResolution)}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Timezone:</span>
+            <span class="info-value">${escapeHtml(issueData.browserInfo.timezone)}</span>
+          </div>
+        </div>
+
+        ${issueData.attachments && issueData.attachments.length > 0 ? `
+        <div class="section">
+          <h3>Attachments (${issueData.attachments.length})</h3>
+          ${issueData.attachments.map((url, index) => `
+            <div class="info-row">
+              <span class="info-label">Attachment ${index + 1}:</span>
+              <span class="info-value"><a href="${escapeHtml(url)}">${escapeHtml(url)}</a></span>
+            </div>
+          `).join('')}
+        </div>
+        ` : ''}
+
+        <div class="footer">
+          <p>Submitted: ${new Date().toLocaleString('en-US', { 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric', 
+            hour: 'numeric', 
+            minute: '2-digit',
+            timeZoneName: 'short'
+          })}</p>
+          <p>This is an automated email from the CheckInV5 platform issue reporting system.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return { subject, html };
+}
+
