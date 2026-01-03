@@ -853,7 +853,10 @@ export default function MeasurementsPage() {
                         // CRITICAL: Prevent any default behavior or event propagation
                         e.preventDefault();
                         e.stopPropagation();
-                        e.stopImmediatePropagation();
+                        // stopImmediatePropagation might not be available on all event types
+                        if (e.stopImmediatePropagation && typeof e.stopImmediatePropagation === 'function') {
+                          e.stopImmediatePropagation();
+                        }
                         
                         // STRICT: Prevent any saves if already saving or button is disabled
                         if (isSavingRef.current || saving) {
