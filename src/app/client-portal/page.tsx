@@ -1139,7 +1139,151 @@ export default function ClientPortalPage() {
                     return aDue - bDue; // Both upcoming - earliest first
                   });
 
+                  // If no actionable check-ins, show the next scheduled check-in
                   if (upcomingCheckins.length === 0) {
+                    // Find the next upcoming scheduled check-in
+                    const nextScheduledCheckIn = assignedCheckins
+                      .filter(checkIn => checkIn.status !== 'completed')
+                      .sort((a, b) => {
+                        const dateA = new Date(a.dueDate).getTime();
+                        const dateB = new Date(b.dueDate).getTime();
+                        return dateA - dateB;
+                      })[0];
+
+                    if (nextScheduledCheckIn) {
+                      // Show next scheduled check-in with window information
+                      const dueDate = new Date(nextScheduledCheckIn.dueDate);
+                      const now = new Date();
+                      const daysDiff = Math.floor((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                      const isToday = daysDiff === 0;
+                      const isTomorrow = daysDiff === 1;
+                      
+                      const checkInWindow = nextScheduledCheckIn.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
+                      const windowStatus = isWithinCheckInWindow(checkInWindow);
+                      
+                      // Helper function to calculate window start date
+                      const calculateWindowStartDate = (dueDate: string, window: CheckInWindow): Date => {
+                        const due = new Date(dueDate);
+                        if (!window.enabled) return due;
+                        
+                        const getDayOfWeek = (dayName: string): number => {
+                          const days: { [key: string]: number } = {
+                            'sunday': 0, 'monday': 1, 'tuesday': 2, 'wednesday': 3,
+                            'thursday': 4, 'friday': 5, 'saturday': 6
+                          };
+                          return days[dayName.toLowerCase()] ?? 5;
+                        };
+                        
+                        const startDayNum = getDayOfWeek(window.startDay);
+                        const dueDayOfWeek = due.getDay();
+                        let daysToAdd = (startDayNum - dueDayOfWeek + 7) % 7;
+                        
+                        const windowStartDate = new Date(due);
+                        windowStartDate.setDate(due.getDate() + daysToAdd);
+                        windowStartDate.setHours(0, 0, 0, 0);
+                        
+                        // Add start time
+                        if (window.startTime) {
+                          const [hours, minutes] = window.startTime.split(':').map(Number);
+                          windowStartDate.setHours(hours, minutes, 0, 0);
+                        }
+                        
+                        return windowStartDate;
+                      };
+                      
+                      const windowStartDate = calculateWindowStartDate(nextScheduledCheckIn.dueDate, checkInWindow);
+                      const windowHasOpened = windowStartDate <= now;
+                      const isAvailable = windowHasOpened && windowStatus.isOpen;
+                      
+                      return (
+                        <div className="space-y-4">
+                          <div className="bg-white rounded-lg lg:rounded-xl p-4 lg:p-6 border-2 border-blue-300 bg-blue-50 transition-all duration-200">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center space-x-2 lg:space-x-3 mb-2">
+                                  <div className="w-7 h-7 lg:w-8 lg:h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-blue-100">
+                                    <svg className="w-3.5 h-3.5 lg:w-4 lg:h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                    </svg>
+                                  </div>
+                                  <h3 className="text-base lg:text-lg font-semibold text-gray-900 truncate">
+                                    {nextScheduledCheckIn.isRecurring && nextScheduledCheckIn.recurringWeek 
+                                      ? `Week ${nextScheduledCheckIn.recurringWeek}: ${nextScheduledCheckIn.title}`
+                                      : nextScheduledCheckIn.title}
+                                  </h3>
+                                </div>
+                                <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 space-y-1 sm:space-y-0 text-xs lg:text-sm ml-9 lg:ml-11">
+                                  <div className="flex items-center space-x-1 text-blue-600">
+                                    <svg className="w-3.5 h-3.5 lg:w-4 lg:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <span className="font-medium">
+                                      {isToday ? 'Due Today!' : 
+                                       isTomorrow ? 'Due Tomorrow' : 
+                                       `Due in ${daysDiff} days`}
+                                    </span>
+                                  </div>
+                                  <span className="text-gray-700">
+                                    {dueDate.toLocaleDateString('en-US', { 
+                                      weekday: 'short', 
+                                      month: 'short', 
+                                      day: 'numeric' 
+                                    })}
+                                  </span>
+                                </div>
+                                {/* Window information */}
+                                {checkInWindow?.enabled && checkInWindow?.startDay && checkInWindow?.startTime && (
+                                  <div className="mt-2 ml-9 lg:ml-11">
+                                    <div className="inline-flex items-center gap-1.5 px-3 py-1.5 lg:py-1 rounded-lg text-xs lg:text-xs font-medium bg-blue-50 text-blue-800">
+                                      <span className="text-base">{isAvailable ? '✅' : '📅'}</span>
+                                      <span>
+                                        {isAvailable 
+                                          ? '✓ Check-in window is open now'
+                                          : windowHasOpened
+                                          ? windowStatus.nextOpenTime
+                                            ? `Window opens: ${windowStatus.nextOpenTime.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })} at ${windowStatus.nextOpenTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`
+                                            : `Window opens ${checkInWindow.startDay.charAt(0).toUpperCase() + checkInWindow.startDay.slice(1)} at ${checkInWindow.startTime}`
+                                          : (() => {
+                                              const startDayName = checkInWindow.startDay.charAt(0).toUpperCase() + checkInWindow.startDay.slice(1);
+                                              const [hours, minutes] = checkInWindow.startTime.split(':').map(Number);
+                                              const period = hours >= 12 ? 'PM' : 'AM';
+                                              const displayHours = hours > 12 ? hours - 12 : hours === 0 ? 12 : hours;
+                                              const displayMinutes = minutes.toString().padStart(2, '0');
+                                              return `Window opens ${startDayName} ${windowStartDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} at ${displayHours}:${displayMinutes} ${period}`;
+                                            })()
+                                        }
+                                      </span>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex items-center justify-between sm:justify-end space-x-2 sm:space-x-3">
+                                <div className="px-2.5 py-1 lg:px-3 lg:py-1 rounded-full text-[10px] lg:text-xs font-medium bg-blue-100 text-blue-700">
+                                  Scheduled
+                                </div>
+                                {isAvailable ? (
+                                  <Link
+                                    href={`/client-portal/check-in/${nextScheduledCheckIn.id}`}
+                                    className="px-3 py-1.5 lg:px-4 lg:py-2 rounded-lg text-xs lg:text-sm font-medium transition-all duration-200 text-white shadow-md hover:shadow-lg bg-green-600 hover:bg-green-700"
+                                  >
+                                    Start Check-in
+                                  </Link>
+                                ) : (
+                                  <button
+                                    disabled
+                                    className="px-3 py-1.5 lg:px-4 lg:py-2 bg-gray-300 text-gray-600 rounded-lg text-xs lg:text-sm font-medium cursor-not-allowed"
+                                  >
+                                    Not Available Yet
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
+                    
+                    // If no scheduled check-ins at all, show "All caught up"
                     return (
                       <div className="text-center py-6">
                         <div className="w-14 h-14 bg-gradient-to-br from-emerald-400 to-green-500 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-lg">
