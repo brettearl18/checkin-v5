@@ -2974,13 +2974,7 @@ export default function ClientProfilePage() {
                                     return (
                                       <div 
                                         key={image.id} 
-                                        className={`group relative aspect-square rounded-xl overflow-hidden border transition-all duration-300 hover:shadow-lg bg-white cursor-pointer ${
-                                          comparisonMode 
-                                            ? isSelected 
-                                              ? 'border-blue-500 ring-2 ring-blue-200 shadow-md' 
-                                              : 'border-gray-200 hover:border-blue-300'
-                                            : 'border-gray-200 hover:border-pink-300'
-                                        }`}
+                                        className="flex flex-col"
                                         onClick={() => {
                                           if (comparisonMode) {
                                             if (isSelected) {
@@ -2993,64 +2987,72 @@ export default function ClientProfilePage() {
                                           }
                                         }}
                                       >
-                                        {comparisonMode && (
-                                          <div className={`absolute top-2 right-2 z-10 w-6 h-6 rounded-full flex items-center justify-center transition-all ${
-                                            isSelected 
-                                              ? 'bg-blue-600 text-white shadow-lg' 
-                                              : 'bg-white/80 backdrop-blur-sm border-2 border-gray-300'
-                                          }`}>
-                                            {isSelected && (
-                                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                              </svg>
+                                        <div 
+                                          className={`group relative aspect-square rounded-xl overflow-hidden border transition-all duration-300 hover:shadow-lg bg-white cursor-pointer ${
+                                            comparisonMode 
+                                              ? isSelected 
+                                                ? 'border-blue-500 ring-2 ring-blue-200 shadow-md' 
+                                                : 'border-gray-200 hover:border-blue-300'
+                                              : 'border-gray-200 hover:border-pink-300'
+                                          }`}
+                                        >
+                                          {comparisonMode && (
+                                            <div className={`absolute top-2 right-2 z-10 w-6 h-6 rounded-full flex items-center justify-center transition-all ${
+                                              isSelected 
+                                                ? 'bg-blue-600 text-white shadow-lg' 
+                                                : 'bg-white/80 backdrop-blur-sm border-2 border-gray-300'
+                                            }`}>
+                                              {isSelected && (
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                                </svg>
+                                              )}
+                                            </div>
+                                          )}
+                                          <img
+                                            src={image.imageUrl}
+                                            alt={image.caption || image.imageType}
+                                            className="w-full h-full object-cover"
+                                            onError={(e) => {
+                                              (e.target as HTMLImageElement).src = `data:image/svg+xml,${encodeURIComponent(`
+                                                <svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
+                                                  <rect width="200" height="200" fill="#f3f4f6"/>
+                                                  <text x="50%" y="50%" font-family="Arial" font-size="14" fill="#9ca3af" text-anchor="middle" dy=".3em">Image</text>
+                                                </svg>
+                                              `)}`;
+                                            }}
+                                          />
+                                          <div className="absolute top-2 left-2 flex flex-col gap-1">
+                                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                              image.imageType === 'profile' ? 'bg-blue-100 text-blue-800' :
+                                              image.imageType === 'before' ? 'bg-orange-100 text-orange-800' :
+                                              image.imageType === 'after' ? 'bg-green-100 text-green-800' :
+                                              'bg-purple-100 text-purple-800'
+                                            }`}>
+                                              {image.imageType === 'profile' ? 'Profile' :
+                                               image.imageType === 'before' ? 'Before' :
+                                               image.imageType === 'after' ? 'After' :
+                                               'Progress'}
+                                            </span>
+                                            {image.orientation && (
+                                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                                image.orientation === 'front' ? 'bg-pink-100 text-pink-800' :
+                                                image.orientation === 'back' ? 'bg-indigo-100 text-indigo-800' :
+                                                'bg-teal-100 text-teal-800'
+                                              }`}>
+                                                {image.orientation.charAt(0).toUpperCase() + image.orientation.slice(1)}
+                                              </span>
                                             )}
                                           </div>
-                                        )}
-                                        <img
-                                          src={image.imageUrl}
-                                          alt={image.caption || image.imageType}
-                                          className="w-full h-full object-cover"
-                                          onError={(e) => {
-                                            (e.target as HTMLImageElement).src = `data:image/svg+xml,${encodeURIComponent(`
-                                              <svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
-                                                <rect width="200" height="200" fill="#f3f4f6"/>
-                                                <text x="50%" y="50%" font-family="Arial" font-size="14" fill="#9ca3af" text-anchor="middle" dy=".3em">Image</text>
-                                              </svg>
-                                            `)}`;
-                                          }}
-                                        />
-                                        <div className="absolute top-2 left-2 flex flex-col gap-1">
-                                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                            image.imageType === 'profile' ? 'bg-blue-100 text-blue-800' :
-                                            image.imageType === 'before' ? 'bg-orange-100 text-orange-800' :
-                                            image.imageType === 'after' ? 'bg-green-100 text-green-800' :
-                                            'bg-purple-100 text-purple-800'
-                                          }`}>
-                                            {image.imageType === 'profile' ? 'Profile' :
-                                             image.imageType === 'before' ? 'Before' :
-                                             image.imageType === 'after' ? 'After' :
-                                             'Progress'}
-                                          </span>
-                                          {image.orientation && (
-                                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                              image.orientation === 'front' ? 'bg-pink-100 text-pink-800' :
-                                              image.orientation === 'back' ? 'bg-indigo-100 text-indigo-800' :
-                                              'bg-teal-100 text-teal-800'
-                                            }`}>
-                                              {image.orientation.charAt(0).toUpperCase() + image.orientation.slice(1)}
-                                            </span>
-                                          )}
                                         </div>
-                                        <div className="absolute bottom-2 right-2 z-10">
-                                          <div className="bg-black/95 backdrop-blur-md rounded-lg px-4 py-2 shadow-xl border-2 border-white/20">
-                                            <p className="text-white text-base font-bold leading-tight whitespace-nowrap">
-                                              {new Date(image.uploadedAt).toLocaleDateString('en-US', { 
-                                                month: 'short', 
-                                                day: 'numeric',
-                                                year: 'numeric'
-                                              })}
-                                            </p>
-                                          </div>
+                                        <div className="mt-2 text-center">
+                                          <p className="text-gray-700 text-sm font-semibold">
+                                            {new Date(image.uploadedAt).toLocaleDateString('en-US', { 
+                                              month: 'short', 
+                                              day: 'numeric',
+                                              year: 'numeric'
+                                            })}
+                                          </p>
                                         </div>
                                       </div>
                                     );

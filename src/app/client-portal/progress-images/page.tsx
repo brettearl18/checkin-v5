@@ -768,84 +768,86 @@ export default function ProgressImagesPage() {
                           return (
                             <div 
                               key={image.id} 
-                              className={`group relative aspect-square rounded-2xl overflow-hidden border transition-all duration-300 hover:shadow-lg cursor-pointer ${
-                                comparisonMode 
-                                  ? isSelected 
-                                    ? 'ring-2 shadow-md' 
-                                    : 'border-gray-200 hover:border-gray-300'
-                                  : 'border-gray-200 hover:border-gray-300'
-                              }`}
-                              style={comparisonMode && isSelected ? { borderColor: '#daa450', ringColor: '#fef9e7' } : {}}
+                              className="flex flex-col"
                               onClick={() => {
                                 if (comparisonMode) {
                                   toggleImageSelection(image.id);
                                 }
                               }}
                             >
-                              {comparisonMode && (
-                                <div className={`absolute top-2 right-2 z-10 w-7 h-7 lg:w-6 lg:h-6 rounded-full flex items-center justify-center transition-all shadow-md ${
-                                  isSelected 
-                                    ? 'text-white' 
-                                    : 'bg-white border-2 border-gray-300'
+                              <div 
+                                className={`group relative aspect-square rounded-2xl overflow-hidden border transition-all duration-300 hover:shadow-lg cursor-pointer ${
+                                  comparisonMode 
+                                    ? isSelected 
+                                      ? 'ring-2 shadow-md' 
+                                      : 'border-gray-200 hover:border-gray-300'
+                                    : 'border-gray-200 hover:border-gray-300'
                                 }`}
-                                style={isSelected ? { backgroundColor: '#daa450' } : {}}
-                                >
-                                  {isSelected && (
-                                    <svg className="w-4 h-4 lg:w-3.5 lg:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                    </svg>
-                                  )}
-                                </div>
-                              )}
-                              <img
-                                src={image.imageUrl}
-                                alt={image.caption || image.imageType}
-                                className="w-full h-full object-cover"
-                                onError={(e) => {
-                                  (e.target as HTMLImageElement).src = `data:image/svg+xml,${encodeURIComponent(`
-                                    <svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
-                                      <rect width="200" height="200" fill="#f3f4f6"/>
-                                      <text x="50%" y="50%" font-family="Arial" font-size="14" fill="#9ca3af" text-anchor="middle" dy=".3em">Image</text>
-                                    </svg>
-                                  `)}`;
-                                }}
-                              />
-                              <div className="absolute bottom-2 right-2 z-10">
-                                <div className="bg-black/95 backdrop-blur-md rounded-lg px-4 py-2 shadow-xl border-2 border-white/20">
-                                  <p className="text-white text-sm lg:text-base font-bold leading-tight whitespace-nowrap">
-                                    {new Date(image.uploadedAt).toLocaleDateString('en-US', { 
-                                      month: 'short', 
-                                      day: 'numeric',
-                                      year: 'numeric'
-                                    })}
-                                  </p>
-                                </div>
-                              </div>
-                              
-                              {/* Delete Button - Shows on Hover */}
-                              {!comparisonMode && (
-                                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleDelete(image.id);
-                                    }}
-                                    disabled={deletingId === image.id}
-                                    className="p-2 bg-red-600 hover:bg-red-700 text-white rounded-xl shadow-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-w-[40px] min-h-[40px] flex items-center justify-center"
-                                    title="Delete image"
+                                style={comparisonMode && isSelected ? { borderColor: '#daa450', ringColor: '#fef9e7' } : {}}
+                              >
+                                {comparisonMode && (
+                                  <div className={`absolute top-2 right-2 z-10 w-7 h-7 lg:w-6 lg:h-6 rounded-full flex items-center justify-center transition-all shadow-md ${
+                                    isSelected 
+                                      ? 'text-white' 
+                                      : 'bg-white border-2 border-gray-300'
+                                  }`}
+                                  style={isSelected ? { backgroundColor: '#daa450' } : {}}
                                   >
-                                    {deletingId === image.id ? (
-                                      <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                      </svg>
-                                    ) : (
-                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    {isSelected && (
+                                      <svg className="w-4 h-4 lg:w-3.5 lg:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                                       </svg>
                                     )}
-                                  </button>
-                                </div>
-                              )}
+                                  </div>
+                                )}
+                                <img
+                                  src={image.imageUrl}
+                                  alt={image.caption || image.imageType}
+                                  className="w-full h-full object-cover"
+                                  onError={(e) => {
+                                    (e.target as HTMLImageElement).src = `data:image/svg+xml,${encodeURIComponent(`
+                                      <svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
+                                        <rect width="200" height="200" fill="#f3f4f6"/>
+                                        <text x="50%" y="50%" font-family="Arial" font-size="14" fill="#9ca3af" text-anchor="middle" dy=".3em">Image</text>
+                                      </svg>
+                                    `)}`;
+                                  }}
+                                />
+                                
+                                {/* Delete Button - Shows on Hover */}
+                                {!comparisonMode && (
+                                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleDelete(image.id);
+                                      }}
+                                      disabled={deletingId === image.id}
+                                      className="p-2 bg-red-600 hover:bg-red-700 text-white rounded-xl shadow-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-w-[40px] min-h-[40px] flex items-center justify-center"
+                                      title="Delete image"
+                                    >
+                                      {deletingId === image.id ? (
+                                        <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                        </svg>
+                                      ) : (
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        </svg>
+                                      )}
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                              <div className="mt-2 text-center">
+                                <p className="text-gray-700 text-sm font-semibold">
+                                  {new Date(image.uploadedAt).toLocaleDateString('en-US', { 
+                                    month: 'short', 
+                                    day: 'numeric',
+                                    year: 'numeric'
+                                  })}
+                                </p>
+                              </div>
                             </div>
                           );
                         })}
