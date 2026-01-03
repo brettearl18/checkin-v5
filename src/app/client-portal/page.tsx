@@ -811,11 +811,11 @@ export default function ClientPortalPage() {
               );
             })()}
 
-            {/* Onboarding Questionnaire Banner - Show if not completed or submitted (default to showing for new clients) */}
+            {/* Onboarding Questionnaire Banner - Show if not completed or submitted (prominent on mobile) */}
             {onboardingStatus !== 'completed' && onboardingStatus !== 'submitted' && onboardingStatus !== 'skipped' && (
-              <div className="bg-gradient-to-r from-[#daa450] to-[#c89540] rounded-2xl lg:rounded-3xl shadow-lg mb-6 overflow-hidden border border-[#daa450]/20" style={{ display: 'block' }}>
+              <div className="bg-gradient-to-r from-[#daa450] to-[#c89540] rounded-2xl lg:rounded-3xl shadow-lg mb-4 sm:mb-6 overflow-hidden border border-[#daa450]/20 w-full">
                 <div className="px-4 py-4 sm:px-6 sm:py-6">
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div className="flex flex-col gap-4">
                     <div className="flex items-start gap-3 sm:gap-4 flex-1 min-w-0 w-full">
                       <div className="w-10 h-10 sm:w-12 sm:h-12 bg-white bg-opacity-20 rounded-xl sm:rounded-2xl flex items-center justify-center flex-shrink-0">
                         <svg className="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -823,8 +823,8 @@ export default function ClientPortalPage() {
                         </svg>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h2 className="text-lg sm:text-xl font-bold text-white mb-1">Complete Your Onboarding Questionnaire</h2>
-                        <p className="text-white/90 text-xs sm:text-sm">
+                        <h2 className="text-base sm:text-lg lg:text-xl font-bold text-white mb-1.5 sm:mb-2">Complete Your Onboarding Questionnaire</h2>
+                        <p className="text-white/90 text-xs sm:text-sm leading-relaxed">
                           {onboardingStatus === 'not_started' 
                             ? 'Help us understand your goals and preferences. This must be completed before you can receive check-ins.'
                             : `You're ${onboardingProgress}% complete. Finish the questionnaire to unlock check-ins.`
@@ -842,7 +842,7 @@ export default function ClientPortalPage() {
                     </div>
                     <Link
                       href="/client-portal/onboarding-questionnaire"
-                      className="w-full sm:w-auto px-4 sm:px-6 py-2.5 sm:py-3 bg-white text-[#daa450] rounded-xl font-semibold hover:bg-gray-50 transition-colors shadow-md flex-shrink-0 text-center text-sm sm:text-base"
+                      className="w-full sm:w-auto px-4 sm:px-6 py-3 sm:py-2.5 bg-white text-[#daa450] rounded-xl font-semibold hover:bg-gray-50 transition-colors shadow-md flex-shrink-0 text-center text-sm sm:text-base min-h-[44px] flex items-center justify-center"
                     >
                       {onboardingStatus === 'not_started' ? 'Start Questionnaire' : 'Continue Questionnaire'}
                     </Link>
