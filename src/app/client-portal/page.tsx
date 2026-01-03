@@ -302,9 +302,16 @@ export default function ClientPortalPage() {
         return;
       }
       
-      // Fetch real data from API using email
+      // Fetch real data from API using email with timeout
       // Try fetching by email first, but also pass user UID as fallback
-      const response = await fetch(`/api/client-portal?clientEmail=${encodeURIComponent(clientEmail)}${userProfile?.uid ? `&userUid=${encodeURIComponent(userProfile.uid)}` : ''}`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+      
+      try {
+        const response = await fetch(`/api/client-portal?clientEmail=${encodeURIComponent(clientEmail)}${userProfile?.uid ? `&userUid=${encodeURIComponent(userProfile.uid)}` : ''}`, {
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
       
       if (response.ok) {
         const data = await response.json();
@@ -463,8 +470,27 @@ export default function ClientPortalPage() {
         setRecentResponses([]);
         setCoach(null);
       }
+      } catch (fetchError: any) {
+        clearTimeout(timeoutId);
+        if (fetchError.name === 'AbortError') {
+          console.error('Request timed out after 15 seconds');
+          // Fallback to empty data on timeout
+        } else {
+          console.error('Error fetching client data:', fetchError);
+        }
+        // Fallback to empty data
+        setStats({
+          overallProgress: 0,
+          completedCheckins: 0,
+          totalCheckins: 0,
+          averageScore: 0
+        });
+        setAssignedCheckins([]);
+        setRecentResponses([]);
+        setCoach(null);
+      }
     } catch (error) {
-      console.error('Error fetching client data:', error);
+      console.error('Error in fetchClientData:', error);
       // Fallback to empty data
       setStats({
         overallProgress: 0,
