@@ -470,6 +470,23 @@ export async function POST(request: NextRequest) {
       try {
         await db.collection('clients').doc(userRecord.uid).set(clientRecord);
         
+        // Auto-create scoring configuration with moderate defaults for new clients
+        try {
+          const { getDefaultThresholds } = await import('@/lib/scoring-utils');
+          const moderateThresholds = getDefaultThresholds('moderate');
+          
+          await db.collection('clientScoring').doc(userRecord.uid).set({
+            clientId: userRecord.uid,
+            scoringProfile: 'moderate',
+            thresholds: moderateThresholds,
+            createdAt: new Date(),
+            updatedAt: new Date()
+          }, { merge: true });
+        } catch (scoringError) {
+          console.error('Error creating default scoring config:', scoringError);
+          // Don't fail registration if scoring config creation fails
+        }
+        
         // Note: Check-ins are now allocated manually by coaches after client signs up
         // Auto-create measurement schedule only (check-ins allocated manually)
         if (coachId) {

@@ -34,8 +34,8 @@ export default function CreateClientPage() {
     goals: [],
     communicationPreference: 'email',
     checkInFrequency: 'weekly',
-    scoringProfile: 'lifestyle',
-    thresholds: getDefaultThresholds('lifestyle')
+    scoringProfile: 'moderate',
+    thresholds: getDefaultThresholds('moderate')
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');

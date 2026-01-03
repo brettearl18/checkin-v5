@@ -255,6 +255,23 @@ export async function POST(request: NextRequest) {
     // Save to Firestore
     await db.collection('clients').doc(clientId).set(client);
 
+    // Auto-create scoring configuration with moderate defaults for new clients
+    try {
+      const { getDefaultThresholds } = await import('@/lib/scoring-utils');
+      const moderateThresholds = getDefaultThresholds('moderate');
+      
+      await db.collection('clientScoring').doc(clientId).set({
+        clientId,
+        scoringProfile: 'moderate',
+        thresholds: moderateThresholds,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      }, { merge: true });
+    } catch (scoringError) {
+      logSafeError('Error creating default scoring config', scoringError);
+      // Don't fail client creation if scoring config creation fails
+    }
+
     // Note: Check-ins are now allocated manually by coaches after client signs up
     // Auto-create measurement schedule only (check-ins allocated manually)
     try {

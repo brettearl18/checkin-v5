@@ -165,12 +165,12 @@ export default function CheckInSuccessPage() {
             // Use profile defaults
             finalThresholds = getDefaultThresholds(scoringConfig.scoringProfile as any);
           } else {
-            // Default to lifestyle
-            finalThresholds = getDefaultThresholds('lifestyle');
+            // Default to moderate
+            finalThresholds = getDefaultThresholds('moderate');
           }
         } else {
-          // Priority 3: No scoring config, use default lifestyle thresholds
-          finalThresholds = getDefaultThresholds('lifestyle');
+          // Priority 3: No scoring config, use default moderate thresholds
+          finalThresholds = getDefaultThresholds('moderate');
         }
 
         setThresholds(finalThresholds);

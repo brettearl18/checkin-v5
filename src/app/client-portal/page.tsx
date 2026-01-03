@@ -201,7 +201,7 @@ export default function ClientPortalPage() {
   const [recentResponses, setRecentResponses] = useState<RecentResponse[]>([]);
   const [coach, setCoach] = useState<Coach | null>(null);
   const [loading, setLoading] = useState(true);
-  const [thresholds, setThresholds] = useState<ScoringThresholds>(getDefaultThresholds('lifestyle'));
+  const [thresholds, setThresholds] = useState<ScoringThresholds>(getDefaultThresholds('moderate'));
   const [averageTrafficLight, setAverageTrafficLight] = useState<TrafficLightStatus>('orange');
   const [clientId, setClientId] = useState<string | null>(null);
   const [showScoringInfo, setShowScoringInfo] = useState(false);
@@ -307,7 +307,7 @@ export default function ClientPortalPage() {
             }
           } else {
             // Fallback to default thresholds if scoring config is missing
-            const defaultThresholds = getDefaultThresholds('lifestyle');
+            const defaultThresholds = getDefaultThresholds('moderate');
             setThresholds(defaultThresholds);
             if (calculatedStats.averageScore > 0) {
               setAverageTrafficLight(getTrafficLightStatus(calculatedStats.averageScore, defaultThresholds));
@@ -692,10 +692,10 @@ export default function ClientPortalPage() {
   // Note: For dashboard, we'll use a simplified version since we don't have client-specific thresholds loaded
   // In a full implementation, we'd fetch thresholds for each response
   const getScoreColor = (score: number) => {
-    // Default to lifestyle thresholds for dashboard display
-    // Red: 0-33, Orange: 34-80, Green: 81-100
-    if (score <= 33) return 'bg-red-200 text-red-800';
-    if (score <= 80) return 'bg-orange-200 text-orange-800';
+    // Default to moderate thresholds for dashboard display
+    // Red: 0-60, Orange: 61-85, Green: 86-100
+    if (score <= 60) return 'bg-red-200 text-red-800';
+    if (score <= 85) return 'bg-orange-200 text-orange-800';
     return 'bg-green-200 text-green-800';
   };
 

@@ -450,27 +450,27 @@ export async function GET(request: NextRequest) {
           // Use profile defaults
           thresholds = getDefaultThresholds(scoringData.scoringProfile as any);
         } else {
-          // Default to lifestyle
-          thresholds = getDefaultThresholds('lifestyle');
+          // Default to moderate
+          thresholds = getDefaultThresholds('moderate');
         }
         
         scoringConfig = {
           thresholds,
-          scoringProfile: scoringData?.scoringProfile || 'lifestyle'
+          scoringProfile: scoringData?.scoringProfile || 'moderate'
         };
       } else {
-        // No scoring config, use default lifestyle thresholds
+        // No scoring config, use default moderate thresholds
         scoringConfig = {
-          thresholds: getDefaultThresholds('lifestyle'),
-          scoringProfile: 'lifestyle'
+          thresholds: getDefaultThresholds('moderate'),
+          scoringProfile: 'moderate'
         };
       }
     } catch (error) {
       console.error('Error fetching scoring config:', error);
-      // Use default lifestyle thresholds on error
+      // Use default moderate thresholds on error
       scoringConfig = {
-        thresholds: getDefaultThresholds('lifestyle'),
-        scoringProfile: 'lifestyle'
+        thresholds: getDefaultThresholds('moderate'),
+        scoringProfile: 'moderate'
       };
     }
 

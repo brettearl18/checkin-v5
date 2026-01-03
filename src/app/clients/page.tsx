@@ -113,8 +113,8 @@ export default function ClientsPage() {
                   daysSinceLastCheckIn = Math.floor(diffTime / (1000 * 60 * 60 * 24));
                 }
                 
-                // Get scoring thresholds (default to lifestyle for now)
-                const thresholds = getDefaultThresholds('lifestyle');
+                // Get scoring thresholds (default to moderate)
+                const thresholds = getDefaultThresholds('moderate');
                 
                 // Get last 4 completed check-ins with traffic light status
                 const recentCheckIns = completedCheckIns
@@ -175,7 +175,7 @@ export default function ClientsPage() {
               ...client,
               overdueCheckIns: 0,
               daysSinceLastCheckIn: client.lastCheckIn ? Math.floor((Date.now() - new Date(client.lastCheckIn).getTime()) / (1000 * 60 * 60 * 24)) : undefined,
-              scoringThresholds: getDefaultThresholds('lifestyle'),
+              scoringThresholds: getDefaultThresholds('moderate'),
               recentCheckIns: [],
               lastCheckInScore: undefined,
               lastCheckInTrafficLight: undefined
@@ -248,7 +248,7 @@ export default function ClientsPage() {
       const noActivity = client.daysSinceLastCheckIn !== undefined && client.daysSinceLastCheckIn > 7;
       const lowCompletion = (client.completionRate || 0) < 50;
       const trafficLight = client.progressScore !== undefined 
-        ? getTrafficLightStatus(client.progressScore, client.scoringThresholds || getDefaultThresholds('lifestyle'))
+        ? getTrafficLightStatus(client.progressScore, client.scoringThresholds || getDefaultThresholds('moderate'))
         : null;
       const isRedOrOrange = trafficLight === 'red' || trafficLight === 'orange';
       

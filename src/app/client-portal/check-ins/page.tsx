@@ -145,19 +145,19 @@ export default function ClientCheckInsPage() {
           // Use profile defaults
           clientThresholds = getDefaultThresholds(scoringData.scoringProfile as any);
         } else {
-          // Default to lifestyle
-          clientThresholds = getDefaultThresholds('lifestyle');
+          // Default to moderate
+          clientThresholds = getDefaultThresholds('moderate');
         }
 
         setThresholds(clientThresholds);
       } else {
-        // No scoring config, use default lifestyle thresholds
-        setThresholds(getDefaultThresholds('lifestyle'));
+        // No scoring config, use default moderate thresholds
+        setThresholds(getDefaultThresholds('moderate'));
       }
     } catch (error) {
       console.error('Error fetching scoring config:', error);
-      // Use default lifestyle thresholds on error
-      setThresholds(getDefaultThresholds('lifestyle'));
+      // Use default moderate thresholds on error
+      setThresholds(getDefaultThresholds('moderate'));
     }
   };
 

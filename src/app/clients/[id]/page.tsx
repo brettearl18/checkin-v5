@@ -631,8 +631,8 @@ export default function ClientProfilePage() {
             // Use profile defaults
             clientThresholds = getDefaultThresholds(scoringData.scoringProfile as any);
           } else {
-            // Default to lifestyle
-            clientThresholds = getDefaultThresholds('lifestyle');
+            // Default to moderate
+            clientThresholds = getDefaultThresholds('moderate');
           }
 
           setScoringThresholds(clientThresholds);
@@ -642,8 +642,8 @@ export default function ClientProfilePage() {
             setProgressTrafficLight(getTrafficLightStatus(client.progressScore, clientThresholds));
           }
         } else {
-          // No scoring config, use default lifestyle thresholds
-          const defaultThresholds = getDefaultThresholds('lifestyle');
+          // No scoring config, use default moderate thresholds
+          const defaultThresholds = getDefaultThresholds('moderate');
           setScoringThresholds(defaultThresholds);
           if (client?.progressScore !== undefined) {
             setProgressTrafficLight(getTrafficLightStatus(client.progressScore, defaultThresholds));
