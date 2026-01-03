@@ -314,12 +314,18 @@ export default function ProfilePersonalizationModal({
       });
 
       const uploadResult = await uploadResponse.json();
-      if (uploadResult.success) {
-        // Image uploaded successfully, refresh user profile
-        window.location.reload();
-      } else {
+      if (!uploadResponse.ok || !uploadResult.success) {
         throw new Error(uploadResult.message || 'Failed to upload image');
       }
+
+      // Image uploaded successfully
+      console.log('Image uploaded successfully:', uploadResult);
+      // Close modal and refresh
+      onSave();
+      onClose();
+      setTimeout(() => {
+        window.location.reload();
+      }, 200);
     } catch (err: any) {
       console.error('Error uploading image:', err);
       setError(err.message || 'Failed to upload image. Please try again.');
