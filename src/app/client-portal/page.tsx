@@ -1401,6 +1401,7 @@ export default function ClientPortalPage() {
                   );
                 })()}
               </div>
+            </div>
 
             {/* Stats Overview - Simplified to 2 cards */}
             <div className="grid grid-cols-2 gap-3 sm:gap-4 mb-6">
@@ -1445,7 +1446,6 @@ export default function ClientPortalPage() {
                 </div>
               </div>
             </div>
-
 
             {/* Progress Images */}
             <div className="hidden lg:block bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden mb-6">
@@ -1680,6 +1680,7 @@ export default function ClientPortalPage() {
                         </span>
                       </div>
                     </div>
+                  </div>
                   </div>
                 </div>
               </div>
