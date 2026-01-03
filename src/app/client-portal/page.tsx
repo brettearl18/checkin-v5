@@ -177,10 +177,16 @@ function ProgressImagesPreview({ clientEmail }: { clientEmail: string }) {
                 </span>
               )}
             </div>
-            <div className="absolute bottom-1 right-1">
-              <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-black/60 text-white">
-                {new Date(image.uploadedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-              </span>
+            <div className="absolute bottom-2 right-2">
+              <div className="bg-black/90 backdrop-blur-sm rounded-lg px-3 py-1.5 shadow-lg border border-white/10">
+                <p className="text-white text-sm font-semibold leading-tight">
+                  {new Date(image.uploadedAt).toLocaleDateString('en-US', { 
+                    month: 'short', 
+                    day: 'numeric',
+                    year: 'numeric'
+                  })}
+                </p>
+              </div>
             </div>
           </div>
         ))}
