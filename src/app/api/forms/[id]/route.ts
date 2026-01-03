@@ -157,11 +157,13 @@ export async function PUT(
     }
 
     // Save thresholds if provided
+    let thresholdsUpdated = false;
     if (body.thresholds?.redMax !== undefined && body.thresholds?.orangeMax !== undefined) {
       updateData.thresholds = {
         redMax: body.thresholds.redMax,
         orangeMax: body.thresholds.orangeMax
       };
+      thresholdsUpdated = true;
     }
 
     console.log(`Updating form ${formId} with ${(questionIds || []).length} questions`);
@@ -169,6 +171,46 @@ export async function PUT(
     await db.collection('forms').doc(formId).update(updateData);
 
     console.log(`Form ${formId} updated successfully`);
+
+    // If thresholds were updated, update all pending/future check-in assignments for this form
+    if (thresholdsUpdated && body.thresholds) {
+      try {
+        // Find all pending check-in assignments for this form (status: 'pending' or future due dates)
+        const assignmentsSnapshot = await db.collection('check_in_assignments')
+          .where('formId', '==', formId)
+          .where('status', 'in', ['pending', 'active'])
+          .get();
+
+        if (assignmentsSnapshot.size > 0) {
+          console.log(`Updating thresholds for ${assignmentsSnapshot.size} pending check-in assignments`);
+          
+          // Update all pending assignments with new thresholds
+          const batch = db.batch();
+          assignmentsSnapshot.docs.forEach(doc => {
+            const assignmentData = doc.data();
+            const dueDate = assignmentData.dueDate?.toDate ? assignmentData.dueDate.toDate() : new Date(assignmentData.dueDate || 0);
+            const now = new Date();
+            
+            // Only update if due date is in the future (not yet completed)
+            if (dueDate >= now || !assignmentData.completedAt) {
+              batch.update(doc.ref, {
+                formThresholds: {
+                  redMax: body.thresholds.redMax,
+                  orangeMax: body.thresholds.orangeMax
+                },
+                thresholdsUpdatedAt: new Date()
+              });
+            }
+          });
+          
+          await batch.commit();
+          console.log(`Successfully updated thresholds for ${assignmentsSnapshot.size} check-in assignments`);
+        }
+      } catch (error) {
+        console.error('Error updating check-in assignment thresholds:', error);
+        // Don't fail the form update if assignment update fails
+      }
+    }
 
     return NextResponse.json({
       success: true,

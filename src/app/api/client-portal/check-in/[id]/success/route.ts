@@ -293,6 +293,15 @@ export async function GET(
       console.error('Error fetching scoring config:', error);
     }
 
+    // Fetch form thresholds - these take priority over client thresholds
+    let formThresholds: any = null;
+    if (formData?.thresholds) {
+      formThresholds = formData.thresholds;
+    } else if (assignmentData?.formThresholds) {
+      // Check if assignment has stored form thresholds (from when form was updated)
+      formThresholds = assignmentData.formThresholds;
+    }
+
     // Convert Firestore Timestamps to ISO strings
     const convertTimestamp = (ts: any) => {
       if (!ts) return null;
@@ -334,7 +343,8 @@ export async function GET(
         response: cleanResponse,
         form: formData,
         questions: questions,
-        scoringConfig: scoringConfig
+        scoringConfig: scoringConfig,
+        formThresholds: formThresholds // Include form thresholds for priority use
       }
     });
 

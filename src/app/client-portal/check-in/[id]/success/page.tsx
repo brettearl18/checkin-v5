@@ -120,7 +120,7 @@ export default function CheckInSuccessPage() {
         return;
       }
 
-      const { assignment, response: responseData, form, questions: questionsData, scoringConfig } = result.data;
+      const { assignment, response: responseData, form, questions: questionsData, scoringConfig, formThresholds } = result.data;
 
       // Set assignment if available
       if (assignment) {
@@ -142,35 +142,39 @@ export default function CheckInSuccessPage() {
           setQuestionScores(calculatedScores);
         }
 
-        // Set scoring configuration
-        if (scoringConfig) {
-          let clientThresholds: ScoringThresholds;
-
-          // Check if new format (redMax/orangeMax) exists
+        // Set scoring configuration - Priority: Form thresholds > Client thresholds > Defaults
+        let finalThresholds: ScoringThresholds;
+        
+        // Priority 1: Use form thresholds if available (takes precedence)
+        if (formThresholds?.redMax !== undefined && formThresholds?.orangeMax !== undefined) {
+          finalThresholds = {
+            redMax: formThresholds.redMax,
+            orangeMax: formThresholds.orangeMax
+          };
+        } else if (scoringConfig) {
+          // Priority 2: Use client scoring config
           if (scoringConfig.thresholds?.redMax !== undefined && scoringConfig.thresholds?.orangeMax !== undefined) {
-            clientThresholds = {
+            finalThresholds = {
               redMax: scoringConfig.thresholds.redMax,
               orangeMax: scoringConfig.thresholds.orangeMax
             };
           } else if (scoringConfig.thresholds?.red !== undefined && scoringConfig.thresholds?.yellow !== undefined) {
             // Convert legacy format
-            clientThresholds = convertLegacyThresholds(scoringConfig.thresholds);
+            finalThresholds = convertLegacyThresholds(scoringConfig.thresholds);
           } else if (scoringConfig.scoringProfile) {
             // Use profile defaults
-            clientThresholds = getDefaultThresholds(scoringConfig.scoringProfile as any);
+            finalThresholds = getDefaultThresholds(scoringConfig.scoringProfile as any);
           } else {
             // Default to lifestyle
-            clientThresholds = getDefaultThresholds('lifestyle');
+            finalThresholds = getDefaultThresholds('lifestyle');
           }
-
-          setThresholds(clientThresholds);
-          setTrafficLightStatus(getTrafficLightStatus(responseScore, clientThresholds));
         } else {
-          // No scoring config, use default lifestyle thresholds
-          const defaultThresholds = getDefaultThresholds('lifestyle');
-          setThresholds(defaultThresholds);
-          setTrafficLightStatus(getTrafficLightStatus(responseScore, defaultThresholds));
+          // Priority 3: No scoring config, use default lifestyle thresholds
+          finalThresholds = getDefaultThresholds('lifestyle');
         }
+
+        setThresholds(finalThresholds);
+        setTrafficLightStatus(getTrafficLightStatus(responseScore, finalThresholds));
       }
     } catch (error) {
       console.error('Error fetching data:', error);

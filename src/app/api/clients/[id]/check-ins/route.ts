@@ -155,23 +155,32 @@ export async function GET(
       }
     });
 
-    // Fetch all forms at once
+    // Fetch all forms at once - include thresholds
     const formPromises = Array.from(formIds).map(async (formId) => {
       try {
         const formDoc = await db.collection('forms').doc(formId).get();
         if (formDoc.exists) {
-          return { formId, title: formDoc.data()?.title || 'Unknown Form' };
+          const formData = formDoc.data();
+          return { 
+            formId, 
+            title: formData?.title || 'Unknown Form',
+            thresholds: formData?.thresholds || formData?.trafficLightThresholds || null
+          };
         }
       } catch (error) {
         console.error(`Error fetching form ${formId}:`, error);
       }
-      return { formId, title: 'Unknown Form' };
+      return { formId, title: 'Unknown Form', thresholds: null };
     });
 
     const formTitlesMap = new Map<string, string>();
+    const formThresholdsMap = new Map<string, any>();
     const formResults = await Promise.all(formPromises);
-    formResults.forEach(({ formId, title }) => {
+    formResults.forEach(({ formId, title, thresholds }) => {
       formTitlesMap.set(formId, title);
+      if (thresholds) {
+        formThresholdsMap.set(formId, thresholds);
+      }
     });
 
     // Process all assignments - need to use Promise.all since we're checking coach feedback
@@ -244,6 +253,9 @@ export async function GET(
         }
       }
 
+      // Get form thresholds - priority: assignment stored thresholds > form thresholds
+      const formThresholds = data.formThresholds || (data.formId ? formThresholdsMap.get(data.formId) : null);
+
       const checkIn: CheckIn = {
         id: doc.id,
         formTitle: formTitle,
@@ -271,8 +283,9 @@ export async function GET(
           endTime: '12:00'
         },
         pausedUntil: pausedUntil ? (pausedUntil?.toDate ? pausedUntil.toDate().toISOString() : new Date(pausedUntil).toISOString()) : undefined,
-        notes: data.notes || ''
-      };
+        notes: data.notes || '',
+        formThresholds: formThresholds // Include form thresholds for priority use
+      } as any;
       
       return checkIn;
     });

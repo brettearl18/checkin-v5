@@ -3951,8 +3951,19 @@ export default function ClientProfilePage() {
                                     return weekA - weekB;
                                   }).map((checkIn, index) => {
                                     // Calculate traffic light status based on score and thresholds
+                                    // Priority: Form thresholds > Client thresholds > Defaults
                                     const score = checkIn.score || 0;
-                                    const trafficLightStatus = getTrafficLightStatus(score, scoringThresholds);
+                                    let thresholdsToUse = scoringThresholds;
+                                    
+                                    // Use form thresholds if available (takes precedence)
+                                    if (checkIn.formThresholds?.redMax !== undefined && checkIn.formThresholds?.orangeMax !== undefined) {
+                                      thresholdsToUse = {
+                                        redMax: checkIn.formThresholds.redMax,
+                                        orangeMax: checkIn.formThresholds.orangeMax
+                                      };
+                                    }
+                                    
+                                    const trafficLightStatus = getTrafficLightStatus(score, thresholdsToUse);
                                     const trafficLightColor = getTrafficLightColor(trafficLightStatus);
                                     const trafficLightIcon = getTrafficLightIcon(trafficLightStatus);
                                     
