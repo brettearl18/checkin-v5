@@ -681,6 +681,8 @@ export default function ClientNavigation() {
         onClose={() => setIsPersonalizationModalOpen(false)}
         onSave={handlePersonalizationSave}
         currentPersonalization={personalization || undefined}
+        currentAvatar={userProfile?.avatar || null}
+        clientId={clientId}
       />
     </>
   );

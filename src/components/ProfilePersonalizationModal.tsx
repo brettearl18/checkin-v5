@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface ProfilePersonalizationModalProps {
@@ -13,6 +13,8 @@ interface ProfilePersonalizationModalProps {
     colorTheme: string;
     icon: string | null;
   };
+  currentAvatar?: string | null;
+  clientId?: string | null;
 }
 
 const colorThemes = [
@@ -41,7 +43,9 @@ export default function ProfilePersonalizationModal({
   isOpen,
   onClose,
   onSave,
-  currentPersonalization
+  currentPersonalization,
+  currentAvatar,
+  clientId
 }: ProfilePersonalizationModalProps) {
   const { userProfile } = useAuth();
   const [quote, setQuote] = useState('');
@@ -50,6 +54,15 @@ export default function ProfilePersonalizationModal({
   const [icon, setIcon] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Image upload and cropping state
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [imagePosition, setImagePosition] = useState({ x: 0, y: 0, scale: 1 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const imageContainerRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (currentPersonalization) {
@@ -58,7 +71,240 @@ export default function ProfilePersonalizationModal({
       setColorTheme(currentPersonalization.colorTheme || '#daa450');
       setIcon(currentPersonalization.icon || null);
     }
+    // Reset image selection when modal opens
+    if (isOpen) {
+      setSelectedImage(null);
+      setImagePosition({ x: 0, y: 0, scale: 1 });
+    }
   }, [currentPersonalization, isOpen]);
+
+  // Handle file selection
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file');
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Image size must be less than 5MB');
+      return;
+    }
+
+    // Read file as data URL
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setSelectedImage(event.target?.result as string);
+      setImagePosition({ x: 0, y: 0, scale: 1 });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Handle drag start
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (!selectedImage) return;
+    setIsDragging(true);
+    setDragStart({ x: e.clientX - imagePosition.x, y: e.clientY - imagePosition.y });
+  };
+
+  const handleMouseMove = (e: MouseEvent) => {
+    if (!isDragging || !selectedImage) return;
+    setImagePosition({
+      ...imagePosition,
+      x: e.clientX - dragStart.x,
+      y: e.clientY - dragStart.y,
+    });
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  // Handle touch events for mobile
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (!selectedImage) return;
+    const touch = e.touches[0];
+    setIsDragging(true);
+    setDragStart({ x: touch.clientX - imagePosition.x, y: touch.clientY - imagePosition.y });
+  };
+
+  const handleTouchMove = (e: TouchEvent) => {
+    if (!isDragging || !selectedImage) return;
+    const touch = e.touches[0];
+    setImagePosition({
+      ...imagePosition,
+      x: touch.clientX - dragStart.x,
+      y: touch.clientY - dragStart.y,
+    });
+  };
+
+  const handleTouchEnd = () => {
+    setIsDragging(false);
+  };
+
+  // Add/remove event listeners for dragging
+  useEffect(() => {
+    if (isDragging) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      document.addEventListener('touchmove', handleTouchMove);
+      document.addEventListener('touchend', handleTouchEnd);
+      return () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+        document.removeEventListener('touchmove', handleTouchMove);
+        document.removeEventListener('touchend', handleTouchEnd);
+      };
+    }
+  }, [isDragging, imagePosition, dragStart, selectedImage]);
+
+  // Crop image to circular shape
+  const cropImageToCircle = async (imageSrc: string, outputSize: number = 400): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = outputSize;
+          canvas.height = outputSize;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            reject(new Error('Could not get canvas context'));
+            return;
+          }
+
+          // Create circular clipping path
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(outputSize / 2, outputSize / 2, outputSize / 2, 0, Math.PI * 2);
+          ctx.clip();
+
+          // Container size (the cropper display size)
+          const containerSize = 200;
+          const scale = imagePosition.scale;
+          const offsetX = imagePosition.x;
+          const offsetY = imagePosition.y;
+
+          // Calculate image dimensions to fill container
+          const imgAspect = img.width / img.height;
+          let fitWidth, fitHeight;
+          
+          if (imgAspect > 1) {
+            // Wider than tall - fit to height
+            fitHeight = containerSize;
+            fitWidth = containerSize * imgAspect;
+          } else {
+            // Taller than wide - fit to width
+            fitWidth = containerSize;
+            fitHeight = containerSize / imgAspect;
+          }
+
+          // Apply user's scale
+          const scaledWidth = fitWidth * scale;
+          const scaledHeight = fitHeight * scale;
+
+          // Calculate where to draw the image
+          // In the cropper, the image is centered and then offset
+          const containerCenter = containerSize / 2;
+          
+          // Calculate the image center position in the container
+          const imageCenterX = containerCenter + offsetX;
+          const imageCenterY = containerCenter + offsetY;
+          
+          // Map to canvas coordinates (scale up from 200px container to outputSize)
+          const scaleFactor = outputSize / containerSize;
+          const canvasImageCenterX = imageCenterX * scaleFactor;
+          const canvasImageCenterY = imageCenterY * scaleFactor;
+          const canvasScaledWidth = scaledWidth * scaleFactor;
+          const canvasScaledHeight = scaledHeight * scaleFactor;
+          
+          // Draw image centered at calculated position
+          ctx.drawImage(
+            img,
+            canvasImageCenterX - canvasScaledWidth / 2,
+            canvasImageCenterY - canvasScaledHeight / 2,
+            canvasScaledWidth,
+            canvasScaledHeight
+          );
+
+          ctx.restore();
+          resolve(canvas.toDataURL('image/png'));
+        } catch (error) {
+          reject(error);
+        }
+      };
+      img.onerror = () => reject(new Error('Failed to load image'));
+      img.src = imageSrc;
+    });
+  };
+
+  // Upload cropped image
+  const handleImageUpload = async () => {
+    if (!selectedImage || !clientId) {
+      alert('Please select an image and ensure client ID is available');
+      return;
+    }
+
+    setUploadingImage(true);
+    setError(null);
+
+    try {
+      // Crop image to circle
+      const croppedImageDataUrl = await cropImageToCircle(selectedImage, 400);
+
+      // Convert data URL to blob
+      const response = await fetch(croppedImageDataUrl);
+      const blob = await response.blob();
+      const file = new File([blob], 'profile-image.png', { type: 'image/png' });
+
+      // Get auth token
+      let idToken: string | null = null;
+      if (typeof window !== 'undefined' && userProfile?.uid) {
+        try {
+          const { auth } = await import('@/lib/firebase-client');
+          if (auth?.currentUser) {
+            idToken = await auth.currentUser.getIdToken();
+          }
+        } catch (authError) {
+          console.warn('Could not get auth token:', authError);
+        }
+      }
+
+      const formData = new FormData();
+      formData.append('file', file);
+      if (clientId) {
+        formData.append('clientId', clientId);
+      }
+
+      const headers: HeadersInit = {};
+      if (idToken) {
+        headers['Authorization'] = `Bearer ${idToken}`;
+      }
+
+      const uploadResponse = await fetch('/api/client-portal/profile-image', {
+        method: 'POST',
+        headers,
+        body: formData,
+      });
+
+      const uploadResult = await uploadResponse.json();
+      if (uploadResult.success) {
+        // Image uploaded successfully, refresh user profile
+        window.location.reload();
+      } else {
+        throw new Error(uploadResult.message || 'Failed to upload image');
+      }
+    } catch (err: any) {
+      console.error('Error uploading image:', err);
+      setError(err.message || 'Failed to upload image. Please try again.');
+    } finally {
+      setUploadingImage(false);
+    }
+  };
 
   const handleSave = async () => {
     setError(null);
@@ -146,14 +392,151 @@ export default function ProfilePersonalizationModal({
             </div>
           )}
 
+          {/* Profile Photo Upload */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-3">
+              Profile Photo
+            </label>
+            
+            {!selectedImage ? (
+              <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileSelect}
+                  accept="image/*"
+                  className="hidden"
+                />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full py-3 px-4 border border-gray-300 rounded-lg bg-white text-gray-700 hover:bg-gray-50 transition-colors font-medium"
+                >
+                  {currentAvatar ? 'Change Photo' : 'Upload Photo'}
+                </button>
+                {currentAvatar && (
+                  <div className="mt-4 flex justify-center">
+                    <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-gray-200">
+                      <img src={currentAvatar} alt="Current profile" className="w-full h-full object-cover" />
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Image Cropper */}
+                <div className="bg-gray-50 rounded-xl p-4 border-2 border-gray-200">
+                  <p className="text-sm font-medium text-gray-700 mb-3">Reposition & Zoom:</p>
+                  <div className="relative mx-auto" style={{ width: '200px', height: '200px' }}>
+                    <div
+                      ref={imageContainerRef}
+                      className="relative w-full h-full rounded-full overflow-hidden border-4 border-gray-300 bg-gray-100"
+                      style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
+                      onMouseDown={handleMouseDown}
+                      onTouchStart={handleTouchStart}
+                    >
+                      {selectedImage && (
+                        <img
+                          src={selectedImage}
+                          alt="Profile preview"
+                          className="absolute select-none"
+                          style={{
+                            top: '50%',
+                            left: '50%',
+                            transform: `translate(-50%, -50%) translate(${imagePosition.x}px, ${imagePosition.y}px) scale(${imagePosition.scale})`,
+                            minWidth: '200px',
+                            minHeight: '200px',
+                            width: 'auto',
+                            height: 'auto',
+                            maxWidth: '400px',
+                            maxHeight: '400px',
+                            objectFit: 'cover',
+                            userSelect: 'none',
+                            pointerEvents: 'none',
+                          }}
+                          draggable={false}
+                        />
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* Zoom Controls */}
+                  <div className="mt-4 flex items-center justify-center space-x-4">
+                    <button
+                      onClick={() => setImagePosition({ ...imagePosition, scale: Math.max(0.5, imagePosition.scale - 0.1) })}
+                      className="px-3 py-1.5 border border-gray-300 rounded-lg bg-white text-gray-700 hover:bg-gray-50 font-medium"
+                    >
+                      −
+                    </button>
+                    <span className="text-sm text-gray-600">Zoom: {Math.round(imagePosition.scale * 100)}%</span>
+                    <button
+                      onClick={() => setImagePosition({ ...imagePosition, scale: Math.min(3, imagePosition.scale + 0.1) })}
+                      className="px-3 py-1.5 border border-gray-300 rounded-lg bg-white text-gray-700 hover:bg-gray-50 font-medium"
+                    >
+                      +
+                    </button>
+                  </div>
+
+                  {/* Reset Position */}
+                  <div className="mt-3 flex items-center justify-center space-x-2">
+                    <button
+                      onClick={() => setImagePosition({ x: 0, y: 0, scale: 1 })}
+                      className="text-xs text-blue-600 hover:text-blue-800 underline"
+                    >
+                      Reset Position
+                    </button>
+                    <span className="text-gray-400">|</span>
+                    <button
+                      onClick={() => {
+                        setSelectedImage(null);
+                        setImagePosition({ x: 0, y: 0, scale: 1 });
+                      }}
+                      className="text-xs text-red-600 hover:text-red-800 underline"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+
+                {/* Upload Button */}
+                <button
+                  onClick={handleImageUpload}
+                  disabled={uploadingImage}
+                  className="w-full py-3 px-4 rounded-lg text-white font-semibold transition-all duration-200 shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{ backgroundColor: colorTheme }}
+                >
+                  {uploadingImage ? 'Uploading...' : 'Save Photo'}
+                </button>
+              </div>
+            )}
+          </div>
+
           {/* Preview */}
           <div className="bg-gray-50 rounded-xl p-4 border-2 border-gray-200">
             <p className="text-sm font-medium text-gray-700 mb-3">Preview:</p>
             <div className="rounded-xl p-4" style={{ backgroundColor: colorTheme }}>
               <div className="flex items-start space-x-3">
                 <div className="w-12 h-12 rounded-full bg-white bg-opacity-20 flex items-center justify-center flex-shrink-0 overflow-hidden">
-                  {userProfile?.avatar ? (
-                    <img src={userProfile.avatar} alt={clientName} className="w-full h-full object-cover rounded-full" />
+                  {(selectedImage || currentAvatar || userProfile?.avatar) ? (
+                    <div className="relative w-full h-full rounded-full overflow-hidden">
+                      {selectedImage ? (
+                        <img
+                          src={selectedImage}
+                          alt={clientName}
+                          className="absolute top-1/2 left-1/2 w-full h-full object-cover"
+                          style={{
+                            transform: `translate(-50%, -50%) translate(${imagePosition.x * 0.3}px, ${imagePosition.y * 0.3}px) scale(${imagePosition.scale * 0.3})`,
+                            minWidth: '100%',
+                            minHeight: '100%',
+                          }}
+                        />
+                      ) : (
+                        <img 
+                          src={currentAvatar || userProfile?.avatar || ''} 
+                          alt={clientName} 
+                          className="w-full h-full object-cover" 
+                        />
+                      )}
+                    </div>
                   ) : (
                     <span className="text-white text-base font-medium">{initials.substring(0, 2)}</span>
                   )}
