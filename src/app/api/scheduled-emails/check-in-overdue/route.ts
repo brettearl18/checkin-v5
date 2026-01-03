@@ -8,7 +8,10 @@ export const dynamic = 'force-dynamic';
 /**
  * POST /api/scheduled-emails/check-in-overdue
  * 
- * Sends reminder emails for check-ins that are 1 day overdue
+ * Sends reminder emails for overdue check-ins
+ * - Only runs at 7:00 AM daily
+ * - Sends one email every 24 hours until check-in is completed
+ * - Checks all overdue check-ins and sends if 24 hours have passed since last email
  */
 export async function POST(request: NextRequest) {
   try {
@@ -27,10 +30,24 @@ export async function POST(request: NextRequest) {
 
     const db = getDb();
     const now = new Date();
-    const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    const twoDaysAgo = new Date(now.getTime() - 48 * 60 * 60 * 1000);
     
-    // Find check-in assignments that are overdue (due date was 1 day ago, between 24-48 hours)
+    // Only run if it's between 7:00 AM and 7:59 AM (allows for some scheduling flexibility)
+    const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
+    if (currentHour !== 7) {
+      return NextResponse.json({
+        success: true,
+        message: `Overdue check-in email job only runs at 7 AM. Current time: ${now.toLocaleTimeString()}. Skipping.`,
+        results: {
+          checked: 0,
+          sent: 0,
+          skipped: 0,
+          errors: [],
+        },
+      });
+    }
+    
+    // Find check-in assignments that are overdue (past due date)
     const assignmentsSnapshot = await db.collection('check_in_assignments')
       .where('status', 'in', ['active', 'pending'])
       .get();
@@ -56,16 +73,26 @@ export async function POST(request: NextRequest) {
       // Check due date
       const dueDate = assignmentData.dueDate?.toDate ? assignmentData.dueDate.toDate() : new Date(assignmentData.dueDate);
       
-      // Check if due date is between 24 and 48 hours ago (1 day overdue)
-      if (dueDate >= oneDayAgo || dueDate < twoDaysAgo) {
+      // Skip if not overdue (due date is in the future or today)
+      if (dueDate > now) {
         results.skipped++;
         continue;
       }
 
-      // Skip if we've already sent an overdue reminder for this assignment
-      if (assignmentData.overdueReminderSent) {
-        results.skipped++;
-        continue;
+      // Check if we should send email (only if 24 hours have passed since last email)
+      const lastEmailSentAt = assignmentData.lastOverdueEmailSentAt?.toDate 
+        ? assignmentData.lastOverdueEmailSentAt.toDate() 
+        : assignmentData.lastOverdueEmailSentAt 
+          ? new Date(assignmentData.lastOverdueEmailSentAt) 
+          : null;
+      
+      if (lastEmailSentAt) {
+        const hoursSinceLastEmail = (now.getTime() - lastEmailSentAt.getTime()) / (1000 * 60 * 60);
+        // Skip if we sent an email in the last 23.5 hours (allowing some buffer)
+        if (hoursSinceLastEmail < 23.5) {
+          results.skipped++;
+          continue;
+        }
       }
 
       // Get client information
@@ -142,10 +169,11 @@ export async function POST(request: NextRequest) {
           html,
         });
 
-        // Mark reminder as sent
+        // Mark reminder as sent (update timestamp for daily tracking)
         await db.collection('check_in_assignments').doc(doc.id).update({
-          overdueReminderSent: true,
-          overdueReminderSentAt: new Date(),
+          overdueReminderSent: true, // Keep for backwards compatibility
+          overdueReminderSentAt: new Date(), // Keep for backwards compatibility
+          lastOverdueEmailSentAt: new Date(), // Track for 24-hour intervals
         });
 
         results.sent++;
