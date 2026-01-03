@@ -286,33 +286,84 @@ export async function POST(request: NextRequest) {
     });
 
     // Convert Timestamps to ISO strings for JSON response
-    const responseData = {
-      id: docRef.id,
-      clientId: measurementData.clientId,
-      date: measurementData.date instanceof Timestamp ? measurementData.date.toDate().toISOString() : (measurementData.date?.toISOString?.() || measurementData.date),
-      bodyWeight: measurementData.bodyWeight,
-      measurements: measurementData.measurements || {},
-      isBaseline: measurementData.isBaseline,
-      createdAt: measurementData.createdAt instanceof Timestamp ? measurementData.createdAt.toDate().toISOString() : (measurementData.createdAt?.toISOString?.() || measurementData.createdAt),
-      updatedAt: measurementData.updatedAt instanceof Timestamp ? measurementData.updatedAt.toDate().toISOString() : (measurementData.updatedAt?.toISOString?.() || measurementData.updatedAt)
+    // Helper function to safely convert Timestamp to ISO string
+    const timestampToISO = (ts: any): string => {
+      try {
+        if (ts instanceof Timestamp) {
+          return ts.toDate().toISOString();
+        }
+        if (ts?.toDate && typeof ts.toDate === 'function') {
+          return ts.toDate().toISOString();
+        }
+        if (ts instanceof Date) {
+          return ts.toISOString();
+        }
+        if (typeof ts === 'string') {
+          return ts;
+        }
+        return new Date().toISOString(); // Fallback
+      } catch (e) {
+        console.error('Error converting timestamp:', e, ts);
+        return new Date().toISOString();
+      }
     };
 
-    return NextResponse.json({
-      success: true,
-      message: 'Measurement saved successfully',
-      data: responseData
-    });
+    try {
+      const responseData = {
+        id: docRef.id,
+        clientId: measurementData.clientId,
+        date: timestampToISO(measurementData.date),
+        bodyWeight: measurementData.bodyWeight,
+        measurements: measurementData.measurements || {},
+        isBaseline: measurementData.isBaseline || false,
+        createdAt: timestampToISO(measurementData.createdAt),
+        updatedAt: timestampToISO(measurementData.updatedAt)
+      };
 
-  } catch (error) {
+      return NextResponse.json({
+        success: true,
+        message: 'Measurement saved successfully',
+        data: responseData
+      });
+    } catch (responseError: any) {
+      console.error('Error creating response:', {
+        error: responseError,
+        message: responseError?.message,
+        measurementData: {
+          id: docRef.id,
+          clientId: measurementData.clientId,
+          hasDate: !!measurementData.date,
+          dateType: typeof measurementData.date,
+          hasCreatedAt: !!measurementData.createdAt,
+          createdAtType: typeof measurementData.createdAt
+        }
+      });
+      throw new Error(`Failed to create response: ${responseError?.message || 'Unknown error'}`);
+    }
+
+  } catch (error: any) {
+    // Log comprehensive error details
     console.error('Error saving measurement:', {
       error,
-      message: error instanceof Error ? error.message : 'Unknown error',
-      stack: error instanceof Error ? error.stack : undefined
+      errorType: typeof error,
+      errorName: error?.name,
+      errorMessage: error?.message,
+      errorCode: error?.code,
+      errorStack: error?.stack,
+      errorDetails: JSON.stringify(error, Object.getOwnPropertyNames(error))
     });
+    
+    // Return detailed error for debugging (in production, sanitize this)
+    const errorMessage = error?.message || 'Unknown error';
+    const errorCode = error?.code || 'UNKNOWN_ERROR';
+    
     return NextResponse.json({
       success: false,
       message: 'Failed to save measurement',
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: errorMessage,
+      errorCode: errorCode,
+      // Only include stack in development
+      ...(process.env.NODE_ENV === 'development' && { stack: error?.stack })
     }, { status: 500 });
   }
 }
