@@ -852,45 +852,59 @@ export default function MeasurementsPage() {
                     </button>
                     <button
                       onClick={async (e) => {
+                        // CRITICAL: Prevent any default behavior or event propagation
                         e.preventDefault();
                         e.stopPropagation();
+                        e.stopImmediatePropagation();
                         
-                        // Prevent double-clicks
+                        // STRICT: Prevent any saves if already saving or button is disabled
                         if (isSavingRef.current || saving) {
+                          console.log('Complete Setup button: Already saving, ignoring click');
                           return;
                         }
                         
-                        // Verify all requirements are met before completing
-                        // Only photos and weight are required - measurements are optional
-                        const hasAllPhotos = beforeImages.front && beforeImages.back && beforeImages.side;
-                        const hasWeight = baselineWeight && baselineWeight.trim() && !isNaN(parseFloat(baselineWeight)) && parseFloat(baselineWeight) > 0;
+                        // STRICT: Set saving flag IMMEDIATELY to prevent duplicate calls
+                        isSavingRef.current = true;
+                        setSaving(true);
                         
-                        if (!hasAllPhotos) {
-                          alert('Please upload all three before photos (front, back, and side) to complete setup.');
-                          return;
-                        }
-                        
-                        if (!hasWeight) {
-                          alert('Please enter your body weight to complete setup.');
-                          return;
-                        }
-                        
-                        // Measurements are optional - no validation needed
-                        
-                        // All requirements met - THIS IS THE ONLY PLACE WE SAVE
                         try {
+                          // Verify all requirements are met before completing
+                          // Only photos and weight are required - measurements are optional
+                          const hasAllPhotos = beforeImages.front && beforeImages.back && beforeImages.side;
+                          const hasWeight = baselineWeight && baselineWeight.trim() && !isNaN(parseFloat(baselineWeight)) && parseFloat(baselineWeight) > 0;
+                          
+                          if (!hasAllPhotos) {
+                            alert('Please upload all three before photos (front, back, and side) to complete setup.');
+                            return;
+                          }
+                          
+                          if (!hasWeight) {
+                            alert('Please enter your body weight to complete setup.');
+                            return;
+                          }
+                          
+                          // Measurements are optional - no validation needed
+                          
+                          // THIS IS THE ONLY PLACE WE SAVE - Explicit button click only
+                          console.log('Complete Setup button: Starting save (user-initiated only)');
                           const saved = await handleBaselineSave();
+                          
                           if (saved) {
                             setIsBaselineSetup(false);
                             alert('Baseline setup completed! You can now track your progress over time.');
                           }
                         } catch (error) {
-                          console.error('Failed to save baseline:', error);
+                          console.error('Complete Setup button: Failed to save baseline:', error);
                           alert('Failed to save baseline. Please try again.');
+                        } finally {
+                          // Always reset saving state
+                          isSavingRef.current = false;
+                          setSaving(false);
                         }
                       }}
                       disabled={saving}
                       type="button"
+                      autoComplete="off"
                       className="px-6 py-3 lg:py-2.5 rounded-xl lg:rounded-lg text-white font-semibold transition-all duration-200 shadow-sm hover:shadow-md min-h-[48px] lg:min-h-[44px] flex items-center justify-center disabled:opacity-50"
                       style={{ backgroundColor: '#22c55e' }}
                       onMouseEnter={(e) => {
