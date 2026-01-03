@@ -141,52 +141,56 @@ function ProgressImagesPreview({ clientEmail }: { clientEmail: string }) {
     <div className="p-5">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {images.map((image) => (
-          <div key={image.id} className="group relative aspect-square rounded-xl overflow-hidden border-2 border-gray-200/60 hover:border-pink-400/80 transition-all duration-300 hover:shadow-lg hover:-translate-y-1 bg-white/50 backdrop-blur-sm">
-            <img
-              src={image.imageUrl}
-              alt={image.caption || image.imageType}
-              className="w-full h-full object-cover"
-              onError={(e) => {
-                (e.target as HTMLImageElement).src = `data:image/svg+xml,${encodeURIComponent(`
-                  <svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
-                    <rect width="200" height="200" fill="#f3f4f6"/>
-                    <text x="50%" y="50%" font-family="Arial" font-size="14" fill="#9ca3af" text-anchor="middle" dy=".3em">Image</text>
-                  </svg>
-                `)}`;
+          <div key={image.id} className="flex flex-col">
+            <div className="group relative aspect-square rounded-xl overflow-hidden border-2 border-gray-200/60 hover:border-pink-400/80 transition-all duration-300 hover:shadow-lg hover:-translate-y-1 bg-white/50 backdrop-blur-sm cursor-pointer"
+              onClick={(e) => {
+                window.location.href = `/client-portal/progress-images?scrollTo=${image.id}`;
               }}
-            />
-            <div className="absolute top-1 left-1 flex flex-col gap-0.5">
-              <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
-                image.imageType === 'profile' ? 'bg-blue-100 text-blue-800' :
-                image.imageType === 'before' ? 'bg-orange-100 text-orange-800' :
-                image.imageType === 'after' ? 'bg-green-100 text-green-800' :
-                'bg-purple-100 text-purple-800'
-              }`}>
-                {image.imageType === 'profile' ? 'Profile' :
-                 image.imageType === 'before' ? 'Before' :
-                 image.imageType === 'after' ? 'After' :
-                 'Progress'}
-              </span>
-              {image.orientation && (
+            >
+              <img
+                src={image.imageUrl}
+                alt={image.caption || image.imageType}
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = `data:image/svg+xml,${encodeURIComponent(`
+                    <svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
+                      <rect width="200" height="200" fill="#f3f4f6"/>
+                      <text x="50%" y="50%" font-family="Arial" font-size="14" fill="#9ca3af" text-anchor="middle" dy=".3em">Image</text>
+                    </svg>
+                  `)}`;
+                }}
+              />
+              <div className="absolute top-1 left-1 flex flex-col gap-0.5">
                 <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
-                  image.orientation === 'front' ? 'bg-pink-100 text-pink-800' :
-                  image.orientation === 'back' ? 'bg-indigo-100 text-indigo-800' :
-                  'bg-teal-100 text-teal-800'
+                  image.imageType === 'profile' ? 'bg-blue-100 text-blue-800' :
+                  image.imageType === 'before' ? 'bg-orange-100 text-orange-800' :
+                  image.imageType === 'after' ? 'bg-green-100 text-green-800' :
+                  'bg-purple-100 text-purple-800'
                 }`}>
-                  {image.orientation.charAt(0).toUpperCase() + image.orientation.slice(1)}
+                  {image.imageType === 'profile' ? 'Profile' :
+                   image.imageType === 'before' ? 'Before' :
+                   image.imageType === 'after' ? 'After' :
+                   'Progress'}
                 </span>
-              )}
-            </div>
-            <div className="absolute bottom-2 right-2 z-10">
-              <div className="bg-black/95 backdrop-blur-md rounded-lg px-4 py-2 shadow-xl border-2 border-white/20">
-                <p className="text-white text-base font-bold leading-tight whitespace-nowrap">
-                  {new Date(image.uploadedAt).toLocaleDateString('en-US', { 
-                    month: 'short', 
-                    day: 'numeric',
-                    year: 'numeric'
-                  })}
-                </p>
+                {image.orientation && (
+                  <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
+                    image.orientation === 'front' ? 'bg-pink-100 text-pink-800' :
+                    image.orientation === 'back' ? 'bg-indigo-100 text-indigo-800' :
+                    'bg-teal-100 text-teal-800'
+                  }`}>
+                    {image.orientation.charAt(0).toUpperCase() + image.orientation.slice(1)}
+                  </span>
+                )}
               </div>
+            </div>
+            <div className="mt-2 text-center">
+              <p className="text-gray-700 text-sm font-semibold">
+                {new Date(image.uploadedAt).toLocaleDateString('en-US', { 
+                  month: 'short', 
+                  day: 'numeric',
+                  year: 'numeric'
+                })}
+              </p>
             </div>
           </div>
         ))}
