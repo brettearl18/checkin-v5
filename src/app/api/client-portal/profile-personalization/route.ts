@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/api-auth';
-import { getDb } from '@/lib/firebase-admin';
+import { getDb } from '@/lib/firebase-server';
 import { logInfo, logSafeError } from '@/lib/logger';
 
 export async function GET(request: NextRequest) {
@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
     const authResult = await requireAuth(request);
     const { user } = authResult;
 
-    const db = await getDb();
+    const db = getDb();
     
     // Get client document
     let clientDoc = await db.collection('clients').doc(user.uid).get();
@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    const db = await getDb();
+    const db = getDb();
     
     // Get client document
     let clientRef = db.collection('clients').doc(user.uid);
