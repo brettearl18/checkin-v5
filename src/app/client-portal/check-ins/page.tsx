@@ -938,7 +938,7 @@ export default function ClientCheckInsPage() {
                       </h2>
                       <p className="text-gray-600 text-sm lg:text-sm mt-1 lg:mt-1 leading-relaxed">
                         {filter === 'toDo' && 'Complete your check-ins that need attention'}
-                        {filter === 'scheduled' && filteredCheckins.length > 0 ? `Next check-in scheduled${filteredCheckins.length > 1 ? ` (${filteredCheckins.length - 1} more upcoming)` : ''}` : 'No upcoming check-ins scheduled'}
+                        {filter === 'scheduled' && (filteredCheckins.length > 0 || scheduledCheckins.length > 0) ? `Next check-in scheduled${scheduledCheckins.length > 1 ? ` (${scheduledCheckins.length - 1} more upcoming)` : ''}` : 'No upcoming check-ins scheduled'}
                         {filter === 'completed' && 'Your completed check-ins and results'}
                         {filter !== 'scheduled' && filter !== 'completed' && filteredCheckins.length > 0 && ` • ${filteredCheckins.length} check-in${filteredCheckins.length !== 1 ? 's' : ''}`}
                       </p>
