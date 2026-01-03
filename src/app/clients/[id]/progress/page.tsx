@@ -254,9 +254,23 @@ export default function ClientProgressPage() {
     });
 
     // Create progress data for each question
-    const progress: QuestionProgress[] = Array.from(questionMap.values()).map(question => {
-      const metadata = questionMetadata.get(question.questionId)!;
-      const weeks = sortedResponses.map((response, index) => {
+    // Filter out text and textarea questions - they are not measurable/scorable
+    const progress: QuestionProgress[] = Array.from(questionMap.values())
+      .filter(question => {
+        // Check if this question type is scorable by looking at responses
+        const sampleResponse = sortedResponses
+          .flatMap(r => r.responses || [])
+          .find((r: QuestionResponse) => r.questionId === question.questionId);
+        
+        if (!sampleResponse) return false;
+        
+        const questionType = sampleResponse.type || 'text';
+        // Exclude text and textarea questions - they are not measurable
+        return questionType !== 'text' && questionType !== 'textarea';
+      })
+      .map(question => {
+        const metadata = questionMetadata.get(question.questionId)!;
+        const weeks = sortedResponses.map((response, index) => {
         // Find this question's response in this check-in
         const qResponse = response.responses?.find(
           (r: QuestionResponse) => r.questionId === question.questionId

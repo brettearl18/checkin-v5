@@ -334,73 +334,101 @@ export default function ClientProgressPage() {
     console.log('Total responses to process:', sortedResponses.length);
 
     // Create progress data for each question
-    const progress: QuestionProgress[] = Array.from(questionMap.values()).map(question => {
-      const weeks = sortedResponses.map((response, index) => {
-        // Find this question's response in this check-in
-        // Try multiple matching strategies - match by any of the stored keys
-        const qResponse = response.responses?.find(
-          (r: QuestionResponse) => {
+    // Filter out text and textarea questions - they are not measurable/scorable
+    const scorableQuestionTypes = ['scale', 'rating', 'number', 'multiple_choice', 'select', 'boolean', 'multiselect'];
+    
+    const progress: QuestionProgress[] = Array.from(questionMap.values())
+      .filter(question => {
+        // Check if this question type is scorable by looking at responses
+        // We need to find at least one response to check its type
+        const sampleResponse = sortedResponses
+          .flatMap(r => r.responses || [])
+          .find((r: QuestionResponse) => {
             const rQuestionId = r.questionId || '';
             const rQuestionText = r.questionText || r.question || '';
-            
-            // Match by questionId
-            if (question.questionId && rQuestionId && rQuestionId === question.questionId) {
-              return true;
+            return (question.questionId && rQuestionId === question.questionId) ||
+                   (question.questionText && rQuestionText === question.questionText);
+          });
+        
+        if (!sampleResponse) return false;
+        
+        const questionType = sampleResponse.type || 'text';
+        // Exclude text and textarea questions - they are not measurable
+        return questionType !== 'text' && questionType !== 'textarea';
+      })
+      .map(question => {
+        const weeks = sortedResponses.map((response, index) => {
+          // Find this question's response in this check-in
+          // Try multiple matching strategies - match by any of the stored keys
+          const qResponse = response.responses?.find(
+            (r: QuestionResponse) => {
+              const rQuestionId = r.questionId || '';
+              const rQuestionText = r.questionText || r.question || '';
+              
+              // Match by questionId
+              if (question.questionId && rQuestionId && rQuestionId === question.questionId) {
+                return true;
+              }
+              
+              // Match by questionText
+              if (question.questionText && rQuestionText && rQuestionText === question.questionText) {
+                return true;
+              }
+              
+              // Match by any of the stored keys
+              if (question.allKeys && question.allKeys.some(key => 
+                (key && rQuestionId === key) || (key && rQuestionText === key)
+              )) {
+                return true;
+              }
+              
+              return false;
             }
-            
-            // Match by questionText
-            if (question.questionText && rQuestionText && rQuestionText === question.questionText) {
-              return true;
-            }
-            
-            // Match by any of the stored keys
-            if (question.allKeys && question.allKeys.some(key => 
-              (key && rQuestionId === key) || (key && rQuestionText === key)
-            )) {
-              return true;
-            }
-            
-            return false;
+          );
+
+          if (!qResponse) {
+            return null;
           }
-        );
 
-        if (!qResponse) {
-          return null;
-        }
+          // Skip if this is a text or textarea question (shouldn't happen due to filter, but double-check)
+          const questionType = qResponse.type || 'text';
+          if (questionType === 'text' || questionType === 'textarea') {
+            return null;
+          }
 
-        // Get score (0-10 scale typically) - check multiple possible fields
-        const score = qResponse.score !== undefined ? qResponse.score : 
-                     (qResponse.weightedScore !== undefined ? qResponse.weightedScore / (qResponse.weight || 1) : 0);
-        
-        // Determine status based on score
-        // Green: 7-10, Orange: 4-6, Red: 0-3
-        let status: 'red' | 'orange' | 'green';
-        if (score >= 7) {
-          status = 'green';
-        } else if (score >= 4) {
-          status = 'orange';
-        } else {
-          status = 'red';
-        }
+          // Get score (0-10 scale typically) - check multiple possible fields
+          const score = qResponse.score !== undefined ? qResponse.score : 
+                       (qResponse.weightedScore !== undefined ? qResponse.weightedScore / (qResponse.weight || 1) : 0);
+          
+          // Determine status based on score
+          // Green: 7-10, Orange: 4-6, Red: 0-3
+          let status: 'red' | 'orange' | 'green';
+          if (score >= 7) {
+            status = 'green';
+          } else if (score >= 4) {
+            status = 'orange';
+          } else {
+            status = 'red';
+          }
 
-        const responseDate = new Date(response.submittedAt);
-        
+          const responseDate = new Date(response.submittedAt);
+          
+          return {
+            week: index + 1,
+            date: responseDate.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+            score: score,
+            status: status,
+            answer: qResponse.answer,
+            type: questionType
+          };
+        }).filter(w => w !== null) as { week: number; date: string; score: number; status: 'red' | 'orange' | 'green' }[];
+
         return {
-          week: index + 1,
-          date: responseDate.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
-          score: score,
-          status: status,
-          answer: qResponse.answer,
-          type: qResponse.type || 'text'
+          questionId: question.questionId,
+          questionText: question.questionText,
+          weeks: weeks
         };
-      }).filter(w => w !== null) as { week: number; date: string; score: number; status: 'red' | 'orange' | 'green' }[];
-
-      return {
-        questionId: question.questionId,
-        questionText: question.questionText,
-        weeks: weeks
-      };
-    });
+      });
 
     setQuestionProgress(progress);
   };
