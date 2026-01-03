@@ -225,13 +225,13 @@ export default function MeasurementsPage() {
   };
 
   const handleBaselineSave = async (): Promise<boolean> => {
-    if (!clientId) return false;
-    
-    // Prevent double submission using ref (more reliable than state)
-    if (isSavingRef.current) {
-      console.log('Already saving baseline, ignoring duplicate call');
+    if (!clientId) {
+      console.error('handleBaselineSave: No clientId');
       return false;
     }
+    
+    // NOTE: Saving flag is managed by button handler to prevent duplicate clicks
+    // This function is ONLY called from Complete Setup button after validation
     
     // Build measurement data - only include fields that have values
     const measurementData: any = {
