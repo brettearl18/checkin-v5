@@ -15,17 +15,14 @@ export async function POST(request: NextRequest) {
   try {
     // Authenticate user
     const authResult = await requireAuth(request);
-    if (!authResult.success) {
-      return NextResponse.json(
-        { success: false, message: 'Authentication required' },
-        { status: 401 }
-      );
+    if (authResult instanceof NextResponse) {
+      return authResult; // Already an error response
     }
 
-    const { uid, userProfile } = authResult;
+    const { user } = authResult;
 
     // Verify user is a client
-    if (userProfile?.role !== 'client') {
+    if (!user.isClient) {
       return NextResponse.json(
         { success: false, message: 'Only clients can submit issue reports' },
         { status: 403 }
@@ -36,7 +33,7 @@ export async function POST(request: NextRequest) {
 
     // Get client information
     const clientsSnapshot = await db.collection('clients')
-      .where('authUid', '==', uid)
+      .where('authUid', '==', user.uid)
       .limit(1)
       .get();
 
@@ -51,7 +48,7 @@ export async function POST(request: NextRequest) {
     const clientData = clientDoc.data();
     const clientId = clientDoc.id;
     const clientName = `${clientData.firstName || ''} ${clientData.lastName || ''}`.trim() || 'Unknown Client';
-    const clientEmail = clientData.email || userProfile?.email || 'Unknown Email';
+    const clientEmail = clientData.email || user.email || 'Unknown Email';
 
     // Parse request body
     const body = await request.json();

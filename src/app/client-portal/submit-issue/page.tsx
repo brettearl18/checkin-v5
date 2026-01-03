@@ -54,11 +54,30 @@ export default function SubmitIssuePage() {
         return;
       }
 
+      // Get Firebase ID token for authentication
+      let idToken: string | null = null;
+      if (typeof window !== 'undefined' && userProfile?.uid) {
+        try {
+          const { auth } = await import('@/lib/firebase-client');
+          if (auth?.currentUser) {
+            idToken = await auth.currentUser.getIdToken();
+          }
+        } catch (authError) {
+          console.warn('Could not get auth token:', authError);
+        }
+      }
+
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      };
+
+      if (idToken) {
+        headers['Authorization'] = `Bearer ${idToken}`;
+      }
+
       const response = await fetch('/api/client-portal/submit-issue', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({
           ...formData,
           browserInfo,
