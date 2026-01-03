@@ -3949,14 +3949,41 @@ export default function ClientProfilePage() {
                                     const weekA = a.recurringWeek || 0;
                                     const weekB = b.recurringWeek || 0;
                                     return weekA - weekB;
-                                  }).map((checkIn, index) => (
-                                    <div key={checkIn.id || `completed-${index}`} className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-6 border border-green-200 hover:shadow-lg transition-all duration-200">
+                                  }).map((checkIn, index) => {
+                                    // Calculate traffic light status based on score and thresholds
+                                    const score = checkIn.score || 0;
+                                    const trafficLightStatus = getTrafficLightStatus(score, scoringThresholds);
+                                    const trafficLightColor = getTrafficLightColor(trafficLightStatus);
+                                    const trafficLightIcon = getTrafficLightIcon(trafficLightStatus);
+                                    
+                                    // Determine background and border colors based on traffic light
+                                    const bgGradient = trafficLightStatus === 'green' 
+                                      ? 'from-green-50 to-emerald-50' 
+                                      : trafficLightStatus === 'orange'
+                                      ? 'from-orange-50 to-amber-50'
+                                      : 'from-red-50 to-rose-50';
+                                    const borderColor = trafficLightStatus === 'green'
+                                      ? 'border-green-200'
+                                      : trafficLightStatus === 'orange'
+                                      ? 'border-orange-200'
+                                      : 'border-red-200';
+                                    const iconBgGradient = trafficLightStatus === 'green'
+                                      ? 'from-green-500 to-emerald-600'
+                                      : trafficLightStatus === 'orange'
+                                      ? 'from-orange-500 to-amber-600'
+                                      : 'from-red-500 to-rose-600';
+                                    const scoreBadgeBg = trafficLightStatus === 'green'
+                                      ? 'bg-green-100 text-green-800'
+                                      : trafficLightStatus === 'orange'
+                                      ? 'bg-orange-100 text-orange-800'
+                                      : 'bg-red-100 text-red-800';
+                                    
+                                    return (
+                                    <div key={checkIn.id || `completed-${index}`} className={`bg-gradient-to-r ${bgGradient} rounded-xl p-6 border ${borderColor} hover:shadow-lg transition-all duration-200`}>
                                       <div className="flex items-center justify-between mb-4">
                                         <div className="flex items-center space-x-4">
-                                          <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center shadow-lg">
-                                            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                            </svg>
+                                          <div className={`w-12 h-12 bg-gradient-to-br ${iconBgGradient} rounded-xl flex items-center justify-center shadow-lg`}>
+                                            <span className="text-2xl">{trafficLightIcon}</span>
                                           </div>
                                           <div>
                                             <h4 className="text-lg font-bold text-gray-900">{checkIn.formTitle}</h4>
@@ -3964,7 +3991,7 @@ export default function ClientProfilePage() {
                                           </div>
                                         </div>
                                         <div className="text-right">
-                                          <div className="px-4 py-2 text-sm font-medium rounded-full bg-green-100 text-green-800">
+                                          <div className={`px-4 py-2 text-sm font-medium rounded-full ${scoreBadgeBg}`}>
                                             {checkIn.score}%
                                           </div>
                                         </div>
