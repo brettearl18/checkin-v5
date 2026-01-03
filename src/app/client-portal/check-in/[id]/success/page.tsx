@@ -259,14 +259,14 @@ export default function CheckInSuccessPage() {
           break;
           
         case 'text':
-          questionScore = 5; // Neutral score for text
-          break;
+          // Text questions are NOT scored - skip them entirely
+          // They are not measurable and should not appear in score breakdown
+          return; // Skip this question - don't add to scores array
           
         case 'textarea':
-          // Textarea questions are not scored (questionWeight should be 0)
+          // Textarea questions are not scored - skip them entirely
           // They are for free-form text responses only
-          questionScore = 0;
-          break;
+          return; // Skip this question - don't add to scores array
           
         default:
           questionScore = 5;
@@ -275,6 +275,7 @@ export default function CheckInSuccessPage() {
       
       const weightedScore = questionScore * questionWeight;
       
+      // Only add scorable questions to the scores array
       scores.push({
         questionId: question.id,
         question: response.question,

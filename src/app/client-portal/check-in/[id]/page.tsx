@@ -504,12 +504,9 @@ export default function CheckInCompletionPage() {
             break;
             
           case 'text':
-            // For text questions, give a neutral score
-            const textValue = String(response.answer).trim();
-            if (textValue.length > 0) {
-              questionScore = 5; // Neutral score for text answers
-            }
-            break;
+            // Text questions are NOT scored - they are not measurable
+            // Return early with 0 weight so they don't count in totals
+            return { ...response, score: 0, weight: 0, questionText: question.text || question.question || '', questionId: question.id || response.questionId || '' };
             
           case 'textarea':
             // All textarea questions are free-form text responses and are NOT scored
@@ -525,6 +522,7 @@ export default function CheckInCompletionPage() {
         }
         
         // Add weighted score (questionScore * questionWeight)
+        // Only count scorable questions (text and textarea are excluded above)
         totalWeightedScore += questionScore * questionWeight;
         totalWeight += questionWeight;
         answeredCount++;
