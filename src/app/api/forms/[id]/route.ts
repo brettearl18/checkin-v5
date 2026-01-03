@@ -156,6 +156,14 @@ export async function PUT(
       updateData.isActive = isActive;
     }
 
+    // Save thresholds if provided
+    if (body.thresholds?.redMax !== undefined && body.thresholds?.orangeMax !== undefined) {
+      updateData.thresholds = {
+        redMax: body.thresholds.redMax,
+        orangeMax: body.thresholds.orangeMax
+      };
+    }
+
     console.log(`Updating form ${formId} with ${(questionIds || []).length} questions`);
 
     await db.collection('forms').doc(formId).update(updateData);

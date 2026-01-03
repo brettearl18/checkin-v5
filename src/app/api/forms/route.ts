@@ -112,7 +112,7 @@ export async function POST(request: NextRequest) {
     const formId = `form-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     
     // Create form object
-    const form = {
+    const form: any = {
       id: formId,
       title,
       description,
@@ -125,6 +125,14 @@ export async function POST(request: NextRequest) {
       createdAt: new Date(),
       updatedAt: new Date()
     };
+
+    // Save thresholds if provided
+    if (formData.thresholds?.redMax !== undefined && formData.thresholds?.orangeMax !== undefined) {
+      form.thresholds = {
+        redMax: formData.thresholds.redMax,
+        orangeMax: formData.thresholds.orangeMax
+      };
+    }
     
     // Save to Firestore
     await db.collection('forms').doc(formId).set(form);

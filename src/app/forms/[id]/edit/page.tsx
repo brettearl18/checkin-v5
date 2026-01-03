@@ -230,6 +230,16 @@ export default function EditFormPage() {
               isActive: formDataObj.isActive !== undefined ? formDataObj.isActive : true,
               estimatedTime: formDataObj.estimatedTime || 5
             });
+            // Load thresholds from form if they exist, otherwise use defaults
+            if (formDataObj.thresholds?.redMax !== undefined && formDataObj.thresholds?.orangeMax !== undefined) {
+              setPreviewThresholds({
+                redMax: formDataObj.thresholds.redMax,
+                orangeMax: formDataObj.thresholds.orangeMax
+              });
+            } else {
+              // Default to lifestyle thresholds
+              setPreviewThresholds({ redMax: 33, orangeMax: 80 });
+            }
             // Set selected questions in the order they appear in the form
             // Handle both cases: questions as IDs (strings) or as objects
             const questionIds = (formDataObj.questions || []).map((q: any) => 
@@ -328,7 +338,11 @@ export default function EditFormPage() {
             title: formData.title.trim(),
             description: formData.description.trim(),
             questionIds: newOrder, // Save the new order
-            coachId: userProfile?.uid
+            coachId: userProfile?.uid,
+            thresholds: {
+              redMax: previewThresholds.redMax,
+              orangeMax: previewThresholds.orangeMax
+            }
           };
 
           const response = await fetch(`/api/forms/${formId}`, {
@@ -391,7 +405,11 @@ export default function EditFormPage() {
         title: formData.title.trim(),
         description: formData.description.trim(),
         questionIds: selectedQuestions,
-        coachId: userProfile?.uid
+        coachId: userProfile?.uid,
+        thresholds: {
+          redMax: previewThresholds.redMax,
+          orangeMax: previewThresholds.orangeMax
+        }
       };
 
       console.log('Saving form with questionIds:', selectedQuestions.length, 'questions');

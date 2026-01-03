@@ -564,7 +564,11 @@ function CreateFormPageContent() {
         description: formData.description.trim(),
         questionIds: selectedQuestions,
         totalQuestions: selectedQuestions.length,
-        coachId: userProfile?.uid
+        coachId: userProfile?.uid,
+        thresholds: {
+          redMax: previewThresholds.redMax,
+          orangeMax: previewThresholds.orangeMax
+        }
       };
 
       const formResponse = await fetch('/api/forms', {
@@ -603,6 +607,10 @@ function CreateFormPageContent() {
         ...formData,
         title: formData.title.trim(),
         description: formData.description.trim(),
+        thresholds: {
+          redMax: previewThresholds.redMax,
+          orangeMax: previewThresholds.orangeMax
+        },
         questionIds: selectedQuestions,
         totalQuestions: selectedQuestions.length,
         coachId: userProfile?.uid
