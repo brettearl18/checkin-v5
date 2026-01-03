@@ -811,9 +811,15 @@ export default function ProgressImagesPage() {
                                 }}
                               />
                               <div className="absolute bottom-2 right-2">
-                                <span className="px-2 py-1 rounded-lg text-[10px] lg:text-xs font-medium bg-black/70 backdrop-blur-sm text-white">
-                                  {formatTimeAgo(image.uploadedAt)}
-                                </span>
+                                <div className="bg-black/85 backdrop-blur-sm rounded-lg px-3 py-1.5 shadow-lg">
+                                  <p className="text-white text-xs lg:text-sm font-semibold leading-tight">
+                                    {new Date(image.uploadedAt).toLocaleDateString('en-US', { 
+                                      month: 'short', 
+                                      day: 'numeric',
+                                      year: 'numeric'
+                                    })}
+                                  </p>
+                                </div>
                               </div>
                               
                               {/* Delete Button - Shows on Hover */}
