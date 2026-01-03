@@ -843,9 +843,9 @@ export default function MeasurementsPage() {
                         }
                         
                         // Verify all requirements are met before completing
+                        // Only photos and weight are required - measurements are optional
                         const hasAllPhotos = beforeImages.front && beforeImages.back && beforeImages.side;
                         const hasWeight = baselineWeight && baselineWeight.trim() && !isNaN(parseFloat(baselineWeight)) && parseFloat(baselineWeight) > 0;
-                        const hasMeasurements = Object.values(baselineMeasurements).some(val => val && val.trim() && !isNaN(parseFloat(val)) && parseFloat(val) > 0);
                         
                         if (!hasAllPhotos) {
                           alert('Please upload all three before photos (front, back, and side) to complete setup.');
@@ -857,10 +857,7 @@ export default function MeasurementsPage() {
                           return;
                         }
                         
-                        if (!hasMeasurements) {
-                          alert('Please enter at least one body measurement to complete setup.');
-                          return;
-                        }
+                        // Measurements are optional - no validation needed
                         
                         // All requirements met - THIS IS THE ONLY PLACE WE SAVE
                         try {
