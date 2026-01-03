@@ -1041,7 +1041,7 @@ export default function ClientCheckInsPage() {
                                       </div>
                                       {/* Show window details for scheduled check-ins */}
                                       {filter === 'scheduled' && checkInWindow?.enabled && checkInWindow?.startDay && checkInWindow?.startTime && (
-                                        <div className="text-xs lg:text-xs text-gray-700 font-medium leading-relaxed">
+                                        <div className="text-xs lg:text-xs text-gray-700 font-medium leading-relaxed mt-1">
                                           {(() => {
                                             const windowStartDate = getCheckInWindowStartDate(checkin.dueDate, checkInWindow);
                                             const startDayName = checkInWindow.startDay.charAt(0).toUpperCase() + checkInWindow.startDay.slice(1);
@@ -1049,7 +1049,21 @@ export default function ClientCheckInsPage() {
                                             const period = hours >= 12 ? 'PM' : 'AM';
                                             const displayHours = hours > 12 ? hours - 12 : hours === 0 ? 12 : hours;
                                             const displayMinutes = minutes.toString().padStart(2, '0');
-                                            return `Window opens ${startDayName} ${formatDate(windowStartDate.toISOString())} at ${displayHours}:${displayMinutes} ${period}`;
+                                            
+                                            // Check if window has already opened
+                                            const now = new Date();
+                                            if (windowStartDate <= now) {
+                                              // Window should be open, check actual window status
+                                              if (windowStatus.isOpen) {
+                                                return `✓ Check-in window is open now`;
+                                              } else if (windowStatus.nextOpenTime) {
+                                                return `Window opens: ${windowStatus.nextOpenTime.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })} at ${windowStatus.nextOpenTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
+                                              } else {
+                                                return `Window opens ${startDayName} ${formatDate(windowStartDate.toISOString())} at ${displayHours}:${displayMinutes} ${period}`;
+                                              }
+                                            } else {
+                                              return `Window opens ${startDayName} ${formatDate(windowStartDate.toISOString())} at ${displayHours}:${displayMinutes} ${period}`;
+                                            }
                                           })()}
                                         </div>
                                       )}
