@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase-server';
+import { Timestamp } from 'firebase-admin/firestore';
 
 export const dynamic = 'force-dynamic';
 /**
@@ -134,6 +135,7 @@ export async function POST(request: NextRequest) {
     }
     
     const measurementDate = date ? new Date(date) : new Date();
+    const measurementTimestamp = Timestamp.fromDate(measurementDate);
     
     // Special handling for baseline entries: Check if baseline already exists
     // A client should only have ONE baseline entry, so update existing if found
@@ -151,9 +153,9 @@ export async function POST(request: NextRequest) {
           const existingData = existingDoc.data();
           
           const updateData: any = {
-            date: measurementDate,
+            date: measurementTimestamp,
             measurements: measurements || {},
-            updatedAt: new Date()
+            updatedAt: Timestamp.now()
           };
           
           if (bodyWeight !== undefined) {
@@ -199,7 +201,7 @@ export async function POST(request: NextRequest) {
     // Prevent duplicate submissions: Check for recent measurements with same data
     // within the last 5 seconds (to catch rapid duplicate submissions for non-baseline entries)
     try {
-      const fiveSecondsAgo = new Date(Date.now() - 5000);
+      const fiveSecondsAgo = Timestamp.fromDate(new Date(Date.now() - 5000));
       const recentMeasurements = await db.collection('client_measurements')
         .where('clientId', '==', clientId)
         .where('createdAt', '>=', fiveSecondsAgo)
@@ -236,10 +238,10 @@ export async function POST(request: NextRequest) {
     
     const measurementData: any = {
       clientId,
-      date: measurementDate,
+      date: measurementTimestamp,
       measurements: measurements || {},
-      createdAt: new Date(),
-      updatedAt: new Date()
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now()
     };
 
     if (bodyWeight !== undefined) {
@@ -251,7 +253,24 @@ export async function POST(request: NextRequest) {
       measurementData.isBaseline = Boolean(isBaseline);
     }
 
-    const docRef = await db.collection('client_measurements').add(measurementData);
+    // Save to Firestore with proper error handling
+    let docRef;
+    try {
+      docRef = await db.collection('client_measurements').add(measurementData);
+    } catch (addError: any) {
+      console.error('Firestore add error:', {
+        error: addError,
+        message: addError?.message,
+        code: addError?.code,
+        measurementData: {
+          clientId,
+          hasBodyWeight: bodyWeight !== undefined,
+          hasMeasurements: measurements && Object.keys(measurements).length > 0,
+          isBaseline
+        }
+      });
+      throw new Error(`Failed to save to database: ${addError?.message || 'Unknown error'}`);
+    }
 
     // Track goal progress after measurement save (async, don't wait)
     fetch('/api/goals/track-progress', {
@@ -330,11 +349,11 @@ export async function PUT(request: NextRequest) {
     }
     
     const updateData: any = {
-      updatedAt: new Date()
+      updatedAt: Timestamp.now()
     };
 
     if (date) {
-      updateData.date = new Date(date);
+      updateData.date = Timestamp.fromDate(new Date(date));
     }
 
     if (bodyWeight !== undefined) {
