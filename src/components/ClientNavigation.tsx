@@ -256,16 +256,58 @@ export default function ClientNavigation() {
   // Handle profile image upload
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !clientId) return;
+    if (!file) {
+      alert('Please select a file to upload');
+      return;
+    }
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file');
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Image size must be less than 5MB');
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      return;
+    }
 
     setUploading(true);
     try {
+      // Get auth token
+      let idToken: string | null = null;
+      if (typeof window !== 'undefined' && userProfile?.uid) {
+        try {
+          const { auth } = await import('@/lib/firebase-client');
+          if (auth?.currentUser) {
+            idToken = await auth.currentUser.getIdToken();
+          }
+        } catch (authError) {
+          console.warn('Could not get auth token:', authError);
+        }
+      }
+
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('clientId', clientId);
+      if (clientId) {
+        formData.append('clientId', clientId);
+      }
+
+      const headers: HeadersInit = {};
+      if (idToken) {
+        headers['Authorization'] = `Bearer ${idToken}`;
+      }
 
       const response = await fetch('/api/client-portal/profile-image', {
         method: 'POST',
+        headers,
         body: formData,
       });
 
@@ -274,7 +316,7 @@ export default function ClientNavigation() {
         // Reload the page to refresh the profile image
         window.location.reload();
       } else {
-        alert(`Failed to upload image: ${result.message}`);
+        alert(`Failed to upload image: ${result.message || 'Unknown error'}`);
       }
     } catch (error) {
       console.error('Error uploading profile image:', error);

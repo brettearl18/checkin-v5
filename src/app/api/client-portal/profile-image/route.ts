@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase-server';
 import { getStorageInstance } from '@/lib/firebase-server';
+import { requireAuth } from '@/lib/api-auth';
+import { logInfo, logSafeError } from '@/lib/logger';
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic';
@@ -10,19 +12,68 @@ export const dynamic = 'force-dynamic';
  * Upload profile image for a client
  */
 export async function POST(request: NextRequest) {
-  const db = getDb();
-  const storage = getStorageInstance();
-  
   try {
+    // Authenticate user
+    const authResult = await requireAuth(request);
+    if (authResult instanceof NextResponse) {
+      return authResult; // Already an error response
+    }
+
+    const { user } = authResult;
+
+    // Verify user is a client
+    if (!user.isClient) {
+      return NextResponse.json(
+        { success: false, message: 'Only clients can upload profile images' },
+        { status: 403 }
+      );
+    }
+
+    const db = getDb();
+    const storage = getStorageInstance();
+    
     const formData = await request.formData();
     const file = formData.get('file') as File;
-    const clientId = formData.get('clientId') as string;
+    const clientIdFromForm = formData.get('clientId') as string;
 
-    if (!file || !clientId) {
+    if (!file) {
       return NextResponse.json({
         success: false,
-        message: 'file and clientId are required'
+        message: 'File is required'
       }, { status: 400 });
+    }
+
+    // Get client document - try multiple methods
+    let clientDoc = await db.collection('clients').doc(user.uid).get();
+    let clientId = user.uid;
+    
+    if (!clientDoc.exists) {
+      // Try by authUid
+      const clientQuery = await db.collection('clients').where('authUid', '==', user.uid).limit(1).get();
+      if (!clientQuery.empty) {
+        clientDoc = clientQuery.docs[0];
+        clientId = clientDoc.id;
+      }
+    }
+
+    // If clientId was provided in form and matches, use it; otherwise use what we found
+    if (clientIdFromForm && clientIdFromForm !== clientId) {
+      // Verify the provided clientId belongs to this user
+      const providedClientDoc = await db.collection('clients').doc(clientIdFromForm).get();
+      if (providedClientDoc.exists) {
+        const providedClientData = providedClientDoc.data();
+        if (providedClientData?.authUid === user.uid) {
+          clientDoc = providedClientDoc;
+          clientId = clientIdFromForm;
+        }
+      }
+    }
+
+    if (!clientDoc.exists) {
+      return NextResponse.json({
+        success: false,
+        message: 'Client not found'
+      }, { status: 404 });
     }
 
     // Validate file type
@@ -55,21 +106,24 @@ export async function POST(request: NextRequest) {
     const imageUrl = `https://storage.googleapis.com/${bucketName}/${fileName}`;
 
     // Update client document with profile image URL
+    const { Timestamp } = await import('firebase-admin/firestore');
     await db.collection('clients').doc(clientId).update({
       profileImage: imageUrl,
-      updatedAt: new Date()
+      avatar: imageUrl, // Also store as avatar for compatibility
+      updatedAt: Timestamp.now()
     });
 
     // Also update in users collection if it exists
-    const clientDoc = await db.collection('clients').doc(clientId).get();
     const clientData = clientDoc.data();
     if (clientData?.authUid) {
       await db.collection('users').doc(clientData.authUid).set({
         avatar: imageUrl,
         'profile.avatar': imageUrl,
-        updatedAt: new Date()
+        updatedAt: Timestamp.now()
       }, { merge: true });
     }
+
+    logInfo('Profile image uploaded successfully', { userId: user.uid, clientId });
 
     return NextResponse.json({
       success: true,
@@ -79,8 +133,8 @@ export async function POST(request: NextRequest) {
       }
     });
 
-  } catch (error) {
-    console.error('Error uploading profile image:', error);
+  } catch (error: any) {
+    logSafeError('Error uploading profile image', error, { userId: 'unknown' });
     return NextResponse.json({
       success: false,
       message: 'Failed to upload profile image',
