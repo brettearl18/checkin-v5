@@ -91,16 +91,19 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { clientId, date, bodyWeight, measurements, isBaseline } = body;
 
-    // Log request details for debugging (redact sensitive info in production)
-    if (process.env.NODE_ENV === 'development') {
-      console.log('POST /api/client-measurements:', {
-        clientId,
-        hasBodyWeight: bodyWeight !== undefined,
-        hasMeasurements: measurements && Object.keys(measurements).length > 0,
-        isBaseline,
-        measurementCount: measurements ? Object.keys(measurements).length : 0
-      });
-    }
+    // Log request details for debugging
+    console.log('POST /api/client-measurements:', {
+      clientId,
+      bodyWeight,
+      bodyWeightType: typeof bodyWeight,
+      measurements,
+      measurementsType: typeof measurements,
+      measurementsKeys: measurements ? Object.keys(measurements) : [],
+      hasBodyWeight: bodyWeight !== undefined && bodyWeight !== null,
+      hasMeasurements: measurements && Object.keys(measurements).length > 0,
+      isBaseline,
+      fullBody: JSON.stringify(body)
+    });
 
     if (!clientId) {
       return NextResponse.json({

@@ -268,14 +268,24 @@ export default function MeasurementsPage() {
     const hasBodyWeight = measurementData.bodyWeight !== undefined && !isNaN(measurementData.bodyWeight);
     const hasMeasurements = measurementData.measurements && Object.keys(measurementData.measurements).length > 0;
     
+    // Log what we're about to send for debugging
+    console.log('handleBaselineSave: Preparing to save', {
+      baselineWeight,
+      hasBodyWeight,
+      hasMeasurements,
+      measurementDataKeys: Object.keys(measurementData),
+      bodyWeightValue: measurementData.bodyWeight,
+      measurementsCount: measurementData.measurements ? Object.keys(measurementData.measurements).length : 0
+    });
+    
     if (!hasBodyWeight && !hasMeasurements) {
-      // No data to save yet - this is fine, just return true without saving
-      console.warn('handleBaselineSave: No valid data to save', {
+      // No data to save - this should not happen if validation passed
+      console.error('handleBaselineSave: No valid data to save - validation should have caught this!', {
         baselineWeight,
         baselineMeasurements,
         measurementData
       });
-      return true;
+      throw new Error('No valid data to save. Please ensure weight is entered.');
     }
     
     isSavingRef.current = true;
@@ -283,6 +293,12 @@ export default function MeasurementsPage() {
     try {
       // Always use POST - the API will handle updating existing baseline automatically
       // This prevents race conditions where the client-side state might be stale
+      // Log the exact payload being sent
+      console.log('handleBaselineSave: Sending to API', {
+        measurementData,
+        payload: JSON.stringify(measurementData)
+      });
+      
       const response = await fetch('/api/client-measurements', {
         method: 'POST',
         headers: {
