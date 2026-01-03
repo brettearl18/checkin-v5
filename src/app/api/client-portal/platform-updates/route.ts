@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    logInfo('Platform updates fetched', { count: updates.length, userId: user.uid });
+    logInfo('Platform updates fetched', { count: updates.length });
 
     return NextResponse.json({
       success: true,
