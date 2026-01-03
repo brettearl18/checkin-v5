@@ -757,9 +757,9 @@ export default function CheckInSuccessPage() {
               <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 p-4 sm:p-6 lg:p-8 mb-6 lg:mb-8">
                 <div className="flex items-center justify-between mb-4 lg:mb-6">
                   <h3 className="text-lg lg:text-xl font-bold text-gray-900">Your Responses</h3>
-                  {formResponse && (
+                  {formResponse && assignment && (
                     <Link
-                      href={`/client-portal/check-in/${assignmentId}/edit`}
+                      href={`/client-portal/check-in/${assignment.id || id}/edit`}
                       className="text-xs text-blue-600 hover:text-blue-800 font-medium"
                     >
                       Edit Responses
