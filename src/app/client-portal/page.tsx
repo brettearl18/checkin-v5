@@ -1401,8 +1401,6 @@ export default function ClientPortalPage() {
                   );
                 })()}
               </div>
-              </div>
-            </div>
 
             {/* Stats Overview - Simplified to 2 cards */}
             <div className="grid grid-cols-2 gap-3 sm:gap-4 mb-6">
