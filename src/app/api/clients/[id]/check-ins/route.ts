@@ -238,6 +238,36 @@ export async function GET(
       // Check if coach has responded (has feedback)
       let coachResponded = false;
       const responseId = data.responseId;
+      let responseCount = data.responseCount || 0;
+      
+      // If responseCount is 0 but we have a responseId, fetch the actual count from the response
+      if (responseId && (!responseCount || responseCount === 0)) {
+        try {
+          const responseDoc = await db.collection('formResponses').doc(responseId).get();
+          if (responseDoc.exists) {
+            const responseData = responseDoc.data();
+            // Use answeredQuestions if available, otherwise count responses
+            if (responseData?.answeredQuestions) {
+              responseCount = responseData.answeredQuestions;
+            } else if (responseData?.responses && Array.isArray(responseData.responses)) {
+              responseCount = responseData.responses.length;
+            } else if (responseData?.totalQuestions) {
+              responseCount = responseData.totalQuestions;
+            }
+            
+            // Update the assignment with the correct count for future queries
+            if (responseCount > 0) {
+              db.collection('check_in_assignments').doc(doc.id).update({
+                responseCount: responseCount,
+                totalQuestions: responseData.totalQuestions || responseCount,
+                answeredQuestions: responseData.answeredQuestions || responseCount
+              }).catch(err => console.error('Error updating assignment response count:', err));
+            }
+          }
+        } catch (error) {
+          console.log('Error fetching response for response count:', error);
+        }
+      }
       
       if (responseId) {
         try {
@@ -272,7 +302,7 @@ export async function GET(
         dueDate: dueDate || data.dueDate,
         category: data.category || 'general',
         score: data.score || 0,
-        responseCount: data.responseCount || 0,
+        responseCount: responseCount, // Use the fetched/corrected responseCount
         responseId: data.responseId || undefined, // Include responseId for linking to form response
         coachResponded: coachResponded, // Include coach response status
         checkInWindow: data.checkInWindow || {

@@ -190,7 +190,10 @@ export async function POST(
       status: 'completed',
       completedAt: new Date(),
       responseId: docRef.id,
-      score: finalScore
+      score: finalScore,
+      responseCount: answeredCount, // Set response count from actual answered questions
+      totalQuestions: requestData.responses ? requestData.responses.length : 0,
+      answeredQuestions: answeredCount
     });
 
     // Create notification for coach
