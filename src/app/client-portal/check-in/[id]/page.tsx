@@ -126,19 +126,35 @@ export default function CheckInCompletionPage() {
               setAssignmentDocId(assignmentData.id);
             }
             
-            // Continue with the assignment data
-            await loadFormAndQuestions(assignmentData);
+            // Use form and questions from API if available (avoids Firestore permission issues)
+            if (data.form && data.questions) {
+              await loadFormAndQuestionsFromAPI(assignmentData, data.form, data.questions);
+            } else {
+              // Fallback to direct Firestore access (may fail due to permissions)
+              await loadFormAndQuestions(assignmentData);
+            }
+            return;
+          } else {
+            // API returned success: false
+            console.error('API returned error:', data.message);
+            setError(data.message || 'Failed to load check-in data. Please try refreshing the page.');
+            setLoading(false);
             return;
           }
+        } else {
+          // HTTP error status
+          const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
+          console.error('API request failed:', response.status, errorData);
+          setError(errorData.message || 'Failed to load check-in data. Please try refreshing the page.');
+          setLoading(false);
+          return;
         }
       } catch (apiError) {
-        console.log('API fetch failed, trying direct Firestore query:', apiError);
+        console.error('API fetch error:', apiError);
+        setError('Failed to load check-in data. Please try refreshing the page.');
+        setLoading(false);
+        return;
       }
-
-      // If API route failed, we shouldn't try direct Firestore access
-      // as it may fail due to permissions. The API route should always work.
-      setError('Failed to load check-in data. Please try refreshing the page.');
-      setLoading(false);
     } catch (error) {
       console.error('Error fetching assignment data:', error);
       setError('Failed to load check-in data');
@@ -146,6 +162,90 @@ export default function CheckInCompletionPage() {
     }
   };
 
+  // Load form and questions from API response (avoids Firestore permission issues)
+  const loadFormAndQuestionsFromAPI = async (
+    assignmentData: CheckInAssignment,
+    formData: any,
+    questionsData: Question[]
+  ) => {
+    try {
+      // Ensure formTitle is set
+      if (!assignmentData.formTitle && formData.title) {
+        assignmentData.formTitle = formData.title;
+      }
+      
+      // If still no title, use a default
+      if (!assignmentData.formTitle) {
+        assignmentData.formTitle = 'Check-in Form';
+      }
+      
+      setAssignment(assignmentData);
+
+      // Check check-in window status
+      const checkInWindow = assignmentData.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
+      const status = isWithinCheckInWindow(checkInWindow);
+      setWindowStatus(status);
+
+      // Use questions from API response
+      setQuestions(questionsData);
+
+      // Initialize responses array - merge with saved draft if available
+      let initialResponses: FormResponse[] = questionsData.map(q => ({
+        questionId: q.id,
+        question: q.text,
+        answer: '',
+        type: q.type,
+        comment: '' // Initialize comment field
+      }));
+
+      // Check for saved draft in localStorage and merge if available
+      try {
+        const savedDraft = localStorage.getItem(AUTOSAVE_KEY);
+        if (savedDraft) {
+          const draftData = JSON.parse(savedDraft);
+          
+          if (draftData.responses && Array.isArray(draftData.responses) && draftData.responses.length > 0) {
+            const savedResponsesMap = new Map(draftData.responses.map((r: FormResponse) => [r.questionId, r]));
+            
+            // Merge saved answers/comments into initial responses
+            initialResponses = initialResponses.map(initialResponse => {
+              const savedResponse = savedResponsesMap.get(initialResponse.questionId);
+              if (savedResponse) {
+                return {
+                  ...initialResponse,
+                  answer: savedResponse.answer !== undefined ? savedResponse.answer : initialResponse.answer,
+                  comment: savedResponse.comment || initialResponse.comment
+                };
+              }
+              return initialResponse;
+            });
+            
+            console.log('Restored saved draft responses and merged with questions');
+            
+            // Restore current question position
+            if (typeof draftData.currentQuestion === 'number' && 
+                draftData.currentQuestion >= 0 && 
+                draftData.currentQuestion < questionsData.length) {
+              setCurrentQuestion(draftData.currentQuestion);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error loading draft from localStorage in loadFormAndQuestionsFromAPI:', error);
+        // Continue with empty responses if draft load fails
+      }
+      
+      setResponses(initialResponses);
+
+    } catch (error) {
+      console.error('Error loading form and questions from API:', error);
+      setError('Failed to load check-in data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fallback: Load form and questions directly from Firestore (may fail due to permissions)
   const loadFormAndQuestions = async (assignmentData: CheckInAssignment) => {
     try {
       

@@ -51,9 +51,9 @@ function RecentFixesSection() {
   };
 
   return (
-    <div className="mb-6 bg-green-50 border-2 border-green-200 rounded-xl p-5">
+    <div className="mb-4 sm:mb-6 bg-green-50 border-2 border-green-200 rounded-xl p-3 sm:p-5">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-lg font-semibold text-gray-900">✓ Recent Fixes</h3>
+        <h3 className="text-base sm:text-lg font-semibold text-gray-900">✓ Recent Fixes</h3>
         <button
           onClick={() => {
             // Switch to updates tab - handled by parent
@@ -187,9 +187,9 @@ export default function SubmitIssueForm() {
   };
 
   if (success) {
-    return (
-      <div className="p-6 lg:p-8">
-        <div className="bg-green-50 border-2 border-green-200 rounded-2xl p-8 lg:p-12 text-center">
+  return (
+    <div className="p-3 sm:p-4 lg:p-8">
+      <div className="bg-green-50 border-2 border-green-200 rounded-2xl p-6 sm:p-8 lg:p-12 text-center">
           <div className="w-16 h-16 lg:w-20 lg:h-20 rounded-full bg-green-500 flex items-center justify-center mx-auto mb-4">
             <svg className="w-8 h-8 lg:w-10 lg:h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -221,20 +221,20 @@ export default function SubmitIssueForm() {
   }
 
   return (
-    <div className="p-6 lg:p-8">
+    <div className="p-3 sm:p-4 lg:p-8">
       {/* Recent Fixes Teaser */}
       <RecentFixesSection />
 
       {/* Form */}
       <div>
-        <div className="mb-6">
-          <h2 className="text-xl lg:text-2xl font-bold text-gray-900 mb-2">Report an Issue</h2>
-          <p className="text-gray-600 text-sm lg:text-base">
+        <div className="mb-4 sm:mb-6">
+          <h2 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900 mb-2">Report an Issue</h2>
+          <p className="text-gray-600 text-xs sm:text-sm lg:text-base">
             Found a bug or having trouble? Let us know and we'll fix it as soon as possible.
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
           {error && (
             <div className="bg-red-50 border-2 border-red-200 rounded-lg p-4">
               <p className="text-red-800 text-sm font-medium">{error}</p>
@@ -249,7 +249,7 @@ export default function SubmitIssueForm() {
             <select
               value={formData.issueType}
               onChange={(e) => setFormData({ ...formData, issueType: e.target.value })}
-              className="w-full px-4 py-3 lg:py-2.5 border border-gray-300 rounded-xl lg:rounded-lg bg-white focus:ring-2 focus:outline-none transition-all text-sm lg:text-base min-h-[48px] lg:min-h-[44px]"
+              className="w-full px-3 sm:px-4 py-3 lg:py-2.5 border border-gray-300 rounded-xl lg:rounded-lg bg-white focus:ring-2 focus:outline-none transition-all text-sm lg:text-base min-h-[48px] lg:min-h-[44px]"
               style={{ focusRingColor: '#daa450' }}
               onFocus={(e) => e.target.style.borderColor = '#daa450'}
               onBlur={(e) => e.target.style.borderColor = '#d1d5db'}
@@ -272,7 +272,7 @@ export default function SubmitIssueForm() {
               value={formData.title}
               onChange={(e) => setFormData({ ...formData, title: e.target.value })}
               placeholder="Brief description of the issue"
-              className="w-full px-4 py-3 lg:py-2.5 border border-gray-300 rounded-xl lg:rounded-lg bg-white focus:ring-2 focus:outline-none transition-all text-sm lg:text-base min-h-[48px] lg:min-h-[44px]"
+              className="w-full px-3 sm:px-4 py-3 lg:py-2.5 border border-gray-300 rounded-xl lg:rounded-lg bg-white focus:ring-2 focus:outline-none transition-all text-sm lg:text-base min-h-[48px] lg:min-h-[44px]"
               style={{ focusRingColor: '#daa450' }}
               onFocus={(e) => e.target.style.borderColor = '#daa450'}
               onBlur={(e) => e.target.style.borderColor = '#d1d5db'}
@@ -292,7 +292,7 @@ export default function SubmitIssueForm() {
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               placeholder="Describe what happened, what you were trying to do, and what you expected vs. what actually happened"
               rows={6}
-              className="w-full px-4 py-3 lg:py-2.5 border border-gray-300 rounded-xl lg:rounded-lg bg-white focus:ring-2 focus:outline-none transition-all text-sm lg:text-base resize-y"
+              className="w-full px-3 sm:px-4 py-3 lg:py-2.5 border border-gray-300 rounded-xl lg:rounded-lg bg-white focus:ring-2 focus:outline-none transition-all text-sm lg:text-base resize-y"
               style={{ focusRingColor: '#daa450' }}
               onFocus={(e) => e.target.style.borderColor = '#daa450'}
               onBlur={(e) => e.target.style.borderColor = '#d1d5db'}
@@ -310,7 +310,7 @@ export default function SubmitIssueForm() {
               onChange={(e) => setFormData({ ...formData, stepsToReproduce: e.target.value })}
               placeholder="1. First step&#10;2. Second step&#10;3. Third step"
               rows={4}
-              className="w-full px-4 py-3 lg:py-2.5 border border-gray-300 rounded-xl lg:rounded-lg bg-white focus:ring-2 focus:outline-none transition-all text-sm lg:text-base resize-y"
+              className="w-full px-3 sm:px-4 py-3 lg:py-2.5 border border-gray-300 rounded-xl lg:rounded-lg bg-white focus:ring-2 focus:outline-none transition-all text-sm lg:text-base resize-y"
               style={{ focusRingColor: '#daa450' }}
               onFocus={(e) => e.target.style.borderColor = '#daa450'}
               onBlur={(e) => e.target.style.borderColor = '#d1d5db'}
@@ -358,7 +358,7 @@ export default function SubmitIssueForm() {
               value={formData.pageUrl}
               onChange={(e) => setFormData({ ...formData, pageUrl: e.target.value })}
               placeholder="e.g., https://checkinv5.web.app/client-portal/check-ins"
-              className="w-full px-4 py-3 lg:py-2.5 border border-gray-300 rounded-xl lg:rounded-lg bg-white focus:ring-2 focus:outline-none transition-all text-sm lg:text-base min-h-[48px] lg:min-h-[44px]"
+              className="w-full px-3 sm:px-4 py-3 lg:py-2.5 border border-gray-300 rounded-xl lg:rounded-lg bg-white focus:ring-2 focus:outline-none transition-all text-sm lg:text-base min-h-[48px] lg:min-h-[44px]"
               style={{ focusRingColor: '#daa450' }}
               onFocus={(e) => e.target.style.borderColor = '#daa450'}
               onBlur={(e) => e.target.style.borderColor = '#d1d5db'}

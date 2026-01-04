@@ -84,19 +84,19 @@ export default function PlatformUpdates() {
   };
 
   return (
-    <div className="p-6 lg:p-8">
-      <div className="mb-6">
-        <h2 className="text-xl lg:text-2xl font-bold text-gray-900 mb-2">Platform Updates & Changes</h2>
-        <p className="text-gray-600 text-sm lg:text-base">
+    <div className="p-3 sm:p-4 lg:p-8">
+      <div className="mb-4 sm:mb-6">
+        <h2 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900 mb-2">Platform Updates & Changes</h2>
+        <p className="text-gray-600 text-xs sm:text-sm lg:text-base">
           Stay informed about improvements, bug fixes, and maintenance to the platform
         </p>
       </div>
 
       {/* Filters */}
-      <div className="mb-6 flex flex-wrap gap-2">
+      <div className="mb-4 sm:mb-6 flex flex-wrap gap-2 overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0 pb-2">
         <button
           onClick={() => setSelectedCategory('all')}
-          className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+          className={`px-3 sm:px-4 py-2 rounded-lg font-medium text-xs sm:text-sm transition-colors whitespace-nowrap ${
             selectedCategory === 'all'
               ? 'bg-gray-900 text-white'
               : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -108,7 +108,7 @@ export default function PlatformUpdates() {
           <button
             key={key}
             onClick={() => setSelectedCategory(key)}
-            className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+            className={`px-3 sm:px-4 py-2 rounded-lg font-medium text-xs sm:text-sm transition-colors whitespace-nowrap ${
               selectedCategory === key
                 ? `${config.color.split(' ')[0]} ${config.color.split(' ')[1]} border-2 ${config.color.split(' ')[2]}`
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -158,42 +158,42 @@ export default function PlatformUpdates() {
             return (
               <div
                 key={update.id}
-                className="bg-white border-2 border-gray-200 rounded-xl p-6 hover:shadow-lg transition-shadow"
+                className="bg-white border-2 border-gray-200 rounded-xl p-4 sm:p-6 hover:shadow-lg transition-shadow"
               >
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-3">
-                    <span className="text-2xl">{category.icon}</span>
-                    <div>
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-3">
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <span className="text-xl sm:text-2xl flex-shrink-0">{category.icon}</span>
+                    <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${category.color}`}>
+                        <span className={`px-2 sm:px-3 py-1 rounded-full text-[10px] sm:text-xs font-semibold border ${category.color}`}>
                           {category.label}
                         </span>
-                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${status.color}`}>
+                        <span className={`px-2 sm:px-3 py-1 rounded-full text-[10px] sm:text-xs font-semibold ${status.color}`}>
                           {status.label}
                         </span>
                         {update.impact && (
-                          <span className="px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-700">
+                          <span className="px-2 sm:px-3 py-1 rounded-full text-[10px] sm:text-xs font-semibold bg-gray-100 text-gray-700">
                             Impact: {update.impact}
                           </span>
                         )}
                       </div>
                     </div>
                   </div>
-                  <span className="text-sm text-gray-500 whitespace-nowrap">
+                  <span className="text-xs sm:text-sm text-gray-500 whitespace-nowrap flex-shrink-0">
                     {formatDate(update.date)}
                   </span>
                 </div>
 
-                <h3 className="text-xl font-bold text-gray-900 mb-2">{update.title}</h3>
-                <p className="text-gray-700 mb-3 whitespace-pre-wrap">{update.description}</p>
+                <h3 className="text-base sm:text-xl font-bold text-gray-900 mb-2 break-words">{update.title}</h3>
+                <p className="text-xs sm:text-sm text-gray-700 mb-3 whitespace-pre-wrap break-words overflow-wrap-anywhere">{update.description}</p>
                 
                 {update.details && (
                   <details className="mt-3">
-                    <summary className="cursor-pointer text-blue-600 hover:text-blue-800 font-medium text-sm">
+                    <summary className="cursor-pointer text-blue-600 hover:text-blue-800 font-medium text-xs sm:text-sm">
                       Read more details
                     </summary>
-                    <div className="mt-3 p-4 bg-gray-50 rounded-lg">
-                      <p className="text-gray-700 whitespace-pre-wrap">{update.details}</p>
+                    <div className="mt-3 p-3 sm:p-4 bg-gray-50 rounded-lg">
+                      <p className="text-xs sm:text-sm text-gray-700 whitespace-pre-wrap break-words overflow-wrap-anywhere">{update.details}</p>
                     </div>
                   </details>
                 )}
@@ -204,8 +204,8 @@ export default function PlatformUpdates() {
       )}
 
       {/* Link to Report Issue */}
-      <div className="mt-8 bg-blue-50 border-2 border-blue-200 rounded-xl p-6">
-        <p className="text-gray-700 mb-3">
+      <div className="mt-6 sm:mt-8 bg-blue-50 border-2 border-blue-200 rounded-xl p-4 sm:p-6">
+        <p className="text-sm sm:text-base text-gray-700 mb-3">
           <strong>Found an issue or have feedback?</strong>
         </p>
         <button
@@ -213,9 +213,9 @@ export default function PlatformUpdates() {
             const event = new CustomEvent('switchTab', { detail: 'report' });
             window.dispatchEvent(event);
           }}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium cursor-pointer"
+          className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-xs sm:text-sm cursor-pointer"
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
           </svg>
           Submit an Issue

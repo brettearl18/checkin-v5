@@ -467,19 +467,19 @@ export default function HelpGuides() {
     : guides.filter(guide => guide.category === selectedCategory);
 
   return (
-    <div className="p-6 lg:p-8">
-      <div className="mb-6">
-        <h2 className="text-xl lg:text-2xl font-bold text-gray-900 mb-2">Help & How-To Guides</h2>
-        <p className="text-gray-600 text-sm lg:text-base">
+    <div className="p-3 sm:p-4 lg:p-8">
+      <div className="mb-4 sm:mb-6">
+        <h2 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900 mb-2">Help & How-To Guides</h2>
+        <p className="text-gray-600 text-xs sm:text-sm lg:text-base">
           Step-by-step instructions for using the platform
         </p>
       </div>
 
       {/* Category Filter */}
-      <div className="mb-6 flex flex-wrap gap-2">
+      <div className="mb-4 sm:mb-6 flex flex-wrap gap-2 overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0 pb-2">
         <button
           onClick={() => setSelectedCategory('all')}
-          className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+          className={`px-3 sm:px-4 py-2 rounded-lg font-medium text-xs sm:text-sm transition-colors whitespace-nowrap ${
             selectedCategory === 'all'
               ? 'bg-gray-900 text-white'
               : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -491,7 +491,7 @@ export default function HelpGuides() {
           <button
             key={category}
             onClick={() => setSelectedCategory(category)}
-            className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+            className={`px-3 sm:px-4 py-2 rounded-lg font-medium text-xs sm:text-sm transition-colors whitespace-nowrap ${
               selectedCategory === category
                 ? 'bg-blue-600 text-white'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -503,7 +503,7 @@ export default function HelpGuides() {
       </div>
 
       {/* Guides List */}
-      <div className="space-y-4">
+      <div className="space-y-3 sm:space-y-4">
         {filteredGuides.map((guide) => (
           <div
             key={guide.id}
@@ -511,14 +511,14 @@ export default function HelpGuides() {
           >
             <button
               onClick={() => setExpandedGuide(expandedGuide === guide.id ? null : guide.id)}
-              className="w-full px-6 py-4 text-left flex items-center justify-between bg-white hover:bg-gray-50 transition-colors"
+              className="w-full px-4 sm:px-6 py-3 sm:py-4 text-left flex items-center justify-between bg-white hover:bg-gray-50 transition-colors"
             >
-              <div className="flex-1">
-                <h3 className="font-semibold text-gray-900 mb-1">{guide.title}</h3>
+              <div className="flex-1 min-w-0 pr-2">
+                <h3 className="font-semibold text-sm sm:text-base text-gray-900 mb-1 break-words">{guide.title}</h3>
                 <p className="text-xs text-gray-500">{guide.category}</p>
               </div>
               <svg
-                className={`w-5 h-5 text-gray-400 transform transition-transform ${
+                className={`w-5 h-5 text-gray-400 transform transition-transform flex-shrink-0 ${
                   expandedGuide === guide.id ? 'rotate-180' : ''
                 }`}
                 fill="none"
@@ -529,9 +529,9 @@ export default function HelpGuides() {
               </svg>
             </button>
             {expandedGuide === guide.id && (
-              <div className="px-6 py-4 bg-gray-50 border-t border-gray-200">
+              <div className="px-4 sm:px-6 py-4 bg-gray-50 border-t border-gray-200">
                 <div className="prose prose-sm max-w-none">
-                  <pre className="whitespace-pre-wrap font-sans text-gray-700 leading-relaxed">
+                  <pre className="whitespace-pre-wrap font-sans text-xs sm:text-sm text-gray-700 leading-relaxed break-words overflow-wrap-anywhere">
                     {guide.content}
                   </pre>
                 </div>

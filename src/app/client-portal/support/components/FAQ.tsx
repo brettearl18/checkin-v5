@@ -192,19 +192,19 @@ export default function FAQ() {
     : faqs.filter(faq => faq.category === selectedCategory);
 
   return (
-    <div className="p-6 lg:p-8">
-      <div className="mb-6">
-        <h2 className="text-xl lg:text-2xl font-bold text-gray-900 mb-2">Frequently Asked Questions</h2>
-        <p className="text-gray-600 text-sm lg:text-base">
+    <div className="p-3 sm:p-4 lg:p-8">
+      <div className="mb-4 sm:mb-6">
+        <h2 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900 mb-2">Frequently Asked Questions</h2>
+        <p className="text-gray-600 text-xs sm:text-sm lg:text-base">
           Find quick answers to common questions
         </p>
       </div>
 
       {/* Category Filter */}
-      <div className="mb-6 flex flex-wrap gap-2">
+      <div className="mb-4 sm:mb-6 flex flex-wrap gap-2 overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0 pb-2">
         <button
           onClick={() => setSelectedCategory('all')}
-          className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+          className={`px-3 sm:px-4 py-2 rounded-lg font-medium text-xs sm:text-sm transition-colors whitespace-nowrap ${
             selectedCategory === 'all'
               ? 'bg-gray-900 text-white'
               : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -216,7 +216,7 @@ export default function FAQ() {
           <button
             key={category}
             onClick={() => setSelectedCategory(category)}
-            className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+            className={`px-3 sm:px-4 py-2 rounded-lg font-medium text-xs sm:text-sm transition-colors whitespace-nowrap ${
               selectedCategory === category
                 ? 'bg-blue-600 text-white'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -236,10 +236,10 @@ export default function FAQ() {
           >
             <button
               onClick={() => setExpandedFAQ(expandedFAQ === faq.id ? null : faq.id)}
-              className="w-full px-6 py-4 text-left flex items-start justify-between bg-white hover:bg-gray-50 transition-colors"
+              className="w-full px-4 sm:px-6 py-3 sm:py-4 text-left flex items-start justify-between bg-white hover:bg-gray-50 transition-colors"
             >
-              <div className="flex-1 pr-4">
-                <h3 className="font-semibold text-gray-900 mb-1">{faq.question}</h3>
+              <div className="flex-1 min-w-0 pr-2">
+                <h3 className="font-semibold text-sm sm:text-base text-gray-900 mb-1 break-words">{faq.question}</h3>
                 <p className="text-xs text-gray-500">{faq.category}</p>
               </div>
               <svg
@@ -254,8 +254,8 @@ export default function FAQ() {
               </svg>
             </button>
             {expandedFAQ === faq.id && (
-              <div className="px-6 py-4 bg-gray-50 border-t border-gray-200">
-                <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">
+              <div className="px-4 sm:px-6 py-4 bg-gray-50 border-t border-gray-200">
+                <p className="text-xs sm:text-sm text-gray-700 leading-relaxed whitespace-pre-wrap break-words overflow-wrap-anywhere">
                   {faq.answer}
                 </p>
               </div>
@@ -271,11 +271,11 @@ export default function FAQ() {
       )}
 
       {/* Additional Help */}
-      <div className="mt-8 bg-blue-50 border-2 border-blue-200 rounded-xl p-6">
-        <p className="text-gray-700 mb-3">
+      <div className="mt-6 sm:mt-8 bg-blue-50 border-2 border-blue-200 rounded-xl p-4 sm:p-6">
+        <p className="text-sm sm:text-base text-gray-700 mb-3">
           <strong>Still have questions?</strong>
         </p>
-        <p className="text-sm text-gray-600 mb-4">
+        <p className="text-xs sm:text-sm text-gray-600 mb-4">
           Can't find what you're looking for? Check the Help & How-To guides or contact your coach.
         </p>
         <button
@@ -283,9 +283,9 @@ export default function FAQ() {
             const event = new CustomEvent('switchTab', { detail: 'report' });
             window.dispatchEvent(event);
           }}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm cursor-pointer"
+          className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-xs sm:text-sm cursor-pointer"
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
           </svg>
           Report an Issue

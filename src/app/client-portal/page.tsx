@@ -21,6 +21,7 @@ import {
   DEFAULT_CHECK_IN_WINDOW,
   type CheckInWindow
 } from '@/lib/checkin-window-utils';
+import QuickStatsBar from '@/components/client-portal/QuickStatsBar';
 
 interface ClientStats {
   overallProgress: number;
@@ -199,6 +200,36 @@ function ProgressImagesPreview({ clientEmail }: { clientEmail: string }) {
   );
 }
 
+interface DashboardAnalytics {
+  bodyweight: {
+    current: number | null;
+    baseline: number | null;
+    change: number;
+    trend: 'up' | 'down' | 'stable' | 'no_data';
+    history: Array<{ date: string; weight: number }>;
+  };
+  measurements: {
+    totalChange: number;
+    history: Array<{
+      date: string;
+      measurements: Record<string, number>;
+    }>;
+  };
+  scores: {
+    current: number | null;
+    average: number;
+    trend: 'up' | 'down' | 'stable' | 'no_data';
+    history: Array<{ date: string; score: number; color: 'red' | 'orange' | 'green' }>;
+  };
+  quickStats: {
+    daysActive: number;
+    totalCheckIns: number;
+    weightChange: number;
+    measurementChange: number;
+    currentStreak: number;
+  };
+}
+
 export default function ClientPortalPage() {
   const { userProfile } = useAuth();
   const [stats, setStats] = useState<ClientStats>({
@@ -228,16 +259,61 @@ export default function ClientPortalPage() {
     status: 'upcoming' | 'due' | 'overdue';
     daysUntil: number;
   } | null>(null);
+  const [analytics, setAnalytics] = useState<DashboardAnalytics | null>(null);
+  const [loadingAnalytics, setLoadingAnalytics] = useState(true);
 
   useEffect(() => {
     if (userProfile?.email) {
       fetchClientData();
+      fetchAnalytics();
     } else if (userProfile === null) {
       // User profile is loaded but no email - this is an error state
       setLoading(false);
+      setLoadingAnalytics(false);
     }
     // If userProfile is undefined, it's still loading, so we wait
   }, [userProfile?.email]);
+
+  const fetchAnalytics = async () => {
+    try {
+      setLoadingAnalytics(true);
+      
+      // Get Firebase ID token for authentication
+      let idToken: string | null = null;
+      if (typeof window !== 'undefined' && userProfile?.uid) {
+        try {
+          const { auth } = await import('@/lib/firebase-client');
+          if (auth?.currentUser) {
+            idToken = await auth.currentUser.getIdToken();
+          }
+        } catch (authError) {
+          console.warn('Could not get auth token:', authError);
+        }
+      }
+
+      const headers: HeadersInit = {};
+      if (idToken) {
+        headers['Authorization'] = `Bearer ${idToken}`;
+      }
+
+      const response = await fetch('/api/client-portal/analytics', {
+        headers
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.data) {
+          setAnalytics(data.data);
+        }
+      } else {
+        console.error('Analytics API error:', response.status, response.statusText);
+      }
+    } catch (error) {
+      console.error('Error fetching analytics:', error);
+    } finally {
+      setLoadingAnalytics(false);
+    }
+  };
 
   // Update scoring config when it's loaded from API (Phase 1: Removed client-side Firestore)
   useEffect(() => {
@@ -749,9 +825,9 @@ export default function ClientPortalPage() {
         <main className="flex-1 px-4 py-4 sm:px-6 lg:px-8 lg:py-6 pt-20 lg:pt-6 overflow-x-hidden w-full bg-white relative z-0">
           <div className="max-w-7xl mx-auto w-full">
             {/* Desktop: Grid layout with main content and sidebar */}
-            <div className="lg:grid lg:grid-cols-3 lg:gap-6">
-              {/* Main Content Column - Full width on mobile, 2/3 on desktop */}
-              <div className="w-full lg:col-span-2">
+            <div className="block lg:grid lg:grid-cols-3 lg:gap-6">
+              {/* Main Content Column - Full width on mobile, 2/3 on desktop - Always visible */}
+              <div className="w-full block lg:col-span-2">
             {/* Header - Hidden on mobile, shown on desktop */}
             <div className="mb-6 hidden lg:block">
               <div className="flex items-center justify-between">
@@ -770,8 +846,12 @@ export default function ClientPortalPage() {
               <p className="text-gray-600 text-xs mt-1">Track your progress and stay connected</p>
             </div>
 
+            {/* Quick Stats Bar - New analytics section - Always visible on all devices */}
+            <div className="mb-6 block">
+              <QuickStatsBar stats={analytics?.quickStats || null} loading={loadingAnalytics} />
+            </div>
 
-            {/* Next Check-in Section - Prominent banner at top */}
+            {/* Next Check-in Section - Prominent banner at top - Visible on all devices */}
             {(() => {
               // Find next scheduled check-in (not overdue, includes today and future dates)
               const now = new Date();
@@ -1017,7 +1097,7 @@ export default function ClientPortalPage() {
               );
             })()}
 
-            {/* Check-ins Requiring Attention - Priority action items - Always visible on mobile */}
+            {/* Check-ins Requiring Attention - Priority action items - Always visible on all devices */}
             <div className="mb-6 block">
               <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
                 <div className="px-4 py-4 sm:px-6 sm:py-5 lg:px-8 lg:py-6 border-b-2" style={{ backgroundColor: '#fef9e7', borderColor: '#daa450' }}>
@@ -1415,57 +1495,127 @@ export default function ClientPortalPage() {
               </div>
             </div>
 
-            {/* Stats Overview - Simplified to 2 cards - Always visible on mobile */}
-            <div className="grid grid-cols-2 gap-3 sm:gap-4 mb-6 block">
-              <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
-                <div className="px-3 py-3 sm:px-4 sm:py-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl flex items-center justify-center shadow-sm" style={{ backgroundColor: '#daa450' }}>
-                      <span className="text-lg sm:text-xl">{getTrafficLightIcon(averageTrafficLight)}</span>
+            {/* Stats Overview - Clean minimal design - Always visible on all devices */}
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mb-6 block">
+              {/* Average Score Card */}
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div className="px-3 py-3 sm:px-4 sm:py-3">
+                  <div className="flex items-center justify-between mb-2.5">
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#daa450' }}>
+                      <span className="text-sm">{getTrafficLightIcon(averageTrafficLight)}</span>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-1 sm:gap-2 mb-1">
-                    <div className="text-2xl sm:text-3xl font-bold text-gray-900">{stats?.averageScore || 0}%</div>
-                    {stats?.averageScore > 0 && (
-                      <span className="text-[10px] sm:text-xs font-semibold text-gray-600">
-                        {getTrafficLightLabel(averageTrafficLight)}
+                    {analytics?.scores.trend && analytics.scores.trend !== 'no_data' && (
+                      <span className={`text-xs font-semibold ${
+                        analytics.scores.trend === 'up' ? 'text-green-600' : 
+                        analytics.scores.trend === 'down' ? 'text-red-600' : 
+                        'text-gray-500'
+                      }`}>
+                        {analytics.scores.trend === 'up' ? '↑' : analytics.scores.trend === 'down' ? '↓' : '→'}
                       </span>
                     )}
                   </div>
-                  <div className="text-[10px] sm:text-xs text-gray-600 font-medium">Average Score</div>
+                  <div className="mb-2.5">
+                    <div className="flex items-baseline gap-1 mb-1">
+                      <span className="text-xl sm:text-2xl font-bold text-gray-900">{stats?.averageScore || 0}</span>
+                      <span className="text-sm text-gray-500">%</span>
+                    </div>
+                    {stats?.averageScore > 0 && (
+                      <div className="inline-block px-1.5 py-0.5 bg-gray-100 rounded text-[10px] font-medium text-gray-700">
+                        {getTrafficLightLabel(averageTrafficLight)}
+                      </div>
+                    )}
+                  </div>
+                  <div className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">Average Score</div>
                   {stats?.averageScore > 0 && stats?.completedCheckins > 0 && (
-                    <div className="text-[10px] sm:text-xs text-gray-500 mt-1">Based on {stats.completedCheckins} check-in{stats.completedCheckins !== 1 ? 's' : ''}</div>
+                    <div className="text-[10px] text-gray-600 mt-0.5">Based on {stats.completedCheckins} check-in{stats.completedCheckins !== 1 ? 's' : ''}</div>
                   )}
                 </div>
               </div>
 
-              <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
-                <div className="px-3 py-3 sm:px-4 sm:py-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="w-8 h-8 sm:w-10 sm:h-10 bg-[#34C759] rounded-xl sm:rounded-2xl flex items-center justify-center shadow-sm">
-                      <svg className="w-4 h-4 sm:w-5 sm:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              {/* Completion Rate Card */}
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div className="px-3 py-3 sm:px-4 sm:py-3">
+                  <div className="flex items-center justify-between mb-2.5">
+                    <div className="w-8 h-8 bg-green-500 rounded-lg flex items-center justify-center">
+                      <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                       </svg>
                     </div>
+                    {analytics?.quickStats.currentStreak > 0 && (
+                      <div className="flex items-center gap-0.5 px-1.5 py-0.5 bg-orange-100 rounded">
+                        <span className="text-[10px]">🔥</span>
+                        <span className="text-[10px] font-bold text-orange-700">{analytics.quickStats.currentStreak}</span>
+                      </div>
+                    )}
                   </div>
-                  <div className="text-2xl sm:text-3xl font-bold text-gray-900">
-                    {stats?.totalCheckins > 0 ? Math.round((stats.completedCheckins / stats.totalCheckins) * 100) : 0}%
+                  <div className="mb-2.5">
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-xl sm:text-2xl font-bold text-gray-900">
+                        {stats?.totalCheckins > 0 ? Math.round((stats.completedCheckins / stats.totalCheckins) * 100) : 0}
+                      </span>
+                      <span className="text-sm text-gray-500">%</span>
+                    </div>
                   </div>
-                  <div className="text-[10px] sm:text-xs text-gray-600 mt-1 font-medium">Completion Rate</div>
+                  <div className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">Completion Rate</div>
                   {stats?.totalCheckins > 0 && (
-                    <div className="text-[10px] sm:text-xs text-gray-500 mt-1">{stats.completedCheckins} of {stats.totalCheckins} completed</div>
+                    <div className="text-[10px] text-gray-600 mt-0.5">{stats.completedCheckins} of {stats.totalCheckins} completed</div>
+                  )}
+                  {analytics?.quickStats.currentStreak > 0 && (
+                    <div className="mt-1 inline-block px-1.5 py-0.5 bg-orange-50 rounded text-[10px] text-orange-700 font-semibold">
+                      {analytics.quickStats.currentStreak} day{analytics.quickStats.currentStreak !== 1 ? 's' : ''} streak!
+                    </div>
                   )}
                 </div>
               </div>
+
+              {/* Weight Progress Card */}
+              {analytics?.bodyweight && analytics.bodyweight.baseline && (
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                  <div className="px-3 py-3 sm:px-4 sm:py-3">
+                    <div className="flex items-center justify-between mb-2.5">
+                      <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
+                        <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
+                        </svg>
+                      </div>
+                      {analytics.bodyweight.trend && analytics.bodyweight.trend !== 'no_data' && (
+                        <span className={`text-xs font-semibold ${
+                          analytics.bodyweight.trend === 'down' ? 'text-green-600' : 
+                          analytics.bodyweight.trend === 'up' ? 'text-red-600' : 
+                          'text-gray-500'
+                        }`}>
+                          {analytics.bodyweight.trend === 'down' ? '↓' : analytics.bodyweight.trend === 'up' ? '↑' : '→'}
+                        </span>
+                      )}
+                    </div>
+                    <div className="mb-2.5">
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-xl sm:text-2xl font-bold text-gray-900">
+                          {analytics.bodyweight.current ? analytics.bodyweight.current.toFixed(1) : '-'}
+                        </span>
+                        <span className="text-sm text-gray-500">kg</span>
+                      </div>
+                      {analytics.bodyweight.change !== 0 && (
+                        <div className={`mt-1 inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                          analytics.bodyweight.change > 0 ? 'bg-green-50 text-green-700' : 'bg-orange-50 text-orange-700'
+                        }`}>
+                          {analytics.bodyweight.change > 0 ? '↓' : '↑'} {Math.abs(analytics.bodyweight.change).toFixed(1)}kg
+                        </div>
+                      )}
+                    </div>
+                    <div className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">Current Weight</div>
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* Progress Images */}
-            <div className="hidden lg:block bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden mb-6">
+            {/* Progress Images - Always visible on all devices */}
+            <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden mb-6 block">
               <div className="px-4 py-4 sm:px-6 sm:py-5 lg:px-8 lg:py-6 border-b-2" style={{ backgroundColor: '#fef9e7', borderColor: '#daa450' }}>
                 <div className="flex items-center justify-between">
                   <div>
-                    <h2 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900">Progress Images</h2>
-                    <p className="text-gray-600 text-xs sm:text-sm mt-1">Track your transformation</p>
+                    <h2 className="text-base sm:text-lg lg:text-2xl font-bold text-gray-900">Progress Images</h2>
+                    <p className="text-gray-600 text-[10px] sm:text-xs lg:text-sm mt-1">Track your transformation</p>
                   </div>
                   <Link
                     href="/client-portal/progress-images"
@@ -1699,14 +1849,570 @@ export default function ClientPortalPage() {
               </div>
             </div>
 
-            {/* Sidebar Content - On mobile, these appear after main content */}
-            <div className="lg:hidden space-y-6 mb-6">
+            {/* Mobile-only Content - All dashboard elements together on mobile */}
+            <div className="lg:hidden space-y-6 mb-6 mt-6">
+              {/* Mobile Welcome */}
+              <div className="mb-4">
+                <h1 className="text-xl font-bold text-gray-900">Welcome Back!</h1>
+                <p className="text-gray-600 text-xs mt-1">Track your progress and stay connected</p>
+              </div>
+
+              {/* Quick Stats Bar */}
+              <div className="mb-6">
+                <QuickStatsBar stats={analytics?.quickStats || null} loading={loadingAnalytics} />
+              </div>
+
+              {/* Next Check-in Section */}
+              {(() => {
+                const now = new Date();
+                now.setHours(0, 0, 0, 0);
+                
+                const nextScheduled = assignedCheckins
+                  .filter(checkIn => {
+                    const dueDate = new Date(checkIn.dueDate);
+                    dueDate.setHours(0, 0, 0, 0);
+                    const daysDiff = Math.floor((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                    return checkIn.status === 'pending' && daysDiff >= 0;
+                  })
+                  .sort((a, b) => {
+                    const dateA = new Date(a.dueDate).getTime();
+                    const dateB = new Date(b.dueDate).getTime();
+                    return dateA - dateB;
+                  })[0];
+
+                if (!nextScheduled) return null;
+
+                const dueDate = new Date(nextScheduled.dueDate);
+                const daysDiff = Math.floor((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                
+                return (
+                  <div className="mb-6">
+                    <div className="bg-[#fef9e7] border-2 border-[#daa450] rounded-2xl p-4 shadow-sm">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#daa450' }}>
+                          <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h2 className="text-base font-bold text-gray-900 mb-1">Next Check-in</h2>
+                          <p className="text-sm font-medium text-gray-900 truncate">{nextScheduled.title}</p>
+                          <p className="text-xs text-gray-600 mt-1">
+                            Due: {dueDate.toLocaleDateString('en-US', { 
+                              weekday: 'long', 
+                              month: 'long', 
+                              day: 'numeric' 
+                            })}
+                            {daysDiff === 0 ? ' (Today)' : daysDiff === 1 ? ' (Tomorrow)' : daysDiff > 1 ? ` (in ${daysDiff} days)` : ''}
+                          </p>
+                        </div>
+                        <Link
+                          href="/client-portal/check-ins"
+                          className="flex-shrink-0 px-4 py-2 text-sm font-semibold text-white rounded-xl hover:opacity-90 transition-opacity shadow-sm"
+                          style={{ backgroundColor: '#daa450' }}
+                        >
+                          View
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Onboarding Questionnaire Banner */}
+              {onboardingStatus !== 'completed' && onboardingStatus !== 'submitted' && onboardingStatus !== 'skipped' && (
+                <div className="bg-gradient-to-r from-[#daa450] to-[#c89540] rounded-2xl shadow-lg mb-4 overflow-hidden border border-[#daa450]/20 w-full">
+                  <div className="px-4 py-4">
+                    <div className="flex flex-col gap-4">
+                      <div className="flex items-start gap-3 flex-1 min-w-0 w-full">
+                        <div className="w-10 h-10 bg-white bg-opacity-20 rounded-xl flex items-center justify-center flex-shrink-0">
+                          <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h2 className="text-base font-bold text-white mb-1.5">Complete Your Onboarding Questionnaire</h2>
+                          <p className="text-white/90 text-xs leading-relaxed">
+                            {onboardingStatus === 'not_started' 
+                              ? 'Help us understand your goals and preferences. This must be completed before you can receive check-ins.'
+                              : `You're ${onboardingProgress}% complete. Finish the questionnaire to unlock check-ins.`
+                            }
+                          </p>
+                          {onboardingProgress > 0 && (
+                            <div className="mt-3 w-full bg-white/20 rounded-full h-2">
+                              <div 
+                                className="bg-white h-2 rounded-full transition-all duration-300"
+                                style={{ width: `${onboardingProgress}%` }}
+                              ></div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <Link
+                        href="/client-portal/onboarding-questionnaire"
+                        className="w-full px-4 py-3 bg-white text-[#daa450] rounded-xl font-semibold hover:bg-gray-50 transition-colors shadow-md text-center text-sm min-h-[44px] flex items-center justify-center"
+                      >
+                        {onboardingStatus === 'not_started' ? 'Start Questionnaire' : 'Continue Questionnaire'}
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Next Upcoming Tasks */}
+              {(() => {
+                if (loadingTodos) return null;
+                
+                const hasOnboardingTasks = !onboardingTodos.hasWeight || !onboardingTodos.hasMeasurements || !onboardingTodos.hasBeforePhotos;
+                const hasMeasurementTask = nextMeasurementTask && (nextMeasurementTask.status === 'upcoming' || nextMeasurementTask.status === 'due' || nextMeasurementTask.status === 'overdue');
+                const hasTasks = hasOnboardingTasks || hasMeasurementTask;
+                
+                if (!hasTasks) return null;
+                
+                return (
+                  <div className="bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 mb-4 overflow-hidden w-full">
+                    <div className="px-4 py-3 border-b-2" style={{ backgroundColor: '#fef9e7', borderColor: '#daa450' }}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 bg-white bg-opacity-20 rounded-lg flex items-center justify-center flex-shrink-0">
+                            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                            </svg>
+                          </div>
+                          <div>
+                            <h2 className="text-sm font-bold text-gray-900">Next Upcoming Tasks</h2>
+                            <p className="text-gray-600 text-[10px] mt-0.5">Complete these tasks to stay on track</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="p-3 space-y-2">
+                      {hasMeasurementTask && (
+                        <Link
+                          href="/client-portal/measurements"
+                          className="flex items-center justify-between p-3 bg-white rounded-xl border-2 transition-all group"
+                          style={{ 
+                            borderColor: nextMeasurementTask!.status === 'overdue' ? '#ef4444' : '#daa450'
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#fef9e7'}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ffffff'}
+                        >
+                          <div className="flex items-center gap-2 flex-1 min-w-0">
+                            <div 
+                              className="w-7 h-7 rounded-full border-2 flex items-center justify-center flex-shrink-0"
+                              style={{ borderColor: nextMeasurementTask!.status === 'overdue' ? '#ef4444' : '#daa450' }}
+                            >
+                              <svg className="w-4 h-4" style={{ color: nextMeasurementTask!.status === 'overdue' ? '#ef4444' : '#daa450' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                              </svg>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h3 className="font-semibold text-sm text-gray-900 truncate">Update Measurements & Photos</h3>
+                              <p className="text-xs text-gray-600 line-clamp-1">
+                                {nextMeasurementTask!.status === 'overdue' && (
+                                  <span className="text-red-600 font-medium">Overdue by {nextMeasurementTask!.daysUntil} {nextMeasurementTask!.daysUntil === 1 ? 'day' : 'days'}</span>
+                                )}
+                                {nextMeasurementTask!.status === 'due' && (
+                                  <span className="font-medium" style={{ color: '#daa450' }}>Due today - {new Date(nextMeasurementTask!.dueDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+                                )}
+                                {nextMeasurementTask!.status === 'upcoming' && (
+                                  <>Due {nextMeasurementTask!.daysUntil === 1 ? 'tomorrow' : `in ${nextMeasurementTask!.daysUntil} days`} - {new Date(nextMeasurementTask!.dueDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</>
+                                )}
+                              </p>
+                            </div>
+                          </div>
+                          <svg className="w-4 h-4 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </Link>
+                      )}
+                      {!onboardingTodos.hasWeight && (
+                        <Link
+                          href="/client-portal/measurements"
+                          className="flex items-center justify-between p-3 bg-white rounded-xl border border-gray-200 hover:border-[#daa450] hover:shadow-md transition-all group"
+                        >
+                          <div className="flex items-center gap-2 flex-1 min-w-0">
+                            <div className="w-7 h-7 rounded-full border-2 flex items-center justify-center flex-shrink-0" style={{ borderColor: '#daa450' }}>
+                              <svg className="w-4 h-4" style={{ color: '#daa450' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                              </svg>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h3 className="font-semibold text-sm text-gray-900 truncate">Enter Your Weight</h3>
+                              <p className="text-xs text-gray-600 line-clamp-1">Record your starting weight to track progress</p>
+                            </div>
+                          </div>
+                          <svg className="w-4 h-4 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </Link>
+                      )}
+                      {!onboardingTodos.hasMeasurements && (
+                        <Link
+                          href="/client-portal/measurements"
+                          className="flex items-center justify-between p-3 bg-white rounded-xl border border-gray-200 hover:border-[#daa450] hover:shadow-md transition-all group"
+                        >
+                          <div className="flex items-center gap-2 flex-1 min-w-0">
+                            <div className="w-7 h-7 rounded-full border-2 flex items-center justify-center flex-shrink-0" style={{ borderColor: '#daa450' }}>
+                              <svg className="w-4 h-4" style={{ color: '#daa450' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                              </svg>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h3 className="font-semibold text-sm text-gray-900 truncate">Add Your Measurements</h3>
+                              <p className="text-xs text-gray-600 line-clamp-1">Record body measurements (waist, hips, chest, etc.)</p>
+                            </div>
+                          </div>
+                          <svg className="w-4 h-4 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </Link>
+                      )}
+                      {!onboardingTodos.hasBeforePhotos && (
+                        <Link
+                          href="/client-portal/measurements"
+                          className="flex items-center justify-between p-3 bg-white rounded-xl border border-gray-200 hover:border-[#daa450] hover:shadow-md transition-all group"
+                        >
+                          <div className="flex items-center gap-2 flex-1 min-w-0">
+                            <div className="w-7 h-7 rounded-full border-2 flex items-center justify-center flex-shrink-0" style={{ borderColor: '#daa450' }}>
+                              <svg className="w-4 h-4" style={{ color: '#daa450' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                              </svg>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h3 className="font-semibold text-sm text-gray-900 truncate">Upload Before Photos</h3>
+                              <p className="text-xs text-gray-600 line-clamp-2">Take and upload front, back, and side photos to track your transformation</p>
+                            </div>
+                          </div>
+                          <svg className="w-4 h-4 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </Link>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Check-ins Requiring Attention */}
+              <div className="mb-6">
+                <div className="bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                  <div className="px-4 py-4 border-b-2" style={{ backgroundColor: '#fef9e7', borderColor: '#daa450' }}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2 flex-1 min-w-0">
+                        <div className="w-8 h-8 bg-white bg-opacity-20 rounded-lg flex items-center justify-center flex-shrink-0">
+                          <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <h2 className="text-lg font-bold text-gray-900">Check-ins Requiring Attention</h2>
+                          <p className="text-gray-600 text-xs">Complete overdue and upcoming check-ins to stay on track</p>
+                        </div>
+                      </div>
+                      <div className="text-right flex-shrink-0 ml-2">
+                        <div className="text-gray-600 text-sm font-medium">Needs Action</div>
+                        <div className="text-2xl font-bold text-gray-900">
+                          {(() => {
+                            const filtered = assignedCheckins.filter(checkIn => {
+                              if (checkIn.status === 'completed') return false;
+                              const dueDate = new Date(checkIn.dueDate);
+                              const now = new Date();
+                              const normalizedDueDate = new Date(dueDate);
+                              normalizedDueDate.setHours(0, 0, 0, 0);
+                              const normalizedNow = new Date(now);
+                              normalizedNow.setHours(0, 0, 0, 0);
+                              if (normalizedDueDate < normalizedNow) return true;
+                              if (normalizedDueDate <= normalizedNow) {
+                                const checkInWindow = checkIn.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
+                                const windowStatus = isWithinCheckInWindow(checkInWindow);
+                                const isFirstCheckIn = checkIn.recurringWeek === 1;
+                                if (windowStatus.isOpen || isFirstCheckIn) return true;
+                              }
+                              return false;
+                            });
+                            const deduplicatedMap = new Map<string, CheckIn>();
+                            filtered.forEach(checkIn => {
+                              const dueDate = new Date(checkIn.dueDate);
+                              dueDate.setHours(0, 0, 0, 0);
+                              const key = `${checkIn.formId}_${dueDate.toISOString().split('T')[0]}`;
+                              if (!deduplicatedMap.has(key)) {
+                                deduplicatedMap.set(key, checkIn);
+                              }
+                            });
+                            return deduplicatedMap.size;
+                          })()}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="p-4">
+                    {(() => {
+                      const filteredCheckins = assignedCheckins.filter(checkIn => {
+                        if (checkIn.status === 'completed') return false;
+                        const dueDate = new Date(checkIn.dueDate);
+                        const now = new Date();
+                        const normalizedDueDate = new Date(dueDate);
+                        normalizedDueDate.setHours(0, 0, 0, 0);
+                        const normalizedNow = new Date(now);
+                        normalizedNow.setHours(0, 0, 0, 0);
+                        if (normalizedDueDate < normalizedNow) return true;
+                        if (normalizedDueDate <= normalizedNow) {
+                          const checkInWindow = checkIn.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
+                          const windowStatus = isWithinCheckInWindow(checkInWindow);
+                          const isFirstCheckIn = checkIn.recurringWeek === 1;
+                          if (windowStatus.isOpen || isFirstCheckIn) return true;
+                        }
+                        return false;
+                      });
+                      const deduplicatedMap = new Map<string, CheckIn>();
+                      filteredCheckins.forEach(checkIn => {
+                        const dueDate = new Date(checkIn.dueDate);
+                        dueDate.setHours(0, 0, 0, 0);
+                        const key = `${checkIn.formId}_${dueDate.toISOString().split('T')[0]}`;
+                        if (!deduplicatedMap.has(key)) {
+                          deduplicatedMap.set(key, checkIn);
+                        }
+                      });
+                      const upcomingCheckins = Array.from(deduplicatedMap.values()).sort((a, b) => {
+                        const aDue = new Date(a.dueDate).getTime();
+                        const bDue = new Date(b.dueDate).getTime();
+                        const now = new Date().getTime();
+                        const aIsOverdue = aDue < now;
+                        const bIsOverdue = bDue < now;
+                        if (aIsOverdue && !bIsOverdue) return -1;
+                        if (!aIsOverdue && bIsOverdue) return 1;
+                        if (aIsOverdue && bIsOverdue) return aDue - bDue;
+                        return aDue - bDue;
+                      });
+                      if (upcomingCheckins.length === 0) {
+                        return (
+                          <div className="text-center py-6">
+                            <div className="w-14 h-14 bg-gradient-to-br from-emerald-400 to-green-500 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-lg">
+                              <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                            </div>
+                            <p className="text-gray-800 text-base font-bold mb-1">All caught up!</p>
+                            <p className="text-gray-900 text-sm">No check-ins due this week. Great job!</p>
+                          </div>
+                        );
+                      }
+                      return (
+                        <div className="space-y-4">
+                          {upcomingCheckins.slice(0, 3).map((checkIn) => {
+                            const dueDate = new Date(checkIn.dueDate);
+                            const now = new Date();
+                            const daysDiff = Math.floor((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                            const isOverdue = daysDiff < 0;
+                            const colorStatus = getCheckInColorStatus(checkIn);
+                            const borderColor = colorStatus === 'red' ? 'border-red-300 bg-red-50' :
+                                              colorStatus === 'orange' ? 'border-orange-300 bg-orange-50' :
+                                              'border-green-300 bg-green-50';
+                            const buttonBg = colorStatus === 'red' ? 'bg-red-600 hover:bg-red-700' :
+                                            colorStatus === 'orange' ? 'bg-orange-600 hover:bg-orange-700' :
+                                            'bg-green-600 hover:bg-green-700';
+                            const buttonText = colorStatus === 'red' ? 'Complete Now' :
+                                             colorStatus === 'orange' ? 'Complete Soon' :
+                                             'Start Check-in';
+                            return (
+                              <div 
+                                key={checkIn.id} 
+                                className={`bg-white rounded-lg p-4 border-2 transition-all duration-200 ${borderColor}`}
+                              >
+                                <div className="flex flex-col gap-3">
+                                  <div className="flex-1 min-w-0">
+                                    <h3 className="text-base font-semibold text-gray-900 truncate">{checkIn.title}</h3>
+                                    <p className="text-xs text-gray-600 mt-1">
+                                      {isOverdue ? `${Math.abs(daysDiff)} day${Math.abs(daysDiff) !== 1 ? 's' : ''} overdue` :
+                                       daysDiff === 0 ? 'Due Today!' : 
+                                       daysDiff === 1 ? 'Due Tomorrow' : 
+                                       `Due in ${daysDiff} days`}
+                                    </p>
+                                  </div>
+                                  <Link
+                                    href={`/client-portal/check-in/${checkIn.id}`}
+                                    className={`w-full px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 text-white text-center ${buttonBg}`}
+                                  >
+                                    {buttonText}
+                                  </Link>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+              </div>
+
+              {/* Stats Overview - Metric Cards */}
+              <div className="grid grid-cols-2 gap-3 mb-6">
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                  <div className="px-3 py-3">
+                    <div className="flex items-center justify-between mb-2.5">
+                      <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#daa450' }}>
+                        <span className="text-sm">{getTrafficLightIcon(averageTrafficLight)}</span>
+                      </div>
+                      {analytics?.scores.trend && analytics.scores.trend !== 'no_data' && (
+                        <span className={`text-xs font-semibold ${
+                          analytics.scores.trend === 'up' ? 'text-green-600' : 
+                          analytics.scores.trend === 'down' ? 'text-red-600' : 
+                          'text-gray-500'
+                        }`}>
+                          {analytics.scores.trend === 'up' ? '↑' : analytics.scores.trend === 'down' ? '↓' : '→'}
+                        </span>
+                      )}
+                    </div>
+                    <div className="mb-2.5">
+                      <div className="flex items-baseline gap-1 mb-1">
+                        <span className="text-xl font-bold text-gray-900">{stats?.averageScore || 0}</span>
+                        <span className="text-sm text-gray-500">%</span>
+                      </div>
+                      {stats?.averageScore > 0 && (
+                        <div className="inline-block px-1.5 py-0.5 bg-gray-100 rounded text-[10px] font-medium text-gray-700">
+                          {getTrafficLightLabel(averageTrafficLight)}
+                        </div>
+                      )}
+                    </div>
+                    <div className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">Average Score</div>
+                    {stats?.averageScore > 0 && stats?.completedCheckins > 0 && (
+                      <div className="text-[10px] text-gray-600 mt-0.5">Based on {stats.completedCheckins} check-in{stats.completedCheckins !== 1 ? 's' : ''}</div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                  <div className="px-3 py-3">
+                    <div className="flex items-center justify-between mb-2.5">
+                      <div className="w-8 h-8 bg-green-500 rounded-lg flex items-center justify-center">
+                        <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      </div>
+                      {analytics?.quickStats.currentStreak > 0 && (
+                        <div className="flex items-center gap-0.5 px-1.5 py-0.5 bg-orange-100 rounded">
+                          <span className="text-[10px]">🔥</span>
+                          <span className="text-[10px] font-bold text-orange-700">{analytics.quickStats.currentStreak}</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="mb-2.5">
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-xl font-bold text-gray-900">
+                          {stats?.totalCheckins > 0 ? Math.round((stats.completedCheckins / stats.totalCheckins) * 100) : 0}
+                        </span>
+                        <span className="text-sm text-gray-500">%</span>
+                      </div>
+                    </div>
+                    <div className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">Completion Rate</div>
+                    {stats?.totalCheckins > 0 && (
+                      <div className="text-[10px] text-gray-600 mt-0.5">{stats.completedCheckins} of {stats.totalCheckins} completed</div>
+                    )}
+                    {analytics?.quickStats.currentStreak > 0 && (
+                      <div className="mt-1 inline-block px-1.5 py-0.5 bg-orange-50 rounded text-[10px] text-orange-700 font-semibold">
+                        {analytics.quickStats.currentStreak} day{analytics.quickStats.currentStreak !== 1 ? 's' : ''} streak!
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {analytics?.bodyweight && analytics.bodyweight.baseline && (
+                  <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div className="px-3 py-3">
+                      <div className="flex items-center justify-between mb-2.5">
+                        <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
+                          <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
+                          </svg>
+                        </div>
+                        {analytics.bodyweight.trend && analytics.bodyweight.trend !== 'no_data' && (
+                          <span className={`text-xs font-semibold ${
+                            analytics.bodyweight.trend === 'down' ? 'text-green-600' : 
+                            analytics.bodyweight.trend === 'up' ? 'text-red-600' : 
+                            'text-gray-500'
+                          }`}>
+                            {analytics.bodyweight.trend === 'down' ? '↓' : analytics.bodyweight.trend === 'up' ? '↑' : '→'}
+                          </span>
+                        )}
+                      </div>
+                      <div className="mb-2.5">
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-xl font-bold text-gray-900">
+                            {analytics.bodyweight.current ? analytics.bodyweight.current.toFixed(1) : '-'}
+                          </span>
+                          <span className="text-sm text-gray-500">kg</span>
+                        </div>
+                        {analytics.bodyweight.change !== 0 && (
+                          <div className={`mt-1 inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                            analytics.bodyweight.change > 0 ? 'bg-green-50 text-green-700' : 'bg-orange-50 text-orange-700'
+                          }`}>
+                            {analytics.bodyweight.change > 0 ? '↓' : '↑'} {Math.abs(analytics.bodyweight.change).toFixed(1)}kg
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">Current Weight</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Progress Images */}
+              <div className="bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden mb-6">
+                <div className="px-4 py-4 border-b-2" style={{ backgroundColor: '#fef9e7', borderColor: '#daa450' }}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h2 className="text-base font-bold text-gray-900">Progress Images</h2>
+                      <p className="text-gray-600 text-[10px] mt-1">Track your transformation</p>
+                    </div>
+                    <Link
+                      href="/client-portal/progress-images"
+                      className="px-3 py-2 text-white rounded-xl hover:opacity-90 transition-all duration-200 text-xs font-medium shadow-sm"
+                      style={{ backgroundColor: '#daa450' }}
+                    >
+                      Manage
+                    </Link>
+                  </div>
+                </div>
+                <ProgressImagesPreview clientEmail={userProfile?.email || ''} />
+              </div>
+
+              {/* Progress Summary */}
+              <div className="bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                <div className="px-4 py-3 border-b-2" style={{ backgroundColor: '#fef9e7', borderColor: '#daa450' }}>
+                  <h3 className="text-base font-bold text-gray-900">Progress Summary</h3>
+                </div>
+                <div className="p-4 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-900">Completion Rate</span>
+                    <span className="font-bold text-gray-900">
+                      {stats.totalCheckins > 0 ? Math.round((stats.completedCheckins / stats.totalCheckins) * 100) : 0}%
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-900">Performance</span>
+                    <span className="font-bold text-gray-900">
+                      {stats.averageScore >= 80 ? 'Excellent' : 
+                       stats.averageScore >= 60 ? 'Good' : 'Needs Improvement'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-900">Active Streak</span>
+                    <span className="font-bold text-gray-900">
+                      {stats.lastActivity ? 'Current' : 'None'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
               {/* Quick Actions */}
               <div className="bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
-                <div className="px-4 py-3 sm:px-6 sm:py-4 border-b-2" style={{ backgroundColor: '#fef9e7', borderColor: '#daa450' }}>
-                  <h3 className="text-base sm:text-lg font-bold text-gray-900">Quick Actions</h3>
+                <div className="px-4 py-3 border-b-2" style={{ backgroundColor: '#fef9e7', borderColor: '#daa450' }}>
+                  <h3 className="text-base font-bold text-gray-900">Quick Actions</h3>
                 </div>
-                <div className="p-4 sm:p-6 space-y-3">
+                <div className="p-4 space-y-3">
                   {coach && (
                     <Link
                       href="/client-portal/messages"
@@ -1739,56 +2445,6 @@ export default function ClientPortalPage() {
                   >
                     Update Profile
                   </Link>
-                </div>
-              </div>
-
-              {/* Progress Summary - Mobile only */}
-              <div className="bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
-                <div className="px-4 py-3 sm:px-6 sm:py-4 border-b-2" style={{ backgroundColor: '#fef9e7', borderColor: '#daa450' }}>
-                  <h3 className="text-base sm:text-lg font-bold text-gray-900">Progress Summary</h3>
-                </div>
-                <div className="p-4 sm:p-6 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-900">Completion Rate</span>
-                    <span className="font-bold text-gray-900">
-                      {stats.totalCheckins > 0 ? Math.round((stats.completedCheckins / stats.totalCheckins) * 100) : 0}%
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-900">Performance</span>
-                    <span className="font-bold text-gray-900">
-                      {stats.averageScore >= 80 ? 'Excellent' : 
-                       stats.averageScore >= 60 ? 'Good' : 'Needs Improvement'}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-900">Active Streak</span>
-                    <span className="font-bold text-gray-900">
-                      {stats.lastActivity ? 'Current' : 'None'}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Progress Images - Mobile only */}
-              <div className="bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
-                <div className="px-4 py-3 sm:px-6 sm:py-4 border-b-2" style={{ backgroundColor: '#fef9e7', borderColor: '#daa450' }}>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-base sm:text-lg font-bold text-gray-900">Progress Images</h3>
-                      <p className="text-gray-600 text-[10px] sm:text-xs mt-1">Track your transformation</p>
-                    </div>
-                    <Link
-                      href="/client-portal/progress-images"
-                      className="px-3 py-1.5 text-white rounded-xl hover:opacity-90 transition-all duration-200 text-xs font-medium shadow-sm"
-                      style={{ backgroundColor: '#daa450' }}
-                    >
-                      Manage
-                    </Link>
-                  </div>
-                </div>
-                <div className="p-4 sm:p-6">
-                  <ProgressImagesPreview clientEmail={userProfile?.email || ''} />
                 </div>
               </div>
             </div>
