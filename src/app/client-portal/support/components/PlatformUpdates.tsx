@@ -98,7 +98,7 @@ export default function PlatformUpdates() {
           onClick={() => setSelectedCategory('all')}
           className={`px-3 sm:px-4 py-2 rounded-lg font-medium text-xs sm:text-sm transition-colors whitespace-nowrap ${
             selectedCategory === 'all'
-              ? 'bg-gray-900 text-white'
+              ? 'bg-blue-600 text-white border-2 border-blue-700'
               : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
           }`}
         >
