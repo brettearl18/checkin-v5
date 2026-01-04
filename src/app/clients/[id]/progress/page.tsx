@@ -33,9 +33,10 @@ interface QuestionProgress {
     week: number;
     date: string;
     score: number;
-    status: 'red' | 'orange' | 'green';
+    status: 'red' | 'orange' | 'green' | 'grey';
     answer: any;
     type: string;
+    weight?: number;
   }[];
   // Lifecycle tracking
   firstSeenWeek: number;
@@ -254,20 +255,8 @@ export default function ClientProgressPage() {
     });
 
     // Create progress data for each question
-    // Filter out text and textarea questions - they are not measurable/scorable
+    // Include ALL questions (including text/textarea) - they will show grey if unscored
     const progress: QuestionProgress[] = Array.from(questionMap.values())
-      .filter(question => {
-        // Check if this question type is scorable by looking at responses
-        const sampleResponse = sortedResponses
-          .flatMap(r => r.responses || [])
-          .find((r: QuestionResponse) => r.questionId === question.questionId);
-        
-        if (!sampleResponse) return false;
-        
-        const questionType = sampleResponse.type || 'text';
-        // Exclude text and textarea questions - they are not measurable
-        return questionType !== 'text' && questionType !== 'textarea';
-      })
       .map(question => {
         const metadata = questionMetadata.get(question.questionId)!;
         const weeks = sortedResponses.map((response, index) => {
@@ -280,13 +269,20 @@ export default function ClientProgressPage() {
           return null;
         }
 
-        // Get score (0-10 scale typically)
+        // Get score (0-10 scale typically) and weight
         const score = qResponse.score || 0;
+        const weight = qResponse.weight !== undefined ? qResponse.weight : 5; // Default weight if not set
+        const questionType = qResponse.type || 'text';
         
-        // Determine status based on score
-        // Green: 7-10, Orange: 4-6, Red: 0-3
-        let status: 'red' | 'orange' | 'green';
-        if (score >= 7) {
+        // Determine if question is unscored (should show grey)
+        // Unscored if: weight === 0, or type is text/textarea
+        const isUnscored = weight === 0 || questionType === 'text' || questionType === 'textarea';
+        
+        // Determine status based on score and whether question is scored
+        let status: 'red' | 'orange' | 'green' | 'grey';
+        if (isUnscored) {
+          status = 'grey';
+        } else if (score >= 7) {
           status = 'green';
         } else if (score >= 4) {
           status = 'orange';
@@ -302,9 +298,10 @@ export default function ClientProgressPage() {
           score: score,
           status: status,
           answer: qResponse.answer,
-          type: qResponse.type || 'text'
+          type: questionType,
+          weight: weight
         };
-      }).filter(w => w !== null) as { week: number; date: string; score: number; status: 'red' | 'orange' | 'green'; answer: any; type: string }[];
+      }).filter(w => w !== null) as { week: number; date: string; score: number; status: 'red' | 'orange' | 'green' | 'grey'; answer: any; type: string; weight?: number }[];
 
       return {
         questionId: question.questionId,
@@ -320,7 +317,7 @@ export default function ClientProgressPage() {
     setQuestionProgress(progress);
   };
 
-  const getStatusColor = (status: 'red' | 'orange' | 'green') => {
+  const getStatusColor = (status: 'red' | 'orange' | 'green' | 'grey') => {
     switch (status) {
       case 'green':
         return 'bg-green-500';
@@ -328,10 +325,14 @@ export default function ClientProgressPage() {
         return 'bg-orange-500';
       case 'red':
         return 'bg-red-500';
+      case 'grey':
+        return 'bg-gray-400';
+      default:
+        return 'bg-gray-400';
     }
   };
 
-  const getStatusBorder = (status: 'red' | 'orange' | 'green') => {
+  const getStatusBorder = (status: 'red' | 'orange' | 'green' | 'grey') => {
     switch (status) {
       case 'green':
         return 'border-green-600';
@@ -339,6 +340,10 @@ export default function ClientProgressPage() {
         return 'border-orange-600';
       case 'red':
         return 'border-red-600';
+      case 'grey':
+        return 'border-gray-500';
+      default:
+        return 'border-gray-500';
     }
   };
 
@@ -502,7 +507,9 @@ export default function ClientProgressPage() {
                             >
                               <div
                                 className={`w-6 h-6 rounded-full ${getStatusColor(questionWeek.status)} ${getStatusBorder(questionWeek.status)} flex items-center justify-center transition-all hover:scale-125 cursor-pointer shadow-sm mx-auto`}
-                                title={`Week ${questionWeek.week}: Score ${questionWeek.score}/10 - ${questionWeek.date}`}
+                                title={questionWeek.status === 'grey' 
+                                  ? `Week ${questionWeek.week}: Not Scored - ${questionWeek.date}` 
+                                  : `Week ${questionWeek.week}: Score ${questionWeek.score}/10 - ${questionWeek.date}`}
                                 onClick={() => setSelectedResponse({
                                   question: question.questionText,
                                   answer: questionWeek.answer,
@@ -512,7 +519,9 @@ export default function ClientProgressPage() {
                                   type: questionWeek.type
                                 })}
                               >
-                                <span className="text-white text-[9px] font-bold">{questionWeek.score}</span>
+                                {questionWeek.status !== 'grey' && (
+                                  <span className="text-white text-[9px] font-bold">{questionWeek.score}</span>
+                                )}
                               </div>
                             </td>
                           );

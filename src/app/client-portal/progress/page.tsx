@@ -36,9 +36,10 @@ interface QuestionProgress {
     week: number;
     date: string;
     score: number;
-    status: 'red' | 'orange' | 'green';
+    status: 'red' | 'orange' | 'green' | 'grey';
     answer: any;
     type: string;
+    weight?: number;
   }[];
 }
 
@@ -334,28 +335,8 @@ export default function ClientProgressPage() {
     console.log('Total responses to process:', sortedResponses.length);
 
     // Create progress data for each question
-    // Filter out text and textarea questions - they are not measurable/scorable
-    const scorableQuestionTypes = ['scale', 'rating', 'number', 'multiple_choice', 'select', 'boolean', 'multiselect'];
-    
+    // Include ALL questions (including text/textarea) - they will show grey if unscored
     const progress: QuestionProgress[] = Array.from(questionMap.values())
-      .filter(question => {
-        // Check if this question type is scorable by looking at responses
-        // We need to find at least one response to check its type
-        const sampleResponse = sortedResponses
-          .flatMap(r => r.responses || [])
-          .find((r: QuestionResponse) => {
-            const rQuestionId = r.questionId || '';
-            const rQuestionText = r.questionText || r.question || '';
-            return (question.questionId && rQuestionId === question.questionId) ||
-                   (question.questionText && rQuestionText === question.questionText);
-          });
-        
-        if (!sampleResponse) return false;
-        
-        const questionType = sampleResponse.type || 'text';
-        // Exclude text and textarea questions - they are not measurable
-        return questionType !== 'text' && questionType !== 'textarea';
-      })
       .map(question => {
         const weeks = sortedResponses.map((response, index) => {
           // Find this question's response in this check-in
@@ -390,20 +371,24 @@ export default function ClientProgressPage() {
             return null;
           }
 
-          // Skip if this is a text or textarea question (shouldn't happen due to filter, but double-check)
           const questionType = qResponse.type || 'text';
-          if (questionType === 'text' || questionType === 'textarea') {
-            return null;
-          }
-
+          
           // Get score (0-10 scale typically) - check multiple possible fields
           const score = qResponse.score !== undefined ? qResponse.score : 
                        (qResponse.weightedScore !== undefined ? qResponse.weightedScore / (qResponse.weight || 1) : 0);
           
-          // Determine status based on score
-          // Green: 7-10, Orange: 4-6, Red: 0-3
-          let status: 'red' | 'orange' | 'green';
-          if (score >= 7) {
+          // Get weight to determine if question is scored
+          const weight = qResponse.weight !== undefined ? qResponse.weight : 5; // Default weight if not set
+          
+          // Determine if question is unscored (should show grey)
+          // Unscored if: weight === 0, or type is text/textarea
+          const isUnscored = weight === 0 || questionType === 'text' || questionType === 'textarea';
+          
+          // Determine status based on score and whether question is scored
+          let status: 'red' | 'orange' | 'green' | 'grey';
+          if (isUnscored) {
+            status = 'grey';
+          } else if (score >= 7) {
             status = 'green';
           } else if (score >= 4) {
             status = 'orange';
@@ -419,9 +404,10 @@ export default function ClientProgressPage() {
             score: score,
             status: status,
             answer: qResponse.answer,
-            type: questionType
+            type: questionType,
+            weight: weight
           };
-        }).filter(w => w !== null) as { week: number; date: string; score: number; status: 'red' | 'orange' | 'green' }[];
+        }).filter(w => w !== null) as { week: number; date: string; score: number; status: 'red' | 'orange' | 'green' | 'grey'; answer: any; type: string; weight?: number }[];
 
         return {
           questionId: question.questionId,
@@ -433,7 +419,7 @@ export default function ClientProgressPage() {
     setQuestionProgress(progress);
   };
 
-  const getStatusColor = (status: 'red' | 'orange' | 'green') => {
+  const getStatusColor = (status: 'red' | 'orange' | 'green' | 'grey') => {
     switch (status) {
       case 'green':
         return 'bg-green-500';
@@ -441,10 +427,14 @@ export default function ClientProgressPage() {
         return 'bg-orange-500';
       case 'red':
         return 'bg-red-500';
+      case 'grey':
+        return 'bg-gray-400';
+      default:
+        return 'bg-gray-400';
     }
   };
 
-  const getStatusBorder = (status: 'red' | 'orange' | 'green') => {
+  const getStatusBorder = (status: 'red' | 'orange' | 'green' | 'grey') => {
     switch (status) {
       case 'green':
         return 'border-green-600';
@@ -452,6 +442,10 @@ export default function ClientProgressPage() {
         return 'border-orange-600';
       case 'red':
         return 'border-red-600';
+      case 'grey':
+        return 'border-gray-500';
+      default:
+        return 'border-gray-500';
     }
   };
 
@@ -752,7 +746,7 @@ export default function ClientProgressPage() {
                   </div>
                 
                   {/* Legend */}
-                  <div className="flex items-center gap-2 md:gap-4 px-3 md:px-6 py-2 md:py-3 bg-gray-50 border-b border-gray-100">
+                  <div className="flex items-center gap-2 md:gap-4 px-3 md:px-6 py-2 md:py-3 bg-gray-50 border-b border-gray-100 flex-wrap">
                     <div className="flex items-center gap-1 md:gap-2">
                       <div className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-full bg-green-500"></div>
                       <span className="text-[10px] md:text-xs text-gray-700 font-medium">Good (7-10)</span>
@@ -764,6 +758,10 @@ export default function ClientProgressPage() {
                     <div className="flex items-center gap-1 md:gap-2">
                       <div className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-full bg-red-500"></div>
                       <span className="text-[10px] md:text-xs text-gray-700 font-medium">Needs Attention (0-3)</span>
+                    </div>
+                    <div className="flex items-center gap-1 md:gap-2">
+                      <div className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-full bg-gray-400 border border-gray-500"></div>
+                      <span className="text-[10px] md:text-xs text-gray-700 font-medium">Not Scored</span>
                     </div>
                   </div>
 
@@ -808,7 +806,9 @@ export default function ClientProgressPage() {
                             >
                               <div
                                 className={`w-6 h-6 rounded-full ${getStatusColor(week.status)} ${getStatusBorder(week.status)} flex items-center justify-center transition-all hover:scale-125 cursor-pointer shadow-sm mx-auto`}
-                                title={`Week ${week.week}: Score ${week.score}/10 - ${week.date}`}
+                                title={week.status === 'grey' 
+                                  ? `Week ${week.week}: Not Scored - ${week.date}` 
+                                  : `Week ${week.week}: Score ${week.score}/10 - ${week.date}`}
                                 onClick={() => setSelectedResponse({
                                   question: question.questionText,
                                   answer: week.answer,
@@ -851,7 +851,9 @@ export default function ClientProgressPage() {
                           >
                             <div
                               className={`w-5 h-5 rounded-full ${getStatusColor(week.status)} ${getStatusBorder(week.status)} flex items-center justify-center transition-all active:scale-110 cursor-pointer shadow-sm`}
-                              title={`Week ${week.week}: Score ${week.score}/10 - ${week.date}`}
+                              title={week.status === 'grey' 
+                                ? `Week ${week.week}: Not Scored - ${week.date}` 
+                                : `Week ${week.week}: Score ${week.score}/10 - ${week.date}`}
                               onClick={() => setSelectedResponse({
                                 question: question.questionText,
                                 answer: week.answer,

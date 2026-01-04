@@ -73,9 +73,10 @@ interface QuestionProgress {
     week: number;
     date: string;
     score: number;
-    status: 'red' | 'orange' | 'green';
+    status: 'red' | 'orange' | 'green' | 'grey';
     answer: any;
     type: string;
+    weight?: number;
   }[];
 }
 
@@ -798,6 +799,36 @@ export default function ClientProfilePage() {
     if (score >= 80) return 'bg-green-100 text-green-800';
     if (score >= 60) return 'bg-yellow-100 text-yellow-800';
     return 'bg-red-100 text-red-800';
+  };
+
+  const getQuestionProgressStatusColor = (status: 'red' | 'orange' | 'green' | 'grey') => {
+    switch (status) {
+      case 'green':
+        return 'bg-green-500';
+      case 'orange':
+        return 'bg-orange-500';
+      case 'red':
+        return 'bg-red-500';
+      case 'grey':
+        return 'bg-gray-400';
+      default:
+        return 'bg-gray-400';
+    }
+  };
+
+  const getQuestionProgressStatusBorder = (status: 'red' | 'orange' | 'green' | 'grey') => {
+    switch (status) {
+      case 'green':
+        return 'border-green-600';
+      case 'orange':
+        return 'border-orange-600';
+      case 'red':
+        return 'border-red-600';
+      case 'grey':
+        return 'border-gray-500';
+      default:
+        return 'border-gray-500';
+    }
   };
 
   const getCategoryColor = (category: string) => {
@@ -2633,7 +2664,7 @@ export default function ClientProfilePage() {
                   {questionProgressExpanded && (
                     <>
                       {/* Legend */}
-                      <div className="flex items-center gap-3 px-6 py-3 bg-gray-50/50 border-b border-gray-100">
+                      <div className="flex items-center gap-3 px-6 py-3 bg-gray-50/50 border-b border-gray-100 flex-wrap">
                     <div className="flex items-center gap-1">
                       <div className="w-2.5 h-2.5 rounded-full bg-green-500"></div>
                       <span className="text-[10px] text-gray-600 font-medium">Good (7-10)</span>
@@ -2645,6 +2676,10 @@ export default function ClientProfilePage() {
                     <div className="flex items-center gap-1">
                       <div className="w-2.5 h-2.5 rounded-full bg-red-500"></div>
                       <span className="text-[10px] text-gray-600 font-medium">Needs Attention (0-3)</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <div className="w-2.5 h-2.5 rounded-full bg-gray-400 border border-gray-500"></div>
+                      <span className="text-[10px] text-gray-600 font-medium">Not Scored</span>
                     </div>
                   </div>
 
@@ -2694,8 +2729,10 @@ export default function ClientProfilePage() {
                                   className="text-center py-1.5 px-1"
                                 >
                                   <div
-                                    className={`w-6 h-6 rounded-full ${getStatusColor(week.status)} ${getStatusBorder(week.status)} flex items-center justify-center transition-all hover:scale-125 cursor-pointer shadow-sm mx-auto`}
-                                    title={`Week ${week.week}: Score ${week.score}/10 - ${week.date}`}
+                                    className={`w-6 h-6 rounded-full ${getQuestionProgressStatusColor(week.status)} ${getQuestionProgressStatusBorder(week.status)} flex items-center justify-center transition-all hover:scale-125 cursor-pointer shadow-sm mx-auto`}
+                                    title={week.status === 'grey' 
+                                      ? `Week ${week.week}: Not Scored - ${week.date}` 
+                                      : `Week ${week.week}: Score ${week.score}/10 - ${week.date}`}
                                     onClick={() => setSelectedResponse({
                                       question: question.questionText,
                                       answer: week.answer,
@@ -2705,7 +2742,9 @@ export default function ClientProfilePage() {
                                       type: week.type
                                     })}
                                   >
-                                    <span className="text-white text-[9px] font-bold">{week.score}</span>
+                                    {week.status !== 'grey' && (
+                                      <span className="text-white text-[9px] font-bold">{week.score}</span>
+                                    )}
                                   </div>
                                 </td>
                               ))}
