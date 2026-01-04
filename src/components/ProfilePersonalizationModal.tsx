@@ -47,7 +47,7 @@ export default function ProfilePersonalizationModal({
   currentAvatar,
   clientId
 }: ProfilePersonalizationModalProps) {
-  const { refreshProfile } = useAuth();
+  const { refreshProfile, userProfile } = useAuth();
   const [quote, setQuote] = useState('');
   const [showQuote, setShowQuote] = useState(true);
   const [colorTheme, setColorTheme] = useState('#daa450');
