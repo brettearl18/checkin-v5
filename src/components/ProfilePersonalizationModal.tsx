@@ -47,7 +47,7 @@ export default function ProfilePersonalizationModal({
   currentAvatar,
   clientId
 }: ProfilePersonalizationModalProps) {
-  const { userProfile } = useAuth();
+  const { refreshProfile } = useAuth();
   const [quote, setQuote] = useState('');
   const [showQuote, setShowQuote] = useState(true);
   const [colorTheme, setColorTheme] = useState('#daa450');
@@ -322,12 +322,18 @@ export default function ProfilePersonalizationModal({
 
       // Image uploaded successfully
       console.log('Image uploaded successfully:', uploadResult);
+      
+      // Refresh profile in AuthContext to get updated avatar
+      await refreshProfile();
+      
       // Close modal and refresh
       onSave();
       onClose();
+      
+      // Give time for API to update, then reload page to refresh UI
       setTimeout(() => {
         window.location.reload();
-      }, 200);
+      }, 500);
     } catch (err: any) {
       console.error('Error uploading image:', err);
       setError(err.message || 'Failed to upload image. Please try again.');

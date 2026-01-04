@@ -114,7 +114,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           firstName: clientData.firstName,
           lastName: clientData.lastName,
           phone: clientData.phone,
-          avatar: clientData.profileImage || undefined,
+          avatar: clientData.profileImage || clientData.avatar || undefined,
           status: clientData.status,
           createdAt: clientData.createdAt?.toDate() || new Date(),
           updatedAt: clientData.updatedAt?.toDate() || new Date(),
@@ -306,6 +306,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isCoach = userProfile?.role === 'coach' || userProfile?.roles?.includes('coach') || false;
   const isClient = userProfile?.role === 'client' || userProfile?.roles?.includes('client') || false;
 
+  // Refresh user profile (public method)
+  const refreshProfile = async () => {
+    if (user?.uid) {
+      await fetchUserProfile(user.uid);
+    }
+  };
+
   const value = {
     user,
     userProfile,
@@ -315,6 +322,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     logout,
     resetPassword,
     updateUserProfile,
+    refreshProfile,
     isAdmin,
     isCoach,
     isClient

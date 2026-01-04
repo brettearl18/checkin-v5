@@ -135,6 +135,7 @@ export async function POST(request: NextRequest) {
     await db.collection('clients').doc(clientId).update({
       profileImage: imageUrl,
       avatar: imageUrl, // Also store as avatar for compatibility
+      'profile.avatar': imageUrl, // Update nested profile.avatar as well
       updatedAt: Timestamp.now()
     });
 

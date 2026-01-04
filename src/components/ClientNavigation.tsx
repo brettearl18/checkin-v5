@@ -122,7 +122,7 @@ export default function ClientNavigation() {
   const [isPersonalizationModalOpen, setIsPersonalizationModalOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pathname = usePathname();
-  const { userProfile, logout } = useAuth();
+  const { userProfile, logout, refreshProfile } = useAuth();
 
   const isActive = (href: string) => {
     if (href === '/client-portal') {
@@ -313,8 +313,12 @@ export default function ClientNavigation() {
 
       const result = await response.json();
       if (result.success) {
-        // Reload the page to refresh the profile image
-        window.location.reload();
+        // Refresh profile in AuthContext to get updated avatar
+        await refreshProfile();
+        // Also reload to ensure UI updates
+        setTimeout(() => {
+          window.location.reload();
+        }, 300);
       } else {
         alert(`Failed to upload image: ${result.message || 'Unknown error'}`);
       }
