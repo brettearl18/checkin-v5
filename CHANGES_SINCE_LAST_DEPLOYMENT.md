@@ -57,6 +57,46 @@
 
 ---
 
+## 👥 Client-Side Updates (Client Portal)
+
+### Client Portal Improvements
+- **Support Page Mobile Optimization**:
+  - Reduced padding and margins for mobile devices
+  - Added horizontal scrolling for tab navigation
+  - Improved text wrapping and overflow handling
+  - Better touch targets and spacing
+- **Check-in Experience**:
+  - Check-in extension request feature (allows late submissions with reason)
+  - Improved error handling and user feedback
+- **Answer Display**:
+  - Scores rounded to 1 decimal place for cleaner display
+  - Better formatting of answers in check-in responses
+
+---
+
+## 👥 Client-Side Updates (Client Portal)
+
+### Client Portal Improvements
+- **Support Page Mobile Optimization**:
+  - Files: `src/app/client-portal/support/page.tsx` and all support components
+  - Reduced padding and margins for mobile devices
+  - Added horizontal scrolling for tab navigation
+  - Improved text wrapping and overflow handling
+  - Better touch targets and spacing
+  - Content properly contained within mobile viewport
+- **Check-in Experience**:
+  - Check-in extension request feature (allows late submissions with reason)
+  - Improved error handling and user feedback
+  - Better mobile layout for check-in forms
+- **Answer Display**:
+  - Scores rounded to 1 decimal place for cleaner display
+  - Better formatting of answers in check-in responses
+- **Navigation**:
+  - Reordered client navigation menu for better logical flow
+  - Improved mobile navigation experience
+
+---
+
 ## 📱 Mobile Optimizations
 
 ### 6. Coach Check-in Response Page Mobile Optimization
