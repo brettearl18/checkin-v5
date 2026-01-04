@@ -292,7 +292,7 @@ export default function OnboardingQuestionnairePage() {
               type="number"
               value={answer || ''}
               onChange={(e) => handleAnswerChange(question.id, e.target.value ? Number(e.target.value) : '')}
-              className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#daa450] focus:border-[#daa450] text-gray-900 text-lg"
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#daa450] focus:border-[#daa450] text-gray-900 text-base sm:text-lg"
               placeholder="Enter a number"
             />
           );
@@ -303,7 +303,7 @@ export default function OnboardingQuestionnairePage() {
               type="text"
               value={answer || ''}
               onChange={(e) => handleAnswerChange(question.id, e.target.value)}
-              className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#daa450] focus:border-[#daa450] text-gray-900 text-lg"
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#daa450] focus:border-[#daa450] text-gray-900 text-base sm:text-lg"
               placeholder="Type your answer"
             />
           );
@@ -372,7 +372,7 @@ export default function OnboardingQuestionnairePage() {
                     key={value}
                     type="button"
                     onClick={() => handleAnswerChange(question.id, value)}
-                    className={`flex-1 min-w-[60px] py-3 px-4 rounded-xl font-semibold text-lg transition-all ${
+                    className={`flex-1 min-w-[50px] sm:min-w-[60px] py-3 px-3 sm:px-4 rounded-xl font-semibold text-base sm:text-lg transition-all ${
                       answer === value
                         ? 'bg-[#daa450] text-white shadow-lg scale-105'
                         : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -391,7 +391,7 @@ export default function OnboardingQuestionnairePage() {
               <button
                 type="button"
                 onClick={() => handleAnswerChange(question.id, true)}
-                className={`flex-1 py-4 px-6 rounded-xl font-semibold text-lg transition-all ${
+                className={`flex-1 py-3 sm:py-4 px-4 sm:px-6 rounded-xl font-semibold text-base sm:text-lg transition-all min-h-[44px] ${
                   answer === true
                     ? 'bg-green-600 text-white shadow-lg'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -402,7 +402,7 @@ export default function OnboardingQuestionnairePage() {
               <button
                 type="button"
                 onClick={() => handleAnswerChange(question.id, false)}
-                className={`flex-1 py-4 px-6 rounded-xl font-semibold text-lg transition-all ${
+                className={`flex-1 py-3 sm:py-4 px-4 sm:px-6 rounded-xl font-semibold text-base sm:text-lg transition-all min-h-[44px] ${
                   answer === false
                     ? 'bg-red-600 text-white shadow-lg'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -423,7 +423,7 @@ export default function OnboardingQuestionnairePage() {
     
     return (
       <div key={question.id} className={`mb-8 ${isUnanswered ? 'bg-yellow-50 border-2 border-yellow-400 rounded-xl p-6' : ''}`}>
-        <label className="block text-xl font-bold text-gray-900 mb-4">
+        <label className="block text-lg sm:text-xl font-bold text-gray-900 mb-4">
           {question.questionText}
           {question.required && <span className="text-red-500 ml-1">*</span>}
           {isUnanswered && (
@@ -445,7 +445,7 @@ export default function OnboardingQuestionnairePage() {
                 type="number"
                 value={followUpAnswer || ''}
                 onChange={(e) => handleAnswerChange(`${question.id}_followup`, e.target.value ? Number(e.target.value) : '')}
-                className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#daa450] focus:border-[#daa450] text-gray-900 text-lg"
+                className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#daa450] focus:border-[#daa450] text-gray-900 text-base sm:text-lg"
               />
             )}
             {question.followUpQuestion.questionType === 'text' && (
@@ -453,7 +453,7 @@ export default function OnboardingQuestionnairePage() {
                 type="text"
                 value={followUpAnswer || ''}
                 onChange={(e) => handleAnswerChange(`${question.id}_followup`, e.target.value)}
-                className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#daa450] focus:border-[#daa450] text-gray-900 text-lg"
+                className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#daa450] focus:border-[#daa450] text-gray-900 text-base sm:text-lg"
               />
             )}
             {question.followUpQuestion.questionType === 'textarea' && (
@@ -479,7 +479,7 @@ export default function OnboardingQuestionnairePage() {
                       onChange={(e) => handleAnswerChange(`${question.id}_followup`, option)}
                       className="w-5 h-5 text-[#daa450] border-gray-300 focus:ring-[#daa450] focus:ring-2"
                     />
-                    <span className="ml-3 text-gray-900 text-lg">{option}</span>
+                    <span className="ml-3 text-gray-900 text-base sm:text-lg">{option}</span>
                   </label>
                 ))}
               </div>
@@ -527,8 +527,8 @@ export default function OnboardingQuestionnairePage() {
                 </svg>
                 Back to Dashboard
               </Link>
-              <h1 className="text-4xl font-bold text-gray-900 mb-2">Onboarding Questionnaire</h1>
-              <p className="text-gray-600 text-lg">
+              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 mb-2">Onboarding Questionnaire</h1>
+              <p className="text-gray-600 text-base sm:text-lg">
                 Help us understand your goals, preferences, and baseline health. You can save each section and return later.
               </p>
             </div>
@@ -567,8 +567,8 @@ export default function OnboardingQuestionnairePage() {
             })()}
 
             {/* Section Navigation */}
-            <div className="mb-8 bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <div className="mb-8 bg-white rounded-2xl p-4 sm:p-6 shadow-sm border border-gray-100">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-2 sm:gap-3">
                 {ONBOARDING_SECTIONS.map((section) => {
                   const isCompleted = progress.completedSections.includes(section.id);
                   const isCurrent = currentSection === section.id;
@@ -587,7 +587,7 @@ export default function OnboardingQuestionnairePage() {
                     >
                       <div className="text-2xl mb-2">{section.icon}</div>
                       <div className="text-xs font-semibold text-gray-900">{section.id}</div>
-                      <div className={`text-[10px] mt-1 ${isCompleted ? 'text-green-600' : 'text-gray-500'}`}>
+                      <div className={`text-xs sm:text-[10px] mt-1 ${isCompleted ? 'text-green-600' : 'text-gray-500'}`}>
                         {isCompleted ? '✓ Complete' : 'Pending'}
                       </div>
                     </button>
@@ -597,12 +597,12 @@ export default function OnboardingQuestionnairePage() {
             </div>
 
             {/* Current Section */}
-            <div className="bg-white rounded-2xl p-8 shadow-sm border border-gray-100 mb-6">
+            <div className="bg-white rounded-2xl p-4 sm:p-6 lg:p-8 shadow-sm border border-gray-100 mb-6">
               <div className="mb-6 pb-4 border-b border-gray-200">
-                <h2 className="text-2xl font-bold text-gray-900">
+                <h2 className="text-xl sm:text-2xl font-bold text-gray-900">
                   Section {currentSection}: {sectionInfo?.name}
                 </h2>
-                <p className="text-gray-600 mt-1">
+                <p className="text-gray-600 text-sm sm:text-base mt-1">
                   {(() => {
                     // Count only questions that are always visible (not conditional)
                     const alwaysVisibleQuestions = sectionQuestions.filter(q => !q.conditionalLogic);
@@ -615,16 +615,16 @@ export default function OnboardingQuestionnairePage() {
                 </p>
               </div>
 
-              <div className="space-y-8">
+              <div className="space-y-6 sm:space-y-8">
                 {sectionQuestions.map(question => renderQuestion(question))}
               </div>
             </div>
 
             {/* Save Section Button */}
-            <div className="flex items-center justify-between bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4 bg-white rounded-2xl p-4 sm:p-6 shadow-sm border border-gray-100">
               <div className="flex items-center space-x-4">
                 {saved && (
-                  <div className="flex items-center text-green-600">
+                  <div className="flex items-center text-green-600 text-sm sm:text-base">
                     <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                     </svg>
@@ -632,11 +632,11 @@ export default function OnboardingQuestionnairePage() {
                   </div>
                 )}
               </div>
-              <div className="flex items-center space-x-4">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 sm:space-x-0">
                 {currentSection > 1 && (
                   <button
                     onClick={() => handleSectionChange(currentSection - 1)}
-                    className="px-6 py-3 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-xl font-medium transition-colors"
+                    className="px-6 py-3 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-xl font-medium transition-colors min-h-[44px]"
                   >
                     Previous Section
                   </button>
@@ -644,7 +644,7 @@ export default function OnboardingQuestionnairePage() {
                 <button
                   onClick={handleSectionSave}
                   disabled={saving}
-                  className="px-6 py-3 bg-[#daa450] hover:bg-[#c89540] text-white rounded-xl font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-6 py-3 bg-[#daa450] hover:bg-[#c89540] text-white rounded-xl font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
                 >
                   {saving ? 'Saving...' : 'Save Section'}
                 </button>

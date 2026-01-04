@@ -249,7 +249,7 @@ export default function FormViewPage() {
                   onChange={(e) => handleResponseChange(question.id, e.target.value)}
                   className="h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300"
                 />
-                <span className="ml-4 text-base text-gray-900 font-medium group-hover:text-blue-700">
+                <span className="ml-4 text-sm sm:text-base text-gray-900 font-medium group-hover:text-blue-700">
                   {option}
                 </span>
               </label>
@@ -287,7 +287,7 @@ export default function FormViewPage() {
               type="number"
               value={responses[question.id] || ''}
               onChange={(e) => handleResponseChange(question.id, parseInt(e.target.value))}
-              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 text-lg transition-all"
+              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 text-base sm:text-lg transition-all min-h-[44px]"
               placeholder="Enter your answer"
             />
           </div>
@@ -300,7 +300,7 @@ export default function FormViewPage() {
               type="text"
               value={responses[question.id] || ''}
               onChange={(e) => handleResponseChange(question.id, e.target.value)}
-              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 text-lg transition-all"
+              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 text-base sm:text-lg transition-all min-h-[44px]"
               placeholder="Enter your answer"
             />
           </div>
@@ -327,7 +327,7 @@ export default function FormViewPage() {
               value={responses[question.id] || ''}
               onChange={(e) => handleResponseChange(question.id, e.target.value)}
               rows={4}
-              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 text-lg transition-all resize-y"
+              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 text-base sm:text-lg transition-all resize-y"
               placeholder="Enter your answer..."
             />
           );
@@ -380,8 +380,8 @@ export default function FormViewPage() {
 
       case 'boolean':
         return (
-          <div className="grid grid-cols-2 gap-4">
-            <label className={`flex items-center justify-center p-6 rounded-xl border-2 transition-all cursor-pointer group ${
+            <div className="grid grid-cols-2 gap-3 sm:gap-4">
+            <label className={`flex items-center justify-center p-4 sm:p-6 rounded-xl border-2 transition-all cursor-pointer group min-h-[44px] ${
               responses[question.id] === true || responses[question.id] === 'yes' || responses[question.id] === 'Yes'
                 ? 'border-green-500 bg-green-50 shadow-md'
                 : 'border-gray-200 hover:border-green-300 hover:bg-green-50'
@@ -394,7 +394,7 @@ export default function FormViewPage() {
                 onChange={() => handleResponseChange(question.id, true)}
                 className="h-5 w-5 text-green-600 focus:ring-green-500 border-gray-300"
               />
-              <span className={`ml-3 text-lg font-semibold ${
+              <span className={`ml-3 text-base sm:text-lg font-semibold ${
                 responses[question.id] === true || responses[question.id] === 'yes' || responses[question.id] === 'Yes'
                   ? 'text-green-700'
                   : 'text-gray-700 group-hover:text-green-700'
@@ -402,7 +402,7 @@ export default function FormViewPage() {
                 ✅ Yes
               </span>
             </label>
-            <label className={`flex items-center justify-center p-6 rounded-xl border-2 transition-all cursor-pointer group ${
+            <label className={`flex items-center justify-center p-4 sm:p-6 rounded-xl border-2 transition-all cursor-pointer group min-h-[44px] ${
               responses[question.id] === false || responses[question.id] === 'no' || responses[question.id] === 'No'
                 ? 'border-red-500 bg-red-50 shadow-md'
                 : 'border-gray-200 hover:border-red-300 hover:bg-red-50'
@@ -415,7 +415,7 @@ export default function FormViewPage() {
                 onChange={() => handleResponseChange(question.id, false)}
                 className="h-5 w-5 text-red-600 focus:ring-red-500 border-gray-300"
               />
-              <span className={`ml-3 text-lg font-semibold ${
+              <span className={`ml-3 text-base sm:text-lg font-semibold ${
                 responses[question.id] === false || responses[question.id] === 'no' || responses[question.id] === 'No'
                   ? 'text-red-700'
                   : 'text-gray-700 group-hover:text-red-700'
@@ -616,19 +616,19 @@ export default function FormViewPage() {
           ))}
 
           {/* Submit Button */}
-          <div className="sticky bottom-0 bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-4 sm:py-6 border-t border-gray-200 shadow-lg">
-            <div className="max-w-3xl mx-auto flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
+          <div className="sticky bottom-0 bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-4 sm:py-6 border-t border-gray-200 shadow-lg z-10">
+            <div className="max-w-3xl mx-auto flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4">
               <button
                 type="button"
                 onClick={() => router.back()}
-                className="px-6 py-3 text-gray-700 bg-white border-2 border-gray-300 rounded-xl hover:bg-gray-50 font-semibold transition-all shadow-sm hover:shadow-md"
+                className="px-6 py-3 text-gray-700 bg-white border-2 border-gray-300 rounded-xl hover:bg-gray-50 font-semibold transition-all shadow-sm hover:shadow-md min-h-[44px]"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={isSubmitting || answeredCount < questions.length}
-                className="px-8 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed font-semibold text-lg transition-all shadow-lg hover:shadow-xl transform hover:scale-105 disabled:transform-none"
+                className="px-8 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed font-semibold text-base sm:text-lg transition-all shadow-lg hover:shadow-xl transform hover:scale-105 disabled:transform-none min-h-[44px]"
               >
                 {isSubmitting ? (
                   <span className="flex items-center justify-center">

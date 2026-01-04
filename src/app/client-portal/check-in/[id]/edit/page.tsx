@@ -304,7 +304,7 @@ export default function EditCheckInPage() {
           <textarea
             value={answer as string}
             onChange={(e) => handleAnswerChange(question.id, e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+            className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 text-base sm:text-lg transition-all min-h-[44px]"
             rows={4}
             placeholder="Enter your answer..."
           />
@@ -318,7 +318,7 @@ export default function EditCheckInPage() {
             value={answer as string || ''}
             onChange={(e) => handleAnswerChange(question.id, e.target.value)}
             rows={4}
-            className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-gray-900 text-base transition-all resize-y"
+            className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-gray-900 text-base sm:text-lg transition-all resize-y"
             placeholder="Enter your answer..."
           />
         );
@@ -329,7 +329,7 @@ export default function EditCheckInPage() {
             type="number"
             value={answer as string}
             onChange={(e) => handleAnswerChange(question.id, Number(e.target.value))}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+            className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 text-base sm:text-lg transition-all min-h-[44px]"
             placeholder="Enter a number..."
           />
         );
@@ -359,16 +359,16 @@ export default function EditCheckInPage() {
         return (
           <div className="space-y-2">
             {question.options?.map((option, index) => (
-              <label key={index} className="flex items-center text-gray-900">
+              <label key={index} className="flex items-center p-3 sm:p-4 border-2 border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 cursor-pointer transition-all text-gray-900 min-h-[44px]">
                 <input
                   type="radio"
                   name={`question-${question.id}`}
                   value={option}
                   checked={answer !== undefined && answer !== null && answer === option}
                   onChange={() => handleAnswerChange(question.id, option)}
-                  className="mr-2"
+                  className="mr-3 h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300"
                 />
-                {option}
+                <span className="text-base sm:text-lg">{option}</span>
               </label>
             ))}
           </div>
@@ -376,28 +376,48 @@ export default function EditCheckInPage() {
 
       case 'boolean':
         return (
-          <div className="space-y-2">
-            <label className="flex items-center text-gray-900">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4">
+            <label className={`flex items-center justify-center p-4 sm:p-6 rounded-xl border-2 transition-all cursor-pointer group min-h-[44px] ${
+              answer === true || answer === 'yes'
+                ? 'border-green-500 bg-green-50 shadow-md'
+                : 'border-gray-200 hover:border-green-300 hover:bg-green-50'
+            }`}>
               <input
                 type="radio"
                 name={`question-${question.id}`}
                 value="true"
                 checked={answer === true || answer === 'yes'}
                 onChange={() => handleAnswerChange(question.id, true)}
-                className="mr-2"
+                className="mr-2 h-5 w-5 text-green-600 focus:ring-green-500 border-gray-300"
               />
-              Yes
+              <span className={`text-base sm:text-lg font-semibold ${
+                answer === true || answer === 'yes'
+                  ? 'text-green-700'
+                  : 'text-gray-700 group-hover:text-green-700'
+              }`}>
+                ✅ Yes
+              </span>
             </label>
-            <label className="flex items-center text-gray-900">
+            <label className={`flex items-center justify-center p-4 sm:p-6 rounded-xl border-2 transition-all cursor-pointer group min-h-[44px] ${
+              answer === false || answer === 'no'
+                ? 'border-red-500 bg-red-50 shadow-md'
+                : 'border-gray-200 hover:border-red-300 hover:bg-red-50'
+            }`}>
               <input
                 type="radio"
                 name={`question-${question.id}`}
                 value="false"
                 checked={answer === false || answer === 'no'}
                 onChange={() => handleAnswerChange(question.id, false)}
-                className="mr-2"
+                className="mr-2 h-5 w-5 text-red-600 focus:ring-red-500 border-gray-300"
               />
-              No
+              <span className={`text-base sm:text-lg font-semibold ${
+                answer === false || answer === 'no'
+                  ? 'text-red-700'
+                  : 'text-gray-700 group-hover:text-red-700'
+              }`}>
+                ❌ No
+              </span>
             </label>
           </div>
         );
@@ -408,7 +428,7 @@ export default function EditCheckInPage() {
             type="text"
             value={answer as string}
             onChange={(e) => handleAnswerChange(question.id, e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+            className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 text-base sm:text-lg transition-all min-h-[44px]"
             placeholder="Enter your answer..."
           />
         );
@@ -463,8 +483,8 @@ export default function EditCheckInPage() {
           <div className="mb-8">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h1 className="text-3xl font-bold text-gray-900">Edit Check-in Response</h1>
-                <p className="text-gray-600 mt-2">Update your answers for {formResponse.formTitle}</p>
+                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Edit Check-in Response</h1>
+                <p className="text-gray-600 text-sm sm:text-base mt-2">Update your answers for {formResponse.formTitle}</p>
               </div>
               <Link
                 href={`/client-portal/check-in/${assignmentId}/success`}
@@ -487,11 +507,11 @@ export default function EditCheckInPage() {
           </div>
 
           {/* Question Card */}
-          <div className="bg-white rounded-lg shadow-lg p-8 mb-8">
+          <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 lg:p-8 mb-8">
             {currentQ && (
               <div>
                 <div className="mb-6">
-                  <h2 className="text-xl font-semibold text-gray-900 mb-2">
+                  <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-2">
                     {currentQ.text}
                   </h2>
                   {currentQ.description && (
@@ -517,7 +537,7 @@ export default function EditCheckInPage() {
                     <textarea
                       value={comments[currentQ.id] || ''}
                       onChange={(e) => handleCommentChange(currentQ.id, e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                      className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 text-base sm:text-lg transition-all min-h-[44px]"
                       rows={3}
                       placeholder="Add any additional notes or context about your answer..."
                     />
@@ -528,11 +548,11 @@ export default function EditCheckInPage() {
                 )}
 
                 {/* Navigation */}
-                <div className="flex justify-between">
+                <div className="flex justify-between gap-3">
                   <button
                     onClick={handlePrevious}
                     disabled={currentQuestion === 0}
-                    className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-4 sm:px-6 py-3 border-2 border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed font-semibold text-sm sm:text-base transition-all min-h-[44px]"
                   >
                     Previous
                   </button>
@@ -540,17 +560,17 @@ export default function EditCheckInPage() {
                   {currentQuestion < questions.length - 1 ? (
                     <button
                       onClick={handleNext}
-                      className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                      className="px-6 sm:px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-semibold text-sm sm:text-base transition-all shadow-lg hover:shadow-xl min-h-[44px]"
                     >
-                      Next
+                      Next →
                     </button>
                   ) : (
                     <button
                       onClick={handleSave}
                       disabled={saving}
-                      className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50"
+                      className="px-6 sm:px-8 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 font-semibold text-sm sm:text-base transition-all shadow-lg hover:shadow-xl min-h-[44px]"
                     >
-                      {saving ? 'Saving...' : 'Save Changes'}
+                      {saving ? 'Saving...' : 'Save Changes ✓'}
                     </button>
                   )}
                 </div>
@@ -566,14 +586,14 @@ export default function EditCheckInPage() {
           )}
 
           {/* Question Navigation */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Question Navigation</h3>
-            <div className="grid grid-cols-5 gap-2">
+          <div className="bg-white rounded-lg shadow p-4 sm:p-6">
+            <h3 className="text-base sm:text-lg font-medium text-gray-900 mb-4">Question Navigation</h3>
+            <div className="grid grid-cols-5 sm:grid-cols-6 lg:grid-cols-5 gap-2">
               {questions.map((question, index) => (
                 <button
                   key={question.id}
                   onClick={() => setCurrentQuestion(index)}
-                  className={`p-3 rounded-md text-sm font-medium transition-colors ${
+                  className={`p-2.5 sm:p-3 rounded-md text-xs sm:text-sm font-medium transition-colors min-h-[44px] ${
                     index === currentQuestion
                       ? 'bg-blue-600 text-white'
                       : responses[question.id]

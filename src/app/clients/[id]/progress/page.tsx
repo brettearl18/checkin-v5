@@ -62,11 +62,15 @@ export default function ClientProgressPage() {
     week: number;
     type: string;
   } | null>(null);
+  const [measurementHistory, setMeasurementHistory] = useState<any[]>([]);
+  const [allMeasurementsData, setAllMeasurementsData] = useState<any[]>([]);
+  const [loadingMeasurements, setLoadingMeasurements] = useState(false);
 
   useEffect(() => {
     if (clientId) {
       fetchClientData();
       fetchQuestionProgress();
+      fetchMeasurementHistory();
     }
   }, [clientId]);
 
@@ -81,6 +85,71 @@ export default function ClientProgressPage() {
       }
     } catch (error) {
       console.error('Error fetching client data:', error);
+    }
+  };
+
+  const fetchMeasurementHistory = async () => {
+    if (!clientId) return;
+
+    setLoadingMeasurements(true);
+    try {
+      // Fetch from client_measurements collection
+      const response = await fetch(`/api/client-measurements?clientId=${clientId}`);
+      const data = await response.json();
+      if (data.success) {
+        const measurements = data.data || [];
+        setMeasurementHistory(measurements);
+        
+        // Also fetch onboarding data for baseline measurements
+        let allMeasurements: any[] = [];
+        
+        try {
+          const onboardingResponse = await fetch(`/api/client-portal/onboarding/report?clientId=${clientId}`);
+          const onboardingData = await onboardingResponse.json();
+          
+          if (onboardingData.success && onboardingData.data) {
+            const onboarding = onboardingData.data;
+            if (onboarding.bodyWeight || (onboarding.measurements && Object.keys(onboarding.measurements).length > 0)) {
+              let onboardingDate = new Date();
+              if (onboarding.completedAt) {
+                onboardingDate = new Date(onboarding.completedAt);
+              } else if (onboarding.createdAt) {
+                onboardingDate = new Date(onboarding.createdAt);
+              } else {
+                onboardingDate = new Date('2020-01-01');
+              }
+              
+              allMeasurements.push({
+                date: onboardingDate,
+                bodyWeight: onboarding.bodyWeight || null,
+                measurements: onboarding.measurements || {},
+                isBaseline: true
+              });
+            }
+          }
+        } catch (error) {
+          console.log('Error fetching onboarding data:', error);
+        }
+        
+        // Add regular measurements
+        const clientMeasurements = measurements.map((m: any) => ({
+          date: new Date(m.date),
+          bodyWeight: m.bodyWeight,
+          measurements: m.measurements || {},
+          isBaseline: false
+        }));
+        allMeasurements = [...allMeasurements, ...clientMeasurements];
+        
+        // Sort by date
+        allMeasurements.sort((a, b) => a.date.getTime() - b.date.getTime());
+        setAllMeasurementsData(allMeasurements);
+      }
+    } catch (error) {
+      console.error('Error fetching measurement history:', error);
+      setMeasurementHistory([]);
+      setAllMeasurementsData([]);
+    } finally {
+      setLoadingMeasurements(false);
     }
   };
 
@@ -381,6 +450,133 @@ export default function ClientProgressPage() {
             >
               ← Back to Client Profile
             </Link>
+          </div>
+        </div>
+
+        {/* Weight, Measurements, and Goals Summary */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+          {/* Weight Summary */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="bg-orange-50 px-6 py-4 border-b border-gray-100">
+              <h2 className="text-lg font-bold text-gray-900">Weight</h2>
+            </div>
+            <div className="p-6">
+              {loadingMeasurements ? (
+                <div className="text-center py-4 text-gray-500 text-sm">Loading...</div>
+              ) : allMeasurementsData.length > 0 ? (
+                <div className="space-y-3">
+                  {(() => {
+                    const latest = allMeasurementsData[allMeasurementsData.length - 1];
+                    const baseline = allMeasurementsData.find(m => m.isBaseline) || allMeasurementsData[0];
+                    const currentWeight = latest?.bodyWeight;
+                    const baselineWeight = baseline?.bodyWeight;
+                    const change = baselineWeight && currentWeight ? baselineWeight - currentWeight : null;
+                    
+                    return (
+                      <>
+                        <div>
+                          <p className="text-sm text-gray-600">Current Weight</p>
+                          <p className="text-2xl font-bold text-gray-900 mt-1">
+                            {currentWeight ? `${currentWeight} kg` : 'Not recorded'}
+                          </p>
+                        </div>
+                        {baselineWeight && change !== null && (
+                          <div className="pt-3 border-t border-gray-100">
+                            <p className="text-sm text-gray-600">Change from Baseline</p>
+                            <p className={`text-xl font-bold mt-1 ${change > 0 ? 'text-green-600' : change < 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                              {change > 0 ? '+' : ''}{change.toFixed(1)} kg
+                            </p>
+                            <p className="text-xs text-gray-500 mt-1">Baseline: {baselineWeight} kg</p>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
+              ) : (
+                <div className="text-center py-4 text-gray-500 text-sm">No weight data available</div>
+              )}
+            </div>
+          </div>
+
+          {/* Measurements Summary */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="bg-purple-50 px-6 py-4 border-b border-gray-100">
+              <h2 className="text-lg font-bold text-gray-900">Body Measurements</h2>
+            </div>
+            <div className="p-6">
+              {loadingMeasurements ? (
+                <div className="text-center py-4 text-gray-500 text-sm">Loading...</div>
+              ) : allMeasurementsData.length > 0 ? (
+                <div className="space-y-2">
+                  {(() => {
+                    const latest = allMeasurementsData[allMeasurementsData.length - 1];
+                    const measurements = latest?.measurements || {};
+                    const measurementKeys = ['waist', 'hips', 'chest', 'leftThigh', 'rightThigh', 'leftArm', 'rightArm'];
+                    const measurementLabels: { [key: string]: string } = {
+                      waist: 'Waist',
+                      hips: 'Hips',
+                      chest: 'Chest',
+                      leftThigh: 'Left Thigh',
+                      rightThigh: 'Right Thigh',
+                      leftArm: 'Left Arm',
+                      rightArm: 'Right Arm'
+                    };
+                    const availableMeasurements = measurementKeys.filter(key => measurements[key]);
+                    
+                    if (availableMeasurements.length === 0) {
+                      return <div className="text-center py-4 text-gray-500 text-sm">No measurements recorded</div>;
+                    }
+                    
+                    return (
+                      <div className="space-y-2">
+                        {availableMeasurements.slice(0, 4).map((key) => (
+                          <div key={key} className="flex justify-between items-center">
+                            <span className="text-sm text-gray-600">{measurementLabels[key]}</span>
+                            <span className="text-sm font-semibold text-gray-900">{measurements[key]} cm</span>
+                          </div>
+                        ))}
+                        {availableMeasurements.length > 4 && (
+                          <p className="text-xs text-gray-500 mt-2 text-center">
+                            +{availableMeasurements.length - 4} more
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+              ) : (
+                <div className="text-center py-4 text-gray-500 text-sm">No measurements available</div>
+              )}
+            </div>
+          </div>
+
+          {/* Goals Summary */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="bg-green-50 px-6 py-4 border-b border-gray-100">
+              <h2 className="text-lg font-bold text-gray-900">Goals</h2>
+            </div>
+            <div className="p-6">
+              {client?.goals && client.goals.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {client.goals.slice(0, 4).map((goal: string, index: number) => (
+                    <span
+                      key={index}
+                      className="px-3 py-1.5 bg-green-100 text-green-800 text-xs font-medium rounded-full border border-green-200"
+                    >
+                      {goal}
+                    </span>
+                  ))}
+                  {client.goals.length > 4 && (
+                    <span className="px-3 py-1.5 bg-gray-100 text-gray-600 text-xs font-medium rounded-full">
+                      +{client.goals.length - 4} more
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center py-4 text-gray-500 text-sm">No goals set</div>
+              )}
+            </div>
           </div>
         </div>
 

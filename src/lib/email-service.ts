@@ -75,14 +75,29 @@ export async function sendEmail(options: EmailOptions): Promise<boolean> {
       ? `[TEST MODE - Original: ${originalRecipients.join(', ')}] ${options.subject}`
       : options.subject;
 
-    await mg.messages.create(DOMAIN, {
+    // Generate a unique message ID for tracking
+    const messageId = `${Date.now()}-${Math.random().toString(36).substring(7)}`;
+    
+    const mailgunOptions: any = {
       from: fromAddress,
       to: actualRecipients,
       subject: subject,
       html: options.html,
       text: options.text || options.html.replace(/<[^>]*>/g, ''), // Strip HTML for text version
       'h:Reply-To': options.replyTo || FROM_EMAIL,
-    });
+      // Enable email tracking
+      'o:tracking': 'yes', // Enable open and click tracking
+      'o:tracking-clicks': 'yes', // Track link clicks
+      'o:tracking-opens': 'yes', // Track email opens
+    };
+
+    // Add custom variables for webhook tracking (only if they have values)
+    if (messageId) mailgunOptions['v:message-id'] = messageId;
+    if (options.emailType) mailgunOptions['v:email-type'] = options.emailType;
+    if (options.metadata?.clientId) mailgunOptions['v:client-id'] = options.metadata.clientId;
+    if (options.metadata?.assignmentId) mailgunOptions['v:assignment-id'] = options.metadata.assignmentId;
+
+    const result = await mg.messages.create(DOMAIN, mailgunOptions);
 
     if (TEST_EMAIL_OVERRIDE) {
       console.log(`📧 [TEST MODE] Email sent to ${TEST_EMAIL_OVERRIDE} (original recipients: ${originalRecipients.join(', ')})`);
@@ -91,6 +106,8 @@ export async function sendEmail(options: EmailOptions): Promise<boolean> {
     }
 
     // Log email to audit log (async, don't block email sending)
+    // Include Mailgun message ID for tracking
+    const mailgunMessageId = result?.id || messageId;
     logEmailToAudit({
       originalRecipients,
       actualRecipients,
@@ -99,6 +116,7 @@ export async function sendEmail(options: EmailOptions): Promise<boolean> {
       metadata: options.metadata || {},
       testMode: !!TEST_EMAIL_OVERRIDE,
       sentAt: new Date(),
+      mailgunMessageId: mailgunMessageId, // Store for webhook tracking
     }).catch(error => {
       // Log error but don't fail email sending
       console.error('Error logging email to audit log:', error);
@@ -459,6 +477,8 @@ async function logEmailToAudit(logData: {
   metadata: Record<string, any>;
   testMode: boolean;
   sentAt: Date;
+  mailgunMessageId?: string;
+  mailgunSent?: boolean;
 }): Promise<void> {
   try {
     const db = getDb();
@@ -473,6 +493,21 @@ async function logEmailToAudit(logData: {
       testMode: logData.testMode,
       sentAt: Timestamp.fromDate(logData.sentAt),
       createdAt: Timestamp.now(),
+      mailgunMessageId: logData.mailgunMessageId || null,
+      mailgunSent: logData.mailgunSent !== undefined ? logData.mailgunSent : true,
+      // Tracking fields (updated via webhooks)
+      opened: false,
+      openedAt: null,
+      openedCount: 0,
+      clicked: false,
+      clickedAt: null,
+      clickedCount: 0,
+      delivered: false,
+      deliveredAt: null,
+      failed: false,
+      failedAt: null,
+      bounced: false,
+      bouncedAt: null,
     };
 
     await db.collection('email_audit_log').add(auditEntry);

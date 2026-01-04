@@ -1517,10 +1517,10 @@ export default function DashboardPage() {
                     <div className="flex items-center justify-between">
                       <h2 className="text-2xl font-bold text-gray-900">Latest Client Photos</h2>
                       <Link
-                        href="/clients"
+                        href="/clients/photos"
                         className="text-orange-600 hover:text-orange-700 text-sm font-medium"
                       >
-                        View All Clients
+                        View All Photos
                       </Link>
                     </div>
                   </div>
@@ -1616,7 +1616,7 @@ export default function DashboardPage() {
                     {clientPhotos.length > 16 && (
                       <div className="text-center pt-6">
                         <Link
-                          href="/clients"
+                          href="/clients/photos"
                           className="text-pink-600 hover:text-pink-700 text-sm font-medium"
                         >
                           View all {clientPhotos.length} client photos →

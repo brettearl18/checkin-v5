@@ -15,6 +15,11 @@ import { checkRateLimit, getClientIdentifier, RateLimitConfig } from './lib/rate
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // Skip rate limiting in development mode
+  if (process.env.NODE_ENV === 'development') {
+    return NextResponse.next();
+  }
+
   // Only apply rate limiting to API routes
   if (!pathname.startsWith('/api/')) {
     return NextResponse.next();

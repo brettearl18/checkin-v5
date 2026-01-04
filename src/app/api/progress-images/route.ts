@@ -121,6 +121,17 @@ export async function GET(request: NextRequest) {
       
       // Limit to requested number after filtering
       images = images.slice(0, limit);
+    } else if (clientId) {
+      // For clientId queries, also validate imageUrl
+      images = images.filter(img => {
+        // Check if imageUrl exists and is valid
+        if (!img.imageUrl || typeof img.imageUrl !== 'string' || img.imageUrl.length < 10) {
+          console.log(`Filtering out image ${img.id} - invalid imageUrl: ${img.imageUrl}`);
+          return false;
+        }
+        
+        return true;
+      });
     }
     
     // Sort manually if orderBy wasn't used (fallback case)

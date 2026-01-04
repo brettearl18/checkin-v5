@@ -182,6 +182,32 @@ export async function POST(
       }
     }
 
+    // Check if check-in window is closed (server-side validation)
+    // Allow submission if: window is open, extension is granted, or it's Week 1
+    const { isWithinCheckInWindow, DEFAULT_CHECK_IN_WINDOW } = await import('@/lib/checkin-window-utils');
+    const checkInWindow = assignmentData.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
+    const windowStatus = isWithinCheckInWindow(checkInWindow);
+    const isFirstCheckIn = assignmentData.recurringWeek === 1;
+    
+    // Check for granted extension
+    let extensionGranted = false;
+    if (!windowStatus.isOpen && !isFirstCheckIn) {
+      const extensionsQuery = await db.collection('check_in_extensions')
+        .where('assignmentId', '==', assignmentId)
+        .where('status', '==', 'granted')
+        .limit(1)
+        .get();
+      
+      extensionGranted = !extensionsQuery.empty || assignmentData.extensionGranted === true;
+      
+      if (!extensionGranted) {
+        return NextResponse.json({
+          success: false,
+          message: `Check-in window is currently closed. ${windowStatus.message}. Please request an extension if needed.`
+        }, { status: 403 });
+      }
+    }
+
     // Save response to Firestore
     const docRef = await db.collection('formResponses').add(responseData);
 

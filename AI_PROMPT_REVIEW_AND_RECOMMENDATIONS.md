@@ -310,3 +310,4 @@ alignment with functional health goals, and barriers to functional optimization.
 4. **Functional Health Checklist:** Add validation step to ensure outputs use functional health principles
 
 
+

@@ -16,6 +16,16 @@ interface EmailLog {
   testMode: boolean;
   sentAt: string;
   createdAt: string;
+  opened?: boolean;
+  openedAt?: string;
+  openedCount?: number;
+  clicked?: boolean;
+  clickedAt?: string;
+  clickedCount?: number;
+  delivered?: boolean;
+  deliveredAt?: string;
+  failed?: boolean;
+  bounced?: boolean;
 }
 
 interface EmailAuditLogData {
@@ -323,12 +333,15 @@ export default function EmailAuditLogPage() {
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Status
                         </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Tracking
+                        </th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
                       {data.logs.length === 0 ? (
                         <tr>
-                          <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
+                          <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
                             No emails found for the selected filters.
                           </td>
                         </tr>
@@ -363,11 +376,37 @@ export default function EmailAuditLogPage() {
                                 <span className="px-2 py-1 text-xs font-medium rounded-full bg-orange-100 text-orange-800">
                                   Test Mode
                                 </span>
-                              ) : (
+                              ) : log.failed || log.bounced ? (
+                                <span className="px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-800">
+                                  Failed
+                                </span>
+                              ) : log.delivered !== false ? (
                                 <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">
                                   Sent
                                 </span>
+                              ) : (
+                                <span className="px-2 py-1 text-xs font-medium rounded-full bg-yellow-100 text-yellow-800">
+                                  Pending
+                                </span>
                               )}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm">
+                              <div className="flex flex-col gap-1">
+                                {log.opened ? (
+                                  <span className="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
+                                    📧 Opened {log.openedCount > 1 ? `(${log.openedCount}x)` : ''}
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-600">
+                                    Not Opened
+                                  </span>
+                                )}
+                                {log.clicked && (
+                                  <span className="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-purple-100 text-purple-800">
+                                    🔗 Clicked {log.clickedCount > 1 ? `(${log.clickedCount}x)` : ''}
+                                  </span>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         ))

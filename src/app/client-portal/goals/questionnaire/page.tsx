@@ -253,7 +253,7 @@ export default function GoalsQuestionnairePage() {
               type="number"
               value={answer || ''}
               onChange={(e) => handleAnswerChange(question.id, e.target.value ? Number(e.target.value) : '')}
-              className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#daa450] focus:border-[#daa450] text-gray-900 text-lg"
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#daa450] focus:border-[#daa450] text-gray-900 text-base sm:text-lg"
               placeholder={question.placeholder || "Enter a number"}
             />
           );
@@ -264,7 +264,7 @@ export default function GoalsQuestionnairePage() {
               type="text"
               value={answer || ''}
               onChange={(e) => handleAnswerChange(question.id, e.target.value)}
-              className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#daa450] focus:border-[#daa450] text-gray-900 text-lg"
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#daa450] focus:border-[#daa450] text-gray-900 text-base sm:text-lg"
               placeholder={question.placeholder || "Type your answer"}
             />
           );
@@ -302,7 +302,7 @@ export default function GoalsQuestionnairePage() {
                     }}
                     className="mr-3 w-5 h-5 text-[#daa450] focus:ring-[#daa450] border-gray-300 rounded"
                   />
-                  <span className="text-gray-900 text-lg">{option}</span>
+                  <span className="text-gray-900 text-base sm:text-lg">{option}</span>
                 </label>
               ))}
             </div>
@@ -332,8 +332,8 @@ export default function GoalsQuestionnairePage() {
 
         case 'yes_no':
           return (
-            <div className="flex gap-4">
-              <label className="flex items-center p-4 border-2 border-gray-200 rounded-xl hover:border-[#daa450] hover:bg-[#daa450]/5 cursor-pointer transition-all flex-1">
+            <div className="flex gap-3 sm:gap-4">
+              <label className="flex items-center p-4 border-2 border-gray-200 rounded-xl hover:border-[#daa450] hover:bg-[#daa450]/5 cursor-pointer transition-all flex-1 min-h-[44px]">
                 <input
                   type="radio"
                   name={question.id}
@@ -342,9 +342,9 @@ export default function GoalsQuestionnairePage() {
                   onChange={() => handleAnswerChange(question.id, 'yes')}
                   className="mr-3 w-5 h-5 text-[#daa450] focus:ring-[#daa450] border-gray-300"
                 />
-                <span className="text-gray-900 text-lg">Yes</span>
+                <span className="text-gray-900 text-base sm:text-lg">Yes</span>
               </label>
-              <label className="flex items-center p-4 border-2 border-gray-200 rounded-xl hover:border-[#daa450] hover:bg-[#daa450]/5 cursor-pointer transition-all flex-1">
+              <label className="flex items-center p-4 border-2 border-gray-200 rounded-xl hover:border-[#daa450] hover:bg-[#daa450]/5 cursor-pointer transition-all flex-1 min-h-[44px]">
                 <input
                   type="radio"
                   name={question.id}
@@ -353,7 +353,7 @@ export default function GoalsQuestionnairePage() {
                   onChange={() => handleAnswerChange(question.id, 'no')}
                   className="mr-3 w-5 h-5 text-[#daa450] focus:ring-[#daa450] border-gray-300"
                 />
-                <span className="text-gray-900 text-lg">No</span>
+                <span className="text-gray-900 text-base sm:text-lg">No</span>
               </label>
             </div>
           );
@@ -365,7 +365,7 @@ export default function GoalsQuestionnairePage() {
 
     return (
       <div key={question.id} className="mb-8">
-        <label className="block text-xl font-semibold text-gray-900 mb-3">
+        <label className="block text-lg sm:text-xl font-semibold text-gray-900 mb-3">
           {question.questionText}
           {question.required && <span className="text-red-500 ml-1">*</span>}
         </label>
@@ -427,8 +427,8 @@ export default function GoalsQuestionnairePage() {
             {/* Header */}
             <div className="mb-6">
               <div className="px-4 py-4 sm:px-6 sm:py-5 lg:px-8 lg:py-6 border-b-2 mb-4 rounded-t-2xl lg:rounded-t-3xl" style={{ backgroundColor: '#fef9e7', borderColor: '#daa450' }}>
-                <h1 className="text-2xl lg:text-3xl font-bold text-gray-900 mb-2">Set Your 2026 Goals</h1>
-                <p className="text-gray-600 text-sm lg:text-base">Answer a few questions to help us create your personalized goals</p>
+                <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 mb-2">Set Your 2026 Goals</h1>
+                <p className="text-gray-600 text-sm sm:text-base">Answer a few questions to help us create your personalized goals</p>
               </div>
 
               {/* Progress Bar */}
@@ -493,11 +493,11 @@ export default function GoalsQuestionnairePage() {
               </div>
 
               {/* Navigation Buttons */}
-              <div className="mt-8 pt-6 border-t border-gray-200 flex justify-between">
+              <div className="mt-8 pt-6 border-t border-gray-200 flex flex-col sm:flex-row justify-between gap-3 sm:gap-4">
                 <button
                   onClick={handlePreviousSection}
                   disabled={currentSection === 1}
-                  className={`px-6 py-3 rounded-xl lg:rounded-lg font-semibold transition-all ${
+                  className={`px-6 py-3 rounded-xl lg:rounded-lg font-semibold transition-all min-h-[44px] ${
                     currentSection === 1
                       ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                       : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
@@ -506,7 +506,7 @@ export default function GoalsQuestionnairePage() {
                   Previous
                 </button>
 
-                <div className="flex gap-3">
+                <div className="flex gap-2 sm:gap-3">
                   {saved && (
                     <span className="px-4 py-3 text-green-600 text-sm font-medium flex items-center">
                       <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -518,7 +518,7 @@ export default function GoalsQuestionnairePage() {
                   <button
                     onClick={handleSectionSave}
                     disabled={saving}
-                    className="px-6 py-3 rounded-xl lg:rounded-lg font-semibold transition-all bg-gray-200 text-gray-700 hover:bg-gray-300 disabled:opacity-50"
+                    className="px-6 py-3 rounded-xl lg:rounded-lg font-semibold transition-all bg-gray-200 text-gray-700 hover:bg-gray-300 disabled:opacity-50 min-h-[44px]"
                   >
                     {saving ? 'Saving...' : 'Save Progress'}
                   </button>
@@ -528,7 +528,7 @@ export default function GoalsQuestionnairePage() {
                   <button
                     onClick={handleSubmit}
                     disabled={submitting}
-                    className="px-6 py-3 rounded-xl lg:rounded-lg text-white font-semibold transition-all duration-200 shadow-sm hover:shadow-md disabled:opacity-50"
+                    className="px-6 py-3 rounded-xl lg:rounded-lg text-white font-semibold transition-all duration-200 shadow-sm hover:shadow-md disabled:opacity-50 min-h-[44px]"
                     style={{ backgroundColor: '#daa450' }}
                   >
                     {submitting ? 'Submitting...' : 'Submit & Create Goals'}
@@ -536,7 +536,7 @@ export default function GoalsQuestionnairePage() {
                 ) : (
                   <button
                     onClick={handleNextSection}
-                    className="px-6 py-3 rounded-xl lg:rounded-lg text-white font-semibold transition-all duration-200 shadow-sm hover:shadow-md"
+                    className="px-6 py-3 rounded-xl lg:rounded-lg text-white font-semibold transition-all duration-200 shadow-sm hover:shadow-md min-h-[44px]"
                     style={{ backgroundColor: '#daa450' }}
                   >
                     Next Section

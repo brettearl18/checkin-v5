@@ -70,6 +70,10 @@ export default function CheckInCompletionPage() {
   const [windowStatus, setWindowStatus] = useState<{ isOpen: boolean; message: string; nextOpenTime?: Date } | null>(null);
   const [lastSaved, setLastSaved] = useState<Date | null>(null); // Track when last saved for visual feedback
   const isSubmittingRef = useRef(false); // Ref to prevent double submissions
+  const [showExtensionModal, setShowExtensionModal] = useState(false);
+  const [extensionReason, setExtensionReason] = useState('');
+  const [requestingExtension, setRequestingExtension] = useState(false);
+  const [extensionGranted, setExtensionGranted] = useState(false);
 
   const assignmentId = params.id as string;
 
@@ -128,7 +132,7 @@ export default function CheckInCompletionPage() {
             
             // Use form and questions from API if available (avoids Firestore permission issues)
             if (data.form && data.questions) {
-              await loadFormAndQuestionsFromAPI(assignmentData, data.form, data.questions);
+              await loadFormAndQuestionsFromAPI(assignmentData, data.form, data.questions, data.documentId || assignmentData.id);
             } else {
               // Fallback to direct Firestore access (may fail due to permissions)
               await loadFormAndQuestions(assignmentData);
@@ -166,7 +170,8 @@ export default function CheckInCompletionPage() {
   const loadFormAndQuestionsFromAPI = async (
     assignmentData: CheckInAssignment,
     formData: any,
-    questionsData: Question[]
+    questionsData: Question[],
+    docId?: string | null
   ) => {
     try {
       // Ensure formTitle is set
@@ -185,6 +190,21 @@ export default function CheckInCompletionPage() {
       const checkInWindow = assignmentData.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
       const status = isWithinCheckInWindow(checkInWindow);
       setWindowStatus(status);
+
+      // Check if extension has been granted
+      if (!status.isOpen && docId) {
+        try {
+          const extensionResponse = await fetch(`/api/check-in-assignments/${docId}/extension`);
+          if (extensionResponse.ok) {
+            const extensionData = await extensionResponse.json();
+            if (extensionData.success && extensionData.extensionGranted) {
+              setExtensionGranted(true);
+            }
+          }
+        } catch (error) {
+          console.error('Error checking extension status:', error);
+        }
+      }
 
       // Use questions from API response
       setQuestions(questionsData);
@@ -452,7 +472,8 @@ export default function CheckInCompletionPage() {
     // regardless of window hours.
     const isFirstCheckIn = assignment.recurringWeek === 1;
     
-    if (!status.isOpen && !isFirstCheckIn) {
+    // Allow submission if window is open, extension is granted, or it's the first check-in
+    if (!status.isOpen && !extensionGranted && !isFirstCheckIn) {
       setError(`Check-in window is currently closed. ${status.message}`);
       setSubmitting(false);
       isSubmittingRef.current = false;
