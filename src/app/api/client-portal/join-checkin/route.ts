@@ -141,7 +141,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: false,
       message: 'Failed to join check-in',
-      error: error.message
+      ...(process.env.NODE_ENV === 'development' && { error: error.message })
     }, { status: 500 });
   }
 }

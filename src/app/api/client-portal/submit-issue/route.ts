@@ -155,7 +155,7 @@ export async function POST(request: NextRequest) {
       {
         success: false,
         message: 'Failed to submit issue report',
-        error: error.message || 'Unknown error',
+        ...(process.env.NODE_ENV === 'development' && { error: error.message || 'Unknown error' })
       },
       { status: 500 }
     );
