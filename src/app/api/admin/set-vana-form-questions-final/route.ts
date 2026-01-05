@@ -205,12 +205,6 @@ export async function POST(request: NextRequest) {
   }
 }
 
-
-import { vanaCheckInQuestions } from '@/lib/vana-checkin-questions';
-import { requireAdmin } from '@/lib/api-auth';
-
-export const dynamic = 'force-dynamic';
-
 /**
  * POST /api/admin/set-vana-form-questions-final
  * 
