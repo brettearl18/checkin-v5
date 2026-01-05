@@ -369,4 +369,3 @@ Provide 3-5 specific, actionable items for each SWOT category, framed in functio
     }, { status: 500 });
   }
 }
-  request: NextRequest,
