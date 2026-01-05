@@ -411,34 +411,3 @@ export default function ClientProfilePage() {
     </RoleProtected>
   );
 } 
-                </div>
-              </Link>
-              
-              <Link
-                href="/client-portal/history"
-                className="flex items-center p-4 bg-white rounded-lg border border-blue-200 hover:bg-blue-50 transition-colors"
-              >
-                <span className="text-2xl mr-3">📋</span>
-                <div>
-                  <h3 className="font-medium text-blue-900">Response History</h3>
-                  <p className="text-sm text-blue-700">View all your past check-ins</p>
-                </div>
-              </Link>
-              
-              <button
-                onClick={() => {/* Add logout functionality */}}
-                className="flex items-center p-4 bg-white rounded-lg border border-red-200 hover:bg-red-50 transition-colors text-left"
-              >
-                <span className="text-2xl mr-3">🚪</span>
-                <div>
-                  <h3 className="font-medium text-red-900">Sign Out</h3>
-                  <p className="text-sm text-red-700">Log out of your account</p>
-                </div>
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </RoleProtected>
-  );
-} 
