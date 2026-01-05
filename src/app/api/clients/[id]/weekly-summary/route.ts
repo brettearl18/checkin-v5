@@ -338,14 +338,6 @@ ${insights.concerns && insights.concerns.length > 0 ? `\n**Areas to Watch:** ${i
     }, { status: 500 });
   }
 }
-
-
-import { extractTextInsights } from '@/lib/openai-service';
-import { getCoachContext } from '@/lib/ai-context';
-
-export const dynamic = 'force-dynamic';
-
-export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
