@@ -811,12 +811,6 @@ function getTimePeriodLabel(period: string): string {
   }
 }
 
-
-import { analyzeClientRisk, extractTextInsights } from '@/lib/openai-service';
-import { getCoachContext } from '@/lib/ai-context';
-
-export const dynamic = 'force-dynamic';
-
 interface AIAnalytics {
   riskLevel: 'low' | 'medium' | 'high' | 'critical';
   riskScore: number;

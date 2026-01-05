@@ -369,22 +369,6 @@ Provide 3-5 specific, actionable items for each SWOT category, framed in functio
     }, { status: 500 });
   }
 }
-
-
-import { getCoachContext } from '@/lib/ai-context';
-import { generateStructuredResponse } from '@/lib/openai-service';
-
-export const dynamic = 'force-dynamic';
-
-interface SWOTAnalysis {
-  strengths: string[];
-  weaknesses: string[];
-  opportunities: string[];
-  threats: string[];
-  overallAssessment: string;
-}
-
-export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
