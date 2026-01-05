@@ -232,30 +232,3 @@ export async function GET(request: NextRequest) {
     }, { status: 500 });
   }
 }
-
-      checkInsToReview = checkInsToReview.slice(0, 20);
-
-    } catch (error) {
-      console.error('Error fetching check-ins to review:', error);
-      checkInsToReview = [];
-    }
-
-    return NextResponse.json({
-      success: true,
-      data: {
-        checkIns: checkInsToReview,
-        total: checkInsToReview.length,
-        sortBy,
-        sortOrder
-      }
-    });
-
-  } catch (error) {
-    console.error('Error in check-ins to review API:', error);
-    return NextResponse.json({
-      success: false,
-      message: 'Failed to fetch check-ins to review',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 });
-  }
-}
