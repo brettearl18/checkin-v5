@@ -131,37 +131,3 @@ export async function GET(request: NextRequest) {
     }, { status: 500 });
   }
 }
-
-
-
-
-
-
-
-              answered: answer !== undefined && answer !== null && answer !== ''
-            };
-          })
-        };
-      })
-    };
-
-    return NextResponse.json({
-      success: true,
-      data: report
-    });
-
-  } catch (error) {
-    console.error('Error fetching onboarding report:', error);
-    return NextResponse.json({
-      success: false,
-      message: 'Failed to fetch onboarding report',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 });
-  }
-}
-
-
-
-
-
-
