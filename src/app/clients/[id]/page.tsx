@@ -4421,7 +4421,9 @@ export default function ClientProfilePage() {
                       </div>
                       <div className="p-8">
                         <div className="prose max-w-none">
-                          <div className="text-gray-700 whitespace-pre-wrap leading-relaxed" dangerouslySetInnerHTML={{ __html: (onboardingAiSummary.summary || '').replace(/\n/g, '<br />') }} />
+                          <div className="text-gray-700 whitespace-pre-wrap leading-relaxed">
+                            {onboardingAiSummary.summary || ''}
+                          </div>
                         </div>
                       </div>
                     </div>
