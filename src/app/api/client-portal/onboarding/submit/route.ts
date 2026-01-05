@@ -236,14 +236,3 @@ function generateOnboardingReport(responses: Record<string, any>) {
   return report;
 }
 
-
-  report.barriers.monthlyBudget = responses['q9-3'];
-
-  // Measurements - removed from onboarding, now handled via dashboard To-Do
-  report.measurements = {
-    note: 'Measurements are entered separately through the Measurements page'
-  };
-
-  return report;
-}
-
