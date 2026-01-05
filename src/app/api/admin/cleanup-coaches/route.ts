@@ -240,14 +240,3 @@ export async function POST(request: NextRequest) {
     }, { status: 500 });
   }
 }
-
-
-    logSafeError('Error cleaning up coaches', error);
-    return NextResponse.json({
-      success: false,
-      message: 'Failed to clean up coaches',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 });
-  }
-}
-

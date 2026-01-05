@@ -17,8 +17,6 @@ import {
   type ScoringThresholds,
   type TrafficLightStatus
 } from '@/lib/scoring-utils';
-import VoiceRecorder from '@/components/VoiceRecorder';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 interface Client {
   id: string;
@@ -181,7 +179,7 @@ export default function ClientProfilePage() {
   const [scoringThresholds, setScoringThresholds] = useState<ScoringThresholds>(getDefaultThresholds('lifestyle'));
   const [progressTrafficLight, setProgressTrafficLight] = useState<TrafficLightStatus>('orange');
   const [checkInTab, setCheckInTab] = useState<'all' | 'completed' | 'coachResponses' | 'pendingReview'>('all');
-  const [activeTab, setActiveTab] = useState<'overview' | 'goals' | 'checkins' | 'history' | 'ai-analytics'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'progress' | 'checkins' | 'history' | 'ai-analytics'>('overview');
   const [aiAnalytics, setAiAnalytics] = useState<any>(null);
   const [loadingAiAnalytics, setLoadingAiAnalytics] = useState(false);
   const [showGenerateAnalyticsModal, setShowGenerateAnalyticsModal] = useState(false);
@@ -201,14 +199,6 @@ export default function ClientProfilePage() {
   const [measurementsExpanded, setMeasurementsExpanded] = useState(false);
   const [onboardingAiSummary, setOnboardingAiSummary] = useState<{summary: string, generatedAt: string} | null>(null);
   const [loadingOnboardingAiSummary, setLoadingOnboardingAiSummary] = useState(false);
-  const [checkInResponses, setCheckInResponses] = useState<any[]>([]);
-  const [loadingCheckInResponses, setLoadingCheckInResponses] = useState(false);
-  const [expandedCheckInId, setExpandedCheckInId] = useState<string | null>(null);
-  const [showQuickResponseModal, setShowQuickResponseModal] = useState(false);
-  const [selectedCheckInForResponse, setSelectedCheckInForResponse] = useState<any>(null);
-  const [quickResponseText, setQuickResponseText] = useState('');
-  const [quickResponseAudio, setQuickResponseAudio] = useState<Blob | null>(null);
-  const [submittingQuickResponse, setSubmittingQuickResponse] = useState(false);
 
   // Debug forms state changes
   useEffect(() => {
@@ -687,15 +677,7 @@ export default function ClientProfilePage() {
         const response = await fetch(`/api/progress-images?clientId=${clientId}&limit=12`);
         const data = await response.json();
         if (data.success) {
-          // Filter out images without valid imageUrl
-          const validImages = (data.data || []).filter((img: any) => 
-            img.imageUrl && typeof img.imageUrl === 'string' && img.imageUrl.length > 10
-          );
-          console.log(`Loaded ${validImages.length} valid progress images for client ${clientId}`);
-          setProgressImages(validImages);
-        } else {
-          console.error('API returned error:', data.message);
-          setProgressImages([]);
+          setProgressImages(data.data || []);
         }
       } catch (error) {
         console.error('Error fetching progress images:', error);
@@ -706,140 +688,6 @@ export default function ClientProfilePage() {
 
     fetchProgressImages();
   }, [params.id]);
-
-  // Fetch check-in responses for Quick Review Table
-  useEffect(() => {
-    const fetchCheckInResponses = async () => {
-      const clientId = params.id as string;
-      if (!clientId) return;
-
-      setLoadingCheckInResponses(true);
-      try {
-        const response = await fetch(`/api/client-portal/history?clientId=${clientId}`);
-        const data = await response.json();
-        if (data.success && data.history) {
-          // Sort by submittedAt descending (newest first)
-          const sorted = data.history.sort((a: any, b: any) => {
-            const dateA = new Date(a.submittedAt).getTime();
-            const dateB = new Date(b.submittedAt).getTime();
-            return dateB - dateA;
-          });
-          setCheckInResponses(sorted);
-        }
-      } catch (error) {
-        console.error('Error fetching check-in responses:', error);
-        setCheckInResponses([]);
-      } finally {
-        setLoadingCheckInResponses(false);
-      }
-    };
-
-    fetchCheckInResponses();
-  }, [params.id]);
-
-  // Handle quick response submission
-  const handleSubmitQuickResponse = async () => {
-    if (!selectedCheckInForResponse || !userProfile?.uid || !clientId) return;
-    if (!quickResponseText.trim() && !quickResponseAudio) {
-      alert('Please provide either text or voice feedback');
-      return;
-    }
-
-    setSubmittingQuickResponse(true);
-    try {
-      // Submit text feedback if provided
-      if (quickResponseText.trim()) {
-        const textResponse = await fetch('/api/coach-feedback', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            responseId: selectedCheckInForResponse.id,
-            coachId: userProfile.uid,
-            clientId: clientId,
-            questionId: null, // Overall feedback
-            feedbackType: 'text',
-            content: quickResponseText.trim()
-          })
-        });
-
-        if (!textResponse.ok) {
-          throw new Error('Failed to submit text feedback');
-        }
-      }
-
-      // Submit voice feedback if provided
-      if (quickResponseAudio) {
-        const reader = new FileReader();
-        await new Promise<void>((resolve, reject) => {
-          reader.onload = async () => {
-            try {
-              const base64Audio = reader.result as string;
-              const voiceResponse = await fetch('/api/coach-feedback', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  responseId: selectedCheckInForResponse.id,
-                  coachId: userProfile.uid,
-                  clientId: clientId,
-                  questionId: null, // Overall feedback
-                  feedbackType: 'voice',
-                  content: base64Audio
-                })
-              });
-
-              if (!voiceResponse.ok) {
-                throw new Error('Failed to submit voice feedback');
-              }
-              resolve();
-            } catch (error) {
-              reject(error);
-            }
-          };
-          reader.onerror = reject;
-          reader.readAsDataURL(quickResponseAudio);
-        });
-      }
-
-      // Mark as reviewed
-      try {
-        await fetch(`/api/responses/${selectedCheckInForResponse.id}/review`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            coachId: userProfile.uid,
-            reviewedAt: new Date().toISOString()
-          })
-        });
-      } catch (error) {
-        console.error('Error marking as reviewed:', error);
-        // Don't fail if review marking fails
-      }
-
-      // Refresh check-in responses
-      const response = await fetch(`/api/client-portal/history?clientId=${clientId}`);
-      const data = await response.json();
-      if (data.success && data.history) {
-        const sorted = data.history.sort((a: any, b: any) => {
-          const dateA = new Date(a.submittedAt).getTime();
-          const dateB = new Date(b.submittedAt).getTime();
-          return dateB - dateA;
-        });
-        setCheckInResponses(sorted);
-      }
-
-      // Close modal and reset
-      setShowQuickResponseModal(false);
-      setSelectedCheckInForResponse(null);
-      setQuickResponseText('');
-      setQuickResponseAudio(null);
-      alert('Response submitted successfully!');
-    } catch (error) {
-      console.error('Error submitting quick response:', error);
-      alert('Failed to submit response. Please try again.');
-    } finally {
-      setSubmittingQuickResponse(false);
-    }
-  };
 
   // Fetch onboarding report data
   useEffect(() => {
@@ -2078,32 +1926,32 @@ export default function ClientProfilePage() {
 
   return (
     <RoleProtected requiredRole="coach">
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 p-3 sm:p-4 lg:p-6">
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 p-4">
         <div className="max-w-7xl mx-auto">
           {/* Compact Header */}
-          <div className="mb-4 sm:mb-6">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0">
-              <div className="flex items-center space-x-2 sm:space-x-3 min-w-0 flex-1">
+          <div className="mb-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
                 <Link
                   href="/clients"
-                  className="p-1.5 sm:p-2 text-gray-600 hover:text-gray-900 hover:bg-white rounded-lg transition-colors flex-shrink-0"
+                  className="p-2 text-gray-600 hover:text-gray-900 hover:bg-white rounded-lg transition-colors"
                   title="Back to Clients"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                   </svg>
                 </Link>
-                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl sm:rounded-2xl flex items-center justify-center shadow-sm flex-shrink-0">
-                  <span className="text-white font-bold text-base sm:text-lg">
+                <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-orange-600 rounded-2xl flex items-center justify-center shadow-sm">
+                  <span className="text-white font-bold text-lg">
                     {client.firstName.charAt(0)}{client.lastName.charAt(0)}
                   </span>
                 </div>
-                <div className="min-w-0 flex-1">
-                  <h1 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900 truncate">
+                <div>
+                  <h1 className="text-2xl font-bold text-gray-900">
                     {client.firstName} {client.lastName}
                   </h1>
-                  <div className="flex items-center flex-wrap gap-2 mt-1">
-                    <span className={`text-[10px] sm:text-xs font-medium px-1.5 sm:px-2 py-0.5 rounded-full border whitespace-nowrap ${
+                  <div className="flex items-center space-x-3 mt-1">
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${
                       client.status === 'active' ? 'bg-[#34C759]/10 text-[#34C759] border-[#34C759]/20' :
                       client.status === 'inactive' ? 'bg-gray-100 text-gray-700 border-gray-200' :
                       client.status === 'pending' ? 'bg-orange-100 text-orange-700 border-orange-200' :
@@ -2112,37 +1960,37 @@ export default function ClientProfilePage() {
                       {client.status}
                     </span>
                     {client.email && (
-                      <span className="text-[10px] sm:text-xs text-gray-600 truncate max-w-[150px] sm:max-w-none">{client.email}</span>
+                      <span className="text-xs text-gray-600">{client.email}</span>
                     )}
                   </div>
                 </div>
               </div>
-              <div className="flex items-center flex-wrap gap-2 sm:space-x-2">
+              <div className="flex items-center space-x-2">
                 <button
                   onClick={() => openStatusModal(client.status)}
-                  className="px-2 sm:px-3 py-1.5 text-xs sm:text-sm text-gray-700 hover:text-gray-900 hover:bg-white rounded-lg border border-gray-200 transition-colors whitespace-nowrap"
+                  className="px-3 py-1.5 text-sm text-gray-700 hover:text-gray-900 hover:bg-white rounded-lg border border-gray-200 transition-colors"
                   title="Update Status"
                 >
-                  <svg className="w-3 h-3 sm:w-4 sm:h-4 inline sm:mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                   </svg>
-                  <span className="hidden sm:inline">Status</span>
+                  Status
                 </button>
                 {client.email && (
                   <Link
                     href={`/coach/email-audit-log?recipient=${encodeURIComponent(client.email)}`}
-                    className="px-2 sm:px-3 py-1.5 text-xs sm:text-sm text-gray-700 hover:text-gray-900 hover:bg-white rounded-lg border border-gray-200 transition-colors whitespace-nowrap"
+                    className="px-3 py-1.5 text-sm text-gray-700 hover:text-gray-900 hover:bg-white rounded-lg border border-gray-200 transition-colors"
                     title="View Sent Emails"
                   >
-                    <svg className="w-3 h-3 sm:w-4 sm:h-4 inline sm:mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                     </svg>
-                    <span className="hidden sm:inline">Sent Emails</span>
+                    Sent Emails
                   </Link>
                 )}
                 <Link
                   href={`/clients/${clientId}/edit`}
-                  className="px-3 sm:px-4 py-1.5 text-xs sm:text-sm bg-orange-500 hover:bg-orange-600 text-white rounded-xl sm:rounded-2xl font-medium transition-all duration-200 shadow-sm whitespace-nowrap"
+                  className="px-4 py-1.5 text-sm bg-orange-500 hover:bg-orange-600 text-white rounded-2xl font-medium transition-all duration-200 shadow-sm"
                 >
                   Edit Profile
                 </Link>
@@ -2151,90 +1999,88 @@ export default function ClientProfilePage() {
           </div>
 
           {/* Tab Navigation */}
-          <div className="mb-4 sm:mb-6 bg-white rounded-xl sm:rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-            <div className="flex border-b border-gray-200 overflow-x-auto -mx-3 sm:mx-0">
-              <div className="flex min-w-full sm:min-w-0">
-                <button
-                  onClick={() => setActiveTab('overview')}
-                  className={`flex-1 min-w-0 px-3 sm:px-4 lg:px-6 py-3 sm:py-4 text-xs sm:text-sm font-semibold transition-all whitespace-nowrap ${
-                    activeTab === 'overview'
-                      ? 'text-orange-600 border-b-2 border-orange-600 bg-orange-50/50'
-                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                  }`}
-                >
-                  Overview
-                </button>
-                <button
-                  onClick={() => setActiveTab('goals')}
-                  className={`flex-1 min-w-0 px-3 sm:px-4 lg:px-6 py-3 sm:py-4 text-xs sm:text-sm font-semibold transition-all whitespace-nowrap ${
-                    activeTab === 'goals'
-                      ? 'text-orange-600 border-b-2 border-orange-600 bg-orange-50/50'
-                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                  }`}
-                >
-                  Goals
-                </button>
-                <button
-                  onClick={() => setActiveTab('checkins')}
-                  className={`flex-1 min-w-0 px-3 sm:px-4 lg:px-6 py-3 sm:py-4 text-xs sm:text-sm font-semibold transition-all whitespace-nowrap ${
-                    activeTab === 'checkins'
-                      ? 'text-orange-600 border-b-2 border-orange-600 bg-orange-50/50'
-                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                  }`}
-                >
-                  Check-ins
-                </button>
-                <button
-                  onClick={() => setActiveTab('history')}
-                  className={`flex-1 min-w-0 px-3 sm:px-4 lg:px-6 py-3 sm:py-4 text-xs sm:text-sm font-semibold transition-all whitespace-nowrap ${
-                    activeTab === 'history'
-                      ? 'text-orange-600 border-b-2 border-orange-600 bg-orange-50/50'
-                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                  }`}
-                >
-                  History
-                </button>
-                <button
-                  onClick={() => setActiveTab('ai-analytics')}
-                  className={`flex-1 min-w-0 px-3 sm:px-4 lg:px-6 py-3 sm:py-4 text-xs sm:text-sm font-semibold transition-all whitespace-nowrap ${
-                    activeTab === 'ai-analytics'
-                      ? 'text-orange-600 border-b-2 border-orange-600 bg-orange-50/50'
-                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                  }`}
-                >
-                  AI Analytics
-                </button>
-              </div>
+          <div className="mb-6 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="flex border-b border-gray-200">
+              <button
+                onClick={() => setActiveTab('overview')}
+                className={`flex-1 px-6 py-4 text-sm font-semibold transition-all ${
+                  activeTab === 'overview'
+                    ? 'text-orange-600 border-b-2 border-orange-600 bg-orange-50/50'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                }`}
+              >
+                Overview
+              </button>
+              <button
+                onClick={() => setActiveTab('progress')}
+                className={`flex-1 px-6 py-4 text-sm font-semibold transition-all ${
+                  activeTab === 'progress'
+                    ? 'text-orange-600 border-b-2 border-orange-600 bg-orange-50/50'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                }`}
+              >
+                Progress
+              </button>
+              <button
+                onClick={() => setActiveTab('checkins')}
+                className={`flex-1 px-6 py-4 text-sm font-semibold transition-all ${
+                  activeTab === 'checkins'
+                    ? 'text-orange-600 border-b-2 border-orange-600 bg-orange-50/50'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                }`}
+              >
+                Check-ins
+              </button>
+              <button
+                onClick={() => setActiveTab('history')}
+                className={`flex-1 px-6 py-4 text-sm font-semibold transition-all ${
+                  activeTab === 'history'
+                    ? 'text-orange-600 border-b-2 border-orange-600 bg-orange-50/50'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                }`}
+              >
+                History
+              </button>
+              <button
+                onClick={() => setActiveTab('ai-analytics')}
+                className={`flex-1 px-6 py-4 text-sm font-semibold transition-all ${
+                  activeTab === 'ai-analytics'
+                    ? 'text-orange-600 border-b-2 border-orange-600 bg-orange-50/50'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                }`}
+              >
+                AI Analytics
+              </button>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             {/* Main Content */}
-            <div className="lg:col-span-3 space-y-3 sm:space-y-4 lg:space-y-6">
+            <div className="lg:col-span-3 space-y-6">
               {/* OVERVIEW TAB */}
               {activeTab === 'overview' && (
-                <div className="space-y-3 sm:space-y-4 lg:space-y-6">
+                <div className="space-y-6">
                   {/* Compact Overview & Progress Combined */}
-              <div className="bg-white rounded-xl sm:rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
-                <div className="p-3 sm:p-4 lg:p-5">
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 lg:gap-4">
+              <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                <div className="p-5">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     {/* Progress Score - Compact with Traffic Light */}
-                    <div className={`rounded-lg sm:rounded-xl lg:rounded-2xl p-2.5 sm:p-3 lg:p-4 border ${
+                    <div className={`rounded-2xl p-4 border ${
                       progressTrafficLight === 'red' ? 'bg-[#FF3B30]/10 border-[#FF3B30]/20' :
                       progressTrafficLight === 'orange' ? 'bg-orange-50 border-orange-200' :
                       'bg-[#34C759]/10 border-[#34C759]/20'
                     }`}>
                       <div className="flex items-center justify-between mb-1">
-                        <div className="text-[10px] sm:text-xs font-medium text-gray-600">Progress Score</div>
-                        <div className="text-sm sm:text-base lg:text-lg">{getTrafficLightIcon(progressTrafficLight)}</div>
+                        <div className="text-xs font-medium text-gray-600">Progress Score</div>
+                        <div className="text-lg">{getTrafficLightIcon(progressTrafficLight)}</div>
                       </div>
-                      <div className={`text-xl sm:text-2xl lg:text-3xl font-bold mb-1 sm:mb-2 ${
+                      <div className={`text-3xl font-bold mb-2 ${
                         progressTrafficLight === 'red' ? 'text-[#FF3B30]' :
                         progressTrafficLight === 'orange' ? 'text-orange-600' : 'text-[#34C759]'
                       }`}>
                         {client.progressScore || 0}%
                       </div>
-                      <div className="w-full bg-gray-200 rounded-full h-1 sm:h-1.5 overflow-hidden">
+                      <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
                         <div 
                           className={`h-full rounded-full transition-all ${
                             progressTrafficLight === 'red' ? 'bg-[#FF3B30]' :
@@ -2243,7 +2089,7 @@ export default function ClientProfilePage() {
                           style={{ width: `${Math.min(client.progressScore || 0, 100)}%` }}
                         ></div>
                       </div>
-                      <div className={`text-[9px] sm:text-[10px] font-medium mt-0.5 sm:mt-1 ${
+                      <div className={`text-[10px] font-medium mt-1 ${
                         progressTrafficLight === 'red' ? 'text-[#FF3B30]' :
                         progressTrafficLight === 'orange' ? 'text-orange-700' : 'text-[#34C759]'
                       }`}>
@@ -2252,806 +2098,260 @@ export default function ClientProfilePage() {
                     </div>
 
                     {/* Total Check-ins */}
-                    <div className="bg-orange-50 rounded-lg sm:rounded-xl lg:rounded-2xl p-2.5 sm:p-3 lg:p-4 border border-orange-200">
-                      <div className="text-[10px] sm:text-xs font-medium text-gray-600 mb-1">Check-ins</div>
-                      <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">{client.completedCheckIns || 0}</div>
-                      <div className="text-[9px] sm:text-xs text-gray-600 mt-0.5 sm:mt-1">Total completed</div>
+                    <div className="bg-orange-50 rounded-2xl p-4 border border-orange-200">
+                      <div className="text-xs font-medium text-gray-600 mb-1">Check-ins</div>
+                      <div className="text-3xl font-bold text-gray-900">{client.completedCheckIns || 0}</div>
+                      <div className="text-xs text-gray-600 mt-1">Total completed</div>
                     </div>
 
                     {/* Completion Rate */}
-                    <div className="bg-orange-50 rounded-lg sm:rounded-xl lg:rounded-2xl p-2.5 sm:p-3 lg:p-4 border border-orange-200">
-                      <div className="text-[10px] sm:text-xs font-medium text-gray-600 mb-1">Completion</div>
-                      <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">{client.completionRate || 0}%</div>
-                      <div className="text-[9px] sm:text-xs text-gray-600 mt-0.5 sm:mt-1">Rate</div>
+                    <div className="bg-orange-50 rounded-2xl p-4 border border-orange-200">
+                      <div className="text-xs font-medium text-gray-600 mb-1">Completion</div>
+                      <div className="text-3xl font-bold text-gray-900">{client.completionRate || 0}%</div>
+                      <div className="text-xs text-gray-600 mt-1">Rate</div>
                     </div>
 
                     {/* Last Activity */}
-                    <div className="bg-orange-50 rounded-lg sm:rounded-xl lg:rounded-2xl p-2.5 sm:p-3 lg:p-4 border border-orange-200">
-                      <div className="text-[10px] sm:text-xs font-medium text-gray-600 mb-1">Last Activity</div>
-                      <div className="text-xs sm:text-sm font-bold text-gray-900 leading-tight">
+                    <div className="bg-orange-50 rounded-2xl p-4 border border-orange-200">
+                      <div className="text-xs font-medium text-gray-600 mb-1">Last Activity</div>
+                      <div className="text-sm font-bold text-gray-900">
                         {client.lastCheckIn ? 
                           formatDate(client.lastCheckIn) : 
                           'Never'
                         }
                       </div>
                       {client.phone && (
-                        <div className="text-[9px] sm:text-xs text-gray-500 mt-0.5 sm:mt-1">{client.phone}</div>
+                        <div className="text-xs text-gray-500 mt-1">{client.phone}</div>
                       )}
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Progress Photos Gallery */}
-              {progressImages.length > 0 && (
-                <div className="bg-white rounded-xl sm:rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
-                  <div className="bg-orange-50 px-4 sm:px-6 lg:px-8 py-4 sm:py-5 lg:py-6 border-b-2 border-orange-200">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0 mb-3 sm:mb-4">
-                      <h2 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900">Progress Images</h2>
+              {/* Weekly AI Summary */}
+              {loadingWeeklySummary ? (
+                <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                  <div className="bg-gradient-to-r from-purple-50 to-pink-50 px-6 py-4 border-b-2 border-purple-200">
+                    <h2 className="text-xl font-bold text-gray-900">This Week's Status</h2>
+                    <p className="text-sm text-gray-600 mt-1">AI-powered weekly summary</p>
+                  </div>
+                  <div className="p-6">
+                    <div className="animate-pulse space-y-3">
+                      <div className="h-4 bg-gray-200 rounded w-full"></div>
+                      <div className="h-4 bg-gray-200 rounded w-5/6"></div>
+                      <div className="h-4 bg-gray-200 rounded w-4/6"></div>
+                    </div>
+                  </div>
+                </div>
+              ) : !weeklySummary && !loadingWeeklySummary ? (
+                <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                  <div className="bg-gradient-to-r from-purple-50 to-pink-50 px-6 py-4 border-b-2 border-purple-200">
+                    <h2 className="text-xl font-bold text-gray-900">This Week's Status</h2>
+                    <p className="text-sm text-gray-600 mt-1">AI-powered weekly summary</p>
+                  </div>
+                  <div className="p-6 text-center">
+                    <p className="text-gray-600 mb-4">Generate an AI-powered weekly summary</p>
+                    <button
+                      onClick={() => handleRefreshWeeklySummary(true)}
+                      disabled={loadingWeeklySummary}
+                      className="px-6 py-3 bg-purple-500 hover:bg-purple-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-xl text-sm font-medium transition-colors flex items-center gap-2 mx-auto"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                      {loadingWeeklySummary ? 'Generating...' : 'Generate Weekly Summary'}
+                    </button>
+                  </div>
+                </div>
+              ) : weeklySummary ? (
+                <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                  <div className="bg-gradient-to-r from-purple-50 to-pink-50 px-6 py-4 border-b-2 border-purple-200">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h2 className="text-xl font-bold text-gray-900">This Week's Status</h2>
+                        <p className="text-sm text-gray-600 mt-1">
+                          AI-powered weekly summary • {new Date(weeklySummary.dateRange.endDate).toLocaleDateString()}
+                        </p>
+                      </div>
                       <button
-                        onClick={() => {
-                          setComparisonMode(!comparisonMode);
-                          if (comparisonMode) {
-                            setSelectedForComparison([]);
-                          }
-                        }}
-                        className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-medium transition-all duration-200 w-full sm:w-auto ${
-                          comparisonMode
-                            ? 'bg-[#34C759] text-white shadow-sm'
-                            : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
-                        }`}
+                        onClick={() => handleRefreshWeeklySummary(true)}
+                        disabled={loadingWeeklySummary}
+                        className="px-4 py-2 bg-purple-500 hover:bg-purple-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-xl text-sm font-medium transition-colors flex items-center gap-2"
                       >
-                        {comparisonMode ? 'Exit Compare' : 'Select to Compare'}
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        {loadingWeeklySummary ? 'Generating...' : 'Refresh'}
                       </button>
                     </div>
-                    
-                    {/* Filters and Comparison Controls */}
-                    <div className="space-y-2 mt-2 sm:mt-3">
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                        <div className="flex items-center flex-wrap gap-2">
-                          <span className="text-[10px] sm:text-xs font-medium text-gray-900 whitespace-nowrap">Filter by view:</span>
-                          <button
-                            onClick={() => setFilterOrientation('all')}
-                            className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-xl lg:rounded-2xl text-[10px] sm:text-xs font-medium transition-all ${
-                              filterOrientation === 'all'
-                                ? 'bg-orange-500 text-white shadow-sm'
-                                : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
-                            }`}
-                          >
-                            All
-                          </button>
-                          <button
-                            onClick={() => setFilterOrientation('front')}
-                            className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-xl lg:rounded-2xl text-[10px] sm:text-xs font-medium transition-all ${
-                              filterOrientation === 'front'
-                                ? 'bg-orange-500 text-white shadow-sm'
-                                : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
-                            }`}
-                          >
-                            Front
-                          </button>
-                          <button
-                            onClick={() => setFilterOrientation('back')}
-                            className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-xl lg:rounded-2xl text-[10px] sm:text-xs font-medium transition-all ${
-                              filterOrientation === 'back'
-                                ? 'bg-orange-500 text-white shadow-sm'
-                                : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
-                            }`}
-                          >
-                            Back
-                          </button>
-                          <button
-                            onClick={() => setFilterOrientation('side')}
-                            className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-xl lg:rounded-2xl text-[10px] sm:text-xs font-medium transition-all ${
-                              filterOrientation === 'side'
-                                ? 'bg-orange-500 text-white shadow-sm'
-                                : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
-                            }`}
-                          >
-                            Side
-                          </button>
-                        </div>
-                        
-                        {selectedForComparison.length > 0 && (
-                          <div className="flex items-center space-x-2">
-                            <span className="text-xs text-gray-900 font-medium">
-                              {selectedForComparison.length} selected
-                            </span>
-                            <button
-                              onClick={() => {
-                                setSelectedForComparison([]);
-                                setComparisonMode(false);
-                              }}
-                              className="px-3 py-1.5 bg-white hover:bg-gray-50 text-gray-700 rounded-lg text-xs font-medium border border-gray-300"
-                            >
-                              Clear
-                            </button>
-                            <button
-                              onClick={() => setComparisonMode(true)}
-                              className="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-2xl text-xs font-medium shadow-sm"
-                            >
-                              Compare ({selectedForComparison.length})
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                      
-                      {/* Date Filter */}
-                      <div className="flex items-center flex-wrap gap-2">
-                        <span className="text-[10px] sm:text-xs font-medium text-gray-900 whitespace-nowrap">Filter by date:</span>
-                        <select
-                          value={filterDate}
-                          onChange={(e) => setFilterDate(e.target.value)}
-                          className="px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-xl lg:rounded-2xl text-[10px] sm:text-xs font-medium bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-orange-500 flex-1 sm:flex-none"
-                        >
-                          <option value="all">All Dates</option>
-                          {(() => {
-                            const dates = progressImages.map(img => {
-                              const date = new Date(img.uploadedAt);
-                              return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-                            });
-                            return Array.from(new Set(dates)).sort((a, b) => {
-                              return new Date(b).getTime() - new Date(a).getTime();
-                            }).map(date => (
-                              <option key={date} value={date}>{date}</option>
-                            ));
-                          })()}
-                        </select>
-                      </div>
-                    </div>
                   </div>
-                  <div className="p-3 sm:p-4 lg:p-5">
-                    {loadingImages ? (
-                      <div className="text-center py-8">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500 mx-auto mb-3"></div>
-                        <p className="text-gray-500 text-sm">Loading images...</p>
-                      </div>
-                    ) : progressImages.length === 0 ? (
-                      <div className="text-center py-8">
-                        <div className="w-12 h-12 bg-pink-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                          <svg className="w-6 h-6 text-pink-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                          </svg>
-                        </div>
-                        <p className="text-gray-500 text-sm mb-1">No progress images yet</p>
-                        <p className="text-gray-400 text-xs">Client photos will appear here as they're uploaded</p>
-                      </div>
-                    ) : (
-                      <>
-                        {/* Comparison View */}
-                        {comparisonMode && selectedForComparison.length > 0 && (
-                          <div className="mb-6 bg-gray-50 rounded-xl border-2 border-blue-200 p-5">
-                            <div className="flex items-center justify-between mb-4">
-                              <h3 className="text-lg font-bold text-gray-900">Side-by-Side Comparison</h3>
-                              <button
-                                onClick={() => {
-                                  setSelectedForComparison([]);
-                                  setComparisonMode(false);
-                                }}
-                                className="px-3 py-1.5 bg-white hover:bg-gray-50 text-gray-700 rounded-lg text-xs font-medium border border-gray-300"
-                              >
-                                Close Comparison
-                              </button>
-                            </div>
-                            <div className={`grid gap-4 ${
-                              selectedForComparison.length === 1 ? 'grid-cols-1' :
-                              selectedForComparison.length === 2 ? 'grid-cols-2' :
-                              selectedForComparison.length === 3 ? 'grid-cols-3' :
-                              'grid-cols-2 md:grid-cols-4'
-                            }`}>
-                              {progressImages.filter(img => selectedForComparison.includes(img.id)).map((image) => (
-                                <div key={image.id} className="bg-white rounded-xl border-2 border-blue-400 shadow-lg overflow-hidden">
-                                  <div className="aspect-square relative">
-                                    <img
-                                      src={image.imageUrl}
-                                      alt={image.caption || image.imageType}
-                                      className="w-full h-full object-cover"
-                                      onError={(e) => {
-                                        (e.target as HTMLImageElement).src = `data:image/svg+xml,${encodeURIComponent(`
-                                          <svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
-                                            <rect width="200" height="200" fill="#f3f4f6"/>
-                                            <text x="50%" y="50%" font-family="Arial" font-size="14" fill="#9ca3af" text-anchor="middle" dy=".3em">Image</text>
-                                          </svg>
-                                        `)}`;
-                                      }}
-                                    />
-                                    <div className="absolute top-2 left-2 flex flex-col gap-1">
-                                      <span className={`px-2 py-1 rounded text-xs font-medium ${
-                                        image.imageType === 'profile' ? 'bg-blue-100 text-blue-800' :
-                                        image.imageType === 'before' ? 'bg-orange-100 text-orange-800' :
-                                        image.imageType === 'after' ? 'bg-green-100 text-green-800' :
-                                        'bg-purple-100 text-purple-800'
-                                      }`}>
-                                        {image.imageType === 'profile' ? 'Profile' :
-                                         image.imageType === 'before' ? 'Before' :
-                                         image.imageType === 'after' ? 'After' :
-                                         'Progress'}
-                                      </span>
-                                      {image.orientation && (
-                                        <span className={`px-2 py-1 rounded text-xs font-medium ${
-                                          image.orientation === 'front' ? 'bg-pink-100 text-pink-800' :
-                                          image.orientation === 'back' ? 'bg-indigo-100 text-indigo-800' :
-                                          'bg-teal-100 text-teal-800'
-                                        }`}>
-                                          {image.orientation.charAt(0).toUpperCase() + image.orientation.slice(1)}
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
+                  <div className="p-6">
+                    <div className="prose max-w-none">
+                      <p className="text-gray-800 leading-relaxed whitespace-pre-line text-sm">
+                        {weeklySummary.summary}
+                      </p>
+                    </div>
+                    {weeklySummary.checkInsCount !== undefined && (
+                      <div className="mt-4 pt-4 border-t border-gray-200 flex items-center gap-6 text-xs text-gray-600">
+                        <span>Check-ins: {weeklySummary.checkInsCount}</span>
+                        {weeklySummary.averageScore !== null && (
+                          <span>Avg Score: {weeklySummary.averageScore}%</span>
                         )}
-
-                        {/* Filtered Images Grid */}
-                        {(() => {
-                          const filteredImages = progressImages.filter(img => {
-                            const orientationMatch = filterOrientation === 'all' || img.orientation === filterOrientation;
-                            if (filterDate === 'all') return orientationMatch;
-                            
-                            const imgDate = new Date(img.uploadedAt);
-                            const imgDateKey = imgDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-                            return orientationMatch && imgDateKey === filterDate;
-                          });
-
-                          if (filteredImages.length === 0) {
-                            return (
-                              <div className="text-center py-12">
-                                <p className="text-gray-500 text-sm">No {filterOrientation !== 'all' ? filterOrientation : ''} images found for the selected date</p>
-                              </div>
-                            );
-                          }
-
-                          // Group by date
-                          const groupedImages: { [key: string]: any[] } = {};
-                          filteredImages.forEach(img => {
-                            const date = new Date(img.uploadedAt);
-                            const dateKey = date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-                            if (!groupedImages[dateKey]) {
-                              groupedImages[dateKey] = [];
-                            }
-                            groupedImages[dateKey].push(img);
-                          });
-                          const sortedDateKeys = Object.keys(groupedImages).sort((a, b) => {
-                            return new Date(b).getTime() - new Date(a).getTime();
-                          });
-
-                          return (
-                            <>
-                              {sortedDateKeys.map((dateKey) => (
-                                <div key={dateKey} className="mb-6">
-                                  <div className="flex items-center justify-between mb-3">
-                                    <h3 className="text-base font-bold text-gray-900 flex items-center">
-                                      <svg className="w-4 h-4 mr-2 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                      </svg>
-                                      {dateKey}
-                                      <span className="ml-2 text-xs font-normal text-gray-700">
-                                        ({groupedImages[dateKey].length} {groupedImages[dateKey].length === 1 ? 'image' : 'images'})
-                                      </span>
-                                    </h3>
-                                  </div>
-                                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3">
-                                    {groupedImages[dateKey].map((image) => {
-                                      const isSelected = selectedForComparison.includes(image.id);
-                                      return (
-                                        <div 
-                                          key={image.id} 
-                                          className="flex flex-col"
-                                          onClick={() => {
-                                            if (comparisonMode) {
-                                              if (isSelected) {
-                                                setSelectedForComparison(selectedForComparison.filter(id => id !== image.id));
-                                              } else {
-                                                if (selectedForComparison.length < 4) {
-                                                  setSelectedForComparison([...selectedForComparison, image.id]);
-                                                }
-                                              }
-                                            }
-                                          }}
-                                        >
-                                          <div 
-                                            className={`group relative aspect-square rounded-xl overflow-hidden border transition-all duration-300 hover:shadow-lg bg-white cursor-pointer ${
-                                              comparisonMode 
-                                                ? isSelected 
-                                                  ? 'border-blue-500 ring-2 ring-blue-200 shadow-md' 
-                                                  : 'border-gray-200 hover:border-blue-300'
-                                                : 'border-gray-200 hover:border-pink-300'
-                                            }`}
-                                          >
-                                            {comparisonMode && (
-                                              <div className={`absolute top-2 right-2 z-10 w-6 h-6 rounded-full flex items-center justify-center transition-all ${
-                                                isSelected 
-                                                  ? 'bg-blue-600 text-white shadow-lg' 
-                                                  : 'bg-white/80 backdrop-blur-sm border-2 border-gray-300'
-                                              }`}>
-                                                {isSelected && (
-                                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                                  </svg>
-                                                )}
-                                              </div>
-                                            )}
-                                            <img
-                                              src={image.imageUrl}
-                                              alt={image.caption || image.imageType}
-                                              className="w-full h-full object-cover"
-                                              onError={(e) => {
-                                                (e.target as HTMLImageElement).src = `data:image/svg+xml,${encodeURIComponent(`
-                                                  <svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
-                                                    <rect width="200" height="200" fill="#f3f4f6"/>
-                                                    <text x="50%" y="50%" font-family="Arial" font-size="14" fill="#9ca3af" text-anchor="middle" dy=".3em">Image</text>
-                                                  </svg>
-                                                `)}`;
-                                              }}
-                                            />
-                                            <div className="absolute top-2 left-2 flex flex-col gap-1">
-                                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                                image.imageType === 'profile' ? 'bg-blue-100 text-blue-800' :
-                                                image.imageType === 'before' ? 'bg-orange-100 text-orange-800' :
-                                                image.imageType === 'after' ? 'bg-green-100 text-green-800' :
-                                                'bg-purple-100 text-purple-800'
-                                              }`}>
-                                                {image.imageType === 'profile' ? 'Profile' :
-                                                 image.imageType === 'before' ? 'Before' :
-                                                 image.imageType === 'after' ? 'After' :
-                                                 'Progress'}
-                                              </span>
-                                              {image.orientation && (
-                                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                                  image.orientation === 'front' ? 'bg-pink-100 text-pink-800' :
-                                                  image.orientation === 'back' ? 'bg-indigo-100 text-indigo-800' :
-                                                  'bg-teal-100 text-teal-800'
-                                                }`}>
-                                                  {image.orientation.charAt(0).toUpperCase() + image.orientation.slice(1)}
-                                                </span>
-                                              )}
-                                            </div>
-                                          </div>
-                                          <div className="mt-2 text-center">
-                                            <p className="text-gray-700 text-sm font-semibold">
-                                              {new Date(image.uploadedAt).toLocaleDateString('en-US', { 
-                                                month: 'short', 
-                                                day: 'numeric',
-                                                year: 'numeric'
-                                              })}
-                                            </p>
-                                          </div>
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-                              ))}
-                            </>
-                          );
-                        })()}
-                      </>
+                        {weeklySummary.measurementsCount > 0 && (
+                          <span>Measurements: {weeklySummary.measurementsCount}</span>
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>
-              )}
+              ) : null}
 
-              {/* Measurement History */}
-              <div className="bg-white rounded-xl sm:rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-                <div className="bg-orange-50 px-4 sm:px-6 lg:px-8 py-4 sm:py-5 lg:py-6 border-b-2 border-orange-200">
-                  <h2 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900">Measurement History</h2>
-                  <p className="text-xs sm:text-sm text-gray-600 mt-1">Track weight and body measurements over time</p>
-                </div>
-                
-                {/* Measurements Graph */}
-                {allMeasurementsData.length > 0 && (
-                  <div className="p-3 sm:p-4 lg:p-6 border-b border-gray-100">
-                    <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-3 sm:mb-4">Measurements Over Time</h3>
-                    
-                    {/* Measurement Toggles */}
-                    {getAvailableMeasurements().length > 0 && (
-                      <div className="mb-3 sm:mb-4 flex flex-wrap gap-2">
-                        {getAvailableMeasurements().map((measurement, index) => (
-                          <button
-                            key={measurement}
-                            onClick={() => toggleMeasurement(measurement)}
-                            className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg text-[10px] sm:text-xs font-medium transition-colors ${
-                              selectedMeasurements.has(measurement)
-                                ? `${getMeasurementColor(index)} text-white`
-                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                            }`}
-                          >
-                            {getMeasurementLabel(measurement)}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Graph */}
-                    {selectedMeasurements.size > 0 ? (
-                      <div className="h-80 w-full">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <LineChart
-                            data={allMeasurementsData.map(m => {
-                              const date = m.date instanceof Date ? m.date : new Date(m.date);
-                              const dataPoint: any = {
-                                date: date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' }),
-                                fullDate: date.toISOString(),
-                                isBaseline: m.isBaseline
-                              };
-                              
-                              // Add each selected measurement to the data point
-                              selectedMeasurements.forEach(key => {
-                                const value = key === 'bodyWeight' 
-                                  ? (m.bodyWeight || null)
-                                  : (m.measurements?.[key] || null);
-                                if (value !== null && value !== undefined && value > 0) {
-                                  dataPoint[getMeasurementLabel(key)] = Number(value.toFixed(1));
-                                }
-                              });
-                              
-                              return dataPoint;
-                            })}
-                            margin={{ top: 10, right: 30, left: 0, bottom: 60 }}
-                          >
-                            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                            <XAxis 
-                              dataKey="date" 
-                              stroke="#6b7280"
-                              fontSize={11}
-                              tick={{ fill: '#6b7280' }}
-                              angle={-45}
-                              textAnchor="end"
-                              height={60}
-                              label={{ 
-                                value: 'Date', 
-                                position: 'insideBottom', 
-                                offset: -5,
-                                style: { textAnchor: 'middle', fill: '#6b7280' }
-                              }}
-                            />
-                            <YAxis 
-                              stroke="#6b7280"
-                              fontSize={11}
-                              tick={{ fill: '#6b7280' }}
-                            />
-                            <Tooltip 
-                              contentStyle={{ 
-                                backgroundColor: 'white', 
-                                border: '1px solid #e5e7eb', 
-                                borderRadius: '8px',
-                                fontSize: '12px'
-                              }}
-                              formatter={(value: number, name: string) => {
-                                // Extract unit from the label (e.g., "Body Weight (kg)" -> "kg")
-                                const unitMatch = name.match(/\((\w+)\)/);
-                                const unit = unitMatch ? unitMatch[1] : '';
-                                return [`${value}${unit ? ' ' + unit : ''}`, name.replace(/\s*\([^)]*\)\s*/g, '')];
-                              }}
-                              labelFormatter={(label, payload) => {
-                                if (payload && payload[0]?.payload?.fullDate) {
-                                  const date = new Date(payload[0].payload.fullDate);
-                                  const baseline = payload[0].payload.isBaseline ? ' (Baseline)' : '';
-                                  return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) + baseline;
-                                }
-                                return label;
-                              }}
-                            />
-                            <Legend 
-                              wrapperStyle={{ paddingTop: '20px' }}
-                              iconType="line"
-                              formatter={(value) => value}
-                            />
-                            {Array.from(selectedMeasurements).map((key, keyIndex) => {
-                              const colorMap = [
-                                '#3b82f6', // blue
-                                '#10b981', // green
-                                '#8b5cf6', // purple
-                                '#f97316', // orange
-                                '#ec4899', // pink
-                                '#6366f1', // indigo
-                                '#ef4444', // red
-                                '#eab308'  // yellow
-                              ];
-                              const color = colorMap[keyIndex % colorMap.length];
-                              const label = getMeasurementLabel(key);
-                              
-                              return (
-                                <Line
-                                  key={key}
-                                  type="monotone"
-                                  dataKey={label}
-                                  stroke={color}
-                                  strokeWidth={2}
-                                  dot={{ r: 4, fill: color, stroke: 'white', strokeWidth: 2 }}
-                                  activeDot={{ r: 6 }}
-                                  connectNulls={false}
-                                />
-                              );
-                            })}
-                          </LineChart>
-                        </ResponsiveContainer>
-                      </div>
-                    ) : (
-                      <div className="text-center py-8 text-gray-500">
-                        <p className="text-sm">Select measurements to view on the graph</p>
-                      </div>
-                    )}
+              {/* SWOT Analysis */}
+              {loadingSwot ? (
+                <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                  <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-6 py-4 border-b-2 border-indigo-200">
+                    <h2 className="text-xl font-bold text-gray-900">SWOT Analysis</h2>
+                    <p className="text-sm text-gray-600 mt-1">Strengths, Weaknesses, Opportunities, Threats</p>
                   </div>
-                )}
-                
-                {/* Measurement Table */}
-                <div className="p-8">
-                  {loadingMeasurements ? (
-                    <div className="text-center py-12">
-                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600 mx-auto mb-4"></div>
-                      <p className="text-gray-500 text-lg">Loading measurements...</p>
+                  <div className="p-6">
+                    <div className="animate-pulse space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="h-32 bg-gray-200 rounded-xl"></div>
+                        <div className="h-32 bg-gray-200 rounded-xl"></div>
+                        <div className="h-32 bg-gray-200 rounded-xl"></div>
+                        <div className="h-32 bg-gray-200 rounded-xl"></div>
+                      </div>
                     </div>
-                  ) : measurementHistory.length > 0 ? (
-                    <div className="overflow-x-auto">
-                      <table className="w-full">
-                        <thead className="bg-gray-50 border-b border-gray-200">
-                          <tr>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Date</th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Weight (kg)</th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Waist (cm)</th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Hips (cm)</th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Chest (cm)</th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Left Thigh (cm)</th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Right Thigh (cm)</th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Left Arm (cm)</th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Right Arm (cm)</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200">
-                          {measurementHistory.map((entry) => (
-                            <tr key={entry.id} className="hover:bg-gray-50">
-                              <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                                {new Date(entry.date).toLocaleDateString('en-US', { 
-                                  year: 'numeric', 
-                                  month: 'short', 
-                                  day: 'numeric' 
-                                })}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-gray-600">
-                                {entry.bodyWeight ? `${entry.bodyWeight}` : '-'}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-gray-600">
-                                {entry.measurements?.waist ? `${entry.measurements.waist}` : '-'}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-gray-600">
-                                {entry.measurements?.hips ? `${entry.measurements.hips}` : '-'}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-gray-600">
-                                {entry.measurements?.chest ? `${entry.measurements.chest}` : '-'}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-gray-600">
-                                {entry.measurements?.leftThigh ? `${entry.measurements.leftThigh}` : '-'}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-gray-600">
-                                {entry.measurements?.rightThigh ? `${entry.measurements.rightThigh}` : '-'}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-gray-600">
-                                {entry.measurements?.leftArm ? `${entry.measurements.leftArm}` : '-'}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-gray-600">
-                                {entry.measurements?.rightArm ? `${entry.measurements.rightArm}` : '-'}
-                              </td>
-                            </tr>
+                  </div>
+                </div>
+              ) : !swotAnalysis && !loadingSwot ? (
+                <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                  <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-6 py-4 border-b-2 border-indigo-200">
+                    <h2 className="text-xl font-bold text-gray-900">SWOT Analysis</h2>
+                    <p className="text-sm text-gray-600 mt-1">Comprehensive analysis of current progress</p>
+                  </div>
+                  <div className="p-6 text-center">
+                    <p className="text-gray-600 mb-4">Generate a comprehensive SWOT analysis</p>
+                    <button
+                      onClick={() => handleRefreshSwotAnalysis(true)}
+                      disabled={loadingSwot}
+                      className="px-6 py-3 bg-indigo-500 hover:bg-indigo-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-xl text-sm font-medium transition-colors flex items-center gap-2 mx-auto"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                      {loadingSwot ? 'Generating...' : 'Generate SWOT Analysis'}
+                    </button>
+                  </div>
+                </div>
+              ) : swotAnalysis ? (
+                <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                  <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-6 py-4 border-b-2 border-indigo-200">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h2 className="text-xl font-bold text-gray-900">SWOT Analysis</h2>
+                        <p className="text-sm text-gray-600 mt-1">Comprehensive analysis of current progress</p>
+                      </div>
+                      <button
+                        onClick={() => handleRefreshSwotAnalysis(true)}
+                        disabled={loadingSwot}
+                        className="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-xl text-sm font-medium transition-colors flex items-center gap-2"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        {loadingSwot ? 'Generating...' : 'Refresh'}
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div className="p-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                      {/* Strengths */}
+                      <div className="bg-green-50 rounded-xl p-5 border-2 border-green-200">
+                        <div className="flex items-center mb-3">
+                          <div className="w-8 h-8 bg-green-500 rounded-lg flex items-center justify-center mr-3">
+                            <span className="text-white font-bold text-sm">S</span>
+                          </div>
+                          <h3 className="text-lg font-bold text-gray-900">Strengths</h3>
+                        </div>
+                        <ul className="space-y-2">
+                          {swotAnalysis.strengths?.map((strength: string, idx: number) => (
+                            <li key={idx} className="flex items-start">
+                              <span className="text-green-600 mr-2 mt-1">✓</span>
+                              <span className="text-gray-800 text-sm">{strength}</span>
+                            </li>
                           ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <div className="text-center py-8 text-gray-500">
-                      <p className="text-sm">No measurements recorded yet</p>
-                    </div>
-                  )}
-                </div>
-              </div>
+                        </ul>
+                      </div>
 
-              {/* Quick Review Table */}
-              <div className="bg-white rounded-xl sm:rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
-                <div className="bg-gradient-to-r from-orange-50 to-red-50 px-4 sm:px-6 py-3 sm:py-4 border-b-2 border-orange-200">
-                  <h2 className="text-lg sm:text-xl font-bold text-gray-900">Check-in Quick Review</h2>
-                  <p className="text-xs sm:text-sm text-gray-600 mt-1">Condensed summary with color indicators</p>
-                </div>
-                <div className="p-3 sm:p-4 lg:p-6">
-                  {loadingCheckInResponses ? (
-                    <div className="text-center py-8">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500 mx-auto mb-2"></div>
-                      <p className="text-sm text-gray-500">Loading check-ins...</p>
-                    </div>
-                  ) : checkInResponses.length === 0 ? (
-                    <div className="text-center py-8 text-gray-500 text-sm">No check-ins available yet</div>
-                  ) : (
-                    <div className="space-y-3">
-                      {checkInResponses.map((checkIn) => {
-                        const isExpanded = expandedCheckInId === checkIn.id;
-                        const submittedDate = new Date(checkIn.submittedAt);
-                        
-                        // Calculate status for each question
-                        const questionStatuses = (checkIn.responses || []).map((resp: any) => {
-                          const score = resp.score || 0;
-                          const weight = resp.weight !== undefined ? resp.weight : 5;
-                          const questionType = resp.type || 'text';
-                          const isUnscored = weight === 0 || questionType === 'text' || questionType === 'textarea';
-                          
-                          if (isUnscored) return 'grey';
-                          if (score >= 7) return 'green';
-                          if (score >= 4) return 'orange';
-                          return 'red';
-                        });
-
-                        const hasCoachResponse = checkIn.coachResponded || false;
-
-                        return (
-                          <div key={checkIn.id} className={`border rounded-xl overflow-hidden hover:border-orange-300 transition-colors ${
-                            hasCoachResponse ? 'border-green-300 bg-green-50/30' : 'border-gray-200'
-                          }`}>
-                            {/* Check-in Row */}
-                            <div 
-                              className={`hover:bg-gray-100 p-4 cursor-pointer transition-colors ${
-                                hasCoachResponse ? 'bg-green-50/50' : 'bg-gray-50'
-                              }`}
-                              onClick={() => setExpandedCheckInId(isExpanded ? null : checkIn.id)}
-                            >
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-4 flex-1 min-w-0">
-                                  <div className="flex-shrink-0 flex items-center gap-2">
-                                    {hasCoachResponse && (
-                                      <div className="flex items-center gap-1.5 px-2 py-1 bg-green-500 text-white rounded-lg text-xs font-semibold">
-                                        <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                        </svg>
-                                        <span>Replied</span>
-                                      </div>
-                                    )}
-                                    <span className="text-sm font-semibold text-gray-900">
-                                      {submittedDate.toLocaleDateString('en-US', { 
-                                        month: 'short', 
-                                        day: 'numeric',
-                                        year: 'numeric'
-                                      })}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
-                                    {questionStatuses.map((status: string, idx: number) => (
-                                      <div
-                                        key={idx}
-                                        className={`w-4 h-4 rounded-full flex-shrink-0 ${
-                                          status === 'green' ? 'bg-green-500 border-green-600' :
-                                          status === 'orange' ? 'bg-orange-500 border-orange-600' :
-                                          status === 'red' ? 'bg-red-500 border-red-600' :
-                                          'bg-gray-400 border-gray-500'
-                                        } border-2`}
-                                        title={`Question ${idx + 1}: ${status === 'green' ? 'Good (7-10)' : status === 'orange' ? 'Moderate (4-6)' : status === 'red' ? 'Needs Attention (0-3)' : 'Not Scored'}`}
-                                      />
-                                    ))}
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-3 flex-shrink-0">
-                                  {checkIn.score !== undefined ? (
-                                    <span className="text-sm font-semibold text-gray-900">{checkIn.score}%</span>
-                                  ) : (
-                                    <span className="text-sm font-medium text-gray-400">-</span>
-                                  )}
-                                  <svg 
-                                    className={`w-5 h-5 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-                                    fill="none" 
-                                    stroke="currentColor" 
-                                    viewBox="0 0 24 24"
-                                  >
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                  </svg>
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Expanded Content */}
-                            {isExpanded && (
-                              <div className="bg-white border-t border-gray-200 p-4">
-                                <div className="space-y-3 mb-4">
-                                  {(checkIn.responses || []).map((resp: any, idx: number) => {
-                                    const score = resp.score || 0;
-                                    const weight = resp.weight !== undefined ? resp.weight : 5;
-                                    const questionType = resp.type || 'text';
-                                    const isUnscored = weight === 0 || questionType === 'text' || questionType === 'textarea';
-                                    let status: 'green' | 'orange' | 'red' | 'grey';
-                                    
-                                    if (isUnscored) {
-                                      status = 'grey';
-                                    } else if (score >= 7) {
-                                      status = 'green';
-                                    } else if (score >= 4) {
-                                      status = 'orange';
-                                    } else {
-                                      status = 'red';
-                                    }
-
-                                    return (
-                                      <div 
-                                        key={idx} 
-                                        className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setSelectedResponse({
-                                            question: resp.question || 'Question',
-                                            answer: resp.answer,
-                                            score: score,
-                                            date: submittedDate.toLocaleDateString(),
-                                            week: 1,
-                                            type: questionType
-                                          });
-                                        }}
-                                      >
-                                        <div className={`w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center ${
-                                          status === 'green' ? 'bg-green-500 border-green-600' :
-                                          status === 'orange' ? 'bg-orange-500 border-orange-600' :
-                                          status === 'red' ? 'bg-red-500 border-red-600' :
-                                          'bg-gray-400 border-gray-500'
-                                        } border-2`}>
-                                          {status !== 'grey' && (
-                                            <span className="text-white text-[10px] font-bold">{score}</span>
-                                          )}
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                          <p className="text-sm font-medium text-gray-900 mb-1">{resp.question || `Question ${idx + 1}`}</p>
-                                          <p className="text-xs text-gray-600 line-clamp-2">
-                                            {questionType === 'boolean' 
-                                              ? (resp.answer === true || resp.answer === 'true' ? 'Yes' : 'No')
-                                              : questionType === 'scale' || questionType === 'rating'
-                                              ? `${resp.answer} / 10`
-                                              : typeof resp.answer === 'string' 
-                                              ? resp.answer.substring(0, 100) + (resp.answer.length > 100 ? '...' : '')
-                                              : String(resp.answer)}
-                                          </p>
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                                <div className="flex justify-end gap-3 pt-3 border-t border-gray-200">
-                                  {hasCoachResponse ? (
-                                    <Link
-                                      href={`/responses/${checkIn.id}`}
-                                      className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
-                                      onClick={(e) => e.stopPropagation()}
-                                    >
-                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                      </svg>
-                                      Review Response
-                                    </Link>
-                                  ) : (
-                                    <>
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setShowQuickResponseModal(true);
-                                          setSelectedCheckInForResponse(checkIn);
-                                        }}
-                                        className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm font-medium transition-colors"
-                                      >
-                                        Quick Response
-                                      </button>
-                                      <Link
-                                        href={`/responses/${checkIn.id}`}
-                                        className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium transition-colors"
-                                        onClick={(e) => e.stopPropagation()}
-                                      >
-                                        View Full Check-in →
-                                      </Link>
-                                    </>
-                                  )}
-                                </div>
-                              </div>
-                            )}
+                      {/* Weaknesses */}
+                      <div className="bg-orange-50 rounded-xl p-5 border-2 border-orange-200">
+                        <div className="flex items-center mb-3">
+                          <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center mr-3">
+                            <span className="text-white font-bold text-sm">W</span>
                           </div>
-                        );
-                      })}
+                          <h3 className="text-lg font-bold text-gray-900">Weaknesses</h3>
+                        </div>
+                        <ul className="space-y-2">
+                          {swotAnalysis.weaknesses?.map((weakness: string, idx: number) => (
+                            <li key={idx} className="flex items-start">
+                              <span className="text-orange-600 mr-2 mt-1">⚠</span>
+                              <span className="text-gray-800 text-sm">{weakness}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      {/* Opportunities */}
+                      <div className="bg-blue-50 rounded-xl p-5 border-2 border-blue-200">
+                        <div className="flex items-center mb-3">
+                          <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center mr-3">
+                            <span className="text-white font-bold text-sm">O</span>
+                          </div>
+                          <h3 className="text-lg font-bold text-gray-900">Opportunities</h3>
+                        </div>
+                        <ul className="space-y-2">
+                          {swotAnalysis.opportunities?.map((opportunity: string, idx: number) => (
+                            <li key={idx} className="flex items-start">
+                              <span className="text-blue-600 mr-2 mt-1">→</span>
+                              <span className="text-gray-800 text-sm">{opportunity}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      {/* Threats */}
+                      <div className="bg-red-50 rounded-xl p-5 border-2 border-red-200">
+                        <div className="flex items-center mb-3">
+                          <div className="w-8 h-8 bg-red-500 rounded-lg flex items-center justify-center mr-3">
+                            <span className="text-white font-bold text-sm">T</span>
+                          </div>
+                          <h3 className="text-lg font-bold text-gray-900">Threats</h3>
+                        </div>
+                        <ul className="space-y-2">
+                          {swotAnalysis.threats?.map((threat: string, idx: number) => (
+                            <li key={idx} className="flex items-start">
+                              <span className="text-red-600 mr-2 mt-1">!</span>
+                              <span className="text-gray-800 text-sm">{threat}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
                     </div>
-                  )}
+
+                    {/* Overall Assessment */}
+                    {swotAnalysis.overallAssessment && (
+                      <div className="bg-gray-50 rounded-xl p-5 border border-gray-200 mt-4">
+                        <h3 className="text-lg font-bold text-gray-900 mb-3">Overall Assessment</h3>
+                        <p className="text-gray-800 leading-relaxed text-sm whitespace-pre-line">
+                          {swotAnalysis.overallAssessment}
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
+              ) : null}
 
               {/* Quick Insights Panel */}
               <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
@@ -3277,43 +2577,976 @@ export default function ClientProfilePage() {
                 </div>
               </div>
 
-                </div>
-              )}
-
-              {/* GOALS TAB */}
-              {activeTab === 'goals' && (
-                <div className="space-y-6">
-                  {/* Health Goals */}
-                  <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
-                    <div className="bg-gradient-to-r from-orange-50 to-red-50 px-8 py-6 border-b-2 border-orange-200">
+              {/* Onboarding Summary - Compact */}
+              {onboardingData && (
+                <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+                  <div className="bg-green-50 px-6 py-4 border-b-2 border-green-200">
+                    <div className="flex items-center justify-between">
                       <div>
-                        <h2 className="text-2xl font-bold text-gray-900">Client Goals</h2>
-                        <p className="text-sm text-gray-600 mt-1">Track and monitor client health and wellness goals</p>
+                        <h2 className="text-xl font-bold text-gray-900">Onboarding Questionnaire</h2>
+                        <p className="text-xs text-gray-600 mt-1">
+                          {onboardingData.submittedAt 
+                            ? `Submitted ${new Date(onboardingData.submittedAt).toLocaleDateString()}`
+                            : 'In progress'}
+                        </p>
                       </div>
-                    </div>
-                    <div className="p-8">
-                      {client.goals && client.goals.length > 0 ? (
-                        <div className="flex flex-wrap gap-4">
-                          {client.goals.map((goal, index) => (
-                            <div
-                              key={index}
-                              className="px-6 py-4 bg-gradient-to-r from-orange-100 to-red-100 text-orange-800 text-base font-semibold rounded-xl border-2 border-orange-200 shadow-sm hover:shadow-md transition-all"
-                            >
-                              {goal}
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="text-center py-12">
-                          <svg className="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                          <p className="text-gray-500 text-lg font-medium">No goals set yet</p>
-                          <p className="text-gray-400 text-sm mt-2">Goals can be set when creating or editing the client profile</p>
-                        </div>
+                      {onboardingData.status === 'submitted' && (
+                        <span className="px-2 py-1 bg-green-600 text-white rounded-full text-xs font-medium">
+                          Submitted
+                        </span>
                       )}
                     </div>
                   </div>
+                  
+                  <div className="p-6">
+                    {onboardingData.sections && onboardingData.sections.length > 0 ? (
+                      <div className="space-y-3">
+                        {onboardingData.sections.slice(0, 3).map((section: any) => (
+                          <div key={section.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                            <div className="flex items-center space-x-3">
+                              <span className="text-xl">{section.icon}</span>
+                              <div>
+                                <p className="text-sm font-semibold text-gray-900">
+                                  Section {section.id}: {section.name}
+                                </p>
+                                <p className="text-xs text-gray-600">
+                                  {section.questions.filter((q: any) => q.answered).length} / {section.questions.length} answered
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                        {onboardingData.sections.length > 3 && (
+                          <p className="text-xs text-gray-500 text-center pt-2">
+                            + {onboardingData.sections.length - 3} more sections
+                          </p>
+                        )}
+                        <Link
+                          href={`/clients/${clientId}/onboarding-report`}
+                          target="_blank"
+                          className="w-full mt-4 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-xl text-sm font-medium text-center transition-all duration-200 shadow-sm block"
+                        >
+                          View Full Report →
+                        </Link>
+                      </div>
+                    ) : (
+                      <div className="text-center py-4 text-gray-500">
+                        <p className="text-sm">No onboarding data available yet.</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+                </div>
+              )}
+
+              {/* PROGRESS TAB */}
+              {activeTab === 'progress' && (
+                <div className="space-y-6">
+              {/* Question Progress Grid */}
+              {questionProgress.length > 0 && (
+                <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                  <div className="bg-orange-50 px-8 py-6 border-b-2 border-orange-200">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h2 className="text-2xl font-bold text-gray-900">Question Progress Over Time</h2>
+                        <p className="text-sm text-gray-600 mt-1">Track how each question improves week by week</p>
+                      </div>
+                      <button
+                        onClick={() => setQuestionProgressExpanded(!questionProgressExpanded)}
+                        className="px-4 py-2 bg-white hover:bg-gray-50 text-gray-700 rounded-xl text-sm font-medium transition-all border border-gray-200"
+                      >
+                        {questionProgressExpanded ? 'Collapse' : 'Expand'}
+                      </button>
+                    </div>
+                  </div>
+                  
+                  {questionProgressExpanded && (
+                    <>
+                      {/* Legend */}
+                      <div className="flex items-center gap-3 px-6 py-3 bg-gray-50/50 border-b border-gray-100 flex-wrap">
+                    <div className="flex items-center gap-1">
+                      <div className="w-2.5 h-2.5 rounded-full bg-green-500"></div>
+                      <span className="text-[10px] text-gray-600 font-medium">Good (7-10)</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <div className="w-2.5 h-2.5 rounded-full bg-orange-500"></div>
+                      <span className="text-[10px] text-gray-600 font-medium">Moderate (4-6)</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <div className="w-2.5 h-2.5 rounded-full bg-red-500"></div>
+                      <span className="text-[10px] text-gray-600 font-medium">Needs Attention (0-3)</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <div className="w-2.5 h-2.5 rounded-full bg-gray-400 border border-gray-500"></div>
+                      <span className="text-[10px] text-gray-600 font-medium">Not Scored</span>
+                    </div>
+                  </div>
+
+                  {/* Progress Grid */}
+                  {loadingQuestionProgress ? (
+                    <div className="p-8 text-center">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto mb-4"></div>
+                      <p className="text-gray-500 text-sm">Loading question progress...</p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
+                      <table className="w-full">
+                        <thead className="sticky top-0 bg-gray-50/95 backdrop-blur-sm z-10">
+                          <tr className="bg-gray-50/30">
+                            <th className="text-left py-1.5 px-3 font-semibold text-[10px] text-gray-600 uppercase tracking-wider sticky left-0 bg-gray-50/95 backdrop-blur-sm z-20 min-w-[160px] border-r border-gray-100">
+                              Question
+                            </th>
+                            {questionProgress[0]?.weeks.map((week: any, index: number) => (
+                              <th
+                                key={index}
+                                className="text-center py-1.5 px-1 font-semibold text-[10px] text-gray-600 uppercase tracking-wider min-w-[60px]"
+                              >
+                                <div className="flex flex-col items-center">
+                                  <span className="text-[9px] text-gray-500 font-medium">W{week.week}</span>
+                                  <span className="text-[9px] text-gray-400">{week.date}</span>
+                                </div>
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {questionProgress.map((question, qIndex) => (
+                            <tr 
+                              key={question.questionId} 
+                              className={`transition-colors hover:bg-gray-50/50 ${
+                                qIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'
+                              }`}
+                            >
+                              <td className="py-1.5 px-3 text-xs font-medium text-gray-900 sticky left-0 bg-inherit z-10 border-r border-gray-100">
+                                <div className="max-w-[160px] line-clamp-2 leading-tight">
+                                  {question.questionText}
+                                </div>
+                              </td>
+                              {question.weeks.map((week: any, wIndex: number) => (
+                                <td
+                                  key={wIndex}
+                                  className="text-center py-1.5 px-1"
+                                >
+                                  <div
+                                    className={`w-6 h-6 rounded-full ${getQuestionProgressStatusColor(week.status)} ${getQuestionProgressStatusBorder(week.status)} flex items-center justify-center transition-all hover:scale-125 cursor-pointer shadow-sm mx-auto`}
+                                    title={week.status === 'grey' 
+                                      ? `Week ${week.week}: Not Scored - ${week.date}` 
+                                      : `Week ${week.week}: Score ${week.score}/10 - ${week.date}`}
+                                    onClick={() => setSelectedResponse({
+                                      question: question.questionText,
+                                      answer: week.answer,
+                                      score: week.score,
+                                      date: week.date,
+                                      week: week.week,
+                                      type: week.type
+                                    })}
+                                  >
+                                    {week.status !== 'grey' && (
+                                      <span className="text-white text-[9px] font-bold">{week.score}</span>
+                                    )}
+                                  </div>
+                                </td>
+                              ))}
+                              {/* Fill empty weeks if needed */}
+                              {Array.from({ length: Math.max(0, (questionProgress[0]?.weeks.length || 0) - question.weeks.length) }).map((_, emptyIndex) => (
+                                <td key={`empty-${emptyIndex}`} className="text-center py-1.5 px-1">
+                                  <div className="w-6 h-6 rounded-full bg-gray-100 border border-gray-200 mx-auto"></div>
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* Progress Images */}
+              {activeTab === 'progress' && (
+                <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                <div className="bg-orange-50 px-8 py-6 border-b-2 border-orange-200">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-2xl font-bold text-gray-900">Progress Images</h2>
+                    {progressImages.length > 0 && (
+                      <button
+                        onClick={() => {
+                          setComparisonMode(!comparisonMode);
+                          if (comparisonMode) {
+                            setSelectedForComparison([]);
+                          }
+                        }}
+                        className={`px-4 py-2 rounded-2xl text-sm font-medium transition-all duration-200 ${
+                          comparisonMode
+                            ? 'bg-[#34C759] text-white shadow-sm'
+                            : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
+                        }`}
+                      >
+                        {comparisonMode ? 'Exit Compare' : 'Select to Compare'}
+                      </button>
+                    )}
+                  </div>
+                  
+                  {/* Filters and Comparison Controls */}
+                  {progressImages.length > 0 && (
+                    <div className="space-y-2 mt-3">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center space-x-2 flex-wrap">
+                          <span className="text-xs font-medium text-gray-900">Filter by view:</span>
+                          <button
+                            onClick={() => setFilterOrientation('all')}
+                            className={`px-3 py-1.5 rounded-2xl text-xs font-medium transition-all ${
+                              filterOrientation === 'all'
+                                ? 'bg-orange-500 text-white shadow-sm'
+                                : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
+                            }`}
+                          >
+                            All
+                          </button>
+                          <button
+                            onClick={() => setFilterOrientation('front')}
+                            className={`px-3 py-1.5 rounded-2xl text-xs font-medium transition-all ${
+                              filterOrientation === 'front'
+                                ? 'bg-orange-500 text-white shadow-sm'
+                                : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
+                            }`}
+                          >
+                            Front
+                          </button>
+                          <button
+                            onClick={() => setFilterOrientation('back')}
+                            className={`px-3 py-1.5 rounded-2xl text-xs font-medium transition-all ${
+                              filterOrientation === 'back'
+                                ? 'bg-orange-500 text-white shadow-sm'
+                                : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
+                            }`}
+                          >
+                            Back
+                          </button>
+                          <button
+                            onClick={() => setFilterOrientation('side')}
+                            className={`px-3 py-1.5 rounded-2xl text-xs font-medium transition-all ${
+                              filterOrientation === 'side'
+                                ? 'bg-orange-500 text-white shadow-sm'
+                                : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
+                            }`}
+                          >
+                            Side
+                          </button>
+                        </div>
+                        
+                        {selectedForComparison.length > 0 && (
+                          <div className="flex items-center space-x-2">
+                            <span className="text-xs text-gray-900 font-medium">
+                              {selectedForComparison.length} selected
+                            </span>
+                            <button
+                              onClick={() => {
+                                setSelectedForComparison([]);
+                                setComparisonMode(false);
+                              }}
+                              className="px-3 py-1.5 bg-white hover:bg-gray-50 text-gray-700 rounded-lg text-xs font-medium border border-gray-300"
+                            >
+                              Clear
+                            </button>
+                            <button
+                              onClick={() => setComparisonMode(true)}
+                              className="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-2xl text-xs font-medium shadow-sm"
+                            >
+                              Compare ({selectedForComparison.length})
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Date Filter */}
+                      <div className="flex items-center space-x-2">
+                        <span className="text-xs font-medium text-gray-900">Filter by date:</span>
+                        <select
+                          value={filterDate}
+                          onChange={(e) => setFilterDate(e.target.value)}
+                          className="px-3 py-1.5 rounded-2xl text-xs font-medium bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        >
+                          <option value="all">All Dates</option>
+                          {(() => {
+                            const dates = progressImages.map(img => {
+                              const date = new Date(img.uploadedAt);
+                              return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+                            });
+                            return Array.from(new Set(dates)).sort((a, b) => {
+                              return new Date(b).getTime() - new Date(a).getTime();
+                            }).map(date => (
+                              <option key={date} value={date}>{date}</option>
+                            ));
+                          })()}
+                        </select>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div className="p-5">
+                  {loadingImages ? (
+                    <div className="text-center py-8">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500 mx-auto mb-3"></div>
+                      <p className="text-gray-500 text-sm">Loading images...</p>
+                    </div>
+                  ) : progressImages.length === 0 ? (
+                    <div className="text-center py-8">
+                      <div className="w-12 h-12 bg-pink-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <svg className="w-6 h-6 text-pink-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                      </div>
+                      <p className="text-gray-500 text-sm mb-1">No progress images yet</p>
+                      <p className="text-gray-400 text-xs">Client photos will appear here as they're uploaded</p>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Comparison View */}
+                      {comparisonMode && selectedForComparison.length > 0 && (
+                        <div className="mb-6 bg-gray-50 rounded-xl border-2 border-blue-200 p-5">
+                          <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-lg font-bold text-gray-900">Side-by-Side Comparison</h3>
+                            <button
+                              onClick={() => {
+                                setSelectedForComparison([]);
+                                setComparisonMode(false);
+                              }}
+                              className="px-3 py-1.5 bg-white hover:bg-gray-50 text-gray-700 rounded-lg text-xs font-medium border border-gray-300"
+                            >
+                              Close Comparison
+                            </button>
+                          </div>
+                          <div className={`grid gap-4 ${
+                            selectedForComparison.length === 1 ? 'grid-cols-1' :
+                            selectedForComparison.length === 2 ? 'grid-cols-2' :
+                            selectedForComparison.length === 3 ? 'grid-cols-3' :
+                            'grid-cols-2 md:grid-cols-4'
+                          }`}>
+                            {progressImages.filter(img => selectedForComparison.includes(img.id)).map((image) => (
+                              <div key={image.id} className="bg-white rounded-xl border-2 border-blue-400 shadow-lg overflow-hidden">
+                                <div className="aspect-square relative">
+                                  <img
+                                    src={image.imageUrl}
+                                    alt={image.caption || image.imageType}
+                                    className="w-full h-full object-cover"
+                                    onError={(e) => {
+                                      (e.target as HTMLImageElement).src = `data:image/svg+xml,${encodeURIComponent(`
+                                        <svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
+                                          <rect width="200" height="200" fill="#f3f4f6"/>
+                                          <text x="50%" y="50%" font-family="Arial" font-size="14" fill="#9ca3af" text-anchor="middle" dy=".3em">Image</text>
+                                        </svg>
+                                      `)}`;
+                                    }}
+                                  />
+                                  <div className="absolute top-2 left-2 flex flex-col gap-1">
+                                    <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                      image.imageType === 'profile' ? 'bg-blue-100 text-blue-800' :
+                                      image.imageType === 'before' ? 'bg-orange-100 text-orange-800' :
+                                      image.imageType === 'after' ? 'bg-green-100 text-green-800' :
+                                      'bg-purple-100 text-purple-800'
+                                    }`}>
+                                      {image.imageType === 'profile' ? 'Profile' :
+                                       image.imageType === 'before' ? 'Before' :
+                                       image.imageType === 'after' ? 'After' :
+                                       'Progress'}
+                                    </span>
+                                    {image.orientation && (
+                                      <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                        image.orientation === 'front' ? 'bg-pink-100 text-pink-800' :
+                                        image.orientation === 'back' ? 'bg-indigo-100 text-indigo-800' :
+                                        'bg-teal-100 text-teal-800'
+                                      }`}>
+                                        {image.orientation.charAt(0).toUpperCase() + image.orientation.slice(1)}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Filtered Images Grid */}
+                      {(() => {
+                        const filteredImages = progressImages.filter(img => {
+                          const orientationMatch = filterOrientation === 'all' || img.orientation === filterOrientation;
+                          if (filterDate === 'all') return orientationMatch;
+                          
+                          const imgDate = new Date(img.uploadedAt);
+                          const imgDateKey = imgDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+                          return orientationMatch && imgDateKey === filterDate;
+                        });
+
+                        if (filteredImages.length === 0) {
+                          return (
+                            <div className="text-center py-12">
+                              <p className="text-gray-500 text-sm">No {filterOrientation !== 'all' ? filterOrientation : ''} images found for the selected date</p>
+                            </div>
+                          );
+                        }
+
+                        // Group by date
+                        const groupedImages: { [key: string]: any[] } = {};
+                        filteredImages.forEach(img => {
+                          const date = new Date(img.uploadedAt);
+                          const dateKey = date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+                          if (!groupedImages[dateKey]) {
+                            groupedImages[dateKey] = [];
+                          }
+                          groupedImages[dateKey].push(img);
+                        });
+                        const sortedDateKeys = Object.keys(groupedImages).sort((a, b) => {
+                          return new Date(b).getTime() - new Date(a).getTime();
+                        });
+
+                        return (
+                          <>
+                            {sortedDateKeys.map((dateKey) => (
+                              <div key={dateKey} className="mb-6">
+                                <div className="flex items-center justify-between mb-3">
+                                  <h3 className="text-base font-bold text-gray-900 flex items-center">
+                                    <svg className="w-4 h-4 mr-2 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                    </svg>
+                                    {dateKey}
+                                    <span className="ml-2 text-xs font-normal text-gray-700">
+                                      ({groupedImages[dateKey].length} {groupedImages[dateKey].length === 1 ? 'image' : 'images'})
+                                    </span>
+                                  </h3>
+                                </div>
+                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                                  {groupedImages[dateKey].map((image) => {
+                                    const isSelected = selectedForComparison.includes(image.id);
+                                    return (
+                                      <div 
+                                        key={image.id} 
+                                        className="flex flex-col"
+                                        onClick={() => {
+                                          if (comparisonMode) {
+                                            if (isSelected) {
+                                              setSelectedForComparison(selectedForComparison.filter(id => id !== image.id));
+                                            } else {
+                                              if (selectedForComparison.length < 4) {
+                                                setSelectedForComparison([...selectedForComparison, image.id]);
+                                              }
+                                            }
+                                          }
+                                        }}
+                                      >
+                                        <div 
+                                          className={`group relative aspect-square rounded-xl overflow-hidden border transition-all duration-300 hover:shadow-lg bg-white cursor-pointer ${
+                                            comparisonMode 
+                                              ? isSelected 
+                                                ? 'border-blue-500 ring-2 ring-blue-200 shadow-md' 
+                                                : 'border-gray-200 hover:border-blue-300'
+                                              : 'border-gray-200 hover:border-pink-300'
+                                          }`}
+                                        >
+                                          {comparisonMode && (
+                                            <div className={`absolute top-2 right-2 z-10 w-6 h-6 rounded-full flex items-center justify-center transition-all ${
+                                              isSelected 
+                                                ? 'bg-blue-600 text-white shadow-lg' 
+                                                : 'bg-white/80 backdrop-blur-sm border-2 border-gray-300'
+                                            }`}>
+                                              {isSelected && (
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                                </svg>
+                                              )}
+                                            </div>
+                                          )}
+                                          <img
+                                            src={image.imageUrl}
+                                            alt={image.caption || image.imageType}
+                                            className="w-full h-full object-cover"
+                                            onError={(e) => {
+                                              (e.target as HTMLImageElement).src = `data:image/svg+xml,${encodeURIComponent(`
+                                                <svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
+                                                  <rect width="200" height="200" fill="#f3f4f6"/>
+                                                  <text x="50%" y="50%" font-family="Arial" font-size="14" fill="#9ca3af" text-anchor="middle" dy=".3em">Image</text>
+                                                </svg>
+                                              `)}`;
+                                            }}
+                                          />
+                                          <div className="absolute top-2 left-2 flex flex-col gap-1">
+                                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                              image.imageType === 'profile' ? 'bg-blue-100 text-blue-800' :
+                                              image.imageType === 'before' ? 'bg-orange-100 text-orange-800' :
+                                              image.imageType === 'after' ? 'bg-green-100 text-green-800' :
+                                              'bg-purple-100 text-purple-800'
+                                            }`}>
+                                              {image.imageType === 'profile' ? 'Profile' :
+                                               image.imageType === 'before' ? 'Before' :
+                                               image.imageType === 'after' ? 'After' :
+                                               'Progress'}
+                                            </span>
+                                            {image.orientation && (
+                                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                                image.orientation === 'front' ? 'bg-pink-100 text-pink-800' :
+                                                image.orientation === 'back' ? 'bg-indigo-100 text-indigo-800' :
+                                                'bg-teal-100 text-teal-800'
+                                              }`}>
+                                                {image.orientation.charAt(0).toUpperCase() + image.orientation.slice(1)}
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                        <div className="mt-2 text-center">
+                                          <p className="text-gray-700 text-sm font-semibold">
+                                            {new Date(image.uploadedAt).toLocaleDateString('en-US', { 
+                                              month: 'short', 
+                                              day: 'numeric',
+                                              year: 'numeric'
+                                            })}
+                                          </p>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            ))}
+                          </>
+                        );
+                      })()}
+                    </>
+                  )}
+                </div>
+              </div>
+              )}
+
+              {/* Measurement History */}
+              {activeTab === 'progress' && (
+                <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+                  <div className="bg-orange-50 px-8 py-6 border-b-2 border-orange-200">
+                    <h2 className="text-2xl font-bold text-gray-900">Measurement History</h2>
+                    <p className="text-sm text-gray-600 mt-1">Track weight and body measurements over time</p>
+                  </div>
+                  
+                  {/* Measurements Graph */}
+                  {allMeasurementsData.length > 0 && (
+                    <div className="p-6 border-b border-gray-100">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-4">Measurements Over Time</h3>
+                      
+                      {/* Measurement Toggles */}
+                      {getAvailableMeasurements().length > 0 && (
+                        <div className="mb-4 flex flex-wrap gap-2">
+                          {getAvailableMeasurements().map((measurement, index) => (
+                            <button
+                              key={measurement}
+                              onClick={() => toggleMeasurement(measurement)}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                                selectedMeasurements.has(measurement)
+                                  ? `${getMeasurementColor(index)} text-white`
+                                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                              }`}
+                            >
+                              {getMeasurementLabel(measurement)}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Graph */}
+                      {selectedMeasurements.size > 0 ? (
+                        <div className="relative">
+                          <svg className="w-full h-64" viewBox="0 0 800 256" preserveAspectRatio="none">
+                            {/* Y-axis grid lines */}
+                            {[0, 1, 2, 3, 4].map((i) => {
+                              const y = (i * 64);
+                              return (
+                                <line
+                                  key={i}
+                                  x1="40"
+                                  y1={y}
+                                  x2="800"
+                                  y2={y}
+                                  stroke="#e5e7eb"
+                                  strokeWidth="1"
+                                />
+                              );
+                            })}
+                            
+                            {/* Calculate max value for scaling */}
+                            {(() => {
+                              const maxValue = Math.max(
+                                ...allMeasurementsData.map(m => {
+                                  let max = 0;
+                                  selectedMeasurements.forEach(key => {
+                                    const value = key === 'bodyWeight' 
+                                      ? (m.bodyWeight || 0)
+                                      : (m.measurements?.[key] || 0);
+                                    max = Math.max(max, value);
+                                  });
+                                  return max;
+                                })
+                              );
+                              
+                              const minValue = Math.min(
+                                ...allMeasurementsData.map(m => {
+                                  let min = Infinity;
+                                  selectedMeasurements.forEach(key => {
+                                    const value = key === 'bodyWeight' 
+                                      ? (m.bodyWeight || 0)
+                                      : (m.measurements?.[key] || 0);
+                                    if (value > 0) min = Math.min(min, value);
+                                  });
+                                  return min === Infinity ? 0 : min;
+                                })
+                              );
+                              
+                              const range = maxValue - minValue || 1;
+                              const padding = range * 0.1; // 10% padding
+                              const scaleMin = Math.max(0, minValue - padding);
+                              const scaleMax = maxValue + padding;
+                              const scaleRange = scaleMax - scaleMin;
+                              
+                              // Draw lines for each selected measurement
+                              return Array.from(selectedMeasurements).map((key, keyIndex) => {
+                                const colorMap = [
+                                  '#3b82f6', // blue
+                                  '#10b981', // green
+                                  '#8b5cf6', // purple
+                                  '#f97316', // orange
+                                  '#ec4899', // pink
+                                  '#6366f1', // indigo
+                                  '#ef4444', // red
+                                  '#eab308'  // yellow
+                                ];
+                                const color = colorMap[keyIndex % colorMap.length];
+                                
+                                const points = allMeasurementsData
+                                  .map((m, index) => {
+                                    const value = key === 'bodyWeight' 
+                                      ? (m.bodyWeight || 0)
+                                      : (m.measurements?.[key] || 0);
+                                    
+                                    if (value === 0 || value === null || value === undefined) return null;
+                                    
+                                    const x = 40 + (index / (allMeasurementsData.length - 1 || 1)) * 760;
+                                    const y = 240 - ((value - scaleMin) / scaleRange) * 200;
+                                    
+                                    return { x, y, value, date: m.date, isBaseline: m.isBaseline };
+                                  })
+                                  .filter(p => p !== null) as { x: number; y: number; value: number; date: Date; isBaseline: boolean }[];
+                                
+                                if (points.length === 0) return null;
+                                
+                                // Draw line
+                                const pathData = points.map((p, i) => 
+                                  `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`
+                                ).join(' ');
+                                
+                                return (
+                                  <g key={key}>
+                                    {/* Line */}
+                                    <path
+                                      d={pathData}
+                                      fill="none"
+                                      stroke={color}
+                                      strokeWidth="3"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                    />
+                                    {/* Points */}
+                                    {points.map((p, i) => (
+                                      <circle
+                                        key={i}
+                                        cx={p.x}
+                                        cy={p.y}
+                                        r="4"
+                                        fill={color}
+                                        stroke="white"
+                                        strokeWidth="2"
+                                        className="cursor-pointer hover:r-6 transition-all"
+                                      />
+                                    ))}
+                                  </g>
+                                );
+                              });
+                            })()}
+                          </svg>
+                          
+                          {/* X-axis date labels */}
+                          <div className="flex justify-between mt-2 px-10">
+                            {allMeasurementsData.map((measurement, index) => {
+                              const date = measurement.date instanceof Date ? measurement.date : new Date(measurement.date);
+                              return (
+                                <div key={index} className="flex flex-col items-center text-[9px] text-gray-500">
+                                  <span>{date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' })}</span>
+                                  {measurement.isBaseline && (
+                                    <span className="text-[8px] text-blue-600 font-semibold mt-0.5">Baseline</span>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                          
+                          {/* Y-axis labels */}
+                          <div className="absolute left-0 top-0 h-64 flex flex-col justify-between text-[10px] text-gray-500 pr-2">
+                            {(() => {
+                              const maxValue = Math.max(
+                                ...allMeasurementsData.map(m => {
+                                  let max = 0;
+                                  selectedMeasurements.forEach(key => {
+                                    const value = key === 'bodyWeight' 
+                                      ? (m.bodyWeight || 0)
+                                      : (m.measurements?.[key] || 0);
+                                    max = Math.max(max, value);
+                                  });
+                                  return max;
+                                })
+                              );
+                              
+                              const minValue = Math.min(
+                                ...allMeasurementsData.map(m => {
+                                  let min = Infinity;
+                                  selectedMeasurements.forEach(key => {
+                                    const value = key === 'bodyWeight' 
+                                      ? (m.bodyWeight || 0)
+                                      : (m.measurements?.[key] || 0);
+                                    if (value > 0) min = Math.min(min, value);
+                                  });
+                                  return min === Infinity ? 0 : min;
+                                })
+                              );
+                              
+                              const range = maxValue - minValue || 1;
+                              const padding = range * 0.1;
+                              const scaleMin = Math.max(0, minValue - padding);
+                              const scaleMax = maxValue + padding;
+                              
+                              return [scaleMax, scaleMax * 0.75, scaleMax * 0.5, scaleMax * 0.25, scaleMin].map((val, i) => (
+                                <span key={i}>{Math.round(val)}</span>
+                              ));
+                            })()}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-center py-8 text-gray-500">
+                          <p className="text-sm">Select measurements to view on the graph</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  
+                  {/* Measurement Table */}
+                  <div className="p-8">
+                    {loadingMeasurements ? (
+                      <div className="text-center py-12">
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600 mx-auto mb-4"></div>
+                        <p className="text-gray-500 text-lg">Loading measurements...</p>
+                      </div>
+                    ) : measurementHistory.length > 0 ? (
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
+                          <thead className="bg-gray-50 border-b border-gray-200">
+                            <tr>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Date</th>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Weight (kg)</th>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Waist (cm)</th>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Hips (cm)</th>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Chest (cm)</th>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Left Thigh (cm)</th>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Right Thigh (cm)</th>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Left Arm (cm)</th>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Right Arm (cm)</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-200">
+                            {measurementHistory.map((entry) => (
+                              <tr key={entry.id} className="hover:bg-gray-50">
+                                <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                                  {new Date(entry.date).toLocaleDateString('en-US', { 
+                                    year: 'numeric', 
+                                    month: 'short', 
+                                    day: 'numeric' 
+                                  })}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-gray-600">
+                                  {entry.bodyWeight ? `${entry.bodyWeight}` : '-'}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-gray-600">
+                                  {entry.measurements?.waist ? `${entry.measurements.waist}` : '-'}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-gray-600">
+                                  {entry.measurements?.hips ? `${entry.measurements.hips}` : '-'}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-gray-600">
+                                  {entry.measurements?.chest ? `${entry.measurements.chest}` : '-'}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-gray-600">
+                                  {entry.measurements?.leftThigh ? `${entry.measurements.leftThigh}` : '-'}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-gray-600">
+                                  {entry.measurements?.rightThigh ? `${entry.measurements.rightThigh}` : '-'}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-gray-600">
+                                  {entry.measurements?.leftArm ? `${entry.measurements.leftArm}` : '-'}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-gray-600">
+                                  {entry.measurements?.rightArm ? `${entry.measurements.rightArm}` : '-'}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-gray-500">
+                        <p className="text-sm">No measurements recorded yet</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Answer Detail Modal */}
+              {selectedResponse && (
+                <div 
+                  className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+                  onClick={() => setSelectedResponse(null)}
+                >
+                  <div 
+                    className="bg-white rounded-lg shadow-2xl max-w-md w-full p-6"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-xl font-bold text-gray-900">Question Response</h3>
+                      <button
+                        onClick={() => setSelectedResponse(null)}
+                        className="text-gray-400 hover:text-gray-600 transition-colors"
+                      >
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                    
+                    <div className="space-y-4">
+                      <div>
+                        <p className="text-sm font-medium text-gray-500 mb-1">Question</p>
+                        <p className="text-gray-900">{selectedResponse.question}</p>
+                      </div>
+                      
+                      <div>
+                        <p className="text-sm font-medium text-gray-500 mb-1">Client's Answer</p>
+                        <div className="bg-gray-50 rounded-lg p-3">
+                          {selectedResponse.type === 'boolean' ? (
+                            <p className="text-gray-900 font-medium">
+                              {selectedResponse.answer === true || selectedResponse.answer === 'true' ? 'Yes' : 'No'}
+                            </p>
+                          ) : selectedResponse.type === 'scale' || selectedResponse.type === 'rating' ? (
+                            <p className="text-gray-900 font-medium">
+                              {selectedResponse.answer} / 10
+                            </p>
+                          ) : selectedResponse.type === 'number' ? (
+                            <p className="text-gray-900 font-medium">
+                              {selectedResponse.answer}
+                            </p>
+                          ) : Array.isArray(selectedResponse.answer) ? (
+                            <p className="text-gray-900 font-medium">
+                              {selectedResponse.answer.join(', ')}
+                            </p>
+                          ) : (
+                            <p className="text-gray-900 font-medium">
+                              {String(selectedResponse.answer)}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <p className="text-sm font-medium text-gray-500 mb-1">Score</p>
+                          <div className="flex items-center gap-2">
+                            <div className={`w-6 h-6 rounded-full ${getStatusColor(
+                              selectedResponse.score >= 7 ? 'green' : selectedResponse.score >= 4 ? 'orange' : 'red'
+                            )} ${getStatusBorder(
+                              selectedResponse.score >= 7 ? 'green' : selectedResponse.score >= 4 ? 'orange' : 'red'
+                            )} flex items-center justify-center`}>
+                              <span className="text-white text-xs font-bold">{selectedResponse.score}</span>
+                            </div>
+                            <span className="text-gray-900 font-medium">{selectedResponse.score}/10</span>
+                          </div>
+                        </div>
+                        
+                        <div>
+                          <p className="text-sm font-medium text-gray-500 mb-1">Date</p>
+                          <p className="text-gray-900 font-medium">Week {selectedResponse.week}</p>
+                          <p className="text-sm text-gray-600">{selectedResponse.date}</p>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="mt-6 flex justify-end">
+                      <button
+                        onClick={() => setSelectedResponse(null)}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Health Goals */}
+              {client.goals && client.goals.length > 0 && (
+                <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+                  <div className="bg-gradient-to-r from-orange-50 to-red-50 px-8 py-6 border-b border-gray-100">
+                    <h2 className="text-2xl font-bold text-gray-900">Health Goals</h2>
+                  </div>
+                  <div className="p-8">
+                    <div className="flex flex-wrap gap-3">
+                      {client.goals.map((goal, index) => (
+                        <span
+                          key={index}
+                          className="px-4 py-2 bg-gradient-to-r from-orange-100 to-red-100 text-orange-800 text-sm font-medium rounded-full border border-orange-200"
+                        >
+                          {goal}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Medical History */}
+              {client.profile?.medicalHistory && client.profile.medicalHistory.length > 0 && (
+                <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+                  <div className="bg-gradient-to-r from-red-50 to-pink-50 px-8 py-6 border-b border-gray-100">
+                    <h2 className="text-2xl font-bold text-gray-900">Medical History</h2>
+                  </div>
+                  <div className="p-8">
+                    <ul className="space-y-3">
+                      {client.profile.medicalHistory.map((condition, index) => (
+                        <li key={index} className="flex items-center space-x-3">
+                          <span className="w-3 h-3 bg-red-400 rounded-full"></span>
+                          <span className="text-gray-900 font-medium">{condition}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              )}
+
+              {/* Notes */}
+              {activeTab === 'progress' && client.notes && (
+                <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+                  <div className="bg-gradient-to-r from-yellow-50 to-amber-50 px-8 py-6 border-b border-gray-100">
+                    <h2 className="text-2xl font-bold text-gray-900">Notes</h2>
+                  </div>
+                  <div className="p-8">
+                    <p className="text-gray-900 whitespace-pre-wrap leading-relaxed">{client.notes}</p>
+                  </div>
+                </div>
+              )}
                 </div>
               )}
 
@@ -4188,235 +4421,8 @@ export default function ClientProfilePage() {
                       </div>
                       <div className="p-8">
                         <div className="prose max-w-none">
-                          <div className="text-gray-700 whitespace-pre-wrap leading-relaxed">
-                            {onboardingAiSummary.summary || ''}
-                          </div>
+                          <div className="text-gray-700 whitespace-pre-wrap leading-relaxed" dangerouslySetInnerHTML={{ __html: (onboardingAiSummary.summary || '').replace(/\n/g, '<br />') }} />
                         </div>
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {/* Weekly AI Summary */}
-                  {loadingWeeklySummary ? (
-                    <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
-                      <div className="bg-gradient-to-r from-purple-50 to-pink-50 px-6 py-4 border-b-2 border-purple-200">
-                        <h2 className="text-xl font-bold text-gray-900">This Week's Status</h2>
-                        <p className="text-sm text-gray-600 mt-1">AI-powered weekly summary</p>
-                      </div>
-                      <div className="p-6">
-                        <div className="animate-pulse space-y-3">
-                          <div className="h-4 bg-gray-200 rounded w-full"></div>
-                          <div className="h-4 bg-gray-200 rounded w-5/6"></div>
-                          <div className="h-4 bg-gray-200 rounded w-4/6"></div>
-                        </div>
-                      </div>
-                    </div>
-                  ) : !weeklySummary && !loadingWeeklySummary ? (
-                    <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
-                      <div className="bg-gradient-to-r from-purple-50 to-pink-50 px-6 py-4 border-b-2 border-purple-200">
-                        <h2 className="text-xl font-bold text-gray-900">This Week's Status</h2>
-                        <p className="text-sm text-gray-600 mt-1">AI-powered weekly summary</p>
-                      </div>
-                      <div className="p-6 text-center">
-                        <p className="text-gray-600 mb-4">Generate an AI-powered weekly summary</p>
-                        <button
-                          onClick={() => handleRefreshWeeklySummary(true)}
-                          disabled={loadingWeeklySummary}
-                          className="px-6 py-3 bg-purple-500 hover:bg-purple-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-xl text-sm font-medium transition-colors flex items-center gap-2 mx-auto"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                          </svg>
-                          {loadingWeeklySummary ? 'Generating...' : 'Generate Weekly Summary'}
-                        </button>
-                      </div>
-                    </div>
-                  ) : weeklySummary ? (
-                    <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
-                      <div className="bg-gradient-to-r from-purple-50 to-pink-50 px-6 py-4 border-b-2 border-purple-200">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <h2 className="text-xl font-bold text-gray-900">This Week's Status</h2>
-                            <p className="text-sm text-gray-600 mt-1">
-                              AI-powered weekly summary • {new Date(weeklySummary.dateRange.endDate).toLocaleDateString()}
-                            </p>
-                          </div>
-                          <button
-                            onClick={() => handleRefreshWeeklySummary(true)}
-                            disabled={loadingWeeklySummary}
-                            className="px-4 py-2 bg-purple-500 hover:bg-purple-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-xl text-sm font-medium transition-colors flex items-center gap-2"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                            </svg>
-                            {loadingWeeklySummary ? 'Generating...' : 'Refresh'}
-                          </button>
-                        </div>
-                      </div>
-                      <div className="p-6">
-                        <div className="prose max-w-none">
-                          <p className="text-gray-800 leading-relaxed whitespace-pre-line text-sm">
-                            {weeklySummary.summary}
-                          </p>
-                        </div>
-                        {weeklySummary.checkInsCount !== undefined && (
-                          <div className="mt-4 pt-4 border-t border-gray-200 flex items-center gap-6 text-xs text-gray-600">
-                            <span>Check-ins: {weeklySummary.checkInsCount}</span>
-                            {weeklySummary.averageScore !== null && (
-                              <span>Avg Score: {weeklySummary.averageScore}%</span>
-                            )}
-                            {weeklySummary.measurementsCount > 0 && (
-                              <span>Measurements: {weeklySummary.measurementsCount}</span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {/* SWOT Analysis */}
-                  {loadingSwot ? (
-                    <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
-                      <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-6 py-4 border-b-2 border-indigo-200">
-                        <h2 className="text-xl font-bold text-gray-900">SWOT Analysis</h2>
-                        <p className="text-sm text-gray-600 mt-1">Strengths, Weaknesses, Opportunities, Threats</p>
-                      </div>
-                      <div className="p-6">
-                        <div className="animate-pulse space-y-4">
-                          <div className="grid grid-cols-2 gap-4">
-                            <div className="h-32 bg-gray-200 rounded-xl"></div>
-                            <div className="h-32 bg-gray-200 rounded-xl"></div>
-                            <div className="h-32 bg-gray-200 rounded-xl"></div>
-                            <div className="h-32 bg-gray-200 rounded-xl"></div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ) : !swotAnalysis && !loadingSwot ? (
-                    <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
-                      <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-6 py-4 border-b-2 border-indigo-200">
-                        <h2 className="text-xl font-bold text-gray-900">SWOT Analysis</h2>
-                        <p className="text-sm text-gray-600 mt-1">Comprehensive analysis of current progress</p>
-                      </div>
-                      <div className="p-6 text-center">
-                        <p className="text-gray-600 mb-4">Generate a comprehensive SWOT analysis</p>
-                        <button
-                          onClick={() => handleRefreshSwotAnalysis(true)}
-                          disabled={loadingSwot}
-                          className="px-6 py-3 bg-indigo-500 hover:bg-indigo-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-xl text-sm font-medium transition-colors flex items-center gap-2 mx-auto"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                          </svg>
-                          {loadingSwot ? 'Generating...' : 'Generate SWOT Analysis'}
-                        </button>
-                      </div>
-                    </div>
-                  ) : swotAnalysis ? (
-                    <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
-                      <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-6 py-4 border-b-2 border-indigo-200">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <h2 className="text-xl font-bold text-gray-900">SWOT Analysis</h2>
-                            <p className="text-sm text-gray-600 mt-1">Comprehensive analysis of current progress</p>
-                          </div>
-                          <button
-                            onClick={() => handleRefreshSwotAnalysis(true)}
-                            disabled={loadingSwot}
-                            className="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-xl text-sm font-medium transition-colors flex items-center gap-2"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                            </svg>
-                            {loadingSwot ? 'Generating...' : 'Refresh'}
-                          </button>
-                        </div>
-                      </div>
-                      
-                      <div className="p-6">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                          {/* Strengths */}
-                          <div className="bg-green-50 rounded-xl p-5 border-2 border-green-200">
-                            <div className="flex items-center mb-3">
-                              <div className="w-8 h-8 bg-green-500 rounded-lg flex items-center justify-center mr-3">
-                                <span className="text-white font-bold text-sm">S</span>
-                              </div>
-                              <h3 className="text-lg font-bold text-gray-900">Strengths</h3>
-                            </div>
-                            <ul className="space-y-2">
-                              {swotAnalysis.strengths?.map((strength: string, idx: number) => (
-                                <li key={idx} className="flex items-start">
-                                  <span className="text-green-600 mr-2 mt-1">✓</span>
-                                  <span className="text-gray-800 text-sm">{strength}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-
-                          {/* Weaknesses */}
-                          <div className="bg-orange-50 rounded-xl p-5 border-2 border-orange-200">
-                            <div className="flex items-center mb-3">
-                              <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center mr-3">
-                                <span className="text-white font-bold text-sm">W</span>
-                              </div>
-                              <h3 className="text-lg font-bold text-gray-900">Weaknesses</h3>
-                            </div>
-                            <ul className="space-y-2">
-                              {swotAnalysis.weaknesses?.map((weakness: string, idx: number) => (
-                                <li key={idx} className="flex items-start">
-                                  <span className="text-orange-600 mr-2 mt-1">⚠</span>
-                                  <span className="text-gray-800 text-sm">{weakness}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-
-                          {/* Opportunities */}
-                          <div className="bg-blue-50 rounded-xl p-5 border-2 border-blue-200">
-                            <div className="flex items-center mb-3">
-                              <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center mr-3">
-                                <span className="text-white font-bold text-sm">O</span>
-                              </div>
-                              <h3 className="text-lg font-bold text-gray-900">Opportunities</h3>
-                            </div>
-                            <ul className="space-y-2">
-                              {swotAnalysis.opportunities?.map((opportunity: string, idx: number) => (
-                                <li key={idx} className="flex items-start">
-                                  <span className="text-blue-600 mr-2 mt-1">→</span>
-                                  <span className="text-gray-800 text-sm">{opportunity}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-
-                          {/* Threats */}
-                          <div className="bg-red-50 rounded-xl p-5 border-2 border-red-200">
-                            <div className="flex items-center mb-3">
-                              <div className="w-8 h-8 bg-red-500 rounded-lg flex items-center justify-center mr-3">
-                                <span className="text-white font-bold text-sm">T</span>
-                              </div>
-                              <h3 className="text-lg font-bold text-gray-900">Threats</h3>
-                            </div>
-                            <ul className="space-y-2">
-                              {swotAnalysis.threats?.map((threat: string, idx: number) => (
-                                <li key={idx} className="flex items-start">
-                                  <span className="text-red-600 mr-2 mt-1">!</span>
-                                  <span className="text-gray-800 text-sm">{threat}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        </div>
-
-                        {/* Overall Assessment */}
-                        {swotAnalysis.overallAssessment && (
-                          <div className="bg-gray-50 rounded-xl p-5 border border-gray-200 mt-4">
-                            <h3 className="text-lg font-bold text-gray-900 mb-3">Overall Assessment</h3>
-                            <p className="text-gray-800 leading-relaxed text-sm whitespace-pre-line">
-                              {swotAnalysis.overallAssessment}
-                            </p>
-                          </div>
-                        )}
                       </div>
                     </div>
                   ) : null}
@@ -6018,99 +6024,6 @@ export default function ClientProfilePage() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                       </svg>
                       Generate Analytics
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Quick Response Modal */}
-      {showQuickResponseModal && selectedCheckInForResponse && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="bg-gradient-to-r from-green-50 to-emerald-50 px-6 py-4 border-b-2 border-green-200">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-xl font-bold text-gray-900">Quick Response</h2>
-                  <p className="text-sm text-gray-600 mt-1">
-                    {selectedCheckInForResponse.checkInTitle || selectedCheckInForResponse.formTitle} • {new Date(selectedCheckInForResponse.submittedAt).toLocaleDateString()}
-                  </p>
-                </div>
-                <button
-                  onClick={() => {
-                    setShowQuickResponseModal(false);
-                    setSelectedCheckInForResponse(null);
-                    setQuickResponseText('');
-                    setQuickResponseAudio(null);
-                  }}
-                  className="text-gray-400 hover:text-gray-600 transition-colors"
-                >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-
-            <div className="p-6 space-y-6">
-              {/* Voice Recording */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-3">
-                  Voice Message (Optional)
-                </label>
-                <VoiceRecorder
-                  onSave={(audioBlob) => setQuickResponseAudio(audioBlob)}
-                  onDelete={() => setQuickResponseAudio(null)}
-                  label="Record Voice Message"
-                />
-              </div>
-
-              {/* Text Input */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-3">
-                  Text Feedback (Optional)
-                </label>
-                <textarea
-                  value={quickResponseText}
-                  onChange={(e) => setQuickResponseText(e.target.value)}
-                  placeholder="Add your feedback, encouragement, or action items for the client..."
-                  className="w-full border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all"
-                  rows={6}
-                />
-              </div>
-
-              {/* Submit Button */}
-              <div className="flex gap-3 pt-4 border-t border-gray-200">
-                <button
-                  onClick={() => {
-                    setShowQuickResponseModal(false);
-                    setSelectedCheckInForResponse(null);
-                    setQuickResponseText('');
-                    setQuickResponseAudio(null);
-                  }}
-                  className="flex-1 px-4 py-3 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-xl text-sm font-medium transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSubmitQuickResponse}
-                  disabled={submittingQuickResponse || (!quickResponseText.trim() && !quickResponseAudio)}
-                  className="flex-1 px-4 py-3 bg-green-500 hover:bg-green-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2"
-                >
-                  {submittingQuickResponse ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                      Submitting...
-                    </>
-                  ) : (
-                    <>
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                      Submit & Mark as Reviewed
                     </>
                   )}
                 </button>
