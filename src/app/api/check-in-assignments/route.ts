@@ -270,3 +270,78 @@ export async function GET(request: NextRequest) {
     );
   }
 }
+
+    return NextResponse.json(
+      { success: false, message: 'Failed to create check-in assignment', error: error instanceof Error ? error.message : 'Unknown error' },
+      { status: 500 }
+    );
+  }
+}
+
+// GET - Fetch check-in assignments
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const coachId = searchParams.get('coachId');
+    const clientId = searchParams.get('clientId');
+    const status = searchParams.get('status');
+
+    const db = getDb();
+    const assignmentsRef = db.collection('check_in_assignments');
+    
+    let query = assignmentsRef;
+    
+    // Apply filters
+    if (coachId) {
+      query = query.where('coachId', '==', coachId);
+    }
+    
+    if (clientId) {
+      query = query.where('clientId', '==', clientId);
+    }
+    
+    if (status) {
+      query = query.where('status', '==', status);
+    }
+    
+    // Try with ordering, fallback if index doesn't exist
+    let querySnapshot;
+    try {
+      querySnapshot = await query.orderBy('assignedAt', 'desc').get();
+    } catch (indexError: any) {
+      console.log('Index error, falling back to simple query:', indexError.message);
+      querySnapshot = await query.get();
+    }
+    
+    const assignments = querySnapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        ...data,
+        assignedAt: data.assignedAt?.toDate?.() || data.assignedAt,
+        completedAt: data.completedAt?.toDate?.() || data.completedAt
+      };
+    });
+
+    // If we used fallback, sort manually
+    if (assignments.length > 0 && assignments.some(a => !a.assignedAt)) {
+      assignments.sort((a, b) => {
+        const dateA = a.assignedAt ? new Date(a.assignedAt) : new Date(0);
+        const dateB = b.assignedAt ? new Date(b.assignedAt) : new Date(0);
+        return dateB.getTime() - dateA.getTime();
+      });
+    }
+    
+    return NextResponse.json({
+      success: true,
+      assignments
+    });
+    
+  } catch (error) {
+    console.error('Error fetching check-in assignments:', error);
+    return NextResponse.json(
+      { success: false, message: 'Failed to fetch check-in assignments', error: error instanceof Error ? error.message : 'Unknown error' },
+      { status: 500 }
+    );
+  }
+}

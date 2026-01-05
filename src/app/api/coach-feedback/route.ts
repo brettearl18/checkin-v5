@@ -438,3 +438,76 @@ export async function DELETE(request: NextRequest) {
     }, { status: 500 });
   }
 }
+
+    return NextResponse.json({
+      success: false,
+      message: 'Failed to fetch feedback',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
+  }
+}
+
+export async function PUT(request: NextRequest) {
+  try {
+    const db = getDb();
+    const body = await request.json();
+    const { feedbackId, content } = body;
+
+    if (!feedbackId || !content) {
+      return NextResponse.json({
+        success: false,
+        message: 'Feedback ID and content are required'
+      }, { status: 400 });
+    }
+
+    // Update feedback in Firestore
+    await db.collection('coachFeedback').doc(feedbackId).update({
+      content,
+      updatedAt: new Date()
+    });
+    
+    return NextResponse.json({
+      success: true,
+      message: 'Feedback updated successfully'
+    });
+
+  } catch (error) {
+    console.error('Error updating coach feedback:', error);
+    return NextResponse.json({
+      success: false,
+      message: 'Failed to update feedback',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const db = getDb();
+    const { searchParams } = new URL(request.url);
+    const feedbackId = searchParams.get('feedbackId');
+
+    if (!feedbackId) {
+      return NextResponse.json({
+        success: false,
+        message: 'Feedback ID is required'
+      }, { status: 400 });
+    }
+
+    // Delete feedback from Firestore
+    await db.collection('coachFeedback').doc(feedbackId).delete();
+    
+    return NextResponse.json({
+      success: true,
+      message: 'Feedback deleted successfully'
+    });
+
+  } catch (error) {
+    console.error('Error deleting coach feedback:', error);
+    return NextResponse.json({
+      success: false,
+      message: 'Failed to delete feedback',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
+  }
+}

@@ -542,3 +542,241 @@ export async function DELETE(request: NextRequest) {
     );
   }
 }
+
+    // Final safety check: ensure all notifications are fully serializable
+    try {
+      safeNotifications = (notifications || []).map((notification: any) => {
+      try {
+        // Test serialization
+        JSON.stringify(notification);
+        return notification;
+      } catch (serializationError) {
+        logSafeError('Notification failed serialization test', serializationError);
+        // Return a minimal safe version
+        return {
+          id: notification.id || '',
+          userId: notification.userId || '',
+          type: notification.type || 'system_alert',
+          title: notification.title || 'Notification',
+          message: notification.message || '',
+          isRead: notification.isRead || false,
+          createdAt: notification.createdAt || new Date().toISOString(),
+          actionUrl: notification.actionUrl || null,
+          metadata: null // Remove problematic metadata
+        };
+      }
+    });
+    } catch (safetyCheckError: any) {
+      logSafeError('Error in safety check for notifications', safetyCheckError);
+      // If safety check itself fails, just use empty array
+      safeNotifications = [];
+    }
+
+    // Ensure we always return a valid response
+    try {
+      return NextResponse.json({
+        success: true,
+        notifications: safeNotifications,
+        unreadCount: unreadCount || 0,
+        totalCount: safeNotifications.length
+      });
+    } catch (jsonError: any) {
+      logSafeError('Error serializing response', jsonError);
+      // Fallback to a basic response if JSON serialization fails
+      return NextResponse.json(
+        { 
+          success: false, 
+          message: 'Error serializing response',
+          notifications: [],
+          unreadCount: 0,
+          totalCount: 0
+        },
+        { status: 200 }
+      );
+    }
+
+  } catch (error: any) {
+    logSafeError('Error fetching notifications', error);
+    
+    // Return 200 with error details instead of 500, since we're handling it gracefully
+    // This ensures the UI doesn't break even if notifications fail to load
+    try {
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : (typeof error === 'string' 
+          ? error 
+          : (error?.toString ? error.toString() : 'Unknown error'));
+      
+      return NextResponse.json(
+        { 
+          success: false, 
+          message: 'Failed to fetch notifications', 
+          error: errorMessage,
+          notifications: [],
+          unreadCount: 0,
+          totalCount: 0
+        },
+        { status: 200 }
+      );
+    } catch (jsonError: any) {
+      // If even JSON serialization fails, return a plain text error with 200 status
+      // to prevent the client from seeing a 500
+      logSafeError('Critical: Failed to serialize error response', jsonError);
+      try {
+        return new NextResponse(
+          JSON.stringify({ 
+            success: false, 
+            message: 'Internal Server Error',
+            notifications: [],
+            unreadCount: 0,
+            totalCount: 0
+          }),
+          { 
+            status: 200,
+            headers: { 'Content-Type': 'application/json' }
+          }
+        );
+      } catch (finalError) {
+        // Last resort: return minimal response
+        return new NextResponse('{"success":false,"notifications":[],"unreadCount":0,"totalCount":0}', { 
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+    }
+  }
+}
+
+// POST - Create a new notification
+export async function POST(request: NextRequest) {
+  try {
+    const notificationData = await request.json();
+    const { userId, type, title, message, actionUrl, metadata } = notificationData;
+
+    if (!userId || !type || !title || !message) {
+      return NextResponse.json({
+        success: false,
+        message: 'Missing required fields: userId, type, title, message'
+      }, { status: 400 });
+    }
+
+    const db = getDb();
+    const notification: Omit<Notification, 'id'> = {
+      userId,
+      type,
+      title,
+      message,
+      isRead: false,
+      createdAt: new Date(),
+      actionUrl,
+      metadata
+    };
+
+    const docRef = await db.collection('notifications').add(notification);
+
+    return NextResponse.json({
+      success: true,
+      message: 'Notification created successfully',
+      notificationId: docRef.id
+    });
+
+  } catch (error) {
+    logSafeError('Error creating notification', error);
+    return NextResponse.json(
+      { success: false, message: 'Failed to create notification', error: error instanceof Error ? error.message : 'Unknown error' },
+      { status: 500 }
+    );
+  }
+}
+
+// PATCH - Mark notification as read or mark all as read
+export async function PATCH(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { notificationId, isRead, markAllAsRead, userId } = body;
+
+    const db = getDb();
+
+    // Handle "mark all as read" operation
+    if (markAllAsRead && userId) {
+      // Get all unread notifications for the user
+      const unreadSnapshot = await db.collection('notifications')
+        .where('userId', '==', userId)
+        .where('isRead', '==', false)
+        .get();
+
+      if (!unreadSnapshot.empty) {
+        // Update all unread notifications in a batch
+        const batch = db.batch();
+        unreadSnapshot.docs.forEach(doc => {
+          batch.update(doc.ref, {
+            isRead: true,
+            updatedAt: new Date()
+          });
+        });
+        await batch.commit();
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: 'All notifications marked as read',
+        updatedCount: unreadSnapshot.size
+      });
+    }
+
+    // Handle individual notification update
+    if (!notificationId) {
+      return NextResponse.json({
+        success: false,
+        message: 'Notification ID is required for individual updates'
+      }, { status: 400 });
+    }
+
+    await db.collection('notifications').doc(notificationId).update({
+      isRead: isRead !== undefined ? isRead : true,
+      updatedAt: new Date()
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: 'Notification updated successfully'
+    });
+
+  } catch (error) {
+    logSafeError('Error updating notification', error);
+    return NextResponse.json(
+      { success: false, message: 'Failed to update notification', error: error instanceof Error ? error.message : 'Unknown error' },
+      { status: 500 }
+    );
+  }
+}
+
+// DELETE - Delete a notification
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const notificationId = searchParams.get('id');
+
+    if (!notificationId) {
+      return NextResponse.json({
+        success: false,
+        message: 'Notification ID is required'
+      }, { status: 400 });
+    }
+
+    const db = getDb();
+    await db.collection('notifications').doc(notificationId).delete();
+
+    return NextResponse.json({
+      success: true,
+      message: 'Notification deleted successfully'
+    });
+
+  } catch (error) {
+    logSafeError('Error deleting notification', error);
+    return NextResponse.json(
+      { success: false, message: 'Failed to delete notification', error: error instanceof Error ? error.message : 'Unknown error' },
+      { status: 500 }
+    );
+  }
+}

@@ -896,3 +896,28 @@ export default function CreateQuestionPage() {
     </RoleProtected>
   );
 } 
+                  {/* Submit Button */}
+                  <div className="flex items-center justify-end space-x-4 pt-6 border-t border-gray-200">
+                    <Link
+                      href="/questions/library"
+                      className="px-6 py-3 text-gray-700 bg-gray-100 rounded-xl font-medium hover:bg-gray-200 transition-all duration-200"
+                    >
+                      Cancel
+                    </Link>
+                    <button
+                      type="submit"
+                      disabled={isSubmitting || !formData.text.trim()}
+                      className="px-8 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl font-medium transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                    >
+                      {isSubmitting ? 'Creating...' : 'Create Question'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </RoleProtected>
+  );
+} 

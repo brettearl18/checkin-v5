@@ -7,6 +7,7 @@ import { collection, getDocs, query, where, orderBy } from 'firebase/firestore';
 import { db } from '@/lib/firebase-client';
 import Link from 'next/link';
 import ClientNavigation from '@/components/ClientNavigation';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 interface QuestionResponse {
   questionId: string;
@@ -918,185 +919,115 @@ export default function ClientProgressPage() {
 
                   {/* Graph */}
                   {measurements.length > 0 && selectedMeasurements.size > 0 ? (
-                <div className="relative">
-                  <svg className="w-full h-64" viewBox="0 0 800 256" preserveAspectRatio="none">
-                    {/* Y-axis grid lines */}
-                    {[0, 1, 2, 3, 4].map((i) => {
-                      const y = (i * 64);
-                      return (
-                        <line
-                          key={i}
-                          x1="40"
-                          y1={y}
-                          x2="800"
-                          y2={y}
-                          stroke="#e5e7eb"
-                          strokeWidth="1"
-                        />
-                      );
-                    })}
-                    
-                    {/* Calculate max value for scaling */}
-                    {(() => {
-                      const maxValue = Math.max(
-                        ...measurements.map(m => {
-                          let max = 0;
-                          selectedMeasurements.forEach(key => {
-                            const value = key === 'bodyWeight' 
-                              ? (m.bodyWeight || 0)
-                              : (m.measurements?.[key] || 0);
-                            max = Math.max(max, value);
-                          });
-                          return max;
-                        })
-                      );
-                      
-                      const minValue = Math.min(
-                        ...measurements.map(m => {
-                          let min = Infinity;
-                          selectedMeasurements.forEach(key => {
-                            const value = key === 'bodyWeight' 
-                              ? (m.bodyWeight || 0)
-                              : (m.measurements?.[key] || 0);
-                            if (value > 0) min = Math.min(min, value);
-                          });
-                          return min === Infinity ? 0 : min;
-                        })
-                      );
-                      
-                      const range = maxValue - minValue || 1;
-                      const padding = range * 0.1; // 10% padding
-                      const scaleMin = Math.max(0, minValue - padding);
-                      const scaleMax = maxValue + padding;
-                      const scaleRange = scaleMax - scaleMin;
-                      
-                      // Draw lines for each selected measurement
-                      return Array.from(selectedMeasurements).map((key, keyIndex) => {
-                        const colorMap = [
-                          '#3b82f6', // blue
-                          '#10b981', // green
-                          '#8b5cf6', // purple
-                          '#f97316', // orange
-                          '#ec4899', // pink
-                          '#6366f1', // indigo
-                          '#ef4444', // red
-                          '#eab308'  // yellow
-                        ];
-                        const color = colorMap[keyIndex % colorMap.length];
-                        
-                        const points = measurements
-                          .map((m, index) => {
-                            const value = key === 'bodyWeight' 
-                              ? (m.bodyWeight || 0)
-                              : (m.measurements?.[key] || 0);
+                    <div className="h-80 w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart
+                          data={measurements.map(m => {
+                            const date = m.date instanceof Date ? m.date : new Date(m.date);
+                            const dataPoint: any = {
+                              date: date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' }),
+                              fullDate: date.toISOString(),
+                              isBaseline: m.isBaseline
+                            };
                             
-                            if (value === 0 || value === null || value === undefined) return null;
+                            // Add each selected measurement to the data point
+                            selectedMeasurements.forEach(key => {
+                              const value = key === 'bodyWeight' 
+                                ? (m.bodyWeight || null)
+                                : (m.measurements?.[key] || null);
+                              if (value !== null && value !== undefined && value > 0) {
+                                dataPoint[getMeasurementLabel(key)] = Number(value.toFixed(1));
+                              }
+                            });
                             
-                            const x = 40 + (index / (measurements.length - 1 || 1)) * 760;
-                            const y = 240 - ((value - scaleMin) / scaleRange) * 200;
+                            return dataPoint;
+                          })}
+                          margin={{ top: 10, right: 30, left: 0, bottom: 60 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                          <XAxis 
+                            dataKey="date" 
+                            stroke="#6b7280"
+                            fontSize={11}
+                            tick={{ fill: '#6b7280' }}
+                            angle={-45}
+                            textAnchor="end"
+                            height={60}
+                            label={{ 
+                              value: 'Date', 
+                              position: 'insideBottom', 
+                              offset: -5,
+                              style: { textAnchor: 'middle', fill: '#6b7280' }
+                            }}
+                          />
+                          <YAxis 
+                            stroke="#6b7280"
+                            fontSize={11}
+                            tick={{ fill: '#6b7280' }}
+                          />
+                          <Tooltip 
+                            contentStyle={{ 
+                              backgroundColor: 'white', 
+                              border: '1px solid #e5e7eb', 
+                              borderRadius: '8px',
+                              fontSize: '12px'
+                            }}
+                            formatter={(value: number, name: string) => {
+                              // Extract unit from the label (e.g., "Body Weight (kg)" -> "kg")
+                              const unitMatch = name.match(/\((\w+)\)/);
+                              const unit = unitMatch ? unitMatch[1] : '';
+                              return [`${value}${unit ? ' ' + unit : ''}`, name.replace(/\s*\([^)]*\)\s*/g, '')];
+                            }}
+                            labelFormatter={(label, payload) => {
+                              if (payload && payload[0]?.payload?.fullDate) {
+                                const date = new Date(payload[0].payload.fullDate);
+                                const baseline = payload[0].payload.isBaseline ? ' (Baseline)' : '';
+                                return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) + baseline;
+                              }
+                              return label;
+                            }}
+                          />
+                          <Legend 
+                            wrapperStyle={{ paddingTop: '20px' }}
+                            iconType="line"
+                            formatter={(value) => value}
+                          />
+                          {Array.from(selectedMeasurements).map((key, keyIndex) => {
+                            const colorMap = [
+                              '#3b82f6', // blue
+                              '#10b981', // green
+                              '#8b5cf6', // purple
+                              '#f97316', // orange
+                              '#ec4899', // pink
+                              '#6366f1', // indigo
+                              '#ef4444', // red
+                              '#eab308'  // yellow
+                            ];
+                            const color = colorMap[keyIndex % colorMap.length];
+                            const label = getMeasurementLabel(key);
                             
-                            return { x, y, value, date: m.date, isBaseline: m.isBaseline };
-                          })
-                          .filter(p => p !== null) as { x: number; y: number; value: number; date: Date; isBaseline: boolean }[];
-                        
-                        if (points.length === 0) return null;
-                        
-                        // Draw line
-                        const pathData = points.map((p, i) => 
-                          `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`
-                        ).join(' ');
-                        
-                        return (
-                          <g key={key}>
-                            {/* Line */}
-                            <path
-                              d={pathData}
-                              fill="none"
-                              stroke={color}
-                              strokeWidth="3"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                            {/* Points */}
-                            {points.map((p, i) => (
-                              <circle
-                                key={i}
-                                cx={p.x}
-                                cy={p.y}
-                                r="4"
-                                fill={color}
-                                stroke="white"
-                                strokeWidth="2"
-                                className="cursor-pointer hover:r-6 transition-all"
+                            return (
+                              <Line
+                                key={key}
+                                type="monotone"
+                                dataKey={label}
+                                stroke={color}
+                                strokeWidth={2}
+                                dot={{ r: 4, fill: color, stroke: 'white', strokeWidth: 2 }}
+                                activeDot={{ r: 6 }}
+                                connectNulls={false}
                               />
-                            ))}
-                          </g>
-                        );
-                      });
-                    })()}
-                  </svg>
-                  
-                  {/* X-axis date labels */}
-                  <div className="flex justify-between mt-2 px-10">
-                    {measurements.map((measurement, index) => {
-                      const date = new Date(measurement.date);
-                      return (
-                        <div key={index} className="flex flex-col items-center text-[9px] text-gray-500">
-                          <span>{date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' })}</span>
-                          {measurement.isBaseline && (
-                            <span className="text-[8px] text-blue-600 font-semibold mt-0.5">Baseline</span>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                  
-                  {/* Y-axis labels */}
-                  <div className="absolute left-0 top-0 h-64 flex flex-col justify-between text-[10px] text-gray-500 pr-2">
-                    {(() => {
-                      const maxValue = Math.max(
-                        ...measurements.map(m => {
-                          let max = 0;
-                          selectedMeasurements.forEach(key => {
-                            const value = key === 'bodyWeight' 
-                              ? (m.bodyWeight || 0)
-                              : (m.measurements?.[key] || 0);
-                            max = Math.max(max, value);
-                          });
-                          return max;
-                        })
-                      );
-                      
-                      const minValue = Math.min(
-                        ...measurements.map(m => {
-                          let min = Infinity;
-                          selectedMeasurements.forEach(key => {
-                            const value = key === 'bodyWeight' 
-                              ? (m.bodyWeight || 0)
-                              : (m.measurements?.[key] || 0);
-                            if (value > 0) min = Math.min(min, value);
-                          });
-                          return min === Infinity ? 0 : min;
-                        })
-                      );
-                      
-                      const range = maxValue - minValue || 1;
-                      const padding = range * 0.1;
-                      const scaleMin = Math.max(0, minValue - padding);
-                      const scaleMax = maxValue + padding;
-                      
-                      return [scaleMax, scaleMax * 0.75, scaleMax * 0.5, scaleMax * 0.25, scaleMin].map((val, i) => (
-                        <span key={i}>{Math.round(val)}</span>
-                      ));
-                    })()}
-                  </div>
-                </div>
-              ) : (
-                <div className="text-center py-12 text-gray-500">
-                  <p className="text-sm">No measurement data available yet.</p>
-                  <p className="text-xs mt-1 text-gray-400">Complete check-ins with measurements to see your progress!</p>
-                </div>
-              )}
+                            );
+                          })}
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ) : (
+                    <div className="text-center py-12 text-gray-500">
+                      <p className="text-sm">No measurement data available yet.</p>
+                      <p className="text-xs mt-1 text-gray-400">Complete check-ins with measurements to see your progress!</p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

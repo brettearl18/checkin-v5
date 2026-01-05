@@ -525,3 +525,105 @@ export async function GET(request: NextRequest) {
     }, { status: 500 });
   }
 }
+
+            if (index > -1) {
+              deduplicatedAssignments[index] = assignment;
+              seen.set(key, assignment);
+            }
+          }
+        }
+      } else {
+        // Non-recurring assignments: deduplicate by id
+        if (!seen.has(assignment.id)) {
+          seen.set(assignment.id, assignment);
+          deduplicatedAssignments.push(assignment);
+        }
+      }
+    });
+    
+    // Show all assignments (including expanded recurring ones, now deduplicated)
+    const assignments = deduplicatedAssignments;
+
+    // Fetch coach names for all unique coach IDs
+    const coachIds = [...new Set(assignments.map(a => a.assignedBy).filter(id => id && id !== 'Coach'))];
+    const coachNames: { [key: string]: string } = {};
+
+    if (coachIds.length > 0) {
+      try {
+        const coachesSnapshot = await db.collection('coaches').get();
+        coachesSnapshot.docs.forEach(doc => {
+          const coachData = doc.data();
+          if (coachIds.includes(doc.id)) {
+            const firstName = coachData.profile?.firstName || '';
+            const lastName = coachData.profile?.lastName || '';
+            coachNames[doc.id] = `${firstName} ${lastName}`.trim() || 'Unknown Coach';
+          }
+        });
+      } catch (error) {
+        console.error('Error fetching coach names:', error);
+      }
+    }
+
+    // Update assignments with coach names
+    assignments.forEach(assignment => {
+      assignment.assignedBy = coachNames[assignment.assignedBy] || assignment.assignedBy || 'Coach';
+    });
+
+    // Calculate summary statistics based on ALL assignments (not just current ones)
+    const total = allAssignments.length;
+    const pending = allAssignments.filter(a => a.status === 'pending').length;
+    const completed = allAssignments.filter(a => a.status === 'completed').length;
+    const overdue = allAssignments.filter(a => {
+      if (a.status === 'completed') return false;
+      const dueDate = new Date(a.dueDate);
+      return dueDate < new Date(); // Use new Date() for current date
+    }).length;
+
+    // Check for overdue check-ins and create notifications
+    // Only send notifications for ACTIVE check-ins (not inactive/paused ones)
+    const overdueAssignments = allAssignments.filter(assignment => {
+      const dueDate = assignment.dueDate?.toDate ? assignment.dueDate.toDate() : new Date(assignment.dueDate);
+      const now = new Date();
+      const diffDays = Math.floor((now.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
+      // Only notify for active check-ins that are overdue
+      return diffDays > 0 && (assignment.status === 'active' || assignment.status === 'pending');
+    });
+
+    // Create notifications for overdue check-ins (limit to prevent spam)
+    for (const assignment of overdueAssignments.slice(0, 3)) {
+      try {
+        await notificationService.createCheckInDueNotification(
+          clientId,
+          assignment.id,
+          assignment.title,
+          assignment.dueDate?.toDate ? assignment.dueDate.toDate() : new Date(assignment.dueDate)
+        );
+      } catch (error) {
+        console.error('Error creating overdue notification:', error);
+      }
+    }
+
+    console.log('Check-ins API Debug:', { total, pending, completed, overdue, assignments });
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        checkins: assignments, // All assignments
+        summary: {
+          total,
+          pending,
+          completed,
+          overdue
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Error fetching client check-ins:', error);
+    return NextResponse.json({
+      success: false,
+      message: 'Failed to fetch check-ins',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
+  }
+}
