@@ -192,23 +192,3 @@ export async function POST(request: NextRequest) {
   }
 }
 
-    }
-
-    return NextResponse.json({
-      success: true,
-      message: `Successfully set user ${userId} as admin and coach${userRecord && !userRecord.emailVerified ? '. Account created - user should verify email on first login.' : ''}`,
-      userId,
-      roles: ['admin', 'coach'],
-      accountCreated: userRecord && !userRecord.emailVerified,
-      email: userEmail
-    });
-
-  } catch (error) {
-    logSafeError('Error setting admin/coach roles', error);
-    return NextResponse.json({
-      success: false,
-      message: 'Failed to set admin/coach roles',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 });
-  }
-}
