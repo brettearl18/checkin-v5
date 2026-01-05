@@ -398,52 +398,6 @@ export async function DELETE(request: NextRequest) {
   }
 }
 
-    console.log('Creating goal with data:', goalData);
-
-    // Save to Firestore
-    const docRef = await db.collection('clientGoals').add(goalData);
-    
-    console.log('Goal saved to Firestore with ID:', docRef.id);
-
-    // Also update the client document's goals array if needed (optional)
-    try {
-      const clientRef = db.collection('clients').doc(clientId);
-      const clientDoc = await clientRef.get();
-      
-      if (clientDoc.exists) {
-        // You can update a goals count or last updated timestamp here if needed
-        await clientRef.update({
-          goalsLastUpdated: new Date()
-        });
-      }
-    } catch (updateError) {
-      // Non-critical - log but don't fail the request
-      console.warn('Could not update client document:', updateError);
-    }
-
-    return NextResponse.json({
-      success: true,
-      message: 'Goal created successfully',
-      goalId: docRef.id,
-      goal: {
-        id: docRef.id,
-        ...goalData,
-        deadline: goalData.deadline.toISOString(),
-        createdAt: goalData.createdAt.toISOString(),
-        updatedAt: goalData.updatedAt.toISOString()
-      }
-    });
-
-  } catch (error) {
-    console.error('Error creating client goal:', error);
-    return NextResponse.json({
-      success: false,
-      message: 'Failed to create goal',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 });
-  }
-}
-
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
