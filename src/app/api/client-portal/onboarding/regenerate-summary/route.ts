@@ -227,15 +227,6 @@ export async function POST(request: NextRequest) {
     }, { status: 500 });
   }
 }
-
-
-
-import { generateOnboardingSummary } from '@/lib/openai-service';
-import { getCoachContext } from '@/lib/ai-context';
-
-export const dynamic = 'force-dynamic';
-
-export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { clientId } = body;
