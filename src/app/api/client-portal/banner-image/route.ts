@@ -160,3 +160,8 @@ export async function POST(request: NextRequest) {
     logSafeError('Error uploading banner image', error, { userId: 'unknown' });
     return NextResponse.json({
       success: false,
+      message: 'Failed to upload banner image',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
+  }
+}

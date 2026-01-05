@@ -97,3 +97,49 @@ export async function POST(request: NextRequest) {
     );
     await Promise.all(deleteAiAnalyticsPromises);
 
+    // Delete weekly summaries
+    const weeklySummariesSnapshot = await db.collection('weekly_summaries')
+      .where('clientId', '==', clientId)
+      .get();
+
+    const deleteWeeklySummariesPromises = weeklySummariesSnapshot.docs.map(doc =>
+      db.collection('weekly_summaries').doc(doc.id).delete().catch(() => null)
+    );
+    await Promise.all(deleteWeeklySummariesPromises);
+
+    // Delete SWOT analyses
+    const swotSnapshot = await db.collection('swot_analyses')
+      .where('clientId', '==', clientId)
+      .get();
+
+    const deleteSwotPromises = swotSnapshot.docs.map(doc =>
+      db.collection('swot_analyses').doc(doc.id).delete().catch(() => null)
+    );
+    await Promise.all(deleteSwotPromises);
+
+    return NextResponse.json({
+      success: true,
+      message: `Successfully cleared all data for ${clientName}`,
+      data: {
+        clientId,
+        clientName,
+        deleted: {
+          checkIns: assignmentIds.length,
+          responses: allResponseIds.size,
+          measurements: measurementsSnapshot.docs.length,
+          aiAnalytics: aiAnalyticsSnapshot.docs.length,
+          weeklySummaries: weeklySummariesSnapshot.docs.length,
+          swotAnalyses: swotSnapshot.docs.length
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Error clearing client data:', error);
+    return NextResponse.json({
+      success: false,
+      message: 'Failed to clear client data',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
+  }
+}
