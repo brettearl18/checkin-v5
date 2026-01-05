@@ -253,3 +253,6 @@ export default function ClientOnboardingPage() {
     </Suspense>
   );
 } 
+    </Suspense>
+  );
+} 
