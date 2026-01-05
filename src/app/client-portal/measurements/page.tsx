@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { RoleProtected } from '@/components/ProtectedRoute';
 import ClientNavigation from '@/components/ClientNavigation';
 import Link from 'next/link';
+import { compressImage, shouldCompressImage } from '@/lib/image-compression';
 
 interface MeasurementEntry {
   id: string;
@@ -191,8 +192,25 @@ export default function MeasurementsPage() {
     setUploading(orientation);
 
     try {
+      // Compress image if it's over 1MB
+      let fileToUpload = file;
+      if (shouldCompressImage(file, 1)) {
+        try {
+          fileToUpload = await compressImage(file, {
+            maxSizeMB: 1,
+            maxWidthOrHeight: 1920,
+            quality: 0.8,
+          });
+          console.log('Image compressed before upload');
+        } catch (error) {
+          console.error('Error compressing image:', error);
+          // If compression fails, use original file
+          fileToUpload = file;
+        }
+      }
+
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('file', fileToUpload);
       formData.append('clientId', clientId);
       formData.append('coachId', coachId);
       formData.append('imageType', 'before');

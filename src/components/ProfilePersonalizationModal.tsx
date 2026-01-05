@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { compressImage } from '@/lib/image-compression';
 
 interface ProfilePersonalizationModalProps {
   isOpen: boolean;
@@ -283,7 +284,20 @@ export default function ProfilePersonalizationModal({
       // Convert data URL to blob
       const response = await fetch(croppedImageDataUrl);
       const blob = await response.blob();
-      const file = new File([blob], 'profile-image.png', { type: 'image/png' });
+      let file = new File([blob], 'profile-image.png', { type: 'image/png' });
+
+      // Compress the cropped image before upload
+      try {
+        file = await compressImage(file, {
+          maxSizeMB: 0.5, // Smaller for profile images (circular, smaller display)
+          maxWidthOrHeight: 400, // Match the crop size
+          quality: 0.85, // Slightly higher quality for profile images
+        });
+        console.log('Profile image compressed before upload');
+      } catch (error) {
+        console.error('Error compressing profile image:', error);
+        // If compression fails, use original cropped file
+      }
 
       // Get auth token
       let idToken: string | null = null;

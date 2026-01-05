@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { RoleProtected } from '@/components/ProtectedRoute';
 import ClientNavigation from '@/components/ClientNavigation';
+import { compressImage, shouldCompressImage } from '@/lib/image-compression';
 
 interface ProgressImage {
   id: string;
@@ -107,18 +108,39 @@ export default function ProgressImagesPage() {
     }
   };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       if (!file.type.startsWith('image/')) {
         alert('Please select an image file');
         return;
       }
+      
+      // Check if file is very large (over 10MB) - reject immediately
       if (file.size > 10 * 1024 * 1024) {
-        alert('Image size must be less than 10MB');
+        alert('Image size must be less than 10MB. Please choose a smaller image.');
         return;
       }
-      setSelectedFile(file);
+
+      // If image is over 1MB, compress it automatically
+      if (shouldCompressImage(file, 1)) {
+        try {
+          const compressedFile = await compressImage(file, {
+            maxSizeMB: 1,
+            maxWidthOrHeight: 1920,
+            quality: 0.8,
+          });
+          setSelectedFile(compressedFile);
+          console.log('Image compressed before upload');
+        } catch (error) {
+          console.error('Error compressing image:', error);
+          // If compression fails, still allow the original file
+          setSelectedFile(file);
+        }
+      } else {
+        // File is already small enough, use as-is
+        setSelectedFile(file);
+      }
     }
   };
 

@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import NotificationBadge from './NotificationBadge';
 import ProfilePersonalizationModal from './ProfilePersonalizationModal';
+import { compressImage, shouldCompressImage } from '@/lib/image-compression';
 
 interface NavItem {
   name: string;
@@ -281,6 +282,23 @@ export default function ClientNavigation() {
 
     setUploading(true);
     try {
+      // Compress image if it's over 1MB
+      let fileToUpload = file;
+      if (shouldCompressImage(file, 1)) {
+        try {
+          fileToUpload = await compressImage(file, {
+            maxSizeMB: 0.5, // Smaller for profile images
+            maxWidthOrHeight: 400, // Profile images are typically smaller
+            quality: 0.85,
+          });
+          console.log('Profile image compressed before upload');
+        } catch (error) {
+          console.error('Error compressing profile image:', error);
+          // If compression fails, use original file
+          fileToUpload = file;
+        }
+      }
+
       // Get auth token
       let idToken: string | null = null;
       if (typeof window !== 'undefined' && userProfile?.uid) {
@@ -295,7 +313,7 @@ export default function ClientNavigation() {
       }
 
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('file', fileToUpload);
       if (clientId) {
         formData.append('clientId', clientId);
       }
