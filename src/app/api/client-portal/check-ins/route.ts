@@ -525,34 +525,6 @@ export async function GET(request: NextRequest) {
     }, { status: 500 });
   }
 }
-
-            if (index > -1) {
-              deduplicatedAssignments[index] = assignment;
-              seen.set(key, assignment);
-            }
-          }
-        }
-      } else {
-        // Non-recurring assignments: deduplicate by id
-        if (!seen.has(assignment.id)) {
-          seen.set(assignment.id, assignment);
-          deduplicatedAssignments.push(assignment);
-        }
-      }
-    });
-    
-    // Show all assignments (including expanded recurring ones, now deduplicated)
-    const assignments = deduplicatedAssignments;
-
-    // Fetch coach names for all unique coach IDs
-    const coachIds = [...new Set(assignments.map(a => a.assignedBy).filter(id => id && id !== 'Coach'))];
-    const coachNames: { [key: string]: string } = {};
-
-    if (coachIds.length > 0) {
-      try {
-        const coachesSnapshot = await db.collection('coaches').get();
-        coachesSnapshot.docs.forEach(doc => {
-          const coachData = doc.data();
           if (coachIds.includes(doc.id)) {
             const firstName = coachData.profile?.firstName || '';
             const lastName = coachData.profile?.lastName || '';

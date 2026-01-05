@@ -398,20 +398,6 @@ export async function DELETE(request: NextRequest) {
   }
 }
 
-      clientId,
-      title,
-      description: description || '',
-      category: category || 'general',
-      targetValue: Number(targetValue),
-      currentValue: 0,
-      unit,
-      deadline: deadlineDate,
-      status: 'active',
-      progress: 0,
-      createdAt: new Date(),
-      updatedAt: new Date()
-    };
-
     console.log('Creating goal with data:', goalData);
 
     // Save to Firestore
