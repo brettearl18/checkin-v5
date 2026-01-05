@@ -2,7 +2,7 @@ import { getDb } from './firebase-server';
 
 export interface NotificationData {
   userId: string;
-  type: 'check_in_due' | 'message_received' | 'goal_achieved' | 'check_in_completed' | 'form_assigned' | 'coach_message' | 'system_alert' | 'coach_feedback_ready' | 'coach_feedback_available';
+  type: 'check_in_due' | 'message_received' | 'goal_achieved' | 'check_in_completed' | 'form_assigned' | 'coach_message' | 'system_alert' | 'coach_feedback_ready' | 'coach_feedback_available' | 'onboarding_submitted';
   title: string;
   message: string;
   actionUrl?: string;
@@ -13,6 +13,7 @@ export interface NotificationData {
     assignmentId?: string;
     messageId?: string;
     responseId?: string;
+    onboardingId?: string;
   };
 }
 

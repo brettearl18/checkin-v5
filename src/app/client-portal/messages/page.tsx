@@ -4,6 +4,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { RoleProtected } from '@/components/ProtectedRoute';
 import ClientNavigation from '@/components/ClientNavigation';
+import { collection, query, where, orderBy, onSnapshot, Timestamp } from 'firebase/firestore';
+import { db } from '@/lib/firebase-client';
 
 interface Message {
   id: string;
@@ -33,8 +35,103 @@ export default function ClientMessagesPage() {
   }, [messages]);
 
   useEffect(() => {
-    fetchMessages();
-  }, []);
+    if (userProfile?.uid) {
+      // Set up real-time listener for messages
+      const unsubscribe = setupRealTimeMessages(userProfile.uid);
+      
+      // Also fetch once to ensure we have initial data
+      fetchMessages();
+      
+      // Cleanup listener on unmount
+      return () => {
+        if (unsubscribe) unsubscribe();
+      };
+    }
+  }, [userProfile?.uid]);
+
+  const setupRealTimeMessages = (clientId: string) => {
+    if (!db) {
+      console.error('Firestore db not initialized');
+      return null;
+    }
+
+    try {
+      // Query messages where participants include this client
+      // Try with orderBy first, fallback to without orderBy if index doesn't exist
+      let messagesQuery;
+      try {
+        messagesQuery = query(
+          collection(db, 'messages'),
+          where('participants', 'array-contains', clientId),
+          orderBy('timestamp', 'asc')
+        );
+      } catch (queryError: any) {
+        // If index doesn't exist, use query without orderBy and sort client-side
+        console.log('OrderBy not available, using query without orderBy:', queryError);
+        messagesQuery = query(
+          collection(db, 'messages'),
+          where('participants', 'array-contains', clientId)
+        );
+      }
+
+      const unsubscribe = onSnapshot(
+        messagesQuery,
+        (snapshot) => {
+          const realTimeMessages: Message[] = [];
+          
+          snapshot.docs.forEach((doc) => {
+            const data = doc.data();
+            // Only include messages where this client is a participant
+            if (data.participants?.includes(clientId)) {
+              let timestamp: string;
+              if (data.timestamp?.toDate) {
+                timestamp = data.timestamp.toDate().toISOString();
+              } else if (data.timestamp?._seconds) {
+                timestamp = new Date(data.timestamp._seconds * 1000).toISOString();
+              } else if (data.timestamp instanceof Timestamp) {
+                timestamp = data.timestamp.toDate().toISOString();
+              } else {
+                timestamp = data.timestamp || new Date().toISOString();
+              }
+
+              realTimeMessages.push({
+                id: doc.id,
+                senderId: data.senderId || '',
+                senderName: data.senderName || 'Unknown',
+                content: data.content || '',
+                timestamp: timestamp,
+                isRead: data.isRead || false,
+                type: data.type || 'text'
+              });
+            }
+          });
+
+          // Sort by timestamp if we didn't use orderBy in the query
+          realTimeMessages.sort((a, b) => {
+            return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+          });
+
+          // Update messages state with real-time data
+          setMessages(realTimeMessages);
+          
+          // Auto-scroll to bottom when new messages arrive
+          setTimeout(() => scrollToBottom(), 100);
+        },
+        (error) => {
+          console.error('Error in real-time messages listener:', error);
+          // Fallback to regular fetch on error
+          fetchMessages();
+        }
+      );
+
+      return unsubscribe;
+    } catch (error) {
+      console.error('Error setting up real-time messages:', error);
+      // Fallback to regular fetch on error
+      fetchMessages();
+      return null;
+    }
+  };
 
   const fetchMessages = async () => {
     try {
@@ -86,8 +183,7 @@ export default function ClientMessagesPage() {
         console.log('Send message response:', data);
         if (data.success) {
           setNewMessage('');
-          console.log('Message sent successfully, refreshing messages...');
-          await fetchMessages(); // Refresh messages
+          // No need to manually fetch messages - real-time listener will update automatically
           // Auto-scroll to the new message
           setTimeout(() => scrollToBottom(), 100);
         }
@@ -129,144 +225,207 @@ export default function ClientMessagesPage() {
   console.log('Messages length:', messages.length);
   console.log('Loading state:', loading);
 
+  const isOwnMessage = (senderId: string) => senderId === userProfile?.uid;
+
   return (
     <RoleProtected requiredRole="client">
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex">
-        <ClientNavigation />
+      <div className="min-h-screen bg-white flex flex-col lg:flex-row">
+        {/* Desktop Navigation */}
+        <div className="hidden lg:block">
+          <ClientNavigation />
+        </div>
         
-        <div className="flex-1 ml-8 p-6">
-          {/* Header */}
-          <div className="mb-8">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900 mb-2">Messages</h1>
-                <p className="text-gray-600">Communicate with your coach</p>
+        {/* Mobile Header - Fixed at top */}
+        <div className="lg:hidden sticky top-0 z-20 bg-white border-b border-gray-200">
+          <div className="px-4 py-3 flex items-center justify-between">
+            <h1 className="text-xl font-bold text-gray-900">Messages</h1>
+            {unreadCount > 0 && (
+              <div className="px-3 py-1 bg-red-100 text-red-800 rounded-full text-xs font-medium">
+                {unreadCount}
               </div>
-              {unreadCount > 0 && (
-                <div className="px-4 py-2 bg-red-100 text-red-800 rounded-full text-sm font-medium">
-                  {unreadCount} unread message{unreadCount !== 1 ? 's' : ''}
+            )}
+          </div>
+        </div>
+
+        {/* Messages Area - Full width on mobile, constrained on desktop */}
+        <div className="flex-1 flex flex-col lg:ml-4 lg:mr-8 lg:mt-6 lg:mb-6 lg:max-w-4xl lg:mx-auto">
+          {/* Desktop Header */}
+          <div className="hidden lg:block mb-6">
+            <div className="px-4 py-4 sm:px-6 sm:py-5 border-b-2 rounded-t-2xl" style={{ backgroundColor: '#fef9e7', borderColor: '#daa450' }}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h1 className="text-2xl font-bold text-gray-900 mb-2">Messages</h1>
+                  <p className="text-gray-600 text-sm">Communicate with your coach</p>
                 </div>
-              )}
+                {unreadCount > 0 && (
+                  <div className="px-4 py-2 bg-red-100 text-red-800 rounded-full text-sm font-medium">
+                    {unreadCount} unread
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
-          {/* Messages Container */}
-          <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-            <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-8 py-6 border-b border-gray-100">
-              <h2 className="text-2xl font-bold text-gray-900">Conversation with Coach</h2>
-              <p className="text-gray-600 mt-1">Send messages and get support from your wellness coach</p>
+          {/* Chat Container - WhatsApp Style */}
+          <div className="flex-1 flex flex-col bg-gray-50 lg:bg-white lg:rounded-2xl lg:shadow-[0_1px_3px_rgba(0,0,0,0.1)] lg:border lg:border-gray-100 overflow-hidden">
+            {/* Chat Header - Fixed */}
+            <div className="bg-white border-b border-gray-200 px-4 py-3 lg:px-6 lg:py-4 flex items-center justify-between sticky top-0 z-10">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Conversation with Coach</h2>
+                <p className="text-xs text-gray-500 lg:text-sm lg:text-gray-600 mt-0.5">Send messages and get support</p>
+              </div>
             </div>
 
-            {/* Messages List */}
-            <div className="h-96 overflow-y-auto p-6">
+            {/* Messages List - Scrollable */}
+            <div className="flex-1 overflow-y-auto px-4 py-4 lg:px-6 lg:py-6" style={{ maxHeight: 'calc(100vh - 200px)' }}>
               {loading ? (
                 <div className="flex items-center justify-center h-full">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                  <div className="animate-spin rounded-full h-10 w-10 border-b-2" style={{ borderBottomColor: '#daa450' }}></div>
                 </div>
               ) : messages.length === 0 ? (
                 <div className="text-center py-12">
-                  <div className="text-6xl mb-4">💬</div>
-                  <h3 className="text-xl font-semibold text-gray-900 mb-2">No messages yet</h3>
-                  <p className="text-gray-600">Start a conversation with your coach by sending a message below.</p>
+                  <div className="text-5xl mb-4">💬</div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">No messages yet</h3>
+                  <p className="text-sm text-gray-600 px-4">Start a conversation with your coach by sending a message below.</p>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {messages.map((message) => (
-                    <div
-                      key={message.id}
-                      className={`flex ${message.senderId === userProfile?.uid ? 'justify-end' : 'justify-start'}`}
-                    >
+                <div className="space-y-2">
+                  {messages.map((message) => {
+                    const own = isOwnMessage(message.senderId);
+                    return (
                       <div
-                        className={`max-w-xs lg:max-w-md px-4 py-3 rounded-lg ${
-                          message.senderId === userProfile?.uid
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-gray-100 text-gray-900'
-                        }`}
+                        key={message.id}
+                        className={`flex ${own ? 'justify-end' : 'justify-start'} items-end gap-2`}
                       >
-                        <div className="flex items-start space-x-2">
-                          <div className="flex-1">
-                            <p className="text-sm font-medium mb-1">
-                              {message.senderId === userProfile?.uid ? 'You' : message.senderName}
-                            </p>
-                            <p className="text-sm">{message.content}</p>
+                        {/* Avatar for received messages */}
+                        {!own && (
+                          <div className="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center flex-shrink-0 mb-1">
+                            <span className="text-xs font-semibold text-gray-600">
+                              {message.senderName.charAt(0).toUpperCase()}
+                            </span>
                           </div>
-                          {!message.isRead && message.senderId !== userProfile?.uid && (
-                            <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                          )}
-                        </div>
-                        <p className={`text-xs mt-2 ${
-                          message.senderId === userProfile?.uid ? 'text-blue-100' : 'text-gray-500'
+                        )}
+                        
+                        {/* Message Bubble */}
+                        <div className={`max-w-[85%] lg:max-w-md px-3 py-2 rounded-2xl ${
+                          own
+                            ? 'bg-[#dcf8c6] text-gray-900 rounded-br-sm'
+                            : 'bg-white text-gray-900 rounded-bl-sm shadow-sm'
                         }`}>
-                          {formatTime(message.timestamp)}
-                        </p>
+                          {/* Sender name for received messages */}
+                          {!own && (
+                            <p className="text-xs font-semibold mb-1 text-gray-700">
+                              {message.senderName}
+                            </p>
+                          )}
+                          
+                          {/* Message content */}
+                          <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+                            {message.content}
+                          </p>
+                          
+                          {/* Timestamp */}
+                          <div className={`flex items-center justify-end gap-1 mt-1 ${
+                            own ? 'flex-row-reverse' : ''
+                          }`}>
+                            <p className={`text-[10px] ${
+                              own ? 'text-gray-500' : 'text-gray-400'
+                            }`}>
+                              {formatTime(message.timestamp)}
+                            </p>
+                            {/* Read receipt for sent messages */}
+                            {own && (
+                              <svg className="w-3 h-3 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                            )}
+                            {/* Unread indicator for received messages */}
+                            {!message.isRead && !own && (
+                              <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                            )}
+                          </div>
+                        </div>
+                        
+                        {/* Avatar for sent messages */}
+                        {own && (
+                          <div className="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center flex-shrink-0 mb-1">
+                            <span className="text-xs font-semibold text-gray-600">
+                              You
+                            </span>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                   {/* Scroll target for auto-scroll */}
                   <div ref={messagesEndRef} />
                 </div>
               )}
             </div>
 
-            {/* Message Input */}
-            <div className="border-t border-gray-200 p-6">
-              <form onSubmit={sendMessage} className="flex space-x-4">
-                <input
-                  type="text"
-                  value={newMessage}
-                  onChange={(e) => setNewMessage(e.target.value)}
-                  placeholder="Type your message..."
-                  className="flex-1 border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  disabled={sending}
-                />
+            {/* Message Input - Fixed at bottom */}
+            <div className="bg-white border-t border-gray-200 px-4 py-3 lg:px-6 lg:py-4 sticky bottom-0 z-10">
+              <form onSubmit={sendMessage} className="flex items-end gap-2 lg:gap-3">
+                <div className="flex-1 bg-gray-100 rounded-full px-4 py-2.5 lg:px-5 lg:py-3 flex items-center">
+                  <input
+                    type="text"
+                    value={newMessage}
+                    onChange={(e) => setNewMessage(e.target.value)}
+                    placeholder="Type your message..."
+                    className="flex-1 bg-transparent text-sm lg:text-base focus:outline-none text-gray-900 placeholder-gray-500"
+                    disabled={sending}
+                  />
+                </div>
                 <button
                   type="submit"
                   disabled={!newMessage.trim() || sending}
-                  className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                  className="rounded-full p-3 lg:p-3.5 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center min-w-[48px] min-h-[48px]"
+                  style={{ 
+                    backgroundColor: !newMessage.trim() || sending ? '#9ca3af' : '#daa450'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (newMessage.trim() && !sending) {
+                      e.currentTarget.style.backgroundColor = '#c89540';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (newMessage.trim() && !sending) {
+                      e.currentTarget.style.backgroundColor = '#daa450';
+                    }
+                  }}
                 >
-                  {sending ? 'Sending...' : 'Send'}
+                  {sending ? (
+                    <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
+                  ) : (
+                    <svg className="w-5 h-5 lg:w-6 lg:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                    </svg>
+                  )}
                 </button>
               </form>
             </div>
           </div>
 
-          {/* Quick Actions */}
-          <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-              <div className="flex items-center">
-                <div className="p-3 bg-green-100 rounded-lg">
-                  <span className="text-2xl">📋</span>
+          {/* Quick Actions - Only on desktop, below chat */}
+          <div className="hidden lg:grid lg:grid-cols-3 gap-4 mt-6">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 hover:shadow-md transition-shadow cursor-pointer">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg" style={{ backgroundColor: '#fef9e7' }}>
+                  <svg className="w-5 h-5" style={{ color: '#daa450' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
                 </div>
-                <div className="ml-4">
-                  <h3 className="font-semibold text-gray-900">Request Check-in</h3>
-                  <p className="text-sm text-gray-600">Ask your coach to assign a new check-in</p>
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900">Request Check-in</h3>
+                  <p className="text-xs text-gray-600">Ask for a new check-in</p>
                 </div>
               </div>
             </div>
+          </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-              <div className="flex items-center">
-                <div className="p-3 bg-blue-100 rounded-lg">
-                  <span className="text-2xl">📊</span>
-                </div>
-                <div className="ml-4">
-                  <h3 className="font-semibold text-gray-900">Progress Review</h3>
-                  <p className="text-sm text-gray-600">Request a progress review from your coach</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-              <div className="flex items-center">
-                <div className="p-3 bg-purple-100 rounded-lg">
-                  <span className="text-2xl">🎯</span>
-                </div>
-                <div className="ml-4">
-                  <h3 className="font-semibold text-gray-900">Goal Support</h3>
-                  <p className="text-sm text-gray-600">Get help with your wellness goals</p>
-                </div>
-              </div>
-            </div>
+          {/* Mobile Navigation */}
+          <div className="lg:hidden mt-4">
+            <ClientNavigation />
           </div>
         </div>
       </div>

@@ -6,15 +6,22 @@ export const dynamic = 'force-dynamic';
 interface CheckIn {
   id: string;
   formTitle: string;
+  formId?: string;
   assignedAt: any;
   completedAt: any;
   status: string;
   isRecurring?: boolean;
   recurringWeek?: number;
   totalWeeks?: number;
+  duration?: number;
+  frequency?: string;
+  startDate?: any;
+  dueDate?: any;
   category: string;
   score: number;
   responseCount: number;
+  responseId?: string; // Link to formResponse document
+  coachResponded?: boolean; // Whether coach has provided feedback
   checkInWindow?: {
     enabled: boolean;
     startDay: string;
@@ -22,6 +29,8 @@ interface CheckIn {
     endDay: string;
     endTime: string;
   };
+  pausedUntil?: string;
+  notes?: string;
 }
 
 interface ClientMetrics {
@@ -30,6 +39,7 @@ interface ClientMetrics {
   averageScore: number;
   lastActivity: string | null;
   progressScore: number;
+  completionRate: number;
 }
 
 export async function GET(
@@ -145,26 +155,36 @@ export async function GET(
       }
     });
 
-    // Fetch all forms at once
+    // Fetch all forms at once - include thresholds
     const formPromises = Array.from(formIds).map(async (formId) => {
       try {
         const formDoc = await db.collection('forms').doc(formId).get();
         if (formDoc.exists) {
-          return { formId, title: formDoc.data()?.title || 'Unknown Form' };
+          const formData = formDoc.data();
+          return { 
+            formId, 
+            title: formData?.title || 'Unknown Form',
+            thresholds: formData?.thresholds || formData?.trafficLightThresholds || null
+          };
         }
       } catch (error) {
         console.error(`Error fetching form ${formId}:`, error);
       }
-      return { formId, title: 'Unknown Form' };
+      return { formId, title: 'Unknown Form', thresholds: null };
     });
 
     const formTitlesMap = new Map<string, string>();
+    const formThresholdsMap = new Map<string, any>();
     const formResults = await Promise.all(formPromises);
-    formResults.forEach(({ formId, title }) => {
+    formResults.forEach(({ formId, title, thresholds }) => {
       formTitlesMap.set(formId, title);
+      if (thresholds) {
+        formThresholdsMap.set(formId, thresholds);
+      }
     });
 
-    assignmentsSnapshot.forEach((doc) => {
+    // Process all assignments - need to use Promise.all since we're checking coach feedback
+    const checkInsPromises = assignmentsSnapshot.docs.map(async (doc) => {
       const data = doc.data();
       // Get form title from the map, or use stored formTitle, or fallback to 'Unknown Form'
       const formTitle = data.formTitle || (data.formId ? formTitlesMap.get(data.formId) : null) || 'Unknown Form';
@@ -195,7 +215,11 @@ export async function GET(
       let status = data.status || 'active';
       let pausedUntil = data.pausedUntil;
       
-      if (status === 'inactive' && pausedUntil) {
+      // If check-in has a responseId or completedAt, it should be marked as completed
+      // This takes priority over other status logic
+      if (data.responseId || data.completedAt) {
+        status = 'completed';
+      } else if (status === 'inactive' && pausedUntil) {
         const pausedUntilDate = pausedUntil?.toDate ? pausedUntil.toDate() : new Date(pausedUntil);
         const now = new Date();
         
@@ -210,6 +234,57 @@ export async function GET(
           }).catch(err => console.error('Error auto-reactivating check-in:', err));
         }
       }
+
+      // Check if coach has responded (has feedback)
+      let coachResponded = false;
+      const responseId = data.responseId;
+      let responseCount = data.responseCount || 0;
+      
+      // If responseCount is 0 but we have a responseId, fetch the actual count from the response
+      if (responseId && (!responseCount || responseCount === 0)) {
+        try {
+          const responseDoc = await db.collection('formResponses').doc(responseId).get();
+          if (responseDoc.exists) {
+            const responseData = responseDoc.data();
+            // Use answeredQuestions if available, otherwise count responses
+            if (responseData?.answeredQuestions) {
+              responseCount = responseData.answeredQuestions;
+            } else if (responseData?.responses && Array.isArray(responseData.responses)) {
+              responseCount = responseData.responses.length;
+            } else if (responseData?.totalQuestions) {
+              responseCount = responseData.totalQuestions;
+            }
+            
+            // Update the assignment with the correct count for future queries
+            if (responseCount > 0) {
+              db.collection('check_in_assignments').doc(doc.id).update({
+                responseCount: responseCount,
+                totalQuestions: responseData.totalQuestions || responseCount,
+                answeredQuestions: responseData.answeredQuestions || responseCount
+              }).catch(err => console.error('Error updating assignment response count:', err));
+            }
+          }
+        } catch (error) {
+          console.log('Error fetching response for response count:', error);
+        }
+      }
+      
+      if (responseId) {
+        try {
+          const feedbackSnapshot = await db.collection('coachFeedback')
+            .where('responseId', '==', responseId)
+            .limit(1)
+            .get();
+          
+          coachResponded = !feedbackSnapshot.empty || data.coachResponded || false;
+        } catch (error) {
+          console.log('Error checking feedback:', error);
+          coachResponded = data.coachResponded || false;
+        }
+      }
+
+      // Get form thresholds - priority: assignment stored thresholds > form thresholds
+      const formThresholds = data.formThresholds || (data.formId ? formThresholdsMap.get(data.formId) : null);
 
       const checkIn: CheckIn = {
         id: doc.id,
@@ -227,7 +302,9 @@ export async function GET(
         dueDate: dueDate || data.dueDate,
         category: data.category || 'general',
         score: data.score || 0,
-        responseCount: data.responseCount || 0,
+        responseCount: responseCount, // Use the fetched/corrected responseCount
+        responseId: data.responseId || undefined, // Include responseId for linking to form response
+        coachResponded: coachResponded, // Include coach response status
         checkInWindow: data.checkInWindow || {
           enabled: false,
           startDay: 'monday',
@@ -236,9 +313,16 @@ export async function GET(
           endTime: '12:00'
         },
         pausedUntil: pausedUntil ? (pausedUntil?.toDate ? pausedUntil.toDate().toISOString() : new Date(pausedUntil).toISOString()) : undefined,
-        notes: data.notes || ''
-      };
+        notes: data.notes || '',
+        formThresholds: formThresholds // Include form thresholds for priority use
+      } as any;
       
+      return checkIn;
+    });
+    
+    const allCheckIns = await Promise.all(checkInsPromises);
+    
+    allCheckIns.forEach((checkIn) => {
       checkIns.push(checkIn);
       
       if (checkIn.status === 'completed') {
@@ -282,7 +366,8 @@ export async function GET(
       completedCheckIns: completedCount,
       averageScore,
       lastActivity,
-      progressScore // Now represents average score, not completion rate
+      progressScore, // Now represents average score, not completion rate
+      completionRate // Add completion rate to metrics
     };
     
     return NextResponse.json({

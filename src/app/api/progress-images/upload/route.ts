@@ -37,6 +37,31 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
+    // File size validation (5MB max for images)
+    const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB in bytes
+    if (file.size > MAX_FILE_SIZE) {
+      return NextResponse.json({
+        success: false,
+        message: `File size exceeds maximum allowed size of ${MAX_FILE_SIZE / (1024 * 1024)}MB`
+      }, { status: 400 });
+    }
+
+    // MIME type validation (allow only image types)
+    const ALLOWED_MIME_TYPES = [
+      'image/jpeg',
+      'image/jpg',
+      'image/png',
+      'image/webp',
+      'image/gif'
+    ];
+    
+    if (!file.type || !ALLOWED_MIME_TYPES.includes(file.type.toLowerCase())) {
+      return NextResponse.json({
+        success: false,
+        message: `Invalid file type. Allowed types: ${ALLOWED_MIME_TYPES.join(', ')}`
+      }, { status: 400 });
+    }
+
     if (!['front', 'back', 'side'].includes(orientation)) {
       return NextResponse.json({
         success: false,

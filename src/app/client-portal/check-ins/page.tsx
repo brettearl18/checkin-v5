@@ -30,24 +30,33 @@ interface CheckIn {
 }
 
 export default function ClientCheckInsPage() {
-  const { userProfile } = useAuth();
+  const { userProfile, authLoading } = useAuth();
   const [checkins, setCheckins] = useState<CheckIn[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<'needsAction' | 'upcoming' | 'pending' | 'completed' | 'overdue'>('needsAction');
+  const [filter, setFilter] = useState<'toDo' | 'scheduled' | 'completed'>('scheduled');
   const [clientId, setClientId] = useState<string | null>(null);
+  const [completedResponses, setCompletedResponses] = useState<any[]>([]);
+  const [completedLoading, setCompletedLoading] = useState(false);
+  const [completedFilter, setCompletedFilter] = useState('all'); // all, recent, high-score, low-score
   const [coachTimezone, setCoachTimezone] = useState<string>(Intl.DateTimeFormat().resolvedOptions().timeZone);
   const [thresholds, setThresholds] = useState<ScoringThresholds>(getDefaultThresholds('lifestyle'));
 
   useEffect(() => {
-    fetchClientId();
-  }, [userProfile?.email]);
+    // Wait for auth to finish loading before fetching client ID
+    if (!authLoading && userProfile?.email) {
+      fetchClientId();
+    }
+  }, [userProfile?.email, authLoading]);
 
   useEffect(() => {
     if (clientId) {
       fetchCheckIns();
       fetchScoringConfig();
+      if (filter === 'completed') {
+        fetchCompletedResponses();
+      }
     }
-  }, [clientId]);
+  }, [clientId, filter]);
 
   useEffect(() => {
     fetchCoachTimezone();
@@ -56,23 +65,37 @@ export default function ClientCheckInsPage() {
   const fetchClientId = async () => {
     try {
       if (!userProfile?.email) {
-        console.error('No user email available');
+        console.warn('No user email available yet');
         setLoading(false);
         return;
       }
 
       // Fetch client ID from clients collection using email
       const response = await fetch(`/api/client-portal?clientEmail=${userProfile.email}`);
+      
+      if (!response.ok) {
+        // Silently handle non-OK responses - API might be starting up
+        setLoading(false);
+        return;
+      }
+      
       const result = await response.json();
 
       if (result.success && result.data.client) {
         setClientId(result.data.client.id);
       } else {
-        console.error('Failed to fetch client ID:', result.message);
+        // Only log if not a network error
+        if (result.message && !result.message.includes('fetch')) {
+          console.error('Failed to fetch client ID:', result.message);
+        }
         setLoading(false);
       }
-    } catch (error) {
-      console.error('Error fetching client ID:', error);
+    } catch (error: any) {
+      // Silently handle network errors - they're often transient
+      // Only log in development
+      if (process.env.NODE_ENV === 'development') {
+        console.debug('Error fetching client ID (will retry):', error);
+      }
       setLoading(false);
     }
   };
@@ -91,6 +114,26 @@ export default function ClientCheckInsPage() {
       }
     } catch (error) {
       console.error('Error fetching coach timezone:', error);
+    }
+  };
+
+  const fetchCompletedResponses = async () => {
+    try {
+      setCompletedLoading(true);
+      if (!clientId) return;
+
+      const response = await fetch(`/api/client-portal/history?clientId=${clientId}`);
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setCompletedResponses(data.history || []);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching completed responses:', error);
+    } finally {
+      setCompletedLoading(false);
     }
   };
 
@@ -116,19 +159,19 @@ export default function ClientCheckInsPage() {
           // Use profile defaults
           clientThresholds = getDefaultThresholds(scoringData.scoringProfile as any);
         } else {
-          // Default to lifestyle
-          clientThresholds = getDefaultThresholds('lifestyle');
+          // Default to moderate
+          clientThresholds = getDefaultThresholds('moderate');
         }
 
         setThresholds(clientThresholds);
       } else {
-        // No scoring config, use default lifestyle thresholds
-        setThresholds(getDefaultThresholds('lifestyle'));
+        // No scoring config, use default moderate thresholds
+        setThresholds(getDefaultThresholds('moderate'));
       }
     } catch (error) {
       console.error('Error fetching scoring config:', error);
-      // Use default lifestyle thresholds on error
-      setThresholds(getDefaultThresholds('lifestyle'));
+      // Use default moderate thresholds on error
+      setThresholds(getDefaultThresholds('moderate'));
     }
   };
 
@@ -144,7 +187,38 @@ export default function ClientCheckInsPage() {
       const result = await response.json();
 
       if (result.success) {
-        setCheckins(result.data.checkins);
+        // Ensure checkInWindow is properly structured for each check-in
+        const processedCheckins = result.data.checkins.map((checkin: any) => {
+          // Log the raw check-in data for debugging
+          console.log('Raw check-in data:', {
+            id: checkin.id,
+            title: checkin.title,
+            dueDate: checkin.dueDate,
+            checkInWindow: checkin.checkInWindow,
+            status: checkin.status
+          });
+
+          // Ensure checkInWindow has the correct structure
+          let checkInWindow = DEFAULT_CHECK_IN_WINDOW;
+          if (checkin.checkInWindow) {
+            if (typeof checkin.checkInWindow === 'object' && 
+                checkin.checkInWindow.enabled !== undefined &&
+                checkin.checkInWindow.startDay &&
+                checkin.checkInWindow.startTime) {
+              checkInWindow = checkin.checkInWindow;
+            } else {
+              console.warn('Invalid checkInWindow structure for check-in:', checkin.id, checkin.checkInWindow);
+            }
+          }
+
+          return {
+            ...checkin,
+            checkInWindow
+          };
+        });
+        
+        console.log('Processed check-ins:', processedCheckins.length, processedCheckins);
+        setCheckins(processedCheckins);
       } else {
         console.error('Failed to fetch check-ins:', result.message);
         setCheckins([]);
@@ -163,6 +237,52 @@ export default function ClientCheckInsPage() {
       day: 'numeric',
       year: 'numeric'
     });
+  };
+
+  // Calculate the start date of the check-in window for a given due date
+  // Returns the Friday (or startDay) of the week that contains the due date
+  // For example: If due date is Monday Jan 12, and start day is Friday, return Friday Jan 16 of that same week
+  const getCheckInWindowStartDate = (dueDate: string, window?: CheckInWindow): Date => {
+    const due = new Date(dueDate);
+    const checkInWindow = window || DEFAULT_CHECK_IN_WINDOW;
+    
+    if (!checkInWindow.enabled) {
+      return due; // If window is disabled, use due date
+    }
+    
+    // Get the day of week for the start day (e.g., Friday = 5)
+    const startDayNum = getDayOfWeek(checkInWindow.startDay);
+    
+    // Get the day of week for the due date (0 = Sunday, 1 = Monday, ..., 6 = Saturday)
+    const dueDayOfWeek = due.getDay();
+    
+    // Calculate days to add to get to the start day of that week
+    // We want the start day of the week containing the due date
+    // If due date is Monday (1) and start day is Friday (5):
+    // We need to add 4 days (Monday -> Tuesday -> Wednesday -> Thursday -> Friday)
+    // Formula: (startDayNum - dueDayOfWeek + 7) % 7
+    let daysToAdd = (startDayNum - dueDayOfWeek + 7) % 7;
+    
+    // Create a new date at the start day of the week
+    const windowStartDate = new Date(due);
+    windowStartDate.setDate(due.getDate() + daysToAdd);
+    windowStartDate.setHours(0, 0, 0, 0); // Reset to start of day
+    
+    return windowStartDate;
+  };
+
+  // Helper function to get day of week number (0 = Sunday, 1 = Monday, ..., 6 = Saturday)
+  const getDayOfWeek = (dayName: string): number => {
+    const days: { [key: string]: number } = {
+      'sunday': 0,
+      'monday': 1,
+      'tuesday': 2,
+      'wednesday': 3,
+      'thursday': 4,
+      'friday': 5,
+      'saturday': 6
+    };
+    return days[dayName.toLowerCase()] ?? 5; // Default to Friday
   };
 
   const getStatusColor = (status: string) => {
@@ -191,111 +311,182 @@ export default function ClientCheckInsPage() {
     }
   };
 
-  // Filter check-ins based on next 7 days and status
-  const getUpcomingCheckins = () => {
+  // "To Do" - Actionable check-ins that need attention
+  // Includes: overdue check-ins OR check-ins that are available now (window is open)
+  // Does NOT include future check-ins whose window hasn't opened yet (those go in "Scheduled")
+  const getToDoCheckins = () => {
     const now = new Date();
-    
-    // Calculate start of today and end of next 7 days
-    const startOfToday = new Date(now);
-    startOfToday.setHours(0, 0, 0, 0);
-    
-    const endOfNextWeek = new Date(now);
-    endOfNextWeek.setDate(now.getDate() + 7);
-    endOfNextWeek.setHours(23, 59, 59, 999);
 
     return checkins.filter(checkin => {
+      // Exclude completed check-ins from "To Do"
+      if (checkin.status === 'completed') return false;
+
       const dueDate = new Date(checkin.dueDate);
       
-      // Check if the due date is within the next 7 days and not completed
-      return dueDate >= startOfToday && dueDate <= endOfNextWeek && checkin.status !== 'completed';
+      // Normalize dates for comparison (set to start of day)
+      dueDate.setHours(0, 0, 0, 0);
+      const today = new Date(now);
+      today.setHours(0, 0, 0, 0);
+      
+      // Include if overdue (past due date)
+      if (dueDate < today) return true;
+      
+      // Include if due date has arrived AND window is open (available now)
+      // Special case: Week 1 check-ins are accessible immediately once due date arrives
+      if (dueDate <= today) {
+        const checkInWindow = checkin.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
+        const windowStatus = isWithinCheckInWindow(checkInWindow);
+        const isFirstCheckIn = checkin.recurringWeek === 1;
+        if (windowStatus.isOpen || isFirstCheckIn) return true;
+      }
+      
+      // Do NOT include future check-ins - they belong in "Scheduled" tab
+      return false;
     });
   };
 
-  // Get check-ins that are available now (window is open)
-  // This includes check-ins where the window is currently open, regardless of overdue status
-  // This ensures that if a check-in is overdue but its window is open, it still shows
-  const getAvailableCheckins = () => {
-    return checkins.filter(checkin => {
-      if (checkin.status === 'completed') return false;
-      const checkInWindow = checkin.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
-      const windowStatus = isWithinCheckInWindow(checkInWindow);
-      return windowStatus.isOpen;
-    });
-  };
-
-  // Get check-ins that need action (overdue + available now)
-  // This includes:
-  // 1. All overdue check-ins (regardless of window status)
-  // 2. All check-ins with open windows (regardless of overdue status)
-  // 3. All instances of recurring check-ins (each week shown separately)
-  const getNeedsActionCheckins = () => {
+  // "Scheduled" - ALL upcoming check-ins
+  // Shows all upcoming check-ins so users can see what's coming and when windows open
+  const getScheduledCheckins = () => {
     const now = new Date();
-    const overdue = checkins.filter(c => {
-      // Check if overdue by comparing dueDate to now
-      const dueDate = new Date(c.dueDate);
-      const hoursOverdue = (now.getTime() - dueDate.getTime()) / (1000 * 60 * 60);
-      return hoursOverdue > 0 && c.status !== 'completed';
-    });
-    
-    const available = getAvailableCheckins();
-    
-    // Combine both lists - each check-in (including different weeks of recurring) should show
-    // Since recurring check-ins have different IDs for each week, no need to deduplicate
-    const combined = [...overdue, ...available];
-    
-    // Remove duplicates by ID only (in case a check-in is both overdue AND has open window)
-    return combined.filter((checkin, index, self) => 
-      index === self.findIndex(c => c.id === checkin.id)
-    );
+    const startOfToday = new Date(now);
+    startOfToday.setHours(0, 0, 0, 0);
+
+    const futureCheckins = checkins
+      .filter(checkin => {
+        // Exclude completed check-ins from "Scheduled"
+        if (checkin.status === 'completed') return false;
+        const dueDate = new Date(checkin.dueDate);
+        // Normalize due date to start of day for accurate comparison
+        dueDate.setHours(0, 0, 0, 0);
+        // Only include future check-ins (due date is today or later)
+        return dueDate >= startOfToday;
+      })
+      .sort((a, b) => {
+        // Sort by due date (earliest first)
+        const dateA = new Date(a.dueDate).getTime();
+        const dateB = new Date(b.dueDate).getTime();
+        return dateA - dateB;
+      });
+    // Return ALL upcoming check-ins (removed .slice(0, 2))
+
+    return futureCheckins;
   };
 
-  // Sort check-ins by urgency: overdue > available now > upcoming > completed
-  const sortByUrgency = (checkinsList: CheckIn[]) => {
-    return [...checkinsList].sort((a, b) => {
-      // Overdue first
-      if (a.status === 'overdue' && b.status !== 'overdue') return -1;
-      if (b.status === 'overdue' && a.status !== 'overdue') return 1;
-      
-      // Then available now
-      const aWindow = a.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
-      const bWindow = b.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
-      const aAvailable = isWithinCheckInWindow(aWindow).isOpen && a.status !== 'completed';
-      const bAvailable = isWithinCheckInWindow(bWindow).isOpen && b.status !== 'completed';
-      if (aAvailable && !bAvailable) return -1;
-      if (bAvailable && !aAvailable) return 1;
-      
-      // Then by due date (earliest first)
-      const aDue = new Date(a.dueDate).getTime();
-      const bDue = new Date(b.dueDate).getTime();
-      if (a.status !== 'completed' && b.status === 'completed') return -1;
-      if (a.status === 'completed' && b.status !== 'completed') return 1;
-      return aDue - bDue;
+
+  const filteredCompletedResponses = completedResponses.filter(item => {
+    switch (completedFilter) {
+      case 'recent':
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        return new Date(item.submittedAt) > thirtyDaysAgo;
+      case 'high-score':
+        return item.score >= 80;
+      case 'low-score':
+        return item.score < 60;
+      default:
+        return true;
+    }
+  });
+
+  const formatHistoryDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
     });
   };
+
+  const getScoreBadge = (score: number) => {
+    if (score >= 80) return 'bg-green-100 text-green-800';
+    if (score >= 60) return 'bg-yellow-100 text-yellow-800';
+    return 'bg-red-100 text-red-800';
+  };
+
+  // Compute check-in lists once
+  const toDoCheckins = getToDoCheckins();
+  const scheduledCheckins = getScheduledCheckins();
+  const completedCheckins = checkins.filter(c => c.status === 'completed');
+  
+  // Only show "To Do" tab if there are check-ins that need attention
+  const showToDoTab = toDoCheckins.length > 0;
+  
+  // If "To Do" tab is selected but there are no to-do items, switch to "Scheduled"
+  useEffect(() => {
+    if (filter === 'toDo' && !showToDoTab) {
+      setFilter('scheduled');
+    }
+  }, [filter, showToDoTab]);
 
   const filteredCheckins = (() => {
     let result: CheckIn[] = [];
+    
+    // Determine which check-in is shown in the banner (to exclude from lists if needed)
+    const bannerCheckin = toDoCheckins[0] || null; // Only from toDo, no fallback
+    const nextScheduledForBanner = !bannerCheckin && scheduledCheckins.length > 0 ? scheduledCheckins[0] : null;
+    const bannerCheckinId = bannerCheckin?.id || nextScheduledForBanner?.id || null;
+    
     switch (filter) {
-      case 'needsAction':
-        result = getNeedsActionCheckins();
-        break;
-      case 'upcoming':
-        result = getUpcomingCheckins();
-        break;
-      case 'pending':
-        result = checkins.filter(c => c.status === 'pending');
-        break;
+      case 'toDo':
+        result = toDoCheckins;
+        // Sort by urgency: overdue first, then available now, then due soon
+        return result.sort((a, b) => {
+          const aDue = new Date(a.dueDate).getTime();
+          const bDue = new Date(b.dueDate).getTime();
+          const now = new Date().getTime();
+          
+          // Overdue first
+          if (aDue < now && bDue >= now) return -1;
+          if (bDue < now && aDue >= now) return 1;
+          
+          // Then available now
+          const aWindow = a.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
+          const bWindow = b.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
+          const aAvailable = isWithinCheckInWindow(aWindow).isOpen;
+          const bAvailable = isWithinCheckInWindow(bWindow).isOpen;
+          if (aAvailable && !bAvailable) return -1;
+          if (bAvailable && !aAvailable) return 1;
+          
+          // Then by due date (earliest first)
+          return aDue - bDue;
+        });
+      case 'scheduled':
+        result = scheduledCheckins;
+        
+        // If no scheduled check-ins, return empty array
+        if (result.length === 0) {
+          return [];
+        }
+        
+        // Sort by due date (earliest first), then by week number if same due date
+        result = result.sort((a, b) => {
+          const dateA = new Date(a.dueDate).getTime();
+          const dateB = new Date(b.dueDate).getTime();
+          
+          if (dateA !== dateB) {
+            return dateA - dateB;
+          }
+          
+          // If same due date, sort by week number (ascending) as secondary sort
+          const weekA = (a.isRecurring && a.recurringWeek) ? a.recurringWeek : 0;
+          const weekB = (b.isRecurring && b.recurringWeek) ? b.recurringWeek : 0;
+          return weekA - weekB;
+        });
+        
+        // Always show at least the next upcoming check-in in the scheduled tab
+        // Don't exclude the banner check-in - show it here too so users can see it
+        // Show the first check-in (next upcoming)
+        return result.slice(0, 1);
       case 'completed':
-        result = checkins.filter(c => c.status === 'completed');
-        break;
-      case 'overdue':
-        result = checkins.filter(c => c.status === 'overdue');
-        break;
+        // For completed tab, we'll use completedResponses (formResponses) instead of assignments
+        // Return empty array here - we'll handle rendering separately
+        return [];
       default:
         result = checkins;
     }
-    // Always sort by urgency
-    return sortByUrgency(result);
+    return result;
   })();
 
   // Helper function to get time until due date
@@ -336,21 +527,30 @@ export default function ClientCheckInsPage() {
       }
     }
     
-    // For pending check-ins, use window status
-    const checkInWindow = checkin.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
-    const windowStatus = isWithinCheckInWindow(checkInWindow);
-    if (windowStatus.isOpen) return 'border-l-4 border-green-500';
+    // For pending check-ins, use window status (only if due date has arrived)
+    const now = new Date();
+    const dueDate = new Date(checkin.dueDate);
+    dueDate.setHours(0, 0, 0, 0);
+    const today = new Date(now);
+    today.setHours(0, 0, 0, 0);
+    
+    if (dueDate <= today) {
+      const checkInWindow = checkin.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
+      const windowStatus = isWithinCheckInWindow(checkInWindow);
+      if (windowStatus.isOpen) return 'border-l-4 border-green-500';
+    }
     
     return 'border-l-4 border-yellow-500';
   };
 
   const stats = {
-    upcoming: getUpcomingCheckins().length,
-    pending: checkins.filter(c => c.status === 'pending').length,
-    completed: checkins.filter(c => c.status === 'completed').length,
-    overdue: checkins.filter(c => c.status === 'overdue').length,
-    available: getAvailableCheckins().length,
-    needsAction: getNeedsActionCheckins().length
+    toDo: getToDoCheckins().length,
+    scheduled: getScheduledCheckins().length,
+    completed: completedResponses.length, // Use formResponses count instead of assignments
+    total: checkins.length,
+    needsAction: getToDoCheckins().length,
+    upcoming: getScheduledCheckins().length,
+    pending: checkins.filter(c => c.status === 'pending').length
   };
 
   if (loading) {
@@ -378,23 +578,23 @@ export default function ClientCheckInsPage() {
 
   return (
     <RoleProtected requiredRole="client">
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/50 flex flex-col lg:flex-row">
+      <div className="min-h-screen bg-white flex flex-col lg:flex-row">
         <ClientNavigation />
         
         {/* Mobile Top Bar */}
-        <div className="lg:hidden flex items-center justify-between px-4 py-4 bg-white/90 backdrop-blur-sm border-b border-gray-200 shadow-sm">
-          <div className="flex items-center space-x-2">
-            <div className="w-9 h-9 bg-gradient-to-br from-pink-500 to-rose-600 rounded-xl flex items-center justify-center text-white font-semibold">
+        <div className="lg:hidden flex items-center justify-between px-5 py-4 bg-white border-b border-gray-100 shadow-[0_1px_3px_rgba(0,0,0,0.1)] sticky top-0 z-10">
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-semibold text-base" style={{ backgroundColor: '#daa450' }}>
               {userProfile?.firstName?.charAt(0) || 'C'}
             </div>
             <div>
-              <p className="text-sm font-semibold text-gray-900">My Check-ins</p>
+              <p className="text-base font-bold text-gray-900">My Check-ins</p>
               <p className="text-xs text-gray-500">Track your progress</p>
             </div>
           </div>
         </div>
         
-        <div className="flex-1 lg:ml-4 p-4 lg:p-5 pt-6 lg:pt-5">
+        <div className="flex-1 lg:ml-4 p-5 lg:p-5 pt-6 lg:pt-5">
           <div className="max-w-7xl">
             {/* Header - Hidden on mobile, shown on desktop */}
             <div className="mb-4 lg:mb-6 hidden lg:block">
@@ -416,173 +616,417 @@ export default function ClientCheckInsPage() {
               </p>
             </div>
 
-            {/* Stats */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4 mb-4 lg:mb-6">
-              <div className="group relative bg-white/80 backdrop-blur-sm rounded-lg lg:rounded-xl shadow-sm border border-gray-200/60 overflow-hidden hover:shadow-lg hover:border-red-300/50 transition-all duration-300 hover:-translate-y-0.5">
-                <div className="absolute inset-0 bg-gradient-to-br from-red-500/5 to-pink-500/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                <div className="relative px-3 py-2.5 lg:px-4 lg:py-3">
-                  <div className="flex items-center justify-between mb-1.5 lg:mb-2">
-                    <div className="w-8 h-8 lg:w-10 lg:h-10 bg-gradient-to-br from-red-500 to-red-600 rounded-lg flex items-center justify-center shadow-sm">
-                      <svg className="w-4 h-4 lg:w-5 lg:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                      </svg>
+            {/* Current Check-in Status Banner */}
+            {(() => {
+              // Current check-in should ONLY be from toDoCheckins (available or overdue)
+              const currentCheckin = toDoCheckins[0] || null;
+              // Next scheduled is the first one that's NOT already shown as current
+              const nextScheduled = scheduledCheckins.length > 0 ? scheduledCheckins[0] : null;
+              
+              if (!currentCheckin && !nextScheduled) return null;
+              
+              // If we have a current check-in, use its window; otherwise use next scheduled's window
+              const checkInWindow = currentCheckin?.checkInWindow || nextScheduled?.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
+              const windowStatus = isWithinCheckInWindow(checkInWindow);
+              
+              // Check if current check-in is available now
+              const now = new Date();
+              const dueDate = currentCheckin ? new Date(currentCheckin.dueDate) : null;
+              let dueDateHasArrived = false;
+              if (dueDate) {
+                dueDate.setHours(0, 0, 0, 0);
+                const today = new Date(now);
+                today.setHours(0, 0, 0, 0);
+                dueDateHasArrived = dueDate <= today;
+              }
+              
+              // Special case: Week 1 (first check-in) is accessible immediately once due date arrives,
+              // bypassing window restrictions. This allows clients who signed up Jan 3-5 to access
+              // their Week 1 check-in on Jan 5 regardless of window hours.
+              const isFirstCheckIn = currentCheckin?.recurringWeek === 1;
+              const isAvailable = currentCheckin && dueDateHasArrived && 
+                (isFirstCheckIn || windowStatus.isOpen) && 
+                currentCheckin.status !== 'completed';
+              
+              // Check if next scheduled check-in is available
+              const nextDueDate = nextScheduled ? new Date(nextScheduled.dueDate) : null;
+              let nextDueDateHasArrived = false;
+              if (nextDueDate) {
+                nextDueDate.setHours(0, 0, 0, 0);
+                const today = new Date(now);
+                today.setHours(0, 0, 0, 0);
+                nextDueDateHasArrived = nextDueDate <= today;
+              }
+              const nextWindow = nextScheduled?.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
+              const nextWindowStatus = isWithinCheckInWindow(nextWindow);
+              const isNextAvailable = nextScheduled && nextDueDateHasArrived && nextWindowStatus.isOpen && nextScheduled.status !== 'completed';
+              
+              return (
+                <div className="mb-4 lg:mb-6">
+                  {currentCheckin ? (
+                    <div className="bg-white border-2 rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border-gray-100 p-5 lg:p-6 transition-all duration-200">
+                      <div className={`px-4 py-4 sm:px-6 sm:py-5 lg:px-8 lg:py-6 border-b-2 mb-4 rounded-t-2xl lg:rounded-t-3xl`} style={{ backgroundColor: '#fef9e7', borderColor: '#daa450' }}>
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 lg:w-12 lg:h-12 rounded-xl lg:rounded-2xl flex items-center justify-center flex-shrink-0 bg-white bg-opacity-20">
+                            <svg className="w-5 h-5 lg:w-6 lg:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                          </div>
+                          <h3 className="text-xl lg:text-lg font-bold text-gray-900">Current Check-in</h3>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-4">
+                        <div className="flex-shrink-0 w-14 h-14 lg:w-12 lg:h-12 rounded-xl lg:rounded-lg flex items-center justify-center" style={{ backgroundColor: '#daa450' }}>
+                          <svg className="w-7 h-7 lg:w-6 lg:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-base lg:text-sm text-gray-700 font-semibold mb-2 break-words">
+                            {currentCheckin.isRecurring && currentCheckin.recurringWeek 
+                              ? `Week ${currentCheckin.recurringWeek}: ${currentCheckin.title}`
+                              : currentCheckin.title}
+                          </p>
+                          {windowStatus.isOpen ? (
+                            <p className="text-green-700 font-semibold text-sm lg:text-sm mb-4">✓ Check-in window is open now - Ready to complete!</p>
+                          ) : windowStatus.nextOpenTime ? (
+                            <p className="text-gray-600 text-sm lg:text-sm mb-4 leading-relaxed">
+                              Next opens: {windowStatus.nextOpenTime.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })} at {windowStatus.nextOpenTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                            </p>
+                          ) : (
+                            <p className="text-gray-600 text-sm lg:text-sm mb-4">{windowStatus.message}</p>
+                          )}
+                          {isAvailable && (
+                            <Link
+                              href={`/client-portal/check-in/${currentCheckin.id}`}
+                              className="inline-block px-5 py-3 lg:px-4 lg:py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl lg:rounded-lg text-base lg:text-sm font-semibold transition-all duration-200 shadow-sm hover:shadow-md min-h-[48px] lg:min-h-[44px] flex items-center justify-center"
+                            >
+                              Check in now
+                            </Link>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                  <div className="text-xl lg:text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">{stats.needsAction}</div>
-                  <div className="text-[10px] lg:text-xs text-gray-900 mt-0.5 lg:mt-1 font-medium">Needs Action</div>
-                </div>
-              </div>
-
-              <div className="group relative bg-white/80 backdrop-blur-sm rounded-lg lg:rounded-xl shadow-sm border border-gray-200/60 overflow-hidden hover:shadow-lg hover:border-blue-300/50 transition-all duration-300 hover:-translate-y-0.5">
-                <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-indigo-500/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                <div className="relative px-3 py-2.5 lg:px-4 lg:py-3">
-                  <div className="flex items-center justify-between mb-1.5 lg:mb-2">
-                    <div className="w-8 h-8 lg:w-10 lg:h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center shadow-sm">
-                      <svg className="w-4 h-4 lg:w-5 lg:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
+                  ) : nextScheduled ? (
+                    <div className="bg-white border-2 rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border-gray-100 p-5 lg:p-6 transition-all duration-200">
+                      <div className={`px-4 py-4 sm:px-6 sm:py-5 lg:px-8 lg:py-6 border-b-2 mb-4 rounded-t-2xl lg:rounded-t-3xl`} style={{ backgroundColor: '#fef9e7', borderColor: '#daa450' }}>
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 lg:w-12 lg:h-12 rounded-xl lg:rounded-2xl flex items-center justify-center flex-shrink-0 bg-white bg-opacity-20">
+                            <svg className="w-5 h-5 lg:w-6 lg:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                          </div>
+                          <h3 className="text-xl lg:text-lg font-bold text-gray-900">{isNextAvailable ? 'Available Now' : 'Next Check-in'}</h3>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-4">
+                        <div className="flex-shrink-0 w-14 h-14 lg:w-12 lg:h-12 rounded-xl lg:rounded-lg flex items-center justify-center" style={{ backgroundColor: '#daa450' }}>
+                          <svg className="w-7 h-7 lg:w-6 lg:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-base lg:text-sm text-gray-700 font-semibold mb-2 break-words">
+                            {nextScheduled.isRecurring && nextScheduled.recurringWeek 
+                              ? `Week ${nextScheduled.recurringWeek}: ${nextScheduled.title}`
+                              : nextScheduled.title}
+                          </p>
+                          <p className="text-gray-600 text-sm mb-2 leading-relaxed">
+                            Due: {new Date(nextScheduled.dueDate).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                          </p>
+                          {(() => {
+                            if (nextWindowStatus.nextOpenTime) {
+                              return (
+                                <p className="text-gray-600 text-sm mt-1 leading-relaxed">
+                                  {isNextAvailable ? '✓ Window is open now' : `Window opens: ${nextWindowStatus.nextOpenTime.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })} at ${nextWindowStatus.nextOpenTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`}
+                                </p>
+                              );
+                            }
+                            return null;
+                          })()}
+                          {isNextAvailable && (
+                            <Link
+                              href={`/client-portal/check-in/${nextScheduled.id}`}
+                              className="inline-block mt-4 px-5 py-3 lg:px-4 lg:py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl lg:rounded-lg text-base lg:text-sm font-semibold transition-all duration-200 shadow-sm hover:shadow-md min-h-[48px] lg:min-h-[44px] flex items-center justify-center"
+                            >
+                              Check in now
+                            </Link>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                  <div className="text-xl lg:text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">{stats.upcoming}</div>
-                  <div className="text-[10px] lg:text-xs text-gray-900 mt-0.5 lg:mt-1 font-medium">This Week</div>
+                  ) : null}
                 </div>
-              </div>
+              );
+            })()}
 
-              <div className="group relative bg-white/80 backdrop-blur-sm rounded-lg lg:rounded-xl shadow-sm border border-gray-200/60 overflow-hidden hover:shadow-lg hover:border-green-300/50 transition-all duration-300 hover:-translate-y-0.5">
-                <div className="absolute inset-0 bg-gradient-to-br from-green-500/5 to-emerald-500/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                <div className="relative px-3 py-2.5 lg:px-4 lg:py-3">
-                  <div className="flex items-center justify-between mb-1.5 lg:mb-2">
-                    <div className="w-8 h-8 lg:w-10 lg:h-10 bg-gradient-to-br from-green-500 to-green-600 rounded-lg flex items-center justify-center shadow-sm">
-                      <svg className="w-4 h-4 lg:w-5 lg:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                    </div>
-                  </div>
-                  <div className="text-xl lg:text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">{stats.completed}</div>
-                  <div className="text-[10px] lg:text-xs text-gray-900 mt-0.5 lg:mt-1 font-medium">Completed</div>
-                </div>
-              </div>
-
-              <div className="group relative bg-white/80 backdrop-blur-sm rounded-lg lg:rounded-xl shadow-sm border border-gray-200/60 overflow-hidden hover:shadow-lg hover:border-yellow-300/50 transition-all duration-300 hover:-translate-y-0.5">
-                <div className="absolute inset-0 bg-gradient-to-br from-yellow-500/5 to-orange-500/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                <div className="relative px-3 py-2.5 lg:px-4 lg:py-3">
-                  <div className="flex items-center justify-between mb-1.5 lg:mb-2">
-                    <div className="w-8 h-8 lg:w-10 lg:h-10 bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-lg flex items-center justify-center shadow-sm">
-                      <svg className="w-4 h-4 lg:w-5 lg:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                    </div>
-                  </div>
-                  <div className="text-xl lg:text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">{stats.pending}</div>
-                  <div className="text-[10px] lg:text-xs text-gray-900 mt-0.5 lg:mt-1 font-medium">Pending</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Filters */}
+            {/* Filters - Tabs (conditionally show To Do) */}
             <div className="mb-4 lg:mb-6">
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2 sm:gap-2">
                 {[
-                  { key: 'needsAction', label: 'Needs Action', count: stats.needsAction, color: 'red' },
-                  { key: 'upcoming', label: 'This Week', count: stats.upcoming, color: 'blue' },
-                  { key: 'pending', label: 'Pending', count: stats.pending, color: 'yellow' },
-                  { key: 'completed', label: 'Completed', count: stats.completed, color: 'green' },
-                  { key: 'overdue', label: 'Overdue', count: stats.overdue, color: 'red' }
+                  // Only include "To Do" tab if there are check-ins that need attention
+                  ...(showToDoTab ? [{ key: 'toDo', label: 'To Do', count: stats.toDo, color: 'red', icon: '📋' }] : []),
+                  { key: 'scheduled', label: 'Scheduled', count: stats.scheduled, color: 'blue', icon: '📅' },
+                  { key: 'completed', label: 'Completed', count: completedResponses.length, color: 'green', icon: '✅' }
                 ].map((filterOption) => (
                   <button
                     key={filterOption.key}
                     onClick={() => setFilter(filterOption.key as any)}
-                    className={`px-3 py-2 lg:px-5 lg:py-2.5 rounded-lg text-xs lg:text-sm font-medium transition-all duration-200 min-h-[36px] ${
+                    className={`px-5 py-3.5 lg:px-6 lg:py-3 rounded-xl lg:rounded-xl text-base lg:text-base font-semibold transition-all duration-200 min-h-[48px] lg:min-h-[44px] flex items-center justify-center gap-2 flex-1 sm:flex-initial ${
                       filter === filterOption.key
-                        ? filterOption.color === 'red'
-                          ? 'bg-red-600 text-white shadow-lg'
-                          : filterOption.color === 'green'
-                          ? 'bg-green-600 text-white shadow-lg'
-                          : filterOption.color === 'yellow'
-                          ? 'bg-yellow-500 text-white shadow-lg'
-                          : 'bg-blue-600 text-white shadow-lg'
-                        : 'bg-white/80 backdrop-blur-sm text-gray-900 hover:bg-white border border-gray-200/60 hover:shadow-md'
+                        ? 'text-white shadow-md'
+                        : 'bg-white text-gray-900 hover:bg-gray-50 border border-gray-200'
                     }`}
+                    style={filter === filterOption.key ? { backgroundColor: '#daa450' } : {}}
                   >
-                    <span className="hidden sm:inline">{filterOption.label}</span>
-                    <span className="sm:hidden">{filterOption.label.split(' ')[0]}</span>
-                    {filterOption.count > 0 && <span className="ml-1">({filterOption.count})</span>}
+                    <span className="text-xl lg:text-lg">{filterOption.icon}</span>
+                    <span className="whitespace-nowrap">{filterOption.label}</span>
+                    {filterOption.count > 0 && (
+                      <span className={`ml-1 px-2.5 py-1 lg:px-2 lg:py-0.5 rounded-full text-sm lg:text-xs font-bold ${
+                        filter === filterOption.key
+                          ? 'bg-white/20 text-white'
+                          : 'bg-gray-100 text-gray-700'
+                      }`}>
+                        {filterOption.count}
+                      </span>
+                    )}
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Check-ins List */}
-            <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200/60 overflow-hidden">
-              <div className="p-4 lg:p-5 border-b border-gray-200/60 bg-gradient-to-r from-gray-50/50 to-white/50">
-                <h2 className="text-lg lg:text-xl font-bold text-gray-900">
-                  {filter === 'needsAction' ? '🔴 Needs Your Action' : 
-                   filter === 'upcoming' ? '📅 This Week\'s Check-ins' : 
-                   filter === 'overdue' ? '⚠️ Overdue Check-ins' :
-                   filter === 'completed' ? '✅ Completed Check-ins' :
-                   `${filter.charAt(0).toUpperCase() + filter.slice(1)} Check-ins`}
-                </h2>
-                <p className="text-gray-900 text-xs lg:text-sm mt-0.5 lg:mt-1">
-                  {filteredCheckins.length} check-in{filteredCheckins.length !== 1 ? 's' : ''} found
-                </p>
+            {/* Completed Tab Content */}
+            {filter === 'completed' ? (
+              <div className="space-y-4">
+                {/* Completed Filters */}
+                <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 p-4 lg:p-4">
+                  <div className="flex flex-wrap gap-2 sm:gap-2">
+                    {[
+                      { key: 'all', label: 'All Responses' },
+                      { key: 'recent', label: 'Last 30 Days' },
+                      { key: 'high-score', label: 'High Scores (80%+)' },
+                      { key: 'low-score', label: 'Needs Attention (<60%)' }
+                    ].map((option) => (
+                      <button
+                        key={option.key}
+                        onClick={() => setCompletedFilter(option.key)}
+                        className={`px-4 py-3 lg:px-4 lg:py-2 rounded-xl lg:rounded-lg text-sm lg:text-sm font-semibold transition-colors min-h-[44px] lg:min-h-[36px] flex items-center justify-center ${
+                          completedFilter === option.key
+                            ? 'text-white shadow-md'
+                            : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
+                        }`}
+                        style={completedFilter === option.key ? { backgroundColor: '#daa450' } : {}}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Completed Stats */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
+                  <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 p-4 lg:p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 lg:w-10 lg:h-10 rounded-xl lg:rounded-lg flex items-center justify-center" style={{ backgroundColor: '#daa450' }}>
+                        <span className="text-2xl lg:text-xl">📊</span>
+                      </div>
+                      <div>
+                        <p className="text-xs lg:text-xs text-gray-600 font-medium">Total</p>
+                        <p className="text-2xl lg:text-xl font-bold text-gray-900">{completedResponses.length}</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 p-4 lg:p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 lg:w-10 lg:h-10 rounded-xl lg:rounded-lg flex items-center justify-center" style={{ backgroundColor: '#daa450' }}>
+                        <span className="text-2xl lg:text-xl">✅</span>
+                      </div>
+                      <div>
+                        <p className="text-xs lg:text-xs text-gray-600 font-medium">Average</p>
+                        <p className="text-2xl lg:text-xl font-bold text-gray-900">
+                          {completedResponses.length > 0 
+                            ? Math.round(completedResponses.reduce((sum, item) => sum + item.score, 0) / completedResponses.length)
+                            : 0}%
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 p-4 lg:p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 lg:w-10 lg:h-10 rounded-xl lg:rounded-lg flex items-center justify-center" style={{ backgroundColor: '#daa450' }}>
+                        <span className="text-2xl lg:text-xl">🎯</span>
+                      </div>
+                      <div>
+                        <p className="text-xs lg:text-xs text-gray-600 font-medium">High Scores</p>
+                        <p className="text-2xl lg:text-xl font-bold text-gray-900">
+                          {completedResponses.filter(item => item.score >= 80).length}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 p-4 lg:p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 lg:w-10 lg:h-10 rounded-xl lg:rounded-lg flex items-center justify-center" style={{ backgroundColor: '#daa450' }}>
+                        <span className="text-2xl lg:text-xl">⚠️</span>
+                      </div>
+                      <div>
+                        <p className="text-xs lg:text-xs text-gray-600 font-medium">Needs Attention</p>
+                        <p className="text-2xl lg:text-xl font-bold text-gray-900">
+                          {completedResponses.filter(item => item.score < 60).length}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Completed List */}
+                <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                  <div className="px-4 py-4 sm:px-6 sm:py-5 lg:px-8 lg:py-6 border-b-2" style={{ backgroundColor: '#fef9e7', borderColor: '#daa450' }}>
+                    <h2 className="text-xl lg:text-xl font-bold text-gray-900">Completed Check-ins</h2>
+                    <p className="text-gray-600 text-sm lg:text-sm mt-1 lg:mt-1">
+                      {filteredCompletedResponses.length} response{filteredCompletedResponses.length !== 1 ? 's' : ''} found
+                    </p>
+                  </div>
+
+                  <div className="p-5 lg:p-5">
+                    {completedLoading ? (
+                      <div className="text-center py-8">
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto"></div>
+                        <p className="mt-4 text-gray-600">Loading completed check-ins...</p>
+                      </div>
+                    ) : filteredCompletedResponses.length === 0 ? (
+                      <div className="text-center py-8">
+                        <div className="text-6xl mb-4">📋</div>
+                        <h3 className="text-xl font-semibold text-gray-900 mb-2">No responses found</h3>
+                        <p className="text-gray-600">
+                          {completedFilter === 'all' && "You haven't completed any check-ins yet."}
+                          {completedFilter === 'recent' && "No responses in the last 30 days."}
+                          {completedFilter === 'high-score' && "No high score responses yet."}
+                          {completedFilter === 'low-score' && "Great job! No responses need attention."}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {filteredCompletedResponses.map((item) => (
+                          <div key={item.id} className="bg-white rounded-2xl lg:rounded-2xl border border-gray-100 p-4 lg:p-4 hover:shadow-md transition-shadow">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 mb-2">
+                                  <h3 className="text-base lg:text-base font-semibold text-gray-900 break-words">
+                                    {item.checkInTitle || item.formTitle || 'Check-in'}
+                                  </h3>
+                                  <span className={`px-3 py-1 rounded-full text-sm lg:text-xs font-semibold ${getScoreBadge(item.score)} self-start sm:self-auto`}>
+                                    {item.score}%
+                                  </span>
+                                </div>
+                                <p className="text-sm text-gray-600">
+                                  Completed on {formatHistoryDate(item.submittedAt)}
+                                </p>
+                              </div>
+                              <Link
+                                href={`/client-portal/check-in/${item.id}/success`}
+                                className="px-5 py-3 lg:px-4 lg:py-2 text-white rounded-xl lg:rounded-lg transition-colors text-base lg:text-sm font-semibold whitespace-nowrap text-center min-h-[48px] lg:min-h-[36px] flex items-center justify-center shadow-sm hover:shadow-md"
+                                style={{ backgroundColor: '#daa450' }}
+                              >
+                                View Details
+                              </Link>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
+            ) : (
+              <>
+              {/* Check-ins List */}
+              <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                <div className="px-4 py-4 sm:px-6 sm:py-5 lg:px-8 lg:py-6 border-b-2" style={{ backgroundColor: '#fef9e7', borderColor: '#daa450' }}>
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1">
+                      <h2 className="text-xl lg:text-xl font-bold text-gray-900">
+                        {filter === 'toDo' ? '📋 Check-ins To Do' : 
+                         filter === 'scheduled' ? '📅 Scheduled Check-ins' :
+                         '✅ Completed Check-ins'}
+                      </h2>
+                      <p className="text-gray-600 text-sm lg:text-sm mt-1 lg:mt-1 leading-relaxed">
+                        {filter === 'toDo' && 'Complete your check-ins that need attention'}
+                        {filter === 'scheduled' && (filteredCheckins.length > 0 || scheduledCheckins.length > 0) ? `Next check-in scheduled${scheduledCheckins.length > 1 ? ` (${scheduledCheckins.length - 1} more upcoming)` : ''}` : 'No upcoming check-ins scheduled'}
+                        {filter === 'completed' && 'Your completed check-ins and results'}
+                        {filter !== 'scheduled' && filter !== 'completed' && filteredCheckins.length > 0 && ` • ${filteredCheckins.length} check-in${filteredCheckins.length !== 1 ? 's' : ''}`}
+                      </p>
+                    </div>
+                  </div>
+                </div>
               
-              <div className="p-4 lg:p-5">
+              <div className="p-5 lg:p-8">
                 {filteredCheckins.length > 0 ? (
                   <div className="space-y-3">
                     {filteredCheckins.map((checkin) => {
                       const checkInWindow = checkin.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
                       const windowStatus = isWithinCheckInWindow(checkInWindow);
-                      const isAvailable = windowStatus.isOpen && checkin.status !== 'completed';
+                      
+                      // A check-in is only available if:
+                      // 1. The due date has arrived (today >= due date)
+                      // 2. AND we're currently within the check-in window period (or it's Week 1)
+                      // 3. AND the check-in is not completed
+                      const now = new Date();
+                      const dueDate = new Date(checkin.dueDate);
+                      dueDate.setHours(0, 0, 0, 0); // Reset to start of day for comparison
+                      const today = new Date(now);
+                      today.setHours(0, 0, 0, 0);
+                      
+                      const dueDateHasArrived = dueDate <= today;
+                      // Special case: Week 1 (first check-in) is accessible immediately once due date arrives,
+                      // bypassing window restrictions for clients who signed up Jan 3-5, 2026
+                      const isFirstCheckIn = checkin.recurringWeek === 1;
+                      const isAvailable = dueDateHasArrived && 
+                        (isFirstCheckIn || windowStatus.isOpen) && 
+                        checkin.status !== 'completed';
                       const isOverdue = checkin.status === 'overdue';
                       const isCompleted = checkin.status === 'completed';
                       
-                      // Determine the best action link for completed check-ins
-                      const getCompletedCheckInLink = () => {
-                        if (checkin.coachResponded && checkin.responseId) {
-                          return `/client-portal/feedback/${checkin.responseId}`;
-                        } else if (checkin.responseId) {
-                          return `/client-portal/check-in/${checkin.id}/success`;
-                        }
-                        return null;
-                      };
-
-                      const completedLink = isCompleted ? getCompletedCheckInLink() : null;
-                      const CardWrapper = completedLink ? Link : 'div';
-                      const cardProps = completedLink ? { href: completedLink } : {};
+                      // For completed check-ins, don't make the entire card a link since there are action buttons inside
+                      // Instead, just use a div wrapper
+                      const CardWrapper = 'div';
 
                       return (
                         <CardWrapper
                           key={checkin.id}
-                          {...cardProps}
-                          className={`${getCardBorderColor(checkin)} bg-white/80 backdrop-blur-sm rounded-lg p-3 lg:p-4 hover:shadow-md transition-all duration-200 border border-gray-200/60 ${completedLink ? 'cursor-pointer' : ''}`}
+                          className={`${getCardBorderColor(checkin)} bg-white rounded-2xl lg:rounded-2xl p-4 lg:p-4 hover:shadow-md transition-all duration-200 border border-gray-100`}
                         >
-                          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                             {/* Left: Main Content */}
                             <div className="flex-1 min-w-0">
-                              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-3 mb-2">
+                              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-3 mb-2">
                                 <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 mb-1 flex-wrap">
-                                    <h3 className="text-sm lg:text-base font-bold text-gray-900 truncate">{checkin.title}</h3>
+                                  <div className="flex items-center gap-2 mb-2 flex-wrap">
+                                    <h3 className="text-base lg:text-base font-bold text-gray-900 break-words">
+                                      {checkin.isRecurring && checkin.recurringWeek 
+                                        ? `Week ${checkin.recurringWeek}: ${checkin.title}`
+                                        : checkin.title
+                                      }
+                                    </h3>
                                     {checkin.status === 'overdue' && (
-                                      <span className="px-1.5 py-0.5 rounded-full text-[10px] lg:text-xs font-medium bg-red-100 text-red-800 flex-shrink-0">
+                                      <span className="px-2 py-1 rounded-full text-xs lg:text-xs font-semibold bg-red-100 text-red-800 flex-shrink-0">
                                         Overdue
                                       </span>
                                     )}
                                     {isAvailable && !isOverdue && (
-                                      <span className="px-1.5 py-0.5 rounded-full text-[10px] lg:text-xs font-medium bg-green-100 text-green-800 flex-shrink-0">
+                                      <span className="px-2 py-1 rounded-full text-xs lg:text-xs font-semibold bg-green-100 text-green-800 flex-shrink-0">
                                         Available Now
                                       </span>
                                     )}
-                                    {!windowStatus.isOpen && !isOverdue && !isCompleted && (
-                                      <span className="px-1.5 py-0.5 rounded-full text-[10px] lg:text-xs font-medium bg-yellow-100 text-yellow-800 flex-shrink-0">
-                                        Window Closed
+                                    {!isAvailable && !isOverdue && !isCompleted && (
+                                      <span className="px-2 py-1 rounded-full text-xs lg:text-xs font-semibold bg-yellow-100 text-yellow-800 flex-shrink-0">
+                                        {dueDateHasArrived ? 'Window Closed' : 'Not Yet Available'}
                                       </span>
                                     )}
                                   </div>
                                   
                                   {/* Time indicator */}
-                                  <p className="text-[10px] lg:text-xs text-gray-900 mb-1.5 lg:mb-2">
+                                  <p className="text-xs lg:text-xs text-gray-900 mb-2 lg:mb-2 font-medium">
                                     {isOverdue 
                                       ? getTimeUntilDue(checkin.dueDate)
                                       : isCompleted
@@ -593,26 +1037,65 @@ export default function ClientCheckInsPage() {
 
                                   {/* Window status for pending check-ins */}
                                   {!isCompleted && !isOverdue && (
-                                    <div className={`inline-flex items-center gap-1 px-2 py-0.5 lg:py-1 rounded text-[10px] lg:text-xs ${
-                                      windowStatus.isOpen 
-                                        ? 'bg-green-50 text-green-800' 
-                                        : 'bg-yellow-50 text-yellow-800'
-                                    }`}>
-                                      {windowStatus.isOpen ? '✅' : '⏰'} <span className="hidden sm:inline">{windowStatus.message}</span>
+                                    <div className="mt-2 space-y-2">
+                                      <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 lg:py-1 rounded-lg text-xs lg:text-xs font-medium ${
+                                        isAvailable 
+                                          ? 'bg-green-50 text-green-800' 
+                                          : dueDateHasArrived
+                                          ? 'bg-yellow-50 text-yellow-800'
+                                          : 'bg-gray-50 text-gray-800'
+                                      }`}>
+                                        <span className="text-base">{isAvailable ? '✅' : dueDateHasArrived ? '⏰' : '📅'}</span>
+                                        <span>
+                                          {isAvailable ? windowStatus.message : dueDateHasArrived ? windowStatus.message : (() => {
+                                            const windowStartDate = getCheckInWindowStartDate(checkin.dueDate, checkInWindow);
+                                            return `Available on ${formatDate(windowStartDate.toISOString())}`;
+                                          })()}
+                                        </span>
+                                      </div>
+                                      {/* Show window details for scheduled check-ins */}
+                                      {filter === 'scheduled' && checkInWindow?.enabled && checkInWindow?.startDay && checkInWindow?.startTime && (
+                                        <div className="text-xs lg:text-xs text-gray-700 font-medium leading-relaxed mt-1">
+                                          {(() => {
+                                            const windowStartDate = getCheckInWindowStartDate(checkin.dueDate, checkInWindow);
+                                            const startDayName = checkInWindow.startDay.charAt(0).toUpperCase() + checkInWindow.startDay.slice(1);
+                                            const [hours, minutes] = checkInWindow.startTime.split(':').map(Number);
+                                            const period = hours >= 12 ? 'PM' : 'AM';
+                                            const displayHours = hours > 12 ? hours - 12 : hours === 0 ? 12 : hours;
+                                            const displayMinutes = minutes.toString().padStart(2, '0');
+                                            
+                                            // Check if window has already opened
+                                            const now = new Date();
+                                            if (windowStartDate <= now) {
+                                              // Window should be open, check actual window status
+                                              if (windowStatus.isOpen) {
+                                                return `✓ Check-in window is open now`;
+                                              } else if (windowStatus.nextOpenTime) {
+                                                return `Window opens: ${windowStatus.nextOpenTime.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })} at ${windowStatus.nextOpenTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
+                                              } else {
+                                                return `Window opens ${startDayName} ${formatDate(windowStartDate.toISOString())} at ${displayHours}:${displayMinutes} ${period}`;
+                                              }
+                                            } else {
+                                              return `Window opens ${startDayName} ${formatDate(windowStartDate.toISOString())} at ${displayHours}:${displayMinutes} ${period}`;
+                                            }
+                                          })()}
+                                        </div>
+                                      )}
                                     </div>
                                   )}
 
                                   {/* Progress indicator for recurring check-ins */}
                                   {checkin.isRecurring && checkin.recurringWeek && checkin.totalWeeks && (
-                                    <div className="mt-2">
-                                      <div className="flex items-center justify-between text-xs text-gray-900 mb-1">
-                                        <span className="font-medium">Week {checkin.recurringWeek} of {checkin.totalWeeks}</span>
-                                        <span>{Math.round((checkin.recurringWeek / checkin.totalWeeks) * 100)}%</span>
+                                    <div className="mt-3">
+                                      <div className="flex items-center justify-between text-sm lg:text-xs text-gray-900 mb-2">
+                                        <span className="font-semibold">Program Progress: Week {checkin.recurringWeek} of {checkin.totalWeeks}</span>
+                                        <span className="text-gray-600 font-semibold">{Math.round((checkin.recurringWeek / checkin.totalWeeks) * 100)}%</span>
                                       </div>
-                                      <div className="w-full bg-gray-200 rounded-full h-1.5">
+                                      <div className="w-full bg-gray-200 rounded-full h-2 lg:h-1.5">
                                         <div 
-                                          className="bg-gradient-to-r from-blue-500 to-indigo-600 h-1.5 rounded-full transition-all duration-300"
+                                          className="bg-gradient-to-r from-blue-500 to-indigo-600 h-2 lg:h-1.5 rounded-full transition-all duration-300"
                                           style={{ width: `${(checkin.recurringWeek / checkin.totalWeeks) * 100}%` }}
+                                          title={`Program progress: ${checkin.recurringWeek} of ${checkin.totalWeeks} weeks completed`}
                                         ></div>
                                       </div>
                                     </div>
@@ -620,8 +1103,8 @@ export default function ClientCheckInsPage() {
 
                                   {/* Feedback indicator for completed check-ins */}
                                   {isCompleted && checkin.coachResponded && (
-                                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-purple-100 text-purple-700 mt-2">
-                                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm lg:text-xs font-semibold bg-purple-100 text-purple-700 mt-3">
+                                      <svg className="w-4 h-4 lg:w-3.5 lg:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                       </svg>
                                       Coach Feedback Available
@@ -630,7 +1113,7 @@ export default function ClientCheckInsPage() {
 
                                   {/* Score for completed with traffic light */}
                                   {isCompleted && checkin.score && (
-                                    <div className="inline-flex items-center gap-2 px-2 py-1 rounded text-xs mt-1">
+                                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm lg:text-xs mt-3">
                                       {/* Determine traffic light status (default to lifestyle thresholds) */}
                                       {(() => {
                                         const score = checkin.score;
@@ -651,9 +1134,9 @@ export default function ClientCheckInsPage() {
                                         };
                                         
                                         return (
-                                          <div className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full border ${colors[status]}`}>
-                                            <span className="text-xs">{icons[status]}</span>
-                                            <span className="font-bold">Score: {score}%</span>
+                                          <div className={`inline-flex items-center gap-2 px-3 py-1.5 lg:px-2 lg:py-1 rounded-full border ${colors[status]}`}>
+                                            <span className="text-base lg:text-xs">{icons[status]}</span>
+                                            <span className="font-bold text-sm lg:text-xs">Score: {score}%</span>
                                           </div>
                                         );
                                       })()}
@@ -666,7 +1149,8 @@ export default function ClientCheckInsPage() {
                                   {isOverdue && (
                                     <Link
                                       href={`/client-portal/check-in/${checkin.id}`}
-                                      className="w-full sm:w-auto inline-block px-3 py-2 lg:px-4 lg:py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs lg:text-sm font-semibold transition-all duration-200 shadow-sm hover:shadow-md text-center min-h-[36px] flex items-center justify-center"
+                                      className="w-full sm:w-auto inline-block px-5 py-3.5 lg:px-4 lg:py-2 text-white rounded-xl lg:rounded-lg text-base lg:text-sm font-semibold transition-all duration-200 shadow-sm hover:shadow-md text-center min-h-[48px] lg:min-h-[36px] flex items-center justify-center"
+                                      style={{ backgroundColor: '#daa450' }}
                                     >
                                       Complete Now
                                     </Link>
@@ -674,29 +1158,33 @@ export default function ClientCheckInsPage() {
                                   {isAvailable && !isOverdue && (
                                     <Link
                                       href={`/client-portal/check-in/${checkin.id}`}
-                                      className="w-full sm:w-auto inline-block px-3 py-2 lg:px-4 lg:py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs lg:text-sm font-semibold transition-all duration-200 shadow-sm hover:shadow-md text-center min-h-[36px] flex items-center justify-center"
+                                      className="w-full sm:w-auto inline-block px-5 py-3.5 lg:px-4 lg:py-2 text-white rounded-xl lg:rounded-lg text-base lg:text-sm font-semibold transition-all duration-200 shadow-sm hover:shadow-md text-center min-h-[48px] lg:min-h-[36px] flex items-center justify-center"
+                                      style={{ backgroundColor: '#daa450' }}
                                     >
                                       Start Check-in
                                     </Link>
                                   )}
-                                  {!windowStatus.isOpen && !isOverdue && !isCompleted && (
+                                  {!isAvailable && !isOverdue && !isCompleted && (
                                     <button
                                       disabled
-                                      className="w-full sm:w-auto px-3 py-2 lg:px-4 lg:py-2 bg-gray-300 text-gray-600 rounded-lg text-xs lg:text-sm font-semibold cursor-not-allowed min-h-[36px]"
-                                      title={getCheckInWindowDescription(checkInWindow)}
+                                      className="w-full sm:w-auto px-5 py-3.5 lg:px-4 lg:py-2 bg-gray-300 text-gray-600 rounded-xl lg:rounded-lg text-base lg:text-sm font-semibold cursor-not-allowed min-h-[48px] lg:min-h-[36px]"
+                                      title={dueDateHasArrived ? getCheckInWindowDescription(checkInWindow) : (() => {
+                                        const windowStartDate = getCheckInWindowStartDate(checkin.dueDate, checkInWindow);
+                                        return `Check-in available on ${formatDate(windowStartDate.toISOString())}`;
+                                      })()}
                                     >
-                                      Window Closed
+                                      {dueDateHasArrived ? 'Window Closed' : 'Not Available Yet'}
                                     </button>
                                   )}
                                   {isCompleted && (
-                                    <div className="flex flex-col sm:flex-row sm:items-end gap-2 w-full sm:w-auto">
+                                    <div className="flex flex-col sm:flex-row sm:items-end gap-3 w-full sm:w-auto">
                                       {checkin.coachResponded && checkin.responseId && (
                                         <Link
                                           href={`/client-portal/feedback/${checkin.responseId}`}
-                                          className="w-full sm:w-auto px-3 py-2 lg:px-4 lg:py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs lg:text-sm font-semibold transition-all duration-200 shadow-sm hover:shadow-md flex items-center justify-center gap-1.5 min-h-[36px]"
-                                          onClick={(e) => e.stopPropagation()}
+                                          className="w-full sm:w-auto px-5 py-3.5 lg:px-4 lg:py-2 text-white rounded-xl lg:rounded-lg text-base lg:text-sm font-semibold transition-all duration-200 shadow-sm hover:shadow-md flex items-center justify-center gap-2 min-h-[48px] lg:min-h-[36px]"
+                                          style={{ backgroundColor: '#daa450' }}
                                         >
-                                          <svg className="w-3.5 h-3.5 lg:w-4 lg:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <svg className="w-4 h-4 lg:w-4 lg:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                           </svg>
                                           <span className="hidden sm:inline">View Feedback</span>
@@ -705,10 +1193,10 @@ export default function ClientCheckInsPage() {
                                       )}
                                       <Link
                                         href={`/client-portal/check-in/${checkin.id}/success`}
-                                        className="w-full sm:w-auto px-3 py-2 lg:px-4 lg:py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs lg:text-sm font-semibold transition-all duration-200 shadow-sm hover:shadow-md flex items-center justify-center gap-1.5 min-h-[36px]"
-                                        onClick={(e) => e.stopPropagation()}
+                                        className="w-full sm:w-auto px-5 py-3.5 lg:px-4 lg:py-2 text-white rounded-xl lg:rounded-lg text-base lg:text-sm font-semibold transition-all duration-200 shadow-sm hover:shadow-md flex items-center justify-center gap-2 min-h-[48px] lg:min-h-[36px]"
+                                        style={{ backgroundColor: '#daa450' }}
                                       >
-                                        <svg className="w-3.5 h-3.5 lg:w-4 lg:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <svg className="w-4 h-4 lg:w-4 lg:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                                         </svg>
                                         <span className="hidden sm:inline">View Results</span>
@@ -725,36 +1213,57 @@ export default function ClientCheckInsPage() {
                     })}
                   </div>
                 ) : (
-                  <div className="text-center py-12">
-                    <div className="text-6xl mb-4">
-                      {filter === 'needsAction' ? '🎯' :
-                       filter === 'completed' ? '✅' : 
-                       filter === 'overdue' ? '🎉' : 
-                       filter === 'upcoming' ? '📅' : '📋'}
-                    </div>
-                    <h3 className="text-xl font-bold text-gray-900 mb-2">
-                      {filter === 'needsAction' ? 'All caught up!' :
-                       filter === 'completed' ? 'No completed check-ins yet' :
-                       filter === 'overdue' ? 'No overdue check-ins!' :
-                       filter === 'upcoming' ? 'No check-ins this week' :
-                       'No check-ins found'}
-                    </h3>
-                    <p className="text-gray-900 text-sm max-w-md mx-auto">
-                      {filter === 'needsAction' 
-                        ? 'You\'re all set! No check-ins need your immediate attention.'
-                        : filter === 'completed' 
-                        ? 'Complete your first check-in to see your results here.'
-                        : filter === 'overdue'
-                        ? 'Great job staying on top of your check-ins!'
-                        : filter === 'upcoming'
-                        ? 'No check-ins scheduled for this week. Check back later!'
-                        : 'No check-ins have been assigned yet.'
-                      }
-                    </p>
+                  <div className="text-center py-12 lg:py-12">
+                    {filter === 'toDo' ? (
+                      <>
+                        <div className="text-6xl mb-4">🎯</div>
+                        <h3 className="text-2xl lg:text-xl font-bold text-gray-900 mb-3">All caught up!</h3>
+                        <p className="text-gray-900 text-base lg:text-sm max-w-md mx-auto mb-6 leading-relaxed px-4">
+                          No check-ins need your attention right now. Great job staying on top of things!
+                        </p>
+                        {(() => {
+                          const nextScheduled = scheduledCheckins.length > 0 ? scheduledCheckins[0] : null;
+                          if (nextScheduled) {
+                            const scheduledDueDate = new Date(nextScheduled.dueDate);
+                            const now = new Date();
+                            const diffTime = scheduledDueDate.getTime() - now.getTime();
+                            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                            return (
+                              <div className="max-w-md mx-auto bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6 border-2 border-blue-200 shadow-lg">
+                                <h4 className="text-lg font-bold text-gray-900 mb-2">Next Check-in</h4>
+                                <p className="text-base font-semibold text-blue-900 mb-3">{nextScheduled.title}</p>
+                                <p className="text-sm text-blue-700 font-medium">
+                                  Scheduled for {formatDate(nextScheduled.dueDate)} ({diffDays === 1 ? 'tomorrow' : `in ${diffDays} days`})
+                                </p>
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()}
+                      </>
+                    ) : filter === 'scheduled' ? (
+                      <>
+                        <div className="text-6xl mb-4">📅</div>
+                        <h3 className="text-2xl lg:text-xl font-bold text-gray-900 mb-3">No scheduled check-ins</h3>
+                        <p className="text-gray-900 text-base lg:text-sm max-w-md mx-auto leading-relaxed px-4">
+                          You don't have any upcoming check-ins scheduled at this time.
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <div className="text-6xl mb-4">✅</div>
+                        <h3 className="text-2xl lg:text-xl font-bold text-gray-900 mb-3">No completed check-ins yet</h3>
+                        <p className="text-gray-900 text-base lg:text-sm max-w-md mx-auto leading-relaxed px-4">
+                          Complete your first check-in to see your results and progress here.
+                        </p>
+                      </>
+                    )}
                   </div>
                 )}
               </div>
             </div>
+              </>
+            )}
           </div>
         </div>
       </div>

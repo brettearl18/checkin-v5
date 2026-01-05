@@ -23,10 +23,26 @@ export async function GET(request: NextRequest) {
         .orderBy('submittedAt', 'desc')
         .get();
 
-      responses = responsesSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
+      responses = responsesSnapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          clientId: data.clientId,
+          formId: data.formId,
+          formTitle: data.formTitle,
+          submittedAt: data.submittedAt,
+          completedAt: data.completedAt,
+          score: data.score,
+          totalQuestions: data.totalQuestions,
+          answeredQuestions: data.answeredQuestions,
+          status: data.status,
+          responses: data.responses || [],
+          createdAt: data.createdAt,
+          updatedAt: data.updatedAt,
+          coachResponded: data.coachResponded || false,
+          coachRespondedAt: data.coachRespondedAt || null
+        };
+      });
     } catch (error) {
       console.log('No formResponses found for client, using empty array');
       responses = [];
@@ -39,10 +55,20 @@ export async function GET(request: NextRequest) {
         .where('clientId', '==', clientId)
         .get();
 
-      assignments = assignmentsSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
+      assignments = assignmentsSnapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          clientId: data.clientId,
+          formId: data.formId,
+          formTitle: data.formTitle,
+          dueDate: data.dueDate,
+          assignedAt: data.assignedAt,
+          recurringWeek: data.recurringWeek,
+          totalWeeks: data.totalWeeks,
+          isRecurring: data.isRecurring
+        };
+      });
     } catch (error) {
       console.log('No check_in_assignments found for client');
       assignments = [];
@@ -54,8 +80,8 @@ export async function GET(request: NextRequest) {
       assignmentMap.set(assignment.id, assignment);
     });
 
-    // Process responses to include check-in titles
-    const history = responses.map(response => {
+    // Process responses to include check-in titles and coach response status
+    const history = await Promise.all(responses.map(async (response) => {
       // Find the assignment by formId (since that's what we save in formResponses)
       const assignment = Array.from(assignmentMap.values()).find(a => a.formId === response.formId);
       
@@ -63,14 +89,36 @@ export async function GET(request: NextRequest) {
       let submittedDate = new Date();
       if (response.submittedAt) {
         if (response.submittedAt._seconds) {
-          // Firebase Timestamp
+          // Firebase Timestamp (legacy)
           submittedDate = new Date(response.submittedAt._seconds * 1000);
-        } else if (response.submittedAt.toDate) {
-          // Firestore Timestamp
+        } else if (response.submittedAt.toDate && typeof response.submittedAt.toDate === 'function') {
+          // Firestore Timestamp object
           submittedDate = response.submittedAt.toDate();
-        } else {
-          // Regular Date
+        } else if (response.submittedAt instanceof Date) {
+          // Already a Date object
+          submittedDate = response.submittedAt;
+        } else if (typeof response.submittedAt === 'string') {
+          // ISO string
           submittedDate = new Date(response.submittedAt);
+        } else {
+          // Try to parse as Date
+          submittedDate = new Date(response.submittedAt);
+        }
+      }
+
+      // Convert completedAt if present
+      let completedDate: Date | null = null;
+      if (response.completedAt) {
+        if (response.completedAt._seconds) {
+          completedDate = new Date(response.completedAt._seconds * 1000);
+        } else if (response.completedAt.toDate && typeof response.completedAt.toDate === 'function') {
+          completedDate = response.completedAt.toDate();
+        } else if (response.completedAt instanceof Date) {
+          completedDate = response.completedAt;
+        } else if (typeof response.completedAt === 'string') {
+          completedDate = new Date(response.completedAt);
+        } else {
+          completedDate = new Date(response.completedAt);
         }
       }
 
@@ -81,34 +129,119 @@ export async function GET(request: NextRequest) {
         scorePercentage = response.score;
       }
 
+      // Check if coach has responded (has feedback)
+      let coachResponded = false;
+      let coachRespondedAt: string | null = null;
+      try {
+        const feedbackSnapshot = await db.collection('coachFeedback')
+          .where('responseId', '==', response.id)
+          .limit(1)
+          .get();
+        
+        coachResponded = !feedbackSnapshot.empty || response.coachResponded || false;
+        
+        if (coachResponded && feedbackSnapshot.docs.length > 0) {
+          const feedbackData = feedbackSnapshot.docs[0].data();
+          if (feedbackData.createdAt) {
+            if (feedbackData.createdAt.toDate && typeof feedbackData.createdAt.toDate === 'function') {
+              coachRespondedAt = feedbackData.createdAt.toDate().toISOString();
+            } else if (feedbackData.createdAt._seconds) {
+              coachRespondedAt = new Date(feedbackData.createdAt._seconds * 1000).toISOString();
+            } else if (typeof feedbackData.createdAt === 'string') {
+              coachRespondedAt = feedbackData.createdAt;
+            }
+          }
+        } else if (response.coachRespondedAt) {
+          // Fallback to response.coachRespondedAt if available
+          if (response.coachRespondedAt.toDate && typeof response.coachRespondedAt.toDate === 'function') {
+            coachRespondedAt = response.coachRespondedAt.toDate().toISOString();
+          } else if (response.coachRespondedAt._seconds) {
+            coachRespondedAt = new Date(response.coachRespondedAt._seconds * 1000).toISOString();
+          } else if (typeof response.coachRespondedAt === 'string') {
+            coachRespondedAt = response.coachRespondedAt;
+          }
+        }
+      } catch (error) {
+        console.log('Error checking coach feedback:', error);
+        // Fallback to response data
+        coachResponded = response.coachResponded || false;
+      }
+
+      // Serialize nested responses array, ensuring all Timestamps are converted
+      const serializedResponses = (response.responses || []).map((resp: any) => {
+        const serialized: any = {
+          questionId: resp.questionId,
+          question: resp.question,
+          answer: resp.answer,
+          type: resp.type,
+          weight: resp.weight,
+          score: resp.score
+        };
+        
+        // Convert any Timestamp fields in responses if they exist
+        if (resp.submittedAt) {
+          try {
+            if (resp.submittedAt.toDate && typeof resp.submittedAt.toDate === 'function') {
+              serialized.submittedAt = resp.submittedAt.toDate().toISOString();
+            } else if (resp.submittedAt._seconds) {
+              serialized.submittedAt = new Date(resp.submittedAt._seconds * 1000).toISOString();
+            } else if (typeof resp.submittedAt === 'string') {
+              serialized.submittedAt = resp.submittedAt;
+            }
+          } catch (e) {
+            // Skip if conversion fails
+          }
+        }
+        
+        return serialized;
+      });
+
       return {
         id: response.id,
         checkInTitle: assignment?.formTitle || response.formTitle || 'Unknown Check-in',
         formTitle: response.formTitle || 'Unknown Form',
         submittedAt: submittedDate.toISOString(),
-        submittedDate: submittedDate,
+        completedAt: completedDate ? completedDate.toISOString() : null,
         score: scorePercentage,
         totalQuestions: response.totalQuestions || 0,
         answeredQuestions: response.answeredQuestions || 0,
         status: response.status || 'completed',
-        responses: response.responses || [],
+        responses: serializedResponses,
         assignmentId: assignment?.id || null,
-        recurringWeek: assignment?.recurringWeek || null,
-        totalWeeks: assignment?.totalWeeks || null
+        recurringWeek: assignment?.recurringWeek ?? null,
+        totalWeeks: assignment?.totalWeeks ?? null,
+        coachResponded: coachResponded,
+        coachRespondedAt: coachRespondedAt
       };
-    });
+    }));
 
-    return NextResponse.json({
-      success: true,
-      history
-    });
+    try {
+      return NextResponse.json({
+        success: true,
+        history
+      });
+    } catch (jsonError: any) {
+      console.error('Error serializing response:', jsonError);
+      // Return a safe response even if serialization fails
+      return NextResponse.json({
+        success: false,
+        message: 'Error serializing response data',
+        history: []
+      }, { status: 200 });
+    }
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error fetching client history:', error);
+    console.error('Error details:', {
+      message: error?.message,
+      stack: error?.stack,
+      name: error?.name
+    });
     return NextResponse.json({
       success: false,
       message: 'Failed to fetch client history',
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: error instanceof Error ? error.message : 'Unknown error',
+      history: []
     }, { status: 500 });
   }
 }

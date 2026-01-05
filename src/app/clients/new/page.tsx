@@ -259,6 +259,7 @@ export default function NewClientPage() {
                       <option value="pending">Pending</option>
                       <option value="active">Active</option>
                       <option value="inactive">Inactive</option>
+                      <option value="archived">Archived</option>
                     </select>
                   </div>
                 </div>

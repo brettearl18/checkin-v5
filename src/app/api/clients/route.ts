@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb, getAuthInstance } from '@/lib/firebase-server';
+import { autoCreateMeasurementSchedule } from '@/lib/auto-allocate-checkin';
+import { logSafeError, logInfo } from '@/lib/logger';
+import { validatePassword } from '@/lib/password-validation';
 import crypto from 'crypto';
 
 // Force dynamic rendering
@@ -10,20 +13,37 @@ function generateOnboardingToken(): string {
   return crypto.randomBytes(32).toString('hex');
 }
 
-// Send onboarding email (mock implementation for development)
-async function sendOnboardingEmail(email: string, onboardingToken: string, coachName: string) {
+// Send onboarding email using Mailgun
+async function sendOnboardingEmail(email: string, onboardingToken: string, coachName: string, clientName?: string, clientId?: string, coachId?: string) {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
   const onboardingUrl = `${baseUrl}/client-onboarding?token=${onboardingToken}&email=${encodeURIComponent(email)}`;
 
-  console.log('📧 ONBOARDING EMAIL SENT:');
-  console.log('To:', email);
-  console.log('From:', coachName);
-  console.log('Onboarding URL:', onboardingUrl);
-  console.log('---');
+  try {
+    const { sendEmail, getOnboardingEmailTemplate } = await import('@/lib/email-service');
+    const { subject, html } = getOnboardingEmailTemplate(
+      clientName || 'there',
+      onboardingUrl,
+      coachName
+    );
 
-  // In production, this would send a real email
-  // For now, we'll just log it so you can test the flow
-  return true;
+    await sendEmail({
+      to: email,
+      subject,
+      html,
+      emailType: 'onboarding',
+      metadata: {
+        clientId: clientId || '',
+        clientName: clientName || 'there',
+        coachId: coachId || '',
+      },
+    });
+
+    return true;
+  } catch (error) {
+    logSafeError('Error sending onboarding email', error);
+    // Don't fail the client creation if email fails
+    return false;
+  }
 }
 
 export async function GET(request: NextRequest) {
@@ -116,11 +136,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate password if provided
-    if (password && password.length < 6) {
-      return NextResponse.json({
-        success: false,
-        message: 'Password must be at least 6 characters long'
-      }, { status: 400 });
+    if (password) {
+      const passwordValidation = validatePassword(password);
+      if (!passwordValidation.valid) {
+        return NextResponse.json({
+          success: false,
+          message: passwordValidation.message || 'Password does not meet requirements'
+        }, { status: 400 });
+      }
     }
 
     // Check if client already exists by email
@@ -206,7 +229,7 @@ export async function POST(request: NextRequest) {
         };
 
       } catch (authError: any) {
-        console.error('Error creating Firebase Auth user:', authError);
+        logSafeError('Error creating Firebase Auth user', authError);
         return NextResponse.json({
           success: false,
           message: `Failed to create user account: ${authError.message}`
@@ -238,12 +261,102 @@ export async function POST(request: NextRequest) {
     // Save to Firestore
     await db.collection('clients').doc(clientId).set(client);
 
-    // If credentials were created, return them (for popup display)
+    // Auto-create scoring configuration with moderate defaults for new clients
+    try {
+      const { getDefaultThresholds } = await import('@/lib/scoring-utils');
+      const moderateThresholds = getDefaultThresholds('moderate');
+      
+      await db.collection('clientScoring').doc(clientId).set({
+        clientId,
+        scoringProfile: 'moderate',
+        thresholds: moderateThresholds,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      }, { merge: true });
+    } catch (scoringError) {
+      logSafeError('Error creating default scoring config', scoringError);
+      // Don't fail client creation if scoring config creation fails
+    }
+
+    // Note: Check-ins are now allocated manually by coaches after client signs up
+    // Auto-create measurement schedule only (check-ins allocated manually)
+    try {
+      if (coachId) {
+        // Only create measurement schedule if coach is assigned
+        await autoCreateMeasurementSchedule(clientId, coachId, new Date());
+      }
+      } catch (allocationError) {
+        logSafeError('Error auto-creating measurement schedule', allocationError);
+        // Don't fail client creation if allocation fails - log it and continue
+      }
+
+    // If credentials were created, send credentials email and return them (for popup display)
     // Otherwise, send onboarding email with token
     if (userCredentials) {
+      // Send credentials email
+      try {
+        const { sendEmail, getCredentialsEmailTemplate } = await import('@/lib/email-service');
+        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+        const loginUrl = `${baseUrl}/login`;
+        const { subject, html } = getCredentialsEmailTemplate(
+          `${firstName} ${lastName}`,
+          email,
+          userCredentials.password,
+          loginUrl,
+          coachName
+        );
+
+        await sendEmail({
+          to: email,
+          subject,
+          html,
+          emailType: 'credentials',
+          metadata: {
+            clientId: clientId,
+            clientName: `${firstName} ${lastName}`,
+            coachId: coachId,
+          },
+        });
+      } catch (emailError) {
+        logSafeError('Error sending credentials email', emailError);
+        // Don't fail the client creation if email fails
+      }
+
+      // Send notification to admin/coach about new client signup
+      try {
+        const { sendEmail } = await import('@/lib/email-service');
+        const { getClientSignupNotificationTemplate } = await import('@/lib/email-templates');
+        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://checkinv5.web.app';
+        const { subject, html } = getClientSignupNotificationTemplate(
+          `${firstName} ${lastName}`,
+          email,
+          clientId,
+          coachName
+        );
+
+        // Send to admin/coach notification emails
+        const notificationEmails = ['silvi@vanahealth.com.au', 'brett.earl@gmail.com'];
+        await sendEmail({
+          to: notificationEmails,
+          subject,
+          html,
+          emailType: 'admin-notification',
+          metadata: {
+            notificationType: 'client-signup',
+            clientId: clientId,
+            clientName: `${firstName} ${lastName}`,
+            clientEmail: email,
+            coachId: coachId,
+          },
+        });
+      } catch (notificationError) {
+        logSafeError('Error sending client signup notification', notificationError);
+        // Don't fail the client creation if notification fails
+      }
+
       return NextResponse.json({
         success: true,
-        message: 'Client created successfully with login credentials.',
+        message: 'Client created successfully with login credentials. Email sent.',
         clientId: clientId,
         client: client,
         credentials: userCredentials
@@ -258,7 +371,39 @@ export async function POST(request: NextRequest) {
         tokenExpiry
       });
 
-      await sendOnboardingEmail(email, onboardingToken, coachName);
+      await sendOnboardingEmail(email, onboardingToken, coachName, `${firstName} ${lastName}`, clientId, coachId);
+
+      // Send notification to admin/coach about new client signup
+      try {
+        const { sendEmail } = await import('@/lib/email-service');
+        const { getClientSignupNotificationTemplate } = await import('@/lib/email-templates');
+        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://checkinv5.web.app';
+        const { subject, html } = getClientSignupNotificationTemplate(
+          `${firstName} ${lastName}`,
+          email,
+          clientId,
+          coachName
+        );
+
+        // Send to admin/coach notification emails
+        const notificationEmails = ['silvi@vanahealth.com.au', 'brett.earl@gmail.com'];
+        await sendEmail({
+          to: notificationEmails,
+          subject,
+          html,
+          emailType: 'admin-notification',
+          metadata: {
+            notificationType: 'client-signup',
+            clientId: clientId,
+            clientName: `${firstName} ${lastName}`,
+            clientEmail: email,
+            coachId: coachId,
+          },
+        });
+      } catch (notificationError) {
+        logSafeError('Error sending client signup notification', notificationError);
+        // Don't fail the client creation if notification fails
+      }
 
       return NextResponse.json({
         success: true,

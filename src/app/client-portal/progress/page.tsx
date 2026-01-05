@@ -7,6 +7,7 @@ import { collection, getDocs, query, where, orderBy } from 'firebase/firestore';
 import { db } from '@/lib/firebase-client';
 import Link from 'next/link';
 import ClientNavigation from '@/components/ClientNavigation';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 interface QuestionResponse {
   questionId: string;
@@ -36,9 +37,10 @@ interface QuestionProgress {
     week: number;
     date: string;
     score: number;
-    status: 'red' | 'orange' | 'green';
+    status: 'red' | 'orange' | 'green' | 'grey';
     answer: any;
     type: string;
+    weight?: number;
   }[];
 }
 
@@ -110,9 +112,50 @@ export default function ClientProgressPage() {
         throw new Error(data.message || 'Failed to fetch progress data');
       }
 
-      const responsesData: FormResponse[] = data.history || [];
+      let responsesData: FormResponse[] = data.history || [];
       
-      console.log('Fetched responses:', responsesData.length);
+      // Deduplicate responses by assignmentId - keep only the most recent one for each assignment
+      // This prevents showing multiple entries when user submits the same check-in multiple times
+      const deduplicatedMap = new Map<string, FormResponse>();
+      
+      responsesData.forEach(response => {
+        const assignmentId = (response as any).assignmentId;
+        if (assignmentId) {
+          const existing = deduplicatedMap.get(assignmentId);
+          if (!existing) {
+            deduplicatedMap.set(assignmentId, response);
+          } else {
+            // Keep the one with the most recent submittedAt
+            const existingDate = new Date(existing.submittedAt);
+            const currentDate = new Date(response.submittedAt);
+            if (currentDate > existingDate) {
+              deduplicatedMap.set(assignmentId, response);
+            }
+          }
+        } else {
+          // If no assignmentId, deduplicate by formId + date (same form submitted on same day)
+          const responseDate = new Date(response.submittedAt);
+          const dateKey = responseDate.toISOString().split('T')[0]; // YYYY-MM-DD
+          const dedupeKey = `${response.formId || 'unknown'}-${dateKey}`;
+          
+          const existing = deduplicatedMap.get(dedupeKey);
+          if (!existing) {
+            deduplicatedMap.set(dedupeKey, response);
+          } else {
+            // Keep the most recent one
+            const existingDate = new Date(existing.submittedAt);
+            if (responseDate > existingDate) {
+              deduplicatedMap.set(dedupeKey, response);
+            }
+          }
+        }
+      });
+      
+      responsesData = Array.from(deduplicatedMap.values());
+      
+      console.log('Fetched responses (after deduplication):', responsesData.length);
+      console.log('Sample response structure:', responsesData[0]);
+      console.log('Sample response.responses:', responsesData[0]?.responses?.[0]);
       setResponses(responsesData);
 
       // Process question-level progress
@@ -264,71 +307,120 @@ export default function ClientProgressPage() {
       return;
     }
 
-    // Get all unique questions
-    const questionMap = new Map<string, { questionId: string; questionText: string }>();
+    // Get all unique questions - use questionText as key if questionId is missing
+    const questionMap = new Map<string, { questionId: string; questionText: string; allKeys?: string[] }>();
     
     sortedResponses.forEach(response => {
       if (response.responses && Array.isArray(response.responses)) {
         response.responses.forEach((qResp: QuestionResponse) => {
-          if (qResp.questionId && !questionMap.has(qResp.questionId)) {
-            questionMap.set(qResp.questionId, {
-              questionId: qResp.questionId,
-              questionText: qResp.question || `Question ${qResp.questionId.slice(0, 8)}`
+          // Use questionId if available, otherwise use questionText as identifier
+          const questionId = qResp.questionId || '';
+          const questionText = qResp.questionText || qResp.question || '';
+          const questionKey = questionId || questionText || '';
+          
+          if (questionKey && !questionMap.has(questionKey)) {
+            // Store all possible keys for matching
+            const allKeys = [questionId, questionText, qResp.question].filter(Boolean);
+            questionMap.set(questionKey, {
+              questionId: questionId || questionKey,
+              questionText: questionText || `Question ${questionKey.slice(0, 8)}`,
+              allKeys: allKeys
             });
           }
         });
       }
     });
 
+    console.log('Question map:', Array.from(questionMap.values()));
+    console.log('Sample response:', sortedResponses[0]?.responses?.[0]);
+    console.log('Total responses to process:', sortedResponses.length);
+
     // Create progress data for each question
-    const progress: QuestionProgress[] = Array.from(questionMap.values()).map(question => {
-      const weeks = sortedResponses.map((response, index) => {
-        // Find this question's response in this check-in
-        const qResponse = response.responses?.find(
-          (r: QuestionResponse) => r.questionId === question.questionId
-        );
+    // Include ALL questions (including text/textarea) - they will show grey if unscored
+    const progress: QuestionProgress[] = Array.from(questionMap.values())
+      .map(question => {
+        const weeks = sortedResponses.map((response, index) => {
+          // Find this question's response in this check-in
+          // Try multiple matching strategies - match by any of the stored keys
+          const qResponse = response.responses?.find(
+            (r: QuestionResponse) => {
+              const rQuestionId = r.questionId || '';
+              const rQuestionText = r.questionText || r.question || '';
+              
+              // Match by questionId
+              if (question.questionId && rQuestionId && rQuestionId === question.questionId) {
+                return true;
+              }
+              
+              // Match by questionText
+              if (question.questionText && rQuestionText && rQuestionText === question.questionText) {
+                return true;
+              }
+              
+              // Match by any of the stored keys
+              if (question.allKeys && question.allKeys.some(key => 
+                (key && rQuestionId === key) || (key && rQuestionText === key)
+              )) {
+                return true;
+              }
+              
+              return false;
+            }
+          );
 
-        if (!qResponse) {
-          return null;
-        }
+          if (!qResponse) {
+            return null;
+          }
 
-        // Get score (0-10 scale typically)
-        const score = qResponse.score || 0;
-        
-        // Determine status based on score
-        // Green: 7-10, Orange: 4-6, Red: 0-3
-        let status: 'red' | 'orange' | 'green';
-        if (score >= 7) {
-          status = 'green';
-        } else if (score >= 4) {
-          status = 'orange';
-        } else {
-          status = 'red';
-        }
+          const questionType = qResponse.type || 'text';
+          
+          // Get score (0-10 scale typically) - check multiple possible fields
+          const score = qResponse.score !== undefined ? qResponse.score : 
+                       (qResponse.weightedScore !== undefined ? qResponse.weightedScore / (qResponse.weight || 1) : 0);
+          
+          // Get weight to determine if question is scored
+          const weight = qResponse.weight !== undefined ? qResponse.weight : 5; // Default weight if not set
+          
+          // Determine if question is unscored (should show grey)
+          // Unscored if: weight === 0, or type is text/textarea
+          const isUnscored = weight === 0 || questionType === 'text' || questionType === 'textarea';
+          
+          // Determine status based on score and whether question is scored
+          let status: 'red' | 'orange' | 'green' | 'grey';
+          if (isUnscored) {
+            status = 'grey';
+          } else if (score >= 7) {
+            status = 'green';
+          } else if (score >= 4) {
+            status = 'orange';
+          } else {
+            status = 'red';
+          }
 
-        const responseDate = new Date(response.submittedAt);
-        
+          const responseDate = new Date(response.submittedAt);
+          
+          return {
+            week: index + 1,
+            date: responseDate.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+            score: score,
+            status: status,
+            answer: qResponse.answer,
+            type: questionType,
+            weight: weight
+          };
+        }).filter(w => w !== null) as { week: number; date: string; score: number; status: 'red' | 'orange' | 'green' | 'grey'; answer: any; type: string; weight?: number }[];
+
         return {
-          week: index + 1,
-          date: responseDate.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
-          score: score,
-          status: status,
-          answer: qResponse.answer,
-          type: qResponse.type || 'text'
+          questionId: question.questionId,
+          questionText: question.questionText,
+          weeks: weeks
         };
-      }).filter(w => w !== null) as { week: number; date: string; score: number; status: 'red' | 'orange' | 'green' }[];
-
-      return {
-        questionId: question.questionId,
-        questionText: question.questionText,
-        weeks: weeks
-      };
-    });
+      });
 
     setQuestionProgress(progress);
   };
 
-  const getStatusColor = (status: 'red' | 'orange' | 'green') => {
+  const getStatusColor = (status: 'red' | 'orange' | 'green' | 'grey') => {
     switch (status) {
       case 'green':
         return 'bg-green-500';
@@ -336,10 +428,14 @@ export default function ClientProgressPage() {
         return 'bg-orange-500';
       case 'red':
         return 'bg-red-500';
+      case 'grey':
+        return 'bg-gray-400';
+      default:
+        return 'bg-gray-400';
     }
   };
 
-  const getStatusBorder = (status: 'red' | 'orange' | 'green') => {
+  const getStatusBorder = (status: 'red' | 'orange' | 'green' | 'grey') => {
     switch (status) {
       case 'green':
         return 'border-green-600';
@@ -347,6 +443,10 @@ export default function ClientProgressPage() {
         return 'border-orange-600';
       case 'red':
         return 'border-red-600';
+      case 'grey':
+        return 'border-gray-500';
+      default:
+        return 'border-gray-500';
     }
   };
 
@@ -502,9 +602,10 @@ export default function ClientProgressPage() {
       waist: 'Waist (cm)',
       chest: 'Chest (cm)',
       hips: 'Hips (cm)',
-      thigh: 'Thigh (cm)',
-      arm: 'Arm (cm)',
-      neck: 'Neck (cm)'
+      leftThigh: 'Left Thigh (cm)',
+      rightThigh: 'Right Thigh (cm)',
+      leftArm: 'Left Arm (cm)',
+      rightArm: 'Right Arm (cm)'
     };
     return labels[key] || key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, ' $1');
   };
@@ -536,131 +637,137 @@ export default function ClientProgressPage() {
 
   return (
     <AuthenticatedOnly>
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex">
+      <div className="min-h-screen bg-white flex">
         <ClientNavigation />
         
-        <div className="flex-1 ml-8 p-6">
-          {/* Header */}
-          <div className="mb-6">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h1 className="text-4xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">Your Progress</h1>
-                <p className="text-gray-600 mt-2 text-lg">Track your health and wellness journey</p>
-              </div>
-              <Link
-                href="/client-portal"
-                className="text-gray-600 hover:text-gray-900 font-medium"
-              >
-                ← Back to Dashboard
-              </Link>
-            </div>
-
-            {/* Time Range Filter */}
-            <div className="flex space-x-2">
-              {['7d', '30d', '90d', 'all'].map((range) => (
-                <button
-                  key={range}
-                  onClick={() => setTimeRange(range)}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    timeRange === range
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
-                  }`}
+        <div className="flex-1 px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
+          <div className="max-w-7xl mx-auto w-full">
+            {/* Header */}
+            <div className="mb-6">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">Your Progress</h1>
+                  <p className="text-gray-600 mt-1 text-sm">Track your health and wellness journey</p>
+                </div>
+                <Link
+                  href="/client-portal"
+                  className="text-sm text-gray-600 hover:text-gray-900 font-medium transition-colors"
                 >
-                  {range === '7d' ? '7 Days' : range === '30d' ? '30 Days' : range === '90d' ? '90 Days' : 'All Time'}
-                </button>
-              ))}
-            </div>
-          </div>
+                  ← Back to Dashboard
+                </Link>
+              </div>
 
-          {/* Stats Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-6">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                    <span className="text-blue-600 text-lg">📊</span>
-                  </div>
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-500">Average Score</p>
-                  <p className="text-2xl font-bold text-gray-900">{stats.averageScore}%</p>
-                </div>
+              {/* Time Range Filter */}
+              <div className="flex flex-wrap gap-2">
+                {['7d', '30d', '90d', 'all'].map((range) => (
+                  <button
+                    key={range}
+                    onClick={() => setTimeRange(range)}
+                    className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                      timeRange === range
+                        ? 'text-white shadow-md'
+                        : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
+                    }`}
+                    style={timeRange === range ? { backgroundColor: '#daa450' } : {}}
+                  >
+                    {range === '7d' ? '7 Days' : range === '30d' ? '30 Days' : range === '90d' ? '90 Days' : 'All Time'}
+                  </button>
+                ))}
               </div>
             </div>
 
-            <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-6">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                    <span className="text-green-600 text-lg">🏆</span>
-                  </div>
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-500">Best Score</p>
-                  <p className="text-2xl font-bold text-gray-900">{stats.bestScore}%</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-6">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                    <span className="text-purple-600 text-lg">📈</span>
-                  </div>
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-500">Improvement</p>
-                  <p className={`text-2xl font-bold ${stats.improvement >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {stats.improvement >= 0 ? '+' : ''}{stats.improvement}%
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-6">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
-                    <span className="text-orange-600 text-lg">🔥</span>
-                  </div>
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-500">Current Streak</p>
-                  <p className="text-2xl font-bold text-gray-900">{stats.currentStreak} days</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* Question Progress Grid */}
-            {questionProgress.length > 0 ? (
-              <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                <div className="px-4 py-2.5 bg-gradient-to-r from-gray-50 to-white border-b border-gray-100">
-                  <h2 className="text-base font-bold text-gray-900">Question Progress Over Time</h2>
-                  <p className="text-[10px] text-gray-500 mt-0.5">Track how each question improves week by week</p>
-                </div>
-                
-                {/* Legend */}
-                <div className="flex items-center gap-3 px-4 py-2 bg-gray-50/50 border-b border-gray-100">
-                  <div className="flex items-center gap-1">
-                    <div className="w-2.5 h-2.5 rounded-full bg-green-500"></div>
-                    <span className="text-[10px] text-gray-600 font-medium">Good (7-10)</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="w-2.5 h-2.5 rounded-full bg-orange-500"></div>
-                    <span className="text-[10px] text-gray-600 font-medium">Moderate (4-6)</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="w-2.5 h-2.5 rounded-full bg-red-500"></div>
-                    <span className="text-[10px] text-gray-600 font-medium">Needs Attention (0-3)</span>
-                      </div>
+            {/* Stats Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-2 md:gap-4 mb-4 md:mb-8">
+              <div className="bg-white rounded-xl md:rounded-2xl shadow-sm border border-gray-100 p-3 md:p-6">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <div className="w-8 h-8 md:w-12 md:h-12 rounded-lg md:rounded-xl flex items-center justify-center" style={{ backgroundColor: '#fef9e7' }}>
+                      <span className="text-base md:text-xl">📊</span>
                     </div>
+                  </div>
+                  <div className="ml-2 md:ml-4 flex-1 min-w-0">
+                    <p className="text-[10px] md:text-xs font-medium text-gray-500 truncate">Average Score</p>
+                    <p className="text-lg md:text-2xl font-bold text-gray-900 mt-0.5 md:mt-1">{stats.averageScore}%</p>
+                  </div>
+                </div>
+              </div>
 
-                {/* Progress Grid */}
-                <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
+              <div className="bg-white rounded-xl md:rounded-2xl shadow-sm border border-gray-100 p-3 md:p-6">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <div className="w-8 h-8 md:w-12 md:h-12 rounded-lg md:rounded-xl flex items-center justify-center" style={{ backgroundColor: '#fef9e7' }}>
+                      <span className="text-base md:text-xl">🏆</span>
+                    </div>
+                  </div>
+                  <div className="ml-2 md:ml-4 flex-1 min-w-0">
+                    <p className="text-[10px] md:text-xs font-medium text-gray-500 truncate">Best Score</p>
+                    <p className="text-lg md:text-2xl font-bold text-gray-900 mt-0.5 md:mt-1">{stats.bestScore}%</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-xl md:rounded-2xl shadow-sm border border-gray-100 p-3 md:p-6">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <div className="w-8 h-8 md:w-12 md:h-12 rounded-lg md:rounded-xl flex items-center justify-center" style={{ backgroundColor: '#fef9e7' }}>
+                      <span className="text-base md:text-xl">📈</span>
+                    </div>
+                  </div>
+                  <div className="ml-2 md:ml-4 flex-1 min-w-0">
+                    <p className="text-[10px] md:text-xs font-medium text-gray-500 truncate">Improvement</p>
+                    <p className={`text-lg md:text-2xl font-bold mt-0.5 md:mt-1 ${stats.improvement >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {stats.improvement >= 0 ? '+' : ''}{stats.improvement}%
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-xl md:rounded-2xl shadow-sm border border-gray-100 p-3 md:p-6">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <div className="w-8 h-8 md:w-12 md:h-12 rounded-lg md:rounded-xl flex items-center justify-center" style={{ backgroundColor: '#fef9e7' }}>
+                      <span className="text-base md:text-xl">🔥</span>
+                    </div>
+                  </div>
+                  <div className="ml-2 md:ml-4 flex-1 min-w-0">
+                    <p className="text-[10px] md:text-xs font-medium text-gray-500 truncate">Current Streak</p>
+                    <p className="text-lg md:text-2xl font-bold text-gray-900 mt-0.5 md:mt-1">{stats.currentStreak} days</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Question Progress Grid */}
+              {questionProgress.length > 0 ? (
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                  <div className="px-3 md:px-6 py-3 md:py-4 border-b border-gray-100" style={{ backgroundColor: '#fef9e7' }}>
+                    <h2 className="text-base md:text-lg font-bold text-gray-900">Question Progress Over Time</h2>
+                    <p className="text-xs md:text-sm text-gray-600 mt-0.5 md:mt-1">Track how each question improves week by week</p>
+                  </div>
+                
+                  {/* Legend */}
+                  <div className="flex items-center gap-2 md:gap-4 px-3 md:px-6 py-2 md:py-3 bg-gray-50 border-b border-gray-100 flex-wrap">
+                    <div className="flex items-center gap-1 md:gap-2">
+                      <div className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-full bg-green-500"></div>
+                      <span className="text-[10px] md:text-xs text-gray-700 font-medium">Good (7-10)</span>
+                    </div>
+                    <div className="flex items-center gap-1 md:gap-2">
+                      <div className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-full bg-orange-500"></div>
+                      <span className="text-[10px] md:text-xs text-gray-700 font-medium">Moderate (4-6)</span>
+                    </div>
+                    <div className="flex items-center gap-1 md:gap-2">
+                      <div className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-full bg-red-500"></div>
+                      <span className="text-[10px] md:text-xs text-gray-700 font-medium">Needs Attention (0-3)</span>
+                    </div>
+                    <div className="flex items-center gap-1 md:gap-2">
+                      <div className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-full bg-gray-400 border border-gray-500"></div>
+                      <span className="text-[10px] md:text-xs text-gray-700 font-medium">Not Scored</span>
+                    </div>
+                  </div>
+
+                {/* Desktop: Table Layout */}
+                <div className="hidden md:block overflow-x-auto max-h-[500px] overflow-y-auto">
                   <table className="w-full">
                     <thead className="sticky top-0 bg-gray-50/95 backdrop-blur-sm z-10">
                       <tr className="bg-gray-50/30">
@@ -700,7 +807,9 @@ export default function ClientProgressPage() {
                             >
                               <div
                                 className={`w-6 h-6 rounded-full ${getStatusColor(week.status)} ${getStatusBorder(week.status)} flex items-center justify-center transition-all hover:scale-125 cursor-pointer shadow-sm mx-auto`}
-                                title={`Week ${week.week}: Score ${week.score}/10 - ${week.date}`}
+                                title={week.status === 'grey' 
+                                  ? `Week ${week.week}: Not Scored - ${week.date}` 
+                                  : `Week ${week.week}: Score ${week.score}/10 - ${week.date}`}
                                 onClick={() => setSelectedResponse({
                                   question: question.questionText,
                                   answer: week.answer,
@@ -710,7 +819,6 @@ export default function ClientProgressPage() {
                                   type: week.type
                                 })}
                               >
-                                <span className="text-white text-[9px] font-bold">{week.score}</span>
                               </div>
                             </td>
                           ))}
@@ -725,227 +833,208 @@ export default function ClientProgressPage() {
                     </tbody>
                   </table>
                 </div>
-              </div>
-            ) : (
-              <div className="bg-white rounded-lg shadow p-6">
-                <h2 className="text-lg font-medium text-gray-900 mb-4">Question Progress</h2>
-                <div className="text-center py-12 text-gray-500">
-                  <p className="text-sm">No question-level data available yet.</p>
-                  <p className="text-xs mt-1 text-gray-400">Complete more check-ins to see your progress!</p>
-                </div>
-              </div>
-            )}
 
-            {/* Measurements Graph */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-lg font-medium text-gray-900 mb-4">Measurements Over Time</h2>
-              
-              {/* Measurement Toggles */}
-              {getAvailableMeasurements().length > 0 && (
-                <div className="mb-4 flex flex-wrap gap-2">
-                  {getAvailableMeasurements().map((measurement, index) => (
-                    <button
-                      key={measurement}
-                      onClick={() => toggleMeasurement(measurement)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                        selectedMeasurements.has(measurement)
-                          ? `${getMeasurementColor(index)} text-white`
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
+                {/* Mobile: Compact Card Layout */}
+                <div className="block md:hidden space-y-2 px-3 py-2 max-h-[500px] overflow-y-auto">
+                  {questionProgress.map((question) => (
+                    <div 
+                      key={question.questionId}
+                      className="bg-white rounded-lg border border-gray-200 p-2.5"
                     >
-                      {getMeasurementLabel(measurement)}
-                    </button>
+                      <h4 className="text-xs font-semibold text-gray-900 mb-2 line-clamp-2 leading-tight">
+                        {question.questionText}
+                      </h4>
+                      <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                        {question.weeks.map((week, wIndex) => (
+                          <div 
+                            key={wIndex}
+                            className="flex flex-col items-center gap-0.5 flex-shrink-0"
+                          >
+                            <div
+                              className={`w-5 h-5 rounded-full ${getStatusColor(week.status)} ${getStatusBorder(week.status)} flex items-center justify-center transition-all active:scale-110 cursor-pointer shadow-sm`}
+                              title={week.status === 'grey' 
+                                ? `Week ${week.week}: Not Scored - ${week.date}` 
+                                : `Week ${week.week}: Score ${week.score}/10 - ${week.date}`}
+                              onClick={() => setSelectedResponse({
+                                question: question.questionText,
+                                answer: week.answer,
+                                score: week.score,
+                                date: week.date,
+                                week: week.week,
+                                type: week.type
+                              })}
+                            >
+                            </div>
+                            <span className="text-[8px] text-gray-500 font-medium">W{week.week}</span>
+                          </div>
+                        ))}
+                        {/* Fill empty weeks if needed */}
+                        {Array.from({ length: Math.max(0, (questionProgress[0]?.weeks.length || 0) - question.weeks.length) }).map((_, emptyIndex) => (
+                          <div key={`empty-${emptyIndex}`} className="flex flex-col items-center gap-0.5 flex-shrink-0">
+                            <div className="w-5 h-5 rounded-full bg-gray-100 border border-gray-200"></div>
+                            <span className="text-[8px] text-gray-400">-</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   ))}
                 </div>
+              </div>
+              ) : (
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                  <h2 className="text-lg font-bold text-gray-900 mb-4">Question Progress</h2>
+                  <div className="text-center py-12 text-gray-500">
+                    <p className="text-sm">No question-level data available yet.</p>
+                    <p className="text-xs mt-1 text-gray-400">Complete more check-ins to see your progress!</p>
+                  </div>
+                </div>
               )}
 
-              {/* Graph */}
-              {measurements.length > 0 && selectedMeasurements.size > 0 ? (
-                <div className="relative">
-                  <svg className="w-full h-64" viewBox="0 0 800 256" preserveAspectRatio="none">
-                    {/* Y-axis grid lines */}
-                    {[0, 1, 2, 3, 4].map((i) => {
-                      const y = (i * 64);
-                      return (
-                        <line
-                          key={i}
-                          x1="40"
-                          y1={y}
-                          x2="800"
-                          y2={y}
-                          stroke="#e5e7eb"
-                          strokeWidth="1"
-                        />
-                      );
-                    })}
-                    
-                    {/* Calculate max value for scaling */}
-                    {(() => {
-                      const maxValue = Math.max(
-                        ...measurements.map(m => {
-                          let max = 0;
-                          selectedMeasurements.forEach(key => {
-                            const value = key === 'bodyWeight' 
-                              ? (m.bodyWeight || 0)
-                              : (m.measurements?.[key] || 0);
-                            max = Math.max(max, value);
-                          });
-                          return max;
-                        })
-                      );
-                      
-                      const minValue = Math.min(
-                        ...measurements.map(m => {
-                          let min = Infinity;
-                          selectedMeasurements.forEach(key => {
-                            const value = key === 'bodyWeight' 
-                              ? (m.bodyWeight || 0)
-                              : (m.measurements?.[key] || 0);
-                            if (value > 0) min = Math.min(min, value);
-                          });
-                          return min === Infinity ? 0 : min;
-                        })
-                      );
-                      
-                      const range = maxValue - minValue || 1;
-                      const padding = range * 0.1; // 10% padding
-                      const scaleMin = Math.max(0, minValue - padding);
-                      const scaleMax = maxValue + padding;
-                      const scaleRange = scaleMax - scaleMin;
-                      
-                      // Draw lines for each selected measurement
-                      return Array.from(selectedMeasurements).map((key, keyIndex) => {
-                        const colorMap = [
-                          '#3b82f6', // blue
-                          '#10b981', // green
-                          '#8b5cf6', // purple
-                          '#f97316', // orange
-                          '#ec4899', // pink
-                          '#6366f1', // indigo
-                          '#ef4444', // red
-                          '#eab308'  // yellow
-                        ];
-                        const color = colorMap[keyIndex % colorMap.length];
-                        
-                        const points = measurements
-                          .map((m, index) => {
-                            const value = key === 'bodyWeight' 
-                              ? (m.bodyWeight || 0)
-                              : (m.measurements?.[key] || 0);
+              {/* Measurements Graph */}
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-100" style={{ backgroundColor: '#fef9e7' }}>
+                  <h2 className="text-lg font-bold text-gray-900">Measurements Over Time</h2>
+                  <p className="text-sm text-gray-600 mt-1">Track your body measurements over time</p>
+                </div>
+                <div className="p-6">
+                  {/* Measurement Toggles */}
+                  {getAvailableMeasurements().length > 0 && (
+                    <div className="mb-6 flex flex-wrap gap-2">
+                      {getAvailableMeasurements().map((measurement, index) => (
+                        <button
+                          key={measurement}
+                          onClick={() => toggleMeasurement(measurement)}
+                          className={`px-3 py-2 rounded-xl text-xs font-medium transition-all ${
+                            selectedMeasurements.has(measurement)
+                              ? 'text-white shadow-sm'
+                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200'
+                          }`}
+                          style={selectedMeasurements.has(measurement) ? { backgroundColor: '#daa450' } : {}}
+                        >
+                          {getMeasurementLabel(measurement)}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Graph */}
+                  {measurements.length > 0 && selectedMeasurements.size > 0 ? (
+                    <div className="h-80 w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart
+                          data={measurements.map(m => {
+                            const date = m.date instanceof Date ? m.date : new Date(m.date);
+                            const dataPoint: any = {
+                              date: date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' }),
+                              fullDate: date.toISOString(),
+                              isBaseline: m.isBaseline
+                            };
                             
-                            if (value === 0 || value === null || value === undefined) return null;
+                            // Add each selected measurement to the data point
+                            selectedMeasurements.forEach(key => {
+                              const value = key === 'bodyWeight' 
+                                ? (m.bodyWeight || null)
+                                : (m.measurements?.[key] || null);
+                              if (value !== null && value !== undefined && value > 0) {
+                                dataPoint[getMeasurementLabel(key)] = Number(value.toFixed(1));
+                              }
+                            });
                             
-                            const x = 40 + (index / (measurements.length - 1 || 1)) * 760;
-                            const y = 240 - ((value - scaleMin) / scaleRange) * 200;
+                            return dataPoint;
+                          })}
+                          margin={{ top: 10, right: 30, left: 0, bottom: 60 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                          <XAxis 
+                            dataKey="date" 
+                            stroke="#6b7280"
+                            fontSize={11}
+                            tick={{ fill: '#6b7280' }}
+                            angle={-45}
+                            textAnchor="end"
+                            height={60}
+                            label={{ 
+                              value: 'Date', 
+                              position: 'insideBottom', 
+                              offset: -5,
+                              style: { textAnchor: 'middle', fill: '#6b7280' }
+                            }}
+                          />
+                          <YAxis 
+                            stroke="#6b7280"
+                            fontSize={11}
+                            tick={{ fill: '#6b7280' }}
+                          />
+                          <Tooltip 
+                            contentStyle={{ 
+                              backgroundColor: 'white', 
+                              border: '1px solid #e5e7eb', 
+                              borderRadius: '8px',
+                              fontSize: '12px'
+                            }}
+                            formatter={(value: number, name: string) => {
+                              // Extract unit from the label (e.g., "Body Weight (kg)" -> "kg")
+                              const unitMatch = name.match(/\((\w+)\)/);
+                              const unit = unitMatch ? unitMatch[1] : '';
+                              return [`${value}${unit ? ' ' + unit : ''}`, name.replace(/\s*\([^)]*\)\s*/g, '')];
+                            }}
+                            labelFormatter={(label, payload) => {
+                              if (payload && payload[0]?.payload?.fullDate) {
+                                const date = new Date(payload[0].payload.fullDate);
+                                const baseline = payload[0].payload.isBaseline ? ' (Baseline)' : '';
+                                return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) + baseline;
+                              }
+                              return label;
+                            }}
+                          />
+                          <Legend 
+                            wrapperStyle={{ paddingTop: '20px' }}
+                            iconType="line"
+                            formatter={(value) => value}
+                          />
+                          {Array.from(selectedMeasurements).map((key, keyIndex) => {
+                            const colorMap = [
+                              '#3b82f6', // blue
+                              '#10b981', // green
+                              '#8b5cf6', // purple
+                              '#f97316', // orange
+                              '#ec4899', // pink
+                              '#6366f1', // indigo
+                              '#ef4444', // red
+                              '#eab308'  // yellow
+                            ];
+                            const color = colorMap[keyIndex % colorMap.length];
+                            const label = getMeasurementLabel(key);
                             
-                            return { x, y, value, date: m.date, isBaseline: m.isBaseline };
-                          })
-                          .filter(p => p !== null) as { x: number; y: number; value: number; date: Date; isBaseline: boolean }[];
-                        
-                        if (points.length === 0) return null;
-                        
-                        // Draw line
-                        const pathData = points.map((p, i) => 
-                          `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`
-                        ).join(' ');
-                        
-                        return (
-                          <g key={key}>
-                            {/* Line */}
-                            <path
-                              d={pathData}
-                              fill="none"
-                              stroke={color}
-                              strokeWidth="3"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                            {/* Points */}
-                            {points.map((p, i) => (
-                              <circle
-                                key={i}
-                                cx={p.x}
-                                cy={p.y}
-                                r="4"
-                                fill={color}
-                                stroke="white"
-                                strokeWidth="2"
-                                className="cursor-pointer hover:r-6 transition-all"
+                            return (
+                              <Line
+                                key={key}
+                                type="monotone"
+                                dataKey={label}
+                                stroke={color}
+                                strokeWidth={2}
+                                dot={{ r: 4, fill: color, stroke: 'white', strokeWidth: 2 }}
+                                activeDot={{ r: 6 }}
+                                connectNulls={false}
                               />
-                            ))}
-                          </g>
-                        );
-                      });
-                    })()}
-                  </svg>
-                  
-                  {/* X-axis date labels */}
-                  <div className="flex justify-between mt-2 px-10">
-                    {measurements.map((measurement, index) => {
-                      const date = new Date(measurement.date);
-                      return (
-                        <div key={index} className="flex flex-col items-center text-[9px] text-gray-500">
-                          <span>{date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' })}</span>
-                          {measurement.isBaseline && (
-                            <span className="text-[8px] text-blue-600 font-semibold mt-0.5">Baseline</span>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                  
-                  {/* Y-axis labels */}
-                  <div className="absolute left-0 top-0 h-64 flex flex-col justify-between text-[10px] text-gray-500 pr-2">
-                    {(() => {
-                      const maxValue = Math.max(
-                        ...measurements.map(m => {
-                          let max = 0;
-                          selectedMeasurements.forEach(key => {
-                            const value = key === 'bodyWeight' 
-                              ? (m.bodyWeight || 0)
-                              : (m.measurements?.[key] || 0);
-                            max = Math.max(max, value);
-                          });
-                          return max;
-                        })
-                      );
-                      
-                      const minValue = Math.min(
-                        ...measurements.map(m => {
-                          let min = Infinity;
-                          selectedMeasurements.forEach(key => {
-                            const value = key === 'bodyWeight' 
-                              ? (m.bodyWeight || 0)
-                              : (m.measurements?.[key] || 0);
-                            if (value > 0) min = Math.min(min, value);
-                          });
-                          return min === Infinity ? 0 : min;
-                        })
-                      );
-                      
-                      const range = maxValue - minValue || 1;
-                      const padding = range * 0.1;
-                      const scaleMin = Math.max(0, minValue - padding);
-                      const scaleMax = maxValue + padding;
-                      
-                      return [scaleMax, scaleMax * 0.75, scaleMax * 0.5, scaleMax * 0.25, scaleMin].map((val, i) => (
-                        <span key={i}>{Math.round(val)}</span>
-                      ));
-                    })()}
-                  </div>
+                            );
+                          })}
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ) : (
+                    <div className="text-center py-12 text-gray-500">
+                      <p className="text-sm">No measurement data available yet.</p>
+                      <p className="text-xs mt-1 text-gray-400">Complete check-ins with measurements to see your progress!</p>
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <div className="text-center py-12 text-gray-500">
-                  <p className="text-sm">No measurement data available yet.</p>
-                  <p className="text-xs mt-1 text-gray-400">Complete check-ins with measurements to see your progress!</p>
-                </div>
-              )}
+              </div>
             </div>
-          </div>
 
           {/* Insights */}
-          <div className="mt-8 bg-white rounded-lg shadow p-6">
-            <h2 className="text-lg font-medium text-gray-900 mb-4">Progress Insights</h2>
+          <div className="mt-8 bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+              <h2 className="text-lg font-bold text-gray-900 mb-4">Progress Insights</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-4">
                 <div className="flex items-start">
@@ -989,7 +1078,7 @@ export default function ClientProgressPage() {
               </div>
             </div>
           </div>
-
+          </div>
 
           {/* Answer Detail Modal */}
           {selectedResponse && (
@@ -997,114 +1086,115 @@ export default function ClientProgressPage() {
               className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
               onClick={() => setSelectedResponse(null)}
             >
-              <div 
-                className="bg-white rounded-lg shadow-2xl max-w-md w-full p-6"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-xl font-bold text-gray-900">Question Response</h3>
-                  <button
-                    onClick={() => setSelectedResponse(null)}
-                    className="text-gray-400 hover:text-gray-600 transition-colors"
-                  >
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-                
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-sm font-medium text-gray-500 mb-1">Question</p>
-                    <p className="text-gray-900">{selectedResponse.question}</p>
+                <div 
+                  className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-xl font-bold text-gray-900">Question Response</h3>
+                    <button
+                      onClick={() => setSelectedResponse(null)}
+                      className="text-gray-400 hover:text-gray-600 transition-colors"
+                    >
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
                   </div>
                   
-                  <div>
-                    <p className="text-sm font-medium text-gray-500 mb-1">Your Answer</p>
-                    <div className="bg-gray-50 rounded-lg p-3">
-                      {selectedResponse.type === 'boolean' ? (
-                        <p className="text-gray-900 font-medium">
-                          {selectedResponse.answer === true || selectedResponse.answer === 'true' ? 'Yes' : 'No'}
-                        </p>
-                      ) : selectedResponse.type === 'scale' || selectedResponse.type === 'rating' ? (
-                        <p className="text-gray-900 font-medium">
-                          {selectedResponse.answer} / 10
-                        </p>
-                      ) : selectedResponse.type === 'number' ? (
-                        <p className="text-gray-900 font-medium">
-                          {selectedResponse.answer}
-                        </p>
-                      ) : Array.isArray(selectedResponse.answer) ? (
-                        <p className="text-gray-900 font-medium">
-                          {selectedResponse.answer.join(', ')}
-                        </p>
-                      ) : (
-                        <p className="text-gray-900 font-medium">
-                          {String(selectedResponse.answer)}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-4">
                     <div>
-                      <p className="text-sm font-medium text-gray-500 mb-1">Score</p>
-                      <div className="flex items-center gap-2">
-                        <div className={`w-6 h-6 rounded-full ${getStatusColor(
-                          selectedResponse.score >= 7 ? 'green' : selectedResponse.score >= 4 ? 'orange' : 'red'
-                        )} border-2 ${getStatusBorder(
-                          selectedResponse.score >= 7 ? 'green' : selectedResponse.score >= 4 ? 'orange' : 'red'
-                        )} flex items-center justify-center`}>
-                          <span className="text-white text-xs font-bold">{selectedResponse.score}</span>
-                        </div>
-                        <span className="text-gray-900 font-medium">{selectedResponse.score}/10</span>
-                      </div>
+                      <p className="text-sm font-medium text-gray-500 mb-1">Question</p>
+                      <p className="text-gray-900">{selectedResponse.question}</p>
                     </div>
                     
                     <div>
-                      <p className="text-sm font-medium text-gray-500 mb-1">Date</p>
-                      <p className="text-gray-900 font-medium">Week {selectedResponse.week}</p>
-                      <p className="text-sm text-gray-600">{selectedResponse.date}</p>
+                      <p className="text-sm font-medium text-gray-500 mb-1">Your Answer</p>
+                      <div className="bg-gray-50 rounded-xl p-3">
+                        {selectedResponse.type === 'boolean' ? (
+                          <p className="text-gray-900 font-medium">
+                            {selectedResponse.answer === true || selectedResponse.answer === 'true' ? 'Yes' : 'No'}
+                          </p>
+                        ) : selectedResponse.type === 'scale' || selectedResponse.type === 'rating' ? (
+                          <p className="text-gray-900 font-medium">
+                            {selectedResponse.answer} / 10
+                          </p>
+                        ) : selectedResponse.type === 'number' ? (
+                          <p className="text-gray-900 font-medium">
+                            {selectedResponse.answer}
+                          </p>
+                        ) : Array.isArray(selectedResponse.answer) ? (
+                          <p className="text-gray-900 font-medium">
+                            {selectedResponse.answer.join(', ')}
+                          </p>
+                        ) : (
+                          <p className="text-gray-900 font-medium">
+                            {String(selectedResponse.answer)}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-sm font-medium text-gray-500 mb-1">Score</p>
+                        <div className="flex items-center gap-2">
+                          <div className={`w-6 h-6 rounded-full ${getStatusColor(
+                            selectedResponse.score >= 7 ? 'green' : selectedResponse.score >= 4 ? 'orange' : 'red'
+                          )} border-2 ${getStatusBorder(
+                            selectedResponse.score >= 7 ? 'green' : selectedResponse.score >= 4 ? 'orange' : 'red'
+                          )} flex items-center justify-center`}>
+                            <span className="text-white text-xs font-bold">{selectedResponse.score}</span>
+                          </div>
+                          <span className="text-gray-900 font-medium">{selectedResponse.score}/10</span>
+                        </div>
+                      </div>
+                      
+                      <div>
+                        <p className="text-sm font-medium text-gray-500 mb-1">Date</p>
+                        <p className="text-gray-900 font-medium">Week {selectedResponse.week}</p>
+                        <p className="text-sm text-gray-600">{selectedResponse.date}</p>
+                      </div>
                     </div>
                   </div>
-                </div>
-                
-                <div className="mt-6 flex justify-end">
-                  <button
-                    onClick={() => setSelectedResponse(null)}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                  >
-                    Close
-                  </button>
+                  
+                  <div className="mt-6 flex justify-end">
+                    <button
+                      onClick={() => setSelectedResponse(null)}
+                      className="px-4 py-2 rounded-xl text-white font-medium transition-all shadow-sm hover:opacity-90"
+                      style={{ backgroundColor: '#daa450' }}
+                    >
+                      Close
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
           )}
 
           {/* Recommendations */}
-          <div className="mt-8 bg-blue-50 rounded-lg p-6">
-            <h2 className="text-lg font-medium text-blue-900 mb-4">💡 Recommendations</h2>
+          <div className="mt-8 bg-white rounded-2xl shadow-sm border border-gray-100 p-6" style={{ backgroundColor: '#fef9e7' }}>
+            <h2 className="text-lg font-bold text-gray-900 mb-4">💡 Recommendations</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <p className="font-medium text-blue-900 mb-2">Set Daily Reminders</p>
-                <p className="text-sm text-blue-700">Schedule your check-ins at the same time each day to build consistency</p>
+                <p className="font-semibold text-gray-900 mb-2">Set Daily Reminders</p>
+                <p className="text-sm text-gray-600">Schedule your check-ins at the same time each day to build consistency</p>
               </div>
               <div>
-                <p className="font-medium text-blue-900 mb-2">Track Your Goals</p>
-                <p className="text-sm text-blue-700">Set specific, measurable goals and review your progress weekly</p>
+                <p className="font-semibold text-gray-900 mb-2">Track Your Goals</p>
+                <p className="text-sm text-gray-600">Set specific, measurable goals and review your progress weekly</p>
               </div>
               <div>
-                <p className="font-medium text-blue-900 mb-2">Celebrate Wins</p>
-                <p className="text-sm text-blue-700">Acknowledge your achievements, no matter how small they seem</p>
+                <p className="font-semibold text-gray-900 mb-2">Celebrate Wins</p>
+                <p className="text-sm text-gray-600">Acknowledge your achievements, no matter how small they seem</p>
               </div>
               <div>
-                <p className="font-medium text-blue-900 mb-2">Stay Connected</p>
-                <p className="text-sm text-blue-700">Your coach is here to support you - reach out when you need help</p>
+                <p className="font-semibold text-gray-900 mb-2">Stay Connected</p>
+                <p className="text-sm text-gray-600">Your coach is here to support you - reach out when you need help</p>
               </div>
             </div>
           </div>
+          </div>
         </div>
-      </div>
-    </AuthenticatedOnly>
-  );
-} 
+      </AuthenticatedOnly>
+    );
+}

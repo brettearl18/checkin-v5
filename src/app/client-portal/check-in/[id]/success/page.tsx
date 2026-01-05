@@ -5,8 +5,6 @@ import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { RoleProtected } from '@/components/ProtectedRoute';
 import ClientNavigation from '@/components/ClientNavigation';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase-client';
 import Link from 'next/link';
 import {
   getTrafficLightStatus,
@@ -72,7 +70,7 @@ export default function CheckInSuccessPage() {
   const [formResponse, setFormResponse] = useState<FormResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [score, setScore] = useState(0);
-  const [thresholds, setThresholds] = useState<ScoringThresholds>(getDefaultThresholds('lifestyle'));
+  const [thresholds, setThresholds] = useState<ScoringThresholds>(getDefaultThresholds('moderate'));
   const [trafficLightStatus, setTrafficLightStatus] = useState<TrafficLightStatus>('orange');
   const [showScoringInfo, setShowScoringInfo] = useState(false);
   const [questions, setQuestions] = useState<any[]>([]);
@@ -86,7 +84,7 @@ export default function CheckInSuccessPage() {
     type: string;
   }>>([]);
 
-  const assignmentId = params.id as string;
+  const id = params.id as string; // Can be either assignmentId or responseId
   const scoreParam = searchParams.get('score');
 
   useEffect(() => {
@@ -94,91 +92,89 @@ export default function CheckInSuccessPage() {
       setScore(parseInt(scoreParam));
     }
     fetchData();
-  }, [assignmentId, scoreParam]);
+  }, [id, scoreParam]);
 
   const fetchData = async () => {
     try {
-      // Fetch assignment data
-      const assignmentDoc = await getDoc(doc(db, 'check_in_assignments', assignmentId));
-      if (assignmentDoc.exists()) {
-        const assignmentData = assignmentDoc.data() as CheckInAssignment;
-        setAssignment(assignmentData);
+      if (!userProfile?.uid) {
+        console.error('User not authenticated');
+        setLoading(false);
+        return;
+      }
 
-        // Fetch the form response using the responseId
-        if (assignmentData.responseId) {
-          const responseDoc = await getDoc(doc(db, 'formResponses', assignmentData.responseId));
-          if (responseDoc.exists()) {
-            const responseData = responseDoc.data() as FormResponse;
-            setFormResponse(responseData);
-            const responseScore = responseData.score || 0;
-            setScore(responseScore);
+      // Fetch data via API route (uses admin SDK, bypasses permissions)
+      const response = await fetch(`/api/client-portal/check-in/${id}/success?clientId=${userProfile.uid}`);
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Error fetching check-in data:', errorData.message);
+        setLoading(false);
+        return;
+      }
 
-            // Fetch questions from the form to calculate per-question scores
-            try {
-              const formDoc = await getDoc(doc(db, 'forms', assignmentData.formId));
-              if (formDoc.exists()) {
-                const formData = formDoc.data();
-                const questionIds = formData.questions || [];
-                
-                // Fetch all questions
-                const questionsData: any[] = [];
-                for (const questionId of questionIds) {
-                  const questionDoc = await getDoc(doc(db, 'questions', questionId));
-                  if (questionDoc.exists()) {
-                    questionsData.push({ id: questionDoc.id, ...questionDoc.data() });
-                  }
-                }
-                setQuestions(questionsData);
-                
-                // Calculate scores for each question
-                const calculatedScores = calculateQuestionScores(questionsData, responseData.responses);
-                setQuestionScores(calculatedScores);
-              }
-            } catch (error) {
-              console.error('Error fetching questions:', error);
-            }
+      const result = await response.json();
+      
+      if (!result.success || !result.data) {
+        console.error('Failed to fetch check-in data:', result.message);
+        setLoading(false);
+        return;
+      }
 
-            // Fetch client scoring configuration
-            try {
-              const scoringDoc = await getDoc(doc(db, 'clientScoring', assignmentData.clientId));
-              if (scoringDoc.exists()) {
-                const scoringData = scoringDoc.data();
-                let clientThresholds: ScoringThresholds;
+      const { assignment, response: responseData, form, questions: questionsData, scoringConfig, formThresholds } = result.data;
 
-                // Check if new format (redMax/orangeMax) exists
-                if (scoringData.thresholds?.redMax !== undefined && scoringData.thresholds?.orangeMax !== undefined) {
-                  clientThresholds = {
-                    redMax: scoringData.thresholds.redMax,
-                    orangeMax: scoringData.thresholds.orangeMax
-                  };
-                } else if (scoringData.thresholds?.red !== undefined && scoringData.thresholds?.yellow !== undefined) {
-                  // Convert legacy format
-                  clientThresholds = convertLegacyThresholds(scoringData.thresholds);
-                } else if (scoringData.scoringProfile) {
-                  // Use profile defaults
-                  clientThresholds = getDefaultThresholds(scoringData.scoringProfile as any);
-                } else {
-                  // Default to lifestyle
-                  clientThresholds = getDefaultThresholds('lifestyle');
-                }
+      // Set assignment if available
+      if (assignment) {
+        setAssignment(assignment as CheckInAssignment);
+      }
 
-                setThresholds(clientThresholds);
-                setTrafficLightStatus(getTrafficLightStatus(responseScore, clientThresholds));
-              } else {
-                // No scoring config, use default lifestyle thresholds
-                const defaultThresholds = getDefaultThresholds('lifestyle');
-                setThresholds(defaultThresholds);
-                setTrafficLightStatus(getTrafficLightStatus(responseScore, defaultThresholds));
-              }
-            } catch (scoringError) {
-              console.error('Error fetching scoring config:', scoringError);
-              // Use default lifestyle thresholds on error
-              const defaultThresholds = getDefaultThresholds('lifestyle');
-              setThresholds(defaultThresholds);
-              setTrafficLightStatus(getTrafficLightStatus(responseScore, defaultThresholds));
-            }
-          }
+      // Set form response
+      if (responseData) {
+        setFormResponse(responseData as FormResponse);
+        const responseScore = responseData.score || 0;
+        setScore(responseScore);
+
+        // Set questions
+        if (questionsData && questionsData.length > 0) {
+          setQuestions(questionsData);
+          
+          // Calculate scores for each question
+          const calculatedScores = calculateQuestionScores(questionsData, responseData.responses);
+          setQuestionScores(calculatedScores);
         }
+
+        // Set scoring configuration - Priority: Form thresholds > Client thresholds > Defaults
+        let finalThresholds: ScoringThresholds;
+        
+        // Priority 1: Use form thresholds if available (takes precedence)
+        if (formThresholds?.redMax !== undefined && formThresholds?.orangeMax !== undefined) {
+          finalThresholds = {
+            redMax: formThresholds.redMax,
+            orangeMax: formThresholds.orangeMax
+          };
+        } else if (scoringConfig) {
+          // Priority 2: Use client scoring config
+          if (scoringConfig.thresholds?.redMax !== undefined && scoringConfig.thresholds?.orangeMax !== undefined) {
+            finalThresholds = {
+              redMax: scoringConfig.thresholds.redMax,
+              orangeMax: scoringConfig.thresholds.orangeMax
+            };
+          } else if (scoringConfig.thresholds?.red !== undefined && scoringConfig.thresholds?.yellow !== undefined) {
+            // Convert legacy format
+            finalThresholds = convertLegacyThresholds(scoringConfig.thresholds);
+          } else if (scoringConfig.scoringProfile) {
+            // Use profile defaults
+            finalThresholds = getDefaultThresholds(scoringConfig.scoringProfile as any);
+          } else {
+            // Default to moderate
+            finalThresholds = getDefaultThresholds('moderate');
+          }
+        } else {
+          // Priority 3: No scoring config, use default moderate thresholds
+          finalThresholds = getDefaultThresholds('moderate');
+        }
+
+        setThresholds(finalThresholds);
+        setTrafficLightStatus(getTrafficLightStatus(responseScore, finalThresholds));
       }
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -267,21 +263,14 @@ export default function CheckInSuccessPage() {
           break;
           
         case 'text':
-          questionScore = 5; // Neutral score for text
-          break;
+          // Text questions are NOT scored - skip them entirely
+          // They are not measurable and should not appear in score breakdown
+          return; // Skip this question - don't add to scores array
           
         case 'textarea':
-          const textareaAnswer = String(response.answer).trim().toLowerCase();
-          if (textareaAnswer === 'great') {
-            questionScore = 9;
-          } else if (textareaAnswer === 'average') {
-            questionScore = 5;
-          } else if (textareaAnswer === 'poor') {
-            questionScore = 2;
-          } else {
-            questionScore = 5;
-          }
-          break;
+          // Textarea questions are not scored - skip them entirely
+          // They are for free-form text responses only
+          return; // Skip this question - don't add to scores array
           
         default:
           questionScore = 5;
@@ -290,6 +279,7 @@ export default function CheckInSuccessPage() {
       
       const weightedScore = questionScore * questionWeight;
       
+      // Only add scorable questions to the scores array
       scores.push({
         questionId: question.id,
         question: response.question,
@@ -396,73 +386,73 @@ export default function CheckInSuccessPage() {
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/50 flex">
         <ClientNavigation />
         
-        <div className="flex-1 ml-4 p-5">
+        <div className="flex-1 ml-4 p-4 sm:p-5 lg:p-6">
           <div className="max-w-4xl">
             {/* Success Header */}
-            <div className="text-center mb-6">
-              <div className="mx-auto w-20 h-20 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center mb-4 shadow-lg">
-                <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="text-center mb-6 lg:mb-8">
+              <div className="mx-auto w-20 h-20 lg:w-24 lg:h-24 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center mb-4 lg:mb-6 shadow-lg">
+                <svg className="w-10 h-10 lg:w-12 lg:h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                 </svg>
               </div>
-              <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent mb-2">
+              <h1 className="text-2xl lg:text-3xl font-bold text-gray-900 mb-2 lg:mb-3">
                 Check-in Completed!
               </h1>
-              <p className="text-gray-900 text-sm font-medium">
+              <p className="text-gray-900 text-sm lg:text-base font-medium">
                 Thank you for completing your check-in
               </p>
             </div>
 
             {/* Score Card */}
-            <div className={`bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200/60 p-6 mb-6 ${getScoreBgColor()}`}>
+            <div className={`bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 p-4 sm:p-6 lg:p-8 mb-6 lg:mb-8 ${getScoreBgColor()}`}>
               <div className="text-center">
-                <div className="flex items-center justify-center gap-2 mb-3">
-                  <span className="text-4xl">{getTrafficLightIcon(trafficLightStatus)}</span>
-                  <span className="text-3xl">{getScoreEmoji()}</span>
+                <div className="flex items-center justify-center gap-2 mb-4 lg:mb-5">
+                  <span className="text-4xl lg:text-5xl">{getTrafficLightIcon(trafficLightStatus)}</span>
+                  <span className="text-3xl lg:text-4xl">{getScoreEmoji()}</span>
                 </div>
-                <h2 className="text-lg font-bold text-gray-900 mb-2">
+                <h2 className="text-xl lg:text-2xl font-bold text-gray-900 mb-3 lg:mb-4">
                   Your Score
                 </h2>
-                <div className={`text-5xl font-bold mb-2 bg-gradient-to-r ${getScoreColor()} bg-clip-text text-transparent`}>
+                <div className={`text-6xl lg:text-7xl font-bold mb-3 lg:mb-4 bg-gradient-to-r ${getScoreColor()} bg-clip-text text-transparent`}>
                   {score}%
                 </div>
-                <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold mb-3 ${getTrafficLightColor(trafficLightStatus)}`}>
+                <div className={`inline-flex items-center gap-1.5 px-4 py-1.5 lg:px-5 lg:py-2 rounded-full text-sm lg:text-base font-semibold mb-4 lg:mb-5 ${getTrafficLightColor(trafficLightStatus)}`}>
                   <span>{getTrafficLightIcon(trafficLightStatus)}</span>
                   <span>{getTrafficLightLabel(trafficLightStatus)}</span>
                 </div>
-                <p className="text-base text-gray-900 mb-5 font-medium">
+                <p className="text-base lg:text-lg text-gray-900 mb-6 lg:mb-8 font-medium">
                   {getScoreMessage()}
                 </p>
                 
                 {/* Progress Bar */}
-                <div className="w-full bg-gray-200/60 rounded-full h-2.5 mb-4">
+                <div className="w-full bg-gray-200 rounded-full h-3 lg:h-3.5 mb-6 lg:mb-8">
                   <div 
-                    className={`h-2.5 rounded-full transition-all duration-1000 bg-gradient-to-r ${getScoreColor()}`}
+                    className={`h-3 lg:h-3.5 rounded-full transition-all duration-1000 bg-gradient-to-r ${getScoreColor()}`}
                     style={{ width: `${score}%` }}
                   ></div>
                 </div>
                 
                 {/* Score Range Description */}
-                <div className="text-xs text-gray-900 space-y-1">
-                  <div className="font-semibold mb-2">Your Score Ranges:</div>
-                  <div className="grid grid-cols-3 gap-2">
-                    <div>
-                      <div className="font-semibold flex items-center gap-1">
-                        <span>🔴</span> Red
+                <div className="text-sm lg:text-base text-gray-900 space-y-2">
+                  <div className="font-bold mb-3 lg:mb-4">Your Score Ranges:</div>
+                  <div className="grid grid-cols-3 gap-3 lg:gap-4">
+                    <div className="bg-gray-50 rounded-xl lg:rounded-2xl p-3 lg:p-4 border border-gray-200">
+                      <div className="font-semibold lg:font-bold flex items-center justify-center gap-1.5 mb-1.5 lg:mb-2">
+                        <span className="text-lg lg:text-xl">🔴</span> <span className="text-sm lg:text-base">Red</span>
                       </div>
-                      <div>0-{thresholds.redMax}%</div>
+                      <div className="text-xs lg:text-sm font-medium">0-{thresholds.redMax}%</div>
                     </div>
-                    <div>
-                      <div className="font-semibold flex items-center gap-1">
-                        <span>🟠</span> Orange
+                    <div className="bg-gray-50 rounded-xl lg:rounded-2xl p-3 lg:p-4 border border-gray-200">
+                      <div className="font-semibold lg:font-bold flex items-center justify-center gap-1.5 mb-1.5 lg:mb-2">
+                        <span className="text-lg lg:text-xl">🟠</span> <span className="text-sm lg:text-base">Orange</span>
                       </div>
-                      <div>{thresholds.redMax + 1}-{thresholds.orangeMax}%</div>
+                      <div className="text-xs lg:text-sm font-medium">{thresholds.redMax + 1}-{thresholds.orangeMax}%</div>
                     </div>
-                    <div>
-                      <div className="font-semibold flex items-center gap-1">
-                        <span>🟢</span> Green
+                    <div className="bg-gray-50 rounded-xl lg:rounded-2xl p-3 lg:p-4 border border-gray-200">
+                      <div className="font-semibold lg:font-bold flex items-center justify-center gap-1.5 mb-1.5 lg:mb-2">
+                        <span className="text-lg lg:text-xl">🟢</span> <span className="text-sm lg:text-base">Green</span>
                       </div>
-                      <div>{thresholds.orangeMax + 1}-100%</div>
+                      <div className="text-xs lg:text-sm font-medium">{thresholds.orangeMax + 1}-100%</div>
                     </div>
                   </div>
                 </div>
@@ -470,20 +460,20 @@ export default function CheckInSuccessPage() {
             </div>
 
             {/* Scoring Formula & Traffic Light Info */}
-            <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200/60 p-5 mb-6">
+            <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 p-4 sm:p-6 lg:p-8 mb-6 lg:mb-8">
               <button
                 onClick={() => setShowScoringInfo(!showScoringInfo)}
                 className="w-full flex items-center justify-between text-left"
               >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-lg flex items-center justify-center">
-                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="flex items-center gap-3 lg:gap-4">
+                  <div className="w-12 h-12 lg:w-14 lg:h-14 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl lg:rounded-2xl flex items-center justify-center flex-shrink-0">
+                    <svg className="w-6 h-6 lg:w-7 lg:h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
                     </svg>
                   </div>
-                  <div>
-                    <h3 className="text-base font-bold text-gray-900">How Your Score is Calculated</h3>
-                    <p className="text-xs text-gray-600">Learn about the scoring formula and traffic light system</p>
+                  <div className="flex-1">
+                    <h3 className="text-lg lg:text-xl font-bold text-gray-900">How Your Score is Calculated</h3>
+                    <p className="text-sm lg:text-base text-gray-600 mt-1">Learn about the scoring formula and traffic light system</p>
                   </div>
                 </div>
                 <svg 
@@ -612,8 +602,8 @@ export default function CheckInSuccessPage() {
 
             {/* Assignment Details */}
             {assignment && (
-              <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200/60 p-5 mb-6">
-                <h3 className="text-base font-bold text-gray-900 mb-4">Check-in Details</h3>
+              <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 p-4 sm:p-6 lg:p-8 mb-6 lg:mb-8">
+                <h3 className="text-lg lg:text-xl font-bold text-gray-900 mb-4 lg:mb-6">Check-in Details</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <p className="text-xs text-gray-900 mb-1 font-medium">Form Title</p>
@@ -652,40 +642,40 @@ export default function CheckInSuccessPage() {
             )}
 
             {/* Next Steps */}
-            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-5 mb-6 border border-blue-200/60">
-              <h3 className="text-base font-bold text-gray-900 mb-4">What's Next?</h3>
-              <div className="space-y-3">
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-blue-200 p-4 sm:p-6 lg:p-8 mb-6 lg:mb-8">
+              <h3 className="text-lg lg:text-xl font-bold text-gray-900 mb-4 lg:mb-6">What's Next?</h3>
+              <div className="space-y-4 lg:space-y-5">
+                <div className="flex items-start gap-3 lg:gap-4">
+                  <div className="w-10 h-10 lg:w-12 lg:h-12 bg-blue-100 rounded-xl lg:rounded-2xl flex items-center justify-center flex-shrink-0">
+                    <svg className="w-5 h-5 lg:w-6 lg:h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                     </svg>
                   </div>
-                  <div>
-                    <p className="text-gray-900 font-semibold text-sm mb-1">Your coach will review your responses</p>
-                    <p className="text-gray-900 text-xs">They'll analyze your answers and provide personalized feedback</p>
+                  <div className="flex-1">
+                    <p className="text-gray-900 font-bold text-base lg:text-lg mb-1.5 lg:mb-2">Your coach will review your responses</p>
+                    <p className="text-gray-900 text-sm lg:text-base">They'll analyze your answers and provide personalized feedback</p>
                   </div>
                 </div>
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 bg-indigo-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="flex items-start gap-3 lg:gap-4">
+                  <div className="w-10 h-10 lg:w-12 lg:h-12 bg-indigo-100 rounded-xl lg:rounded-2xl flex items-center justify-center flex-shrink-0">
+                    <svg className="w-5 h-5 lg:w-6 lg:h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
                     </svg>
                   </div>
-                  <div>
-                    <p className="text-gray-900 font-semibold text-sm mb-1">Track your progress over time</p>
-                    <p className="text-gray-900 text-xs">Monitor your improvements and trends in your wellness journey</p>
+                  <div className="flex-1">
+                    <p className="text-gray-900 font-bold text-base lg:text-lg mb-1.5 lg:mb-2">Track your progress over time</p>
+                    <p className="text-gray-900 text-sm lg:text-base">Monitor your improvements and trends in your wellness journey</p>
                   </div>
                 </div>
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="flex items-start gap-3 lg:gap-4">
+                  <div className="w-10 h-10 lg:w-12 lg:h-12 bg-purple-100 rounded-xl lg:rounded-2xl flex items-center justify-center flex-shrink-0">
+                    <svg className="w-5 h-5 lg:w-6 lg:h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                   </div>
-                  <div>
-                    <p className="text-gray-900 font-semibold text-sm mb-1">Look out for your next check-in</p>
-                    <p className="text-gray-900 text-xs">Complete regular check-ins to maintain momentum</p>
+                  <div className="flex-1">
+                    <p className="text-gray-900 font-bold text-base lg:text-lg mb-1.5 lg:mb-2">Look out for your next check-in</p>
+                    <p className="text-gray-900 text-sm lg:text-base">Complete regular check-ins to maintain momentum</p>
                   </div>
                 </div>
               </div>
@@ -693,8 +683,8 @@ export default function CheckInSuccessPage() {
 
             {/* Question Score Breakdown */}
             {questionScores.length > 0 && (
-              <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200/60 p-5 mb-6">
-                <h3 className="text-base font-bold text-gray-900 mb-4">Question Score Breakdown</h3>
+              <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 p-4 sm:p-6 lg:p-8 mb-6 lg:mb-8">
+                <h3 className="text-lg lg:text-xl font-bold text-gray-900 mb-4 lg:mb-6">Question Score Breakdown</h3>
                 <div className="space-y-3">
                   {questionScores.map((item, index) => {
                     const percentage = item.questionWeight > 0 
@@ -769,12 +759,12 @@ export default function CheckInSuccessPage() {
 
             {/* Your Responses */}
             {formResponse && formResponse.responses && formResponse.responses.length > 0 && (
-              <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200/60 p-5 mb-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-base font-bold text-gray-900">Your Responses</h3>
-                  {formResponse && (
+              <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 p-4 sm:p-6 lg:p-8 mb-6 lg:mb-8">
+                <div className="flex items-center justify-between mb-4 lg:mb-6">
+                  <h3 className="text-lg lg:text-xl font-bold text-gray-900">Your Responses</h3>
+                  {formResponse && assignment && (
                     <Link
-                      href={`/client-portal/check-in/${assignmentId}/edit`}
+                      href={`/client-portal/check-in/${assignment.id || id}/edit`}
                       className="text-xs text-blue-600 hover:text-blue-800 font-medium"
                     >
                       Edit Responses
@@ -817,22 +807,22 @@ export default function CheckInSuccessPage() {
             )}
 
             {/* Navigation Buttons */}
-            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <div className="flex flex-col sm:flex-row gap-3 lg:gap-4 justify-center">
               <Link
                 href="/client-portal/check-ins"
-                className="px-5 py-2.5 bg-white/80 backdrop-blur-sm text-gray-900 rounded-xl hover:bg-white border border-gray-200/60 shadow-sm transition-all duration-200 text-sm font-semibold text-center"
+                className="px-6 py-3 lg:px-8 lg:py-3.5 bg-white text-gray-900 rounded-xl lg:rounded-2xl hover:bg-gray-50 border border-gray-200 shadow-[0_1px_3px_rgba(0,0,0,0.1)] hover:shadow-md transition-all duration-200 text-sm lg:text-base font-semibold text-center min-h-[44px] lg:min-h-[48px] flex items-center justify-center"
               >
                 Back to Check-ins
               </Link>
               <Link
                 href="/client-portal"
-                className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl transition-all duration-200 shadow-md hover:shadow-lg text-sm font-semibold text-center"
+                className="px-6 py-3 lg:px-8 lg:py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl lg:rounded-2xl transition-all duration-200 shadow-md hover:shadow-lg text-sm lg:text-base font-semibold text-center min-h-[44px] lg:min-h-[48px] flex items-center justify-center"
               >
                 Go to Dashboard
               </Link>
               <Link
                 href="/client-portal/progress"
-                className="px-5 py-2.5 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-xl transition-all duration-200 shadow-md hover:shadow-lg text-sm font-semibold text-center"
+                className="px-6 py-3 lg:px-8 lg:py-3.5 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-xl lg:rounded-2xl transition-all duration-200 shadow-md hover:shadow-lg text-sm lg:text-base font-semibold text-center min-h-[44px] lg:min-h-[48px] flex items-center justify-center"
               >
                 View Progress
               </Link>

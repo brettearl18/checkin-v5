@@ -67,87 +67,56 @@ export default function ClientFormResponsesPage() {
       );
       const responsesSnapshot = await getDocs(responsesQuery);
       const responsesData: FormResponse[] = [];
+      const deduplicatedMap = new Map<string, FormResponse>();
       
       responsesSnapshot.forEach((doc) => {
         const data = doc.data();
         if (data.clientId === clientId) {
-          responsesData.push({ id: doc.id, ...data } as FormResponse);
+          const response = { id: doc.id, ...data } as FormResponse;
+          
+          // Deduplicate by assignmentId - keep only the most recent response for each assignment
+          // If no assignmentId, deduplicate by formId + date
+          const assignmentId = (data as any).assignmentId;
+          if (assignmentId) {
+            const existing = deduplicatedMap.get(assignmentId);
+            if (!existing) {
+              deduplicatedMap.set(assignmentId, response);
+            } else {
+              // Keep the one with the most recent submittedAt
+              const existingDate = new Date(existing.submittedAt);
+              const currentDate = new Date(response.submittedAt);
+              if (currentDate > existingDate) {
+                deduplicatedMap.set(assignmentId, response);
+              }
+            }
+          } else {
+            // If no assignmentId, deduplicate by formId + date (same form submitted on same day)
+            const responseDate = new Date(response.submittedAt);
+            const dateKey = responseDate.toISOString().split('T')[0]; // YYYY-MM-DD
+            const dedupeKey = `${response.formId || 'unknown'}-${dateKey}`;
+            
+            const existing = deduplicatedMap.get(dedupeKey);
+            if (!existing) {
+              deduplicatedMap.set(dedupeKey, response);
+            } else {
+              // Keep the most recent one
+              const existingDate = new Date(existing.submittedAt);
+              if (responseDate > existingDate) {
+                deduplicatedMap.set(dedupeKey, response);
+              }
+            }
+          }
         }
       });
 
-      // If no real responses, create mock data
-      if (responsesData.length === 0) {
-        const mockResponses = [
-          {
-            id: 'mock-1',
-            formTitle: 'Weekly Progress Check-in',
-            formId: 'form-1',
-            clientId: clientId,
-            clientName: 'Silvana Lima',
-            submittedAt: { toDate: () => new Date(Date.now() - 5 * 24 * 60 * 60 * 1000) },
-            completedAt: { toDate: () => new Date(Date.now() - 5 * 24 * 60 * 60 * 1000) },
-            score: 85,
-            totalQuestions: 15,
-            answeredQuestions: 12,
-            category: 'progress',
-            isRecurring: true,
-            recurringWeek: 1,
-            totalWeeks: 8,
-            responses: [
-              { question: 'How would you rate your energy levels this week?', answer: '7/10', type: 'rating' },
-              { question: 'Did you meet your weekly goals?', answer: 'Mostly - completed 3 out of 4 goals', type: 'text' },
-              { question: 'How many days did you exercise?', answer: '4 days', type: 'number' },
-              { question: 'Any challenges you faced?', answer: 'Work was busy, but I still made time for workouts', type: 'text' }
-            ]
-          },
-          {
-            id: 'mock-2',
-            formTitle: 'Daily Health Check-in',
-            formId: 'form-2',
-            clientId: clientId,
-            clientName: 'Silvana Lima',
-            submittedAt: { toDate: () => new Date(Date.now() - 12 * 24 * 60 * 60 * 1000) },
-            completedAt: { toDate: () => new Date(Date.now() - 12 * 24 * 60 * 60 * 1000) },
-            score: 92,
-            totalQuestions: 10,
-            answeredQuestions: 8,
-            category: 'health',
-            isRecurring: true,
-            recurringWeek: 2,
-            totalWeeks: 8,
-            responses: [
-              { question: 'How many hours did you sleep last night?', answer: '7.5 hours', type: 'number' },
-              { question: 'Rate your stress level today', answer: '4/10', type: 'rating' },
-              { question: 'Did you take your medications?', answer: 'Yes, all prescribed medications', type: 'text' },
-              { question: 'How are you feeling overall?', answer: 'Good, feeling more energetic today', type: 'text' }
-            ]
-          },
-          {
-            id: 'mock-3',
-            formTitle: 'Nutrition Assessment',
-            formId: 'form-3',
-            clientId: clientId,
-            clientName: 'Silvana Lima',
-            submittedAt: { toDate: () => new Date(Date.now() - 19 * 24 * 60 * 60 * 1000) },
-            completedAt: { toDate: () => new Date(Date.now() - 19 * 24 * 60 * 60 * 1000) },
-            score: 78,
-            totalQuestions: 20,
-            answeredQuestions: 15,
-            category: 'nutrition',
-            isRecurring: false,
-            responses: [
-              { question: 'How many servings of vegetables did you eat today?', answer: '3 servings', type: 'number' },
-              { question: 'Did you drink enough water?', answer: 'Yes, 8 glasses', type: 'text' },
-              { question: 'Rate your meal planning this week', answer: '6/10', type: 'rating' },
-              { question: 'Any cravings you struggled with?', answer: 'Sweet cravings in the evening', type: 'text' },
-              { question: 'How often do you eat processed foods?', answer: '2-3 times per week', type: 'text' }
-            ]
-          }
-        ];
-        setFormResponses(mockResponses);
-      } else {
-        setFormResponses(responsesData);
-      }
+      // Convert map values to array and sort by submittedAt descending
+      const deduplicatedResponses = Array.from(deduplicatedMap.values()).sort((a, b) => {
+        const dateA = new Date(a.submittedAt);
+        const dateB = new Date(b.submittedAt);
+        return dateB.getTime() - dateA.getTime();
+      });
+
+      setFormResponses(deduplicatedResponses);
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
@@ -375,6 +344,47 @@ export default function ClientFormResponsesPage() {
                       {selectedResponse.score || 0}%
                     </div>
                   </div>
+                  <div>
+                    <span className="font-medium text-gray-700">Submitted:</span>
+                    <div>{formatDate(selectedResponse.submittedAt)}</div>
+                  </div>
+                  <div>
+                    <span className="font-medium text-gray-700">Questions:</span>
+                    <div>{selectedResponse.answeredQuestions}/{selectedResponse.totalQuestions}</div>
+                  </div>
+                  <div>
+                    <span className="font-medium text-gray-700">Category:</span>
+                    <div className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getCategoryColor(selectedResponse.category)}`}>
+                      {selectedResponse.category}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Individual Responses */}
+              <div className="space-y-4">
+                <h4 className="font-medium text-gray-900">Question Responses</h4>
+                {selectedResponse.responses.map((response, index) => (
+                  <div key={index} className="border border-gray-200 rounded-lg p-4">
+                    <div className="flex items-start justify-between mb-2">
+                      <h5 className="font-medium text-gray-900">{response.question}</h5>
+                      <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                        {response.type}
+                      </span>
+                    </div>
+                    <div className="bg-blue-50 p-3 rounded border-l-4 border-blue-400">
+                      <p className="text-gray-900">{response.answer}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </AuthenticatedOnly>
+  );
+} 
                   <div>
                     <span className="font-medium text-gray-700">Submitted:</span>
                     <div>{formatDate(selectedResponse.submittedAt)}</div>

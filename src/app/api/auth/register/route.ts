@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb, getAuthInstance } from '@/lib/firebase-server';
+import { autoCreateMeasurementSchedule } from '@/lib/auto-allocate-checkin';
+import { logSafeError } from '@/lib/logger';
+import { validatePassword } from '@/lib/password-validation';
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic';
@@ -16,7 +19,7 @@ function generateShortUID(): string {
 }
 
 // Function to check if a short UID is unique
-async function isShortUIDUnique(shortUID: string): Promise<boolean> {
+async function isShortUIDUnique(shortUID: string, db: any): Promise<boolean> {
   const snapshot = await db.collection('coaches')
     .where('shortUID', '==', shortUID)
     .limit(1)
@@ -25,7 +28,7 @@ async function isShortUIDUnique(shortUID: string): Promise<boolean> {
 }
 
 // Function to generate a unique short UID
-async function generateUniqueShortUID(): Promise<string> {
+async function generateUniqueShortUID(db: any): Promise<string> {
   let shortUID: string;
   let attempts = 0;
   const maxAttempts = 10;
@@ -36,13 +39,13 @@ async function generateUniqueShortUID(): Promise<string> {
     if (attempts > maxAttempts) {
       throw new Error('Unable to generate unique short UID after maximum attempts');
     }
-  } while (!(await isShortUIDUnique(shortUID)));
+  } while (!(await isShortUIDUnique(shortUID, db)));
   
   return shortUID;
 }
 
 // Function to create standard questions for men's health
-async function createMensHealthQuestions(coachId: string) {
+async function createMensHealthQuestions(coachId: string, db: any) {
   const questions = [
     {
       id: `mens-q-${Date.now()}-1`,
@@ -267,15 +270,40 @@ async function createStandardForms(coachId: string, coachName: string, db: any) 
 }
 
 export async function POST(request: NextRequest) {
-  const db = getDb();
   try {
-    const { email, password, firstName, lastName, role, coachShortUID } = await request.json();
+    let db;
+    try {
+      db = getDb();
+      // Validate db is properly initialized
+      if (!db || typeof db.collection !== 'function') {
+        console.error('Database instance is invalid:', typeof db);
+        throw new Error('Database instance is not properly initialized');
+      }
+    } catch (dbError: any) {
+      console.error('Error getting database instance:', dbError);
+      return NextResponse.json({
+        success: false,
+        message: 'Database connection failed',
+        error: dbError instanceof Error ? dbError.message : 'Unknown error'
+      }, { status: 500 });
+    }
+
+    const { email, password, firstName, lastName, role, coachId: providedCoachId } = await request.json();
 
     // Validate required fields
     if (!email || !password || !firstName || !lastName || !role) {
       return NextResponse.json({
         success: false,
         message: 'Missing required fields: email, password, firstName, lastName, role'
+      }, { status: 400 });
+    }
+
+    // Validate password strength
+    const passwordValidation = validatePassword(password);
+    if (!passwordValidation.valid) {
+      return NextResponse.json({
+        success: false,
+        message: passwordValidation.message || 'Password does not meet requirements'
       }, { status: 400 });
     }
 
@@ -287,36 +315,40 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // If registering as a client, look up coach by short UID
-    let coachId = null;
-    if (role === 'client' && coachShortUID) {
+    // If registering as a client, validate coach ID if provided
+    let coachId = providedCoachId || null;
+    if (role === 'client' && coachId) {
       try {
-        const coachesSnapshot = await db.collection('coaches')
-          .where('shortUID', '==', coachShortUID)
-          .limit(1)
-          .get();
-
-        if (coachesSnapshot.empty) {
+        const coachDoc = await db.collection('coaches').doc(coachId).get();
+        if (!coachDoc.exists) {
           return NextResponse.json({
             success: false,
-            message: 'Coach not found with the provided short UID'
+            message: 'Coach not found with the provided ID'
           }, { status: 404 });
         }
-
-        coachId = coachesSnapshot.docs[0].id;
       } catch (error) {
-        console.error('Error looking up coach:', error);
+        console.error('Error validating coach:', error);
         return NextResponse.json({
           success: false,
-          message: 'Failed to look up coach'
+          message: 'Failed to validate coach'
         }, { status: 500 });
       }
     }
 
     // Check if client already exists
-    const existingClientQuery = await db.collection('clients')
-      .where('email', '==', email)
-      .get();
+    let existingClientQuery;
+    try {
+      existingClientQuery = await db.collection('clients')
+        .where('email', '==', email)
+        .get();
+    } catch (error: any) {
+      console.error('Error checking existing client:', error);
+      return NextResponse.json({
+        success: false,
+        message: 'Failed to check existing client',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      }, { status: 500 });
+    }
 
     if (!existingClientQuery.empty) {
       const existingClient = existingClientQuery.docs[0].data();
@@ -337,12 +369,42 @@ export async function POST(request: NextRequest) {
     }
 
     // Create Firebase Auth user
-    const userRecord = await auth.createUser({
-      email,
-      password,
-      displayName: `${firstName} ${lastName}`,
-      emailVerified: false
-    });
+    let auth;
+    let userRecord;
+    try {
+      auth = getAuthInstance();
+      userRecord = await auth.createUser({
+        email,
+        password,
+        displayName: `${firstName} ${lastName}`,
+        emailVerified: false
+      });
+    } catch (authError: any) {
+      logSafeError('Error creating Firebase Auth user', authError);
+      // Handle specific Firebase Auth errors
+      if (authError.code === 'auth/email-already-exists') {
+        return NextResponse.json({
+          success: false,
+          message: 'An account with this email already exists'
+        }, { status: 409 });
+      }
+      
+      if (authError.code === 'auth/weak-password') {
+        return NextResponse.json({
+          success: false,
+          message: 'Password is too weak. Please choose a stronger password'
+        }, { status: 400 });
+      }
+      
+      if (authError.code === 'auth/invalid-email') {
+        return NextResponse.json({
+          success: false,
+          message: 'Invalid email address'
+        }, { status: 400 });
+      }
+      
+      throw authError; // Re-throw to be caught by outer catch
+    }
 
     // Create user profile in Firestore
     const userProfile = {
@@ -358,7 +420,22 @@ export async function POST(request: NextRequest) {
     };
 
     // Save to users collection
-    await db.collection('users').doc(userRecord.uid).set(userProfile);
+    try {
+      await db.collection('users').doc(userRecord.uid).set(userProfile);
+    } catch (error: any) {
+      logSafeError('Error saving user profile', error);
+      // Try to clean up the auth user if profile save fails
+      try {
+        await auth.deleteUser(userRecord.uid);
+      } catch (deleteError) {
+        logSafeError('Error cleaning up auth user', deleteError);
+      }
+      return NextResponse.json({
+        success: false,
+        message: 'Failed to save user profile',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      }, { status: 500 });
+    }
 
     // If registering as a client, create client record
     if (role === 'client') {
@@ -370,6 +447,8 @@ export async function POST(request: NextRequest) {
         email,
         phone: '',
         status: 'pending', // Set to pending if no coach assigned
+        onboardingStatus: 'not_started', // Initialize onboarding status
+        canStartCheckIns: false, // Cannot start check-ins until onboarding is complete
         profile: {
           goals: [],
           preferences: {
@@ -388,12 +467,74 @@ export async function POST(request: NextRequest) {
         updatedAt: new Date()
       };
 
-      await db.collection('clients').doc(userRecord.uid).set(clientRecord);
+      try {
+        await db.collection('clients').doc(userRecord.uid).set(clientRecord);
+        
+        // Auto-create scoring configuration with moderate defaults for new clients
+        try {
+          const { getDefaultThresholds } = await import('@/lib/scoring-utils');
+          const moderateThresholds = getDefaultThresholds('moderate');
+          
+          await db.collection('clientScoring').doc(userRecord.uid).set({
+            clientId: userRecord.uid,
+            scoringProfile: 'moderate',
+            thresholds: moderateThresholds,
+            createdAt: new Date(),
+            updatedAt: new Date()
+          }, { merge: true });
+        } catch (scoringError) {
+          console.error('Error creating default scoring config:', scoringError);
+          // Don't fail registration if scoring config creation fails
+        }
+        
+        // Note: Check-ins are now allocated manually by coaches after client signs up
+        // Auto-create measurement schedule only (check-ins allocated manually)
+        if (coachId) {
+          try {
+            await autoCreateMeasurementSchedule(userRecord.uid, coachId, new Date());
+          } catch (allocationError) {
+            console.error('Error auto-creating measurement schedule:', allocationError);
+            // Don't fail registration if allocation fails - log it and continue
+          }
+        }
+      } catch (error: any) {
+        console.error('Error saving client record:', error);
+        // Try to clean up the auth user and user profile if client record save fails
+        try {
+          await auth.deleteUser(userRecord.uid);
+          await db.collection('users').doc(userRecord.uid).delete();
+        } catch (deleteError) {
+          console.error('Error cleaning up after client record save failure:', deleteError);
+        }
+        return NextResponse.json({
+          success: false,
+          message: 'Failed to save client record',
+          error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        }, { status: 500 });
+      }
     }
 
     // If registering as a coach, create coach record
     if (role === 'coach') {
-      const shortUID = await generateUniqueShortUID();
+      let shortUID;
+      try {
+        shortUID = await generateUniqueShortUID(db);
+      } catch (error: any) {
+        console.error('Error generating short UID:', error);
+        // Try to clean up the auth user and user profile
+        try {
+          await auth.deleteUser(userRecord.uid);
+          await db.collection('users').doc(userRecord.uid).delete();
+        } catch (deleteError) {
+          console.error('Error cleaning up after short UID generation failure:', deleteError);
+        }
+        return NextResponse.json({
+          success: false,
+          message: 'Failed to generate coach code',
+          error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        }, { status: 500 });
+      }
+
       const coachRecord = {
         id: userRecord.uid,
         shortUID,
@@ -409,10 +550,32 @@ export async function POST(request: NextRequest) {
         updatedAt: new Date()
       };
 
-      await db.collection('coaches').doc(userRecord.uid).set(coachRecord);
+      try {
+        await db.collection('coaches').doc(userRecord.uid).set(coachRecord);
+      } catch (error: any) {
+        console.error('Error saving coach record:', error);
+        // Try to clean up the auth user and user profile
+        try {
+          await auth.deleteUser(userRecord.uid);
+          await db.collection('users').doc(userRecord.uid).delete();
+        } catch (deleteError) {
+          console.error('Error cleaning up after coach record save failure:', deleteError);
+        }
+        return NextResponse.json({
+          success: false,
+          message: 'Failed to save coach record',
+          error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        }, { status: 500 });
+      }
 
       // Create standard forms for the new coach
-      await createStandardForms(userRecord.uid, `${firstName} ${lastName}`, db);
+      try {
+        await createStandardForms(userRecord.uid, `${firstName} ${lastName}`, db);
+      } catch (error: any) {
+        console.error('Error creating standard forms:', error);
+        // Don't fail registration if forms creation fails - coach can create them manually
+        console.warn('Coach registered but standard forms creation failed. Coach can create forms manually.');
+      }
 
       return NextResponse.json({
         success: true,
@@ -437,7 +600,13 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error: any) {
-    console.error('Error registering user:', error);
+    // Log the full error for debugging
+    console.error('Error registering user:', {
+      message: error.message,
+      code: error.code,
+      stack: error.stack,
+      name: error.name
+    });
     
     // Handle specific Firebase Auth errors
     if (error.code === 'auth/email-already-exists') {
@@ -464,7 +633,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: false,
       message: 'Failed to register user',
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : 'An error occurred during registration. Please try again.'
     }, { status: 500 });
   }
 }

@@ -31,10 +31,12 @@ export async function GET(
     const scoringDoc = await db.collection('clientScoring').doc(clientId).get();
     
     if (!scoringDoc.exists) {
-      return NextResponse.json(
-        { success: false, message: 'Scoring configuration not found' },
-        { status: 404 }
-      );
+      // Return success with null config instead of 404, so frontend can create default
+      return NextResponse.json({
+        success: false,
+        message: 'Scoring configuration not found',
+        config: null
+      });
     }
     
     const config = {
@@ -63,6 +65,7 @@ export async function POST(
 ) {
   try {
     const clientId = await params.id;
+    const db = getDb();
     const formData = await request.json();
     
     // Clean the data

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase-server';
 import { notificationService } from '@/lib/notification-service';
+import { logInfo, logSafeError } from '@/lib/logger';
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic';
@@ -11,7 +12,9 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
+    logInfo('[Check-in API] Received check-in submission request');
     const requestData = await request.json();
+    logInfo('[Check-in API] Processing check-in submission');
 
     if (!id) {
       return NextResponse.json({
@@ -22,24 +25,39 @@ export async function POST(
 
     const db = getDb();
 
-    // Get the assignment
-    const assignmentDoc = await db.collection('check_in_assignments').doc(id).get();
+    // Get the assignment - try as document ID first, then query by 'id' field
+    logInfo('[Check-in API] Attempting to find assignment');
+    let assignmentDoc = await db.collection('check_in_assignments').doc(id).get();
+    let assignmentData = assignmentDoc.exists ? assignmentDoc.data() : null;
+    let assignmentDocId = assignmentDoc.exists ? assignmentDoc.id : null;
+
+    // If not found by document ID, try querying by 'id' field
     if (!assignmentDoc.exists) {
+      logInfo('[Check-in API] Not found by document ID, querying by id field');
+      const assignmentsQuery = await db.collection('check_in_assignments')
+        .where('id', '==', id)
+        .limit(1)
+        .get();
+      
+      if (!assignmentsQuery.empty) {
+        assignmentDoc = assignmentsQuery.docs[0];
+        assignmentData = assignmentDoc.data();
+        assignmentDocId = assignmentDoc.id;
+        logInfo('[Check-in API] Found by id field');
+      }
+    }
+
+    if (!assignmentData || !assignmentDocId) {
+      logInfo('[Check-in API] Assignment not found');
       return NextResponse.json({
         success: false,
         message: 'Assignment not found'
       }, { status: 404 });
     }
 
-    const assignmentData = assignmentDoc.data();
-    if (!assignmentData) {
-      return NextResponse.json({
-        success: false,
-        message: 'Assignment data is invalid'
-      }, { status: 400 });
-    }
+    logInfo('[Check-in API] Assignment found');
 
-    const assignmentId = assignmentDoc.id;
+    const assignmentId = assignmentDocId; // Use the actual Firestore document ID
 
     // Get the form
     const formDoc = await db.collection('forms').doc(assignmentData.formId).get();
@@ -51,53 +69,73 @@ export async function POST(
     }
 
     const formData = formDoc.data();
-    console.log('Form data retrieved:', formData);
-    console.log('Assignment data:', assignmentData);
+    logInfo('Form and assignment data retrieved');
 
     // Validate form data
     if (!formData || !formData.title) {
-      console.error('Form data is missing or invalid:', { formData, assignmentData });
+      logSafeError('Form data is missing or invalid', { hasFormData: !!formData, hasAssignmentData: !!assignmentData });
       return NextResponse.json({
         success: false,
         message: 'Form data is invalid or missing title'
       }, { status: 400 });
     }
 
-    // Get client name
-    const clientDoc = await db.collection('clients').doc(assignmentData.clientId).get();
+    // Get client name and verify client exists
+    // clientId might be a Firestore document ID or authUid, so try both
+    let clientDoc = await db.collection('clients').doc(assignmentData.clientId).get();
+    let clientData = clientDoc.exists ? clientDoc.data() : null;
+
+    // If not found by document ID, try finding by authUid
     if (!clientDoc.exists) {
+      const clientsQuery = await db.collection('clients')
+        .where('authUid', '==', assignmentData.clientId)
+        .limit(1)
+        .get();
+      
+      if (!clientsQuery.empty) {
+        clientDoc = clientsQuery.docs[0];
+        clientData = clientDoc.data();
+      }
+    }
+
+    if (!clientData) {
       return NextResponse.json({
         success: false,
         message: 'Client not found'
       }, { status: 404 });
     }
     
-    const clientData = clientDoc.data();
-    if (!clientData) {
-      return NextResponse.json({
-        success: false,
-        message: 'Client data is invalid'
-      }, { status: 400 });
-    }
+    const clientName = `${clientData.firstName || ''} ${clientData.lastName || ''}`.trim() || 'Client';
+
+    // Calculate score - use the score from frontend if provided, otherwise recalculate
+    let finalScore = requestData.score || 0;
     
-    const clientName = `${clientData.firstName} ${clientData.lastName}`;
+    // If score not provided, calculate from individual response scores
+    if (!finalScore && requestData.responses && Array.isArray(requestData.responses)) {
+      let totalWeightedScore = 0;
+      let totalWeight = 0;
 
-    // Calculate score
-    let score = 0;
-    let totalWeight = 0;
-
-    if (requestData.responses && Array.isArray(requestData.responses)) {
       requestData.responses.forEach((response: any) => {
-        if (response.weight) {
+        if (response.weight && response.score !== undefined) {
+          totalWeightedScore += (response.score || 0) * response.weight;
           totalWeight += response.weight;
-          score += response.score || 0;
         }
       });
+
+      // Calculate: (totalWeightedScore / (totalWeight * 10)) * 100
+      finalScore = totalWeight > 0 
+        ? Math.round((totalWeightedScore / (totalWeight * 10)) * 100)
+        : 0;
     }
 
-    const finalScore = totalWeight > 0 ? Math.round((score / totalWeight) * 100) : 0;
-
     // Prepare response data
+    // Count answered questions - handle string, number, boolean answers
+    const answeredCount = requestData.responses ? requestData.responses.filter((r: any) => {
+      if (!r.answer && r.answer !== 0 && r.answer !== false) return false; // null, undefined, empty string
+      if (typeof r.answer === 'string') return r.answer.trim() !== ''; // non-empty string
+      return true; // number, boolean, etc. are considered answered
+    }).length : 0;
+
     const responseData = {
       assignmentId: assignmentId,
       formId: assignmentData.formId,
@@ -107,20 +145,67 @@ export async function POST(
       responses: requestData.responses || [],
       score: finalScore,
       totalQuestions: requestData.responses ? requestData.responses.length : 0,
-      answeredQuestions: requestData.responses ? requestData.responses.filter((r: any) => r.answer && r.answer.trim() !== '').length : 0,
+      answeredQuestions: answeredCount,
       submittedAt: new Date(),
       status: 'completed'
     };
 
-    console.log('Prepared response data:', responseData);
+    logInfo('Prepared response data');
 
     // Validate response data before saving
     if (!responseData.formTitle || responseData.formTitle === 'Unknown Form') {
-      console.error('Invalid form title in response data:', responseData);
+      logSafeError('Invalid form title in response data', { hasFormTitle: !!responseData?.formTitle });
       return NextResponse.json({
         success: false,
         message: 'Form title is invalid'
       }, { status: 400 });
+    }
+
+    // Check if assignment is already completed (prevent duplicate submissions)
+    if (assignmentData.status === 'completed' && assignmentData.responseId) {
+      logInfo('[Check-in API] Assignment already completed, returning existing response');
+      // Return existing response instead of creating a new one
+      try {
+        const existingResponseDoc = await db.collection('formResponses').doc(assignmentData.responseId).get();
+        if (existingResponseDoc.exists) {
+          return NextResponse.json({
+            success: true,
+            message: 'Check-in already completed',
+            responseId: assignmentData.responseId,
+            score: assignmentData.score || 0,
+            alreadyCompleted: true
+          });
+        }
+      } catch (error) {
+        logSafeError('Error fetching existing response', error);
+        // Continue to create new response if existing one can't be found
+      }
+    }
+
+    // Check if check-in window is closed (server-side validation)
+    // Allow submission if: window is open, extension is granted, or it's Week 1
+    const { isWithinCheckInWindow, DEFAULT_CHECK_IN_WINDOW } = await import('@/lib/checkin-window-utils');
+    const checkInWindow = assignmentData.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
+    const windowStatus = isWithinCheckInWindow(checkInWindow);
+    const isFirstCheckIn = assignmentData.recurringWeek === 1;
+    
+    // Check for granted extension
+    let extensionGranted = false;
+    if (!windowStatus.isOpen && !isFirstCheckIn) {
+      const extensionsQuery = await db.collection('check_in_extensions')
+        .where('assignmentId', '==', assignmentId)
+        .where('status', '==', 'granted')
+        .limit(1)
+        .get();
+      
+      extensionGranted = !extensionsQuery.empty || assignmentData.extensionGranted === true;
+      
+      if (!extensionGranted) {
+        return NextResponse.json({
+          success: false,
+          message: `Check-in window is currently closed. ${windowStatus.message}. Please request an extension if needed.`
+        }, { status: 403 });
+      }
     }
 
     // Save response to Firestore
@@ -131,7 +216,10 @@ export async function POST(
       status: 'completed',
       completedAt: new Date(),
       responseId: docRef.id,
-      score: finalScore
+      score: finalScore,
+      responseCount: answeredCount, // Set response count from actual answered questions
+      totalQuestions: requestData.responses ? requestData.responses.length : 0,
+      answeredQuestions: answeredCount
     });
 
     // Create notification for coach
@@ -146,8 +234,63 @@ export async function POST(
         assignmentData.formId // formId
       );
     } catch (error) {
-      console.error('Error creating notification:', error);
+      logSafeError('Error creating notification', error);
       // Don't fail the check-in if notification fails
+    }
+
+    // Send completion confirmation email to client
+    try {
+      const clientEmail = clientData.email;
+      const emailNotificationsEnabled = clientData.emailNotifications ?? true;
+      if (clientEmail && emailNotificationsEnabled) {
+        const { sendEmail } = await import('@/lib/email-service');
+        const { getCheckInCompletedEmailTemplate } = await import('@/lib/email-templates');
+        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://checkinv5.web.app';
+        const checkInUrl = `${baseUrl}/client-portal/check-in/${assignmentId}`;
+
+        // Get coach name
+        let coachName: string | undefined;
+        if (assignmentData.coachId) {
+          try {
+            const coachDoc = await db.collection('coaches').doc(assignmentData.coachId).get();
+            if (coachDoc.exists) {
+              const coachData = coachDoc.data();
+              coachName = `${coachData?.firstName || ''} ${coachData?.lastName || ''}`.trim() || undefined;
+            }
+          } catch (error) {
+            logInfo('Could not fetch coach information for completion email');
+          }
+        }
+
+        const { subject, html } = getCheckInCompletedEmailTemplate(
+          clientName,
+          formData.title,
+          finalScore,
+          checkInUrl,
+          coachName
+        );
+
+        await sendEmail({
+          to: clientEmail,
+          subject,
+          html,
+        });
+      }
+    } catch (error) {
+      logSafeError('Error sending completion email', error);
+      // Don't fail the check-in if email fails
+    }
+
+    // Track goal progress after check-in completion (async, don't wait)
+    if (assignmentData.clientId) {
+      fetch('/api/goals/track-progress', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId: assignmentData.clientId })
+      }).catch(error => {
+        logSafeError('Error tracking goal progress after check-in', error);
+        // Don't fail the check-in if goal tracking fails
+      });
     }
 
     return NextResponse.json({
@@ -157,13 +300,14 @@ export async function POST(
       score: finalScore
     });
 
-  } catch (error) {
-    console.error('Error completing check-in:', error);
+  } catch (error: any) {
+    logSafeError('Error completing check-in', error);
     return NextResponse.json(
       { 
         success: false, 
         message: 'Failed to complete check-in',
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error instanceof Error ? error.message : 'Unknown error',
+        details: process.env.NODE_ENV === 'development' ? error?.stack : undefined
       },
       { status: 500 }
     );

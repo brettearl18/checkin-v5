@@ -10,7 +10,7 @@ import {
   sendPasswordResetEmail,
   updateProfile
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, getDoc, serverTimestamp, collection, query, where, limit, getDocs } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase-client';
 
 interface UserProfile {
@@ -56,6 +56,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Fetch user profile from Firestore
   const fetchUserProfile = async (uid: string) => {
     try {
+      if (!db) {
+        console.error('Firestore db not initialized');
+        setUserProfile(null);
+        return;
+      }
+      
       // First try to get from users collection (for coaches and admins)
       let userDoc = await getDoc(doc(db, 'users', uid));
       
@@ -89,11 +95,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      // If not found in users, try clients collection
-      const clientsQuery = await db.collection('clients').where('authUid', '==', uid).limit(1).get();
+      // If not found in users, try clients collection (Firestore v9 syntax)
+      const clientsQuery = query(
+        collection(db, 'clients'),
+        where('authUid', '==', uid),
+        limit(1)
+      );
+      const clientsSnapshot = await getDocs(clientsQuery);
       
-      if (!clientsQuery.empty) {
-        const clientDoc = clientsQuery.docs[0];
+      if (!clientsSnapshot.empty) {
+        const clientDoc = clientsSnapshot.docs[0];
         const clientData = clientDoc.data();
         
         setUserProfile({
@@ -103,7 +114,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           firstName: clientData.firstName,
           lastName: clientData.lastName,
           phone: clientData.phone,
-          avatar: undefined,
+          avatar: clientData.profileImage || clientData.avatar || undefined,
           status: clientData.status,
           createdAt: clientData.createdAt?.toDate() || new Date(),
           updatedAt: clientData.updatedAt?.toDate() || new Date(),
@@ -127,6 +138,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Update user profile in Firestore
   const updateUserProfileInFirestore = async (uid: string, data: Partial<UserProfile>) => {
     try {
+      if (!db) {
+        throw new Error('Firestore db not initialized');
+      }
+      
       const userRef = doc(db, 'users', uid);
       await setDoc(userRef, {
         ...data,
@@ -176,6 +191,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (userData.phone) profileData.phone = userData.phone;
       if (userData.avatar) profileData.avatar = userData.avatar;
 
+      if (!db) {
+        throw new Error('Firestore db not initialized');
+      }
+
       const userProfileData = {
         uid: user.uid,
         email: user.email,
@@ -221,7 +240,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await sendPasswordResetEmail(auth, email);
     } catch (error) {
-      console.error('Password reset error:', error);
+      // Log error but don't expose sensitive details to user
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Password reset error:', error);
+      }
       throw error;
     }
   };
@@ -240,11 +262,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Listen for auth state changes
   useEffect(() => {
+    if (!auth) {
+      setLoading(false);
+      return;
+    }
+
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setUser(user);
       
       if (user) {
-        await fetchUserProfile(user.uid);
+        try {
+          // Add timeout to prevent hanging
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Auth profile fetch timeout')), 10000)
+          );
+          
+          await Promise.race([fetchUserProfile(user.uid), timeoutPromise]);
+        } catch (error: any) {
+          console.error('Error or timeout fetching user profile:', error);
+          // Continue even if profile fetch fails - set loading to false
+          setUserProfile(null);
+        }
       } else {
         setUserProfile(null);
       }
@@ -252,13 +290,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    // Safety timeout - if auth state change doesn't fire within 5 seconds, stop loading
+    const safetyTimeout = setTimeout(() => {
+      setLoading(false);
+    }, 5000);
+
+    return () => {
+      unsubscribe();
+      clearTimeout(safetyTimeout);
+    };
   }, []);
 
   // Computed properties for role checking (support multiple roles)
   const isAdmin = userProfile?.role === 'admin' || userProfile?.roles?.includes('admin') || false;
   const isCoach = userProfile?.role === 'coach' || userProfile?.roles?.includes('coach') || false;
   const isClient = userProfile?.role === 'client' || userProfile?.roles?.includes('client') || false;
+
+  // Refresh user profile (public method)
+  const refreshProfile = async () => {
+    if (user?.uid) {
+      await fetchUserProfile(user.uid);
+    }
+  };
 
   const value = {
     user,
@@ -269,6 +322,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     logout,
     resetPassword,
     updateUserProfile,
+    refreshProfile,
     isAdmin,
     isCoach,
     isClient

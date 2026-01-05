@@ -21,20 +21,23 @@ export async function GET(request: NextRequest) {
     try {
       console.log('Fetching check-ins to review for coachId:', coachId);
       
-      // First, get all clients for this coach
+      // First, get all clients for this coach (excluding archived clients)
       const clientsSnapshot = await db.collection('clients')
         .where('coachId', '==', coachId)
         .get();
 
-      const clients = clientsSnapshot.docs.map(doc => ({
+      const allClients = clientsSnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       }));
 
-      console.log('Found clients for coach:', clients.length);
+      // Filter out archived clients
+      const clients = allClients.filter(client => client.status !== 'archived');
+
+      console.log('Found clients for coach:', clients.length, '(excluding', allClients.length - clients.length, 'archived)');
       console.log('Client IDs:', clients.map(c => c.id));
 
-      // Get all completed assignments for these clients
+      // Get all completed assignments for these clients (non-archived)
       let allAssignments: any[] = [];
       for (const client of clients) {
         try {
@@ -76,7 +79,7 @@ export async function GET(request: NextRequest) {
       };
 
       // Build check-ins to review with client data and fetch scores from responses if needed
-      checkInsToReview = await Promise.all(allAssignments.map(async (assignment) => {
+      const checkInsWithStatus = await Promise.all(allAssignments.map(async (assignment) => {
         const client = clients.find(c => c.id === assignment.clientId);
         
         // Get score from assignment, or fetch from response if missing
@@ -113,11 +116,13 @@ export async function GET(request: NextRequest) {
           }
         }
         
-        // Check if coach has responded (has feedback)
+        // Check if coach has responded (has feedback) or marked as reviewed
         let coachResponded = false;
+        let reviewedByCoach = false;
         let workflowStatus = 'completed';
         if (assignment.responseId) {
           try {
+            // Check for coach feedback
             const feedbackSnapshot = await db.collection('coachFeedback')
               .where('responseId', '==', assignment.responseId)
               .where('coachId', '==', coachId)
@@ -125,14 +130,38 @@ export async function GET(request: NextRequest) {
               .get();
             
             coachResponded = !feedbackSnapshot.empty;
+            
+            // Check if response is marked as reviewed
+            const responseDoc = await db.collection('formResponses').doc(assignment.responseId).get();
+            if (responseDoc.exists) {
+              const responseData = responseDoc.data();
+              reviewedByCoach = responseData?.reviewedByCoach || false;
+            }
+            
+            // Also check assignment for reviewed status
+            if (!reviewedByCoach) {
+              reviewedByCoach = assignment.reviewedByCoach || false;
+            }
+            
             if (coachResponded) {
               workflowStatus = 'responded';
-            } else if (assignment.reviewedByCoach) {
+            } else if (reviewedByCoach) {
               workflowStatus = 'reviewed';
             }
           } catch (error) {
             console.log('Error checking feedback:', error);
           }
+        } else {
+          // Check assignment directly if no responseId
+          reviewedByCoach = assignment.reviewedByCoach || false;
+          if (reviewedByCoach) {
+            workflowStatus = 'reviewed';
+          }
+        }
+        
+        // Skip check-ins that have been reviewed (they should not appear in "To Review")
+        if (reviewedByCoach || workflowStatus === 'reviewed') {
+          return null; // Filter this out
         }
 
         return {
@@ -153,7 +182,8 @@ export async function GET(request: NextRequest) {
         };
       }));
 
-      // Sort the results
+      // Filter out null values (reviewed check-ins) and sort the results
+      checkInsToReview = checkInsWithStatus.filter((ci): ci is NonNullable<typeof ci> => ci !== null);
       checkInsToReview.sort((a, b) => {
         let comparison = 0;
         
@@ -176,6 +206,33 @@ export async function GET(request: NextRequest) {
       });
 
       // Limit to top 20 for performance
+      checkInsToReview = checkInsToReview.slice(0, 20);
+
+    } catch (error) {
+      console.error('Error fetching check-ins to review:', error);
+      checkInsToReview = [];
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        checkIns: checkInsToReview,
+        total: checkInsToReview.length,
+        sortBy,
+        sortOrder
+      }
+    });
+
+  } catch (error) {
+    console.error('Error in check-ins to review API:', error);
+    return NextResponse.json({
+      success: false,
+      message: 'Failed to fetch check-ins to review',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
+  }
+}
+
       checkInsToReview = checkInsToReview.slice(0, 20);
 
     } catch (error) {

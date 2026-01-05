@@ -52,14 +52,46 @@ const NotificationBell: React.FC = () => {
   const formatTimeAgo = (timestamp: any) => {
     if (!timestamp) return 'Just now';
     
-    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-    const now = new Date();
-    const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60));
+    let date: Date;
     
-    if (diffInMinutes < 1) return 'Just now';
-    if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
-    if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h ago`;
-    return `${Math.floor(diffInMinutes / 1440)}d ago`;
+    try {
+      // Handle Firebase Timestamp with toDate method
+      if (timestamp.toDate && typeof timestamp.toDate === 'function') {
+        date = timestamp.toDate();
+      } else if (timestamp._seconds) {
+        // Handle Firestore Timestamp object with _seconds
+        date = new Date(timestamp._seconds * 1000);
+      } else if (timestamp instanceof Date) {
+        // Handle Date object
+        date = timestamp;
+      } else if (typeof timestamp === 'string') {
+        // Handle ISO string
+        date = new Date(timestamp);
+      } else if (typeof timestamp === 'number') {
+        // Handle Unix timestamp (milliseconds)
+        date = new Date(timestamp);
+      } else {
+        // Fallback: try to create Date from timestamp
+        date = new Date(timestamp);
+      }
+      
+      // Check if date is valid
+      if (isNaN(date.getTime())) {
+        return 'Just now';
+      }
+      
+      const now = new Date();
+      const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60));
+      
+      if (diffInMinutes < 1) return 'Just now';
+      if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
+      if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h ago`;
+      return `${Math.floor(diffInMinutes / 1440)}d ago`;
+    } catch (error) {
+      // If anything goes wrong, return a safe default
+      console.warn('Error formatting timestamp:', error, timestamp);
+      return 'Just now';
+    }
   };
 
   return (

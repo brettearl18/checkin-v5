@@ -27,6 +27,7 @@ interface RiskMetrics {
 }
 
 export async function GET(request: NextRequest) {
+  const db = getDb();
   try {
     const { searchParams } = new URL(request.url);
     const coachId = searchParams.get('coachId');
@@ -60,26 +61,31 @@ export async function GET(request: NextRequest) {
 }
 
 async function calculateRiskAnalysis(coachId: string): Promise<RiskAnalysis[]> {
+  const db = getDb();
   try {
-    // Fetch clients and their responses
-    const [clientsSnapshot, responsesSnapshot] = await Promise.all([
+    // Fetch clients, assignments, and responses
+    const [clientsSnapshot, assignmentsSnapshot, responsesSnapshot] = await Promise.all([
       db.collection('clients').where('coachId', '==', coachId).get(),
+      db.collection('check_in_assignments').where('coachId', '==', coachId).get(),
       db.collection('formResponses').where('coachId', '==', coachId).get()
     ]);
 
-    const clients = clientsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const clients = clientsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+      .filter(c => c.status !== 'archived'); // Filter out archived clients
+    const assignments = assignmentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     const responses = responsesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
     const riskAnalysis: RiskAnalysis[] = [];
 
     for (const client of clients) {
+      const clientAssignments = assignments.filter(a => a.clientId === client.id);
       const clientResponses = responses.filter(r => r.clientId === client.id);
-      const riskScore = calculateRiskScore(client, clientResponses);
+      const riskScore = calculateRiskScore(client, clientAssignments, clientResponses);
       const riskLevel = getRiskLevel(riskScore);
-      const riskFactors = getRiskFactors(client, clientResponses);
+      const riskFactors = getRiskFactors(client, clientAssignments, clientResponses);
       const trend = calculateTrend(clientResponses);
       const recommendations = getRecommendations(riskLevel, riskFactors);
-      const alerts = generateAlerts(client, clientResponses, riskLevel);
+      const alerts = generateAlerts(client, clientAssignments, clientResponses, riskLevel);
 
       riskAnalysis.push({
         clientId: client.id,
@@ -170,42 +176,70 @@ async function calculateRiskMetrics(coachId: string): Promise<RiskMetrics> {
   }
 }
 
-function calculateRiskScore(client: any, responses: any[]): number {
+function calculateRiskScore(client: any, assignments: any[], responses: any[]): number {
   let score = 0;
   
-  // Base score from client progress
-  const progressScore = client.progress?.overallScore || 0;
-  score += (100 - progressScore) * 0.4; // 40% weight on progress
+  // Calculate actual metrics from check-in assignments and responses
+  const totalCheckins = assignments.length;
+  const completedAssignments = assignments.filter(a => a.status === 'completed' || a.completedAt || a.responseId);
+  const completedCheckins = completedAssignments.length;
+  const completionRate = totalCheckins > 0 ? (completedCheckins / totalCheckins) * 100 : 0;
   
-  // Engagement score
-  const totalCheckins = client.progress?.totalCheckins || 0;
-  const completedCheckins = client.progress?.completedCheckins || 0;
-  const engagementRate = totalCheckins > 0 ? (completedCheckins / totalCheckins) * 100 : 0;
-  score += (100 - engagementRate) * 0.3; // 30% weight on engagement
+  // Calculate average score from actual completed check-ins
+  const scores: number[] = [];
+  completedAssignments.forEach(assignment => {
+    if (assignment.score && assignment.score > 0) {
+      scores.push(assignment.score);
+    } else if (assignment.responseId) {
+      const response = responses.find(r => r.id === assignment.responseId);
+      if (response && (response.score || response.percentageScore)) {
+        scores.push(response.score || response.percentageScore || 0);
+      }
+    }
+  });
+  const averageScore = scores.length > 0 
+    ? scores.reduce((sum, s) => sum + s, 0) / scores.length 
+    : 0;
   
-  // Recent activity
-  const lastActivity = client.progress?.lastActivity;
-  if (lastActivity) {
-    const lastActivityDate = lastActivity.toDate ? lastActivity.toDate() : new Date(lastActivity);
+  // Base score from actual performance (40% weight)
+  score += (100 - averageScore) * 0.4;
+  
+  // Engagement score (30% weight)
+  score += (100 - completionRate) * 0.3;
+  
+  // Recent activity (20% weight)
+  let lastActivityDate: Date | null = null;
+  completedAssignments.forEach(assignment => {
+    if (assignment.completedAt) {
+      const completedDate = assignment.completedAt?.toDate 
+        ? assignment.completedAt.toDate() 
+        : new Date(assignment.completedAt);
+      if (!lastActivityDate || completedDate > lastActivityDate) {
+        lastActivityDate = completedDate;
+      }
+    }
+  });
+  
+  if (lastActivityDate) {
     const daysSinceActivity = (Date.now() - lastActivityDate.getTime()) / (1000 * 60 * 60 * 24);
     if (daysSinceActivity > 14) score += 30; // High risk if no activity for 14+ days
     else if (daysSinceActivity > 7) score += 15; // Medium risk if no activity for 7+ days
-  } else {
-    score += 50; // High risk if no activity recorded
+  } else if (totalCheckins > 0) {
+    score += 50; // High risk if assigned check-ins but none completed
   }
   
-  // Response quality
+  // Response quality (10% weight)
   const recentResponses = responses.filter(r => {
     const responseDate = r.submittedAt?.toDate ? r.submittedAt.toDate() : new Date(r.submittedAt);
     const daysSinceResponse = (Date.now() - responseDate.getTime()) / (1000 * 60 * 60 * 24);
     return daysSinceResponse <= 30;
   });
   
-  if (recentResponses.length === 0) {
-    score += 20; // Risk if no recent responses
-  } else {
-    const avgResponseScore = recentResponses.reduce((sum, r) => sum + (r.percentageScore || 0), 0) / recentResponses.length;
-    score += (100 - avgResponseScore) * 0.1; // 10% weight on response quality
+  if (recentResponses.length === 0 && totalCheckins > 0) {
+    score += 20; // Risk if no recent responses but has assignments
+  } else if (recentResponses.length > 0) {
+    const avgResponseScore = recentResponses.reduce((sum, r) => sum + (r.score || r.percentageScore || 0), 0) / recentResponses.length;
+    score += (100 - avgResponseScore) * 0.1;
   }
   
   return Math.min(100, Math.max(0, score));
@@ -218,28 +252,62 @@ function getRiskLevel(riskScore: number): 'low' | 'medium' | 'high' | 'critical'
   return 'low';
 }
 
-function getRiskFactors(client: any, responses: any[]): string[] {
+function getRiskFactors(client: any, assignments: any[], responses: any[]): string[] {
   const factors: string[] = [];
   
-  const progressScore = client.progress?.overallScore || 0;
-  if (progressScore < 60) factors.push('Low Performance Score');
+  // Calculate actual metrics
+  const totalCheckins = assignments.length;
+  const completedAssignments = assignments.filter(a => a.status === 'completed' || a.completedAt || a.responseId);
+  const completedCheckins = completedAssignments.length;
   
-  const totalCheckins = client.progress?.totalCheckins || 0;
-  const completedCheckins = client.progress?.completedCheckins || 0;
-  if (totalCheckins > 0 && (completedCheckins / totalCheckins) < 0.7) {
+  // Get scores from actual check-ins
+  const scores: number[] = [];
+  completedAssignments.forEach(assignment => {
+    if (assignment.score && assignment.score > 0) {
+      scores.push(assignment.score);
+    } else if (assignment.responseId) {
+      const response = responses.find(r => r.id === assignment.responseId);
+      if (response && (response.score || response.percentageScore)) {
+        scores.push(response.score || response.percentageScore || 0);
+      }
+    }
+  });
+  const averageScore = scores.length > 0 
+    ? scores.reduce((sum, s) => sum + s, 0) / scores.length 
+    : 0;
+  
+  if (averageScore > 0 && averageScore < 60) {
+    factors.push('Low Performance Score');
+  }
+  
+  const completionRate = totalCheckins > 0 ? (completedCheckins / totalCheckins) * 100 : 0;
+  if (totalCheckins > 0 && completionRate < 70) {
     factors.push('Missed Check-ins');
   }
   
-  const lastActivity = client.progress?.lastActivity;
-  if (lastActivity) {
-    const lastActivityDate = lastActivity.toDate ? lastActivity.toDate() : new Date(lastActivity);
+  // Check last activity
+  let lastActivityDate: Date | null = null;
+  completedAssignments.forEach(assignment => {
+    if (assignment.completedAt) {
+      const completedDate = assignment.completedAt?.toDate 
+        ? assignment.completedAt.toDate() 
+        : new Date(assignment.completedAt);
+      if (!lastActivityDate || completedDate > lastActivityDate) {
+        lastActivityDate = completedDate;
+      }
+    }
+  });
+  
+  if (lastActivityDate) {
     const daysSinceActivity = (Date.now() - lastActivityDate.getTime()) / (1000 * 60 * 60 * 24);
     if (daysSinceActivity > 14) factors.push('No Recent Activity');
-  } else {
-    factors.push('No Activity Recorded');
+  } else if (totalCheckins > 0) {
+    factors.push('No Check-ins Completed');
   }
   
-  if (responses.length === 0) factors.push('No Form Responses');
+  if (responses.length === 0 && totalCheckins > 0) {
+    factors.push('No Form Responses');
+  }
   
   return factors;
 }
@@ -298,7 +366,7 @@ function getRecommendations(riskLevel: string, riskFactors: string[]): string[] 
   return recommendations;
 }
 
-function generateAlerts(client: any, responses: any[], riskLevel: string): string[] {
+function generateAlerts(client: any, assignments: any[], responses: any[], riskLevel: string): string[] {
   const alerts: string[] = [];
   
   if (riskLevel === 'critical') {
@@ -307,13 +375,29 @@ function generateAlerts(client: any, responses: any[], riskLevel: string): strin
     alerts.push(`High Risk: ${client.firstName} ${client.lastName} needs intervention`);
   }
   
-  const progressScore = client.progress?.overallScore || 0;
-  if (progressScore < 50) {
-    alerts.push(`Alert: Performance score dropped to ${progressScore}%`);
+  // Calculate actual average score
+  const completedAssignments = assignments.filter(a => a.status === 'completed' || a.completedAt || a.responseId);
+  const scores: number[] = [];
+  completedAssignments.forEach(assignment => {
+    if (assignment.score && assignment.score > 0) {
+      scores.push(assignment.score);
+    } else if (assignment.responseId) {
+      const response = responses.find(r => r.id === assignment.responseId);
+      if (response && (response.score || response.percentageScore)) {
+        scores.push(response.score || response.percentageScore || 0);
+      }
+    }
+  });
+  const averageScore = scores.length > 0 
+    ? scores.reduce((sum, s) => sum + s, 0) / scores.length 
+    : 0;
+  
+  if (averageScore > 0 && averageScore < 50) {
+    alerts.push(`Alert: Performance score dropped to ${Math.round(averageScore)}%`);
   }
   
-  const totalCheckins = client.progress?.totalCheckins || 0;
-  const completedCheckins = client.progress?.completedCheckins || 0;
+  const totalCheckins = assignments.length;
+  const completedCheckins = completedAssignments.length;
   if (totalCheckins > 0 && (completedCheckins / totalCheckins) < 0.5) {
     alerts.push(`Alert: ${totalCheckins - completedCheckins} missed check-ins`);
   }

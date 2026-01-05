@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase-server';
 
-// GET - Fetch a specific check-in assignment
+// GET - Fetch a specific check-in assignment with form and questions
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -34,6 +34,50 @@ export async function GET(
 
     const assignmentData = assignmentDoc.data();
     
+    // Fetch form data if formId exists
+    let formData = null;
+    let questions = [];
+    
+    if (assignmentData?.formId) {
+      try {
+        const formDoc = await db.collection('forms').doc(assignmentData.formId).get();
+        if (formDoc.exists) {
+          formData = {
+            id: formDoc.id,
+            ...formDoc.data()
+          };
+          
+          // Fetch questions if form has questionIds
+          if (formData.questions && Array.isArray(formData.questions) && formData.questions.length > 0) {
+            const questionPromises = formData.questions.map((questionId: string) =>
+              db.collection('questions').doc(questionId).get()
+            );
+            
+            const questionDocs = await Promise.all(questionPromises);
+            questions = questionDocs
+              .filter(doc => doc.exists)
+              .map(doc => ({
+                id: doc.id,
+                ...doc.data()
+              }));
+            
+            // Log if any questions are missing
+            const missingQuestions = formData.questions.filter((qId: string) => 
+              !questionDocs.some(doc => doc.exists && doc.id === qId)
+            );
+            if (missingQuestions.length > 0) {
+              console.warn(`Missing questions for form ${assignmentData.formId}:`, missingQuestions);
+            }
+          }
+        } else {
+          console.error(`Form not found: ${assignmentData.formId}`);
+        }
+      } catch (formError) {
+        console.error('Error fetching form data:', formError);
+        // Continue without form data - client can still try to load it
+      }
+    }
+    
     return NextResponse.json({
       success: true,
       assignment: {
@@ -43,7 +87,9 @@ export async function GET(
         completedAt: assignmentData?.completedAt?.toDate?.() || assignmentData?.completedAt,
         dueDate: assignmentData?.dueDate?.toDate?.() || assignmentData?.dueDate
       },
-      documentId: assignmentDoc.id // Return the actual Firestore document ID
+      documentId: assignmentDoc.id, // Return the actual Firestore document ID
+      form: formData, // Include form data
+      questions: questions // Include questions data
     });
 
   } catch (error) {

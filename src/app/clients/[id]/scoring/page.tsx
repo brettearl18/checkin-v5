@@ -132,81 +132,77 @@ export default function ClientScoringPage() {
   }, [clientId]);
 
   const handleProfileChange = (profile: keyof typeof scoringProfiles) => {
-    if (scoringConfig) {
-      const profileData = scoringProfiles[profile];
-      setScoringConfig({
-        ...scoringConfig,
-        scoringProfile: profile,
-        thresholds: profileData.thresholds,
-        categories: Object.keys(scoringConfig.categories).reduce((acc, category) => {
-          acc[category] = {
-            ...scoringConfig.categories[category],
-            thresholds: profileData.thresholds
-          };
-          return acc;
-        }, {} as any)
-      });
-    }
+    if (!scoringConfig) return;
+    const profileData = scoringProfiles[profile];
+    setScoringConfig({
+      ...scoringConfig,
+      scoringProfile: profile,
+      thresholds: profileData.thresholds,
+      categories: Object.keys(scoringConfig.categories || {}).reduce((acc, category) => {
+        acc[category] = {
+          ...(scoringConfig.categories?.[category] || { enabled: true, weight: 1, thresholds: profileData.thresholds }),
+          thresholds: profileData.thresholds
+        };
+        return acc;
+      }, {} as any)
+    });
   };
 
   const handleThresholdChange = (type: 'redMax' | 'orangeMax', value: number) => {
-    if (scoringConfig) {
-      setScoringConfig({
-        ...scoringConfig,
-        thresholds: {
-          ...scoringConfig.thresholds,
-          [type]: value
-        }
-      });
-    }
+    if (!scoringConfig) return;
+    setScoringConfig({
+      ...scoringConfig,
+      thresholds: {
+        ...(scoringConfig.thresholds || { redMax: 60, orangeMax: 80 }),
+        [type]: value
+      }
+    });
   };
 
   const handleCategoryToggle = (category: string, enabled: boolean) => {
-    if (scoringConfig) {
-      setScoringConfig({
-        ...scoringConfig,
-        categories: {
-          ...scoringConfig.categories,
-          [category]: {
-            ...scoringConfig.categories[category],
-            enabled
-          }
+    if (!scoringConfig) return;
+    setScoringConfig({
+      ...scoringConfig,
+      categories: {
+        ...(scoringConfig.categories || {}),
+        [category]: {
+          ...(scoringConfig.categories?.[category] || { enabled: true, weight: 1, thresholds: { red: 60, yellow: 80, green: 90 } }),
+          enabled
         }
-      });
-    }
+      }
+    });
   };
 
   const handleCategoryWeightChange = (category: string, weight: number) => {
-    if (scoringConfig) {
-      setScoringConfig({
-        ...scoringConfig,
-        categories: {
-          ...scoringConfig.categories,
-          [category]: {
-            ...scoringConfig.categories[category],
-            weight
-          }
+    if (!scoringConfig) return;
+    setScoringConfig({
+      ...scoringConfig,
+      categories: {
+        ...(scoringConfig.categories || {}),
+        [category]: {
+          ...(scoringConfig.categories?.[category] || { enabled: true, weight: 1, thresholds: { red: 60, yellow: 80, green: 90 } }),
+          weight
         }
-      });
-    }
+      }
+    });
   };
 
   const handleCategoryThresholdChange = (category: string, type: 'redMax' | 'orangeMax', value: number) => {
-    if (scoringConfig) {
-      setScoringConfig({
-        ...scoringConfig,
-        categories: {
-          ...scoringConfig.categories,
-          [category]: {
-            ...scoringConfig.categories[category],
-            thresholds: {
-              ...scoringConfig.categories[category].thresholds,
-              [type]: value
-            }
+    if (!scoringConfig) return;
+    const currentCategory = scoringConfig.categories?.[category] || { enabled: true, weight: 1, thresholds: { red: 60, yellow: 80, green: 90 } };
+    setScoringConfig({
+      ...scoringConfig,
+      categories: {
+        ...(scoringConfig.categories || {}),
+        [category]: {
+          ...currentCategory,
+          thresholds: {
+            ...currentCategory.thresholds,
+            [type]: value
           }
         }
-      });
-    }
+      }
+    });
   };
 
   const handleSave = async () => {
@@ -241,15 +237,19 @@ export default function ClientScoringPage() {
 
   const getScoreColor = (score: number) => {
     if (!scoringConfig) return 'text-gray-500';
-    if (score > scoringConfig.thresholds.orangeMax) return 'text-green-600';
-    if (score > scoringConfig.thresholds.redMax) return 'text-orange-600';
+    const orangeMax = scoringConfig.thresholds?.orangeMax ?? 80;
+    const redMax = scoringConfig.thresholds?.redMax ?? 60;
+    if (score > orangeMax) return 'text-green-600';
+    if (score > redMax) return 'text-orange-600';
     return 'text-red-600';
   };
 
   const getScoreStatus = (score: number) => {
     if (!scoringConfig) return 'Unknown';
-    if (score > scoringConfig.thresholds.orangeMax) return '🟢 Excellent';
-    if (score > scoringConfig.thresholds.redMax) return '🟠 On Track';
+    const orangeMax = scoringConfig.thresholds?.orangeMax ?? 80;
+    const redMax = scoringConfig.thresholds?.redMax ?? 60;
+    if (score > orangeMax) return '🟢 Excellent';
+    if (score > redMax) return '🟠 On Track';
     return '🔴 Needs Attention';
   };
 
@@ -314,7 +314,7 @@ export default function ClientScoringPage() {
                   <label
                     key={key}
                     className={`relative flex items-start p-4 border rounded-lg cursor-pointer transition-colors ${
-                      scoringConfig.scoringProfile === key
+                        scoringConfig?.scoringProfile === key
                         ? 'border-blue-500 bg-blue-50'
                         : 'border-gray-300 hover:border-gray-400'
                     }`}
@@ -323,7 +323,7 @@ export default function ClientScoringPage() {
                       type="radio"
                       name="profile"
                       value={key}
-                      checked={scoringConfig.scoringProfile === key}
+                      checked={scoringConfig?.scoringProfile === key}
                       onChange={() => handleProfileChange(key as keyof typeof scoringProfiles)}
                       className="sr-only"
                     />
@@ -352,11 +352,11 @@ export default function ClientScoringPage() {
                     type="number"
                     min="0"
                     max="100"
-                    value={scoringConfig.thresholds.redMax}
+                    value={scoringConfig?.thresholds?.redMax ?? 60}
                     onChange={(e) => handleThresholdChange('redMax', parseInt(e.target.value) || 0)}
                     className="w-full px-3 py-2 border border-red-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
                   />
-                  <p className="text-xs text-gray-500 mt-1">Maximum score for Red zone (0-{scoringConfig.thresholds.redMax}%)</p>
+                  <p className="text-xs text-gray-500 mt-1">Maximum score for Red zone (0-{scoringConfig?.thresholds?.redMax ?? 60}%)</p>
                 </div>
                 
                 <div>
@@ -367,11 +367,11 @@ export default function ClientScoringPage() {
                     type="number"
                     min="0"
                     max="100"
-                    value={scoringConfig.thresholds.orangeMax}
+                    value={scoringConfig?.thresholds?.orangeMax ?? 80}
                     onChange={(e) => handleThresholdChange('orangeMax', parseInt(e.target.value) || 0)}
                     className="w-full px-3 py-2 border border-orange-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
                   />
-                  <p className="text-xs text-gray-500 mt-1">Maximum score for Orange zone ({scoringConfig.thresholds.redMax + 1}-{scoringConfig.thresholds.orangeMax}%)</p>
+                  <p className="text-xs text-gray-500 mt-1">Maximum score for Orange zone ({(scoringConfig?.thresholds?.redMax ?? 60) + 1}-{scoringConfig?.thresholds?.orangeMax ?? 80}%)</p>
                 </div>
                 
                 <div>
@@ -379,7 +379,7 @@ export default function ClientScoringPage() {
                     🟢 Green Zone (Excellent)
                   </label>
                   <div className="w-full px-3 py-2 border border-green-300 rounded-md bg-gray-50">
-                    <p className="text-sm text-gray-700">{scoringConfig.thresholds.orangeMax + 1}-100%</p>
+                    <p className="text-sm text-gray-700">{(scoringConfig?.thresholds?.orangeMax ?? 80) + 1}-100%</p>
                   </div>
                   <p className="text-xs text-gray-500 mt-1">Automatically calculated (above Orange max)</p>
                 </div>
@@ -391,7 +391,7 @@ export default function ClientScoringPage() {
               <h2 className="text-xl font-semibold text-gray-900 mb-4">Category Configuration</h2>
               
               <div className="space-y-4">
-                {Object.entries(scoringConfig.categories).map(([category, config]) => (
+                {Object.entries(scoringConfig?.categories || {}).map(([category, config]) => (
                   <div key={category} className="border rounded-lg p-4">
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center space-x-3">

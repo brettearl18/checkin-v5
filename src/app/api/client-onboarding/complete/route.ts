@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb, getAuthInstance } from '@/lib/firebase-server';
 import { notificationService } from '@/lib/notification-service';
+import { autoCreateMeasurementSchedule } from '@/lib/auto-allocate-checkin';
+import { validatePassword } from '@/lib/password-validation';
 
 // Force dynamic rendering - API routes should not be pre-rendered
 export const dynamic = 'force-dynamic';
@@ -20,6 +22,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         success: false,
         message: 'Token, email, and password are required'
+      }, { status: 400 });
+    }
+
+    // Validate password strength
+    const passwordValidation = validatePassword(password);
+    if (!passwordValidation.valid) {
+      return NextResponse.json({
+        success: false,
+        message: passwordValidation.message || 'Password does not meet requirements'
       }, { status: 400 });
     }
 
@@ -70,12 +81,17 @@ export async function POST(request: NextRequest) {
       coachId: clientData.coachId
     });
 
+    // Use the Firestore document ID as the client ID
+    const clientId = clientDoc.id;
+    
     // Update client record
-    await db.collection('clients').doc(clientData.id).update({
+    await db.collection('clients').doc(clientId).update({
       status: 'active',
       authUid: userRecord.uid,
       onboardingToken: null, // Clear the token
       tokenExpiry: null,
+      onboardingStatus: 'completed', // Mark onboarding as completed
+      canStartCheckIns: true, // Allow client to start check-ins
       updatedAt: new Date()
     });
 
@@ -101,12 +117,78 @@ export async function POST(request: NextRequest) {
     // Create welcome notification for client
     try {
       await notificationService.createClientOnboardingNotification(
-        clientData.id,
+        clientId,
         clientData.coachName
       );
     } catch (error) {
       console.error('Error creating welcome notification:', error);
       // Don't fail onboarding if notification fails
+    }
+
+    // Send notification to admin/coach about client completing onboarding
+    try {
+      const { sendEmail } = await import('@/lib/email-service');
+      const { getClientOnboardingCompleteNotificationTemplate } = await import('@/lib/email-templates');
+      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://checkinv5.web.app';
+      
+      // Get coach name if available
+      let coachName: string | undefined;
+      if (clientData.coachId) {
+        try {
+          const coachDoc = await db.collection('coaches').doc(clientData.coachId).get();
+          if (coachDoc.exists) {
+            const coachData = coachDoc.data();
+            coachName = `${coachData?.firstName || ''} ${coachData?.lastName || ''}`.trim() || undefined;
+          }
+        } catch (coachError) {
+          // Ignore coach fetch errors
+        }
+      }
+
+      const clientName = `${clientData?.firstName || ''} ${clientData?.lastName || ''}`.trim() || 'Client';
+      const { subject, html } = getClientOnboardingCompleteNotificationTemplate(
+        clientName,
+        email,
+        clientId,
+        coachName
+      );
+
+      // Send to admin/coach notification emails
+      const notificationEmails = ['silvi@vanahealth.com.au', 'brett.earl@gmail.com'];
+      await sendEmail({
+        to: notificationEmails,
+        subject,
+        html,
+        emailType: 'admin-notification',
+        metadata: {
+          notificationType: 'client-onboarding-complete',
+          clientId: clientId,
+          clientName: clientName,
+          clientEmail: email,
+          coachId: clientData.coachId || '',
+        },
+      });
+    } catch (notificationError) {
+      console.error('Error sending onboarding complete notification:', notificationError);
+      // Don't fail onboarding if notification fails
+    }
+
+    // Note: Check-ins are now allocated manually by coaches after client completes onboarding
+    // Auto-create measurement schedule only (check-ins allocated manually)
+    if (clientData.coachId) {
+      try {
+        await autoCreateMeasurementSchedule(clientId, clientData.coachId, new Date());
+        console.log('Measurement schedule created successfully');
+      } catch (allocationError) {
+        console.error('Error auto-creating measurement schedule:', allocationError);
+        // Log the full error for debugging
+        if (allocationError instanceof Error) {
+          console.error('Allocation error details:', allocationError.message, allocationError.stack);
+        }
+        // Don't fail onboarding if allocation fails - log it and continue
+      }
+    } else {
+      console.warn('No coachId found for client, skipping measurement schedule creation');
     }
 
     return NextResponse.json({ success: true, message: 'Onboarding complete. Account activated.' });

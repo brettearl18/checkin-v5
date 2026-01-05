@@ -53,11 +53,13 @@ interface Form {
 function SortableQuestionItem({ 
   questionId, 
   question, 
-  index 
+  index,
+  returnUrl
 }: { 
   questionId: string; 
   question: Question; 
   index: number;
+  returnUrl?: string;
 }) {
   const {
     attributes,
@@ -90,13 +92,19 @@ function SortableQuestionItem({
     };
     return labels[type] || type;
   };
-  const getCategoryLabel = (category: string) => {
-    if (!category) return 'Uncategorized';
-    return category
+  const getCategoryLabel = (category: string | undefined) => {
+    if (!category || typeof category !== 'string') return 'Uncategorized';
+    const categoryStr = String(category).trim();
+    if (!categoryStr) return 'Uncategorized';
+    return categoryStr
       .split(' ')
       .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
       .join(' ');
   };
+
+  const editUrl = returnUrl 
+    ? `/questions/edit/${questionId}?returnUrl=${encodeURIComponent(returnUrl)}`
+    : `/questions/edit/${questionId}`;
 
   return (
     <div
@@ -123,6 +131,19 @@ function SortableQuestionItem({
           {getQuestionTypeLabel(getQuestionType(question))} • {getCategoryLabel(question.category)}
         </p>
       </div>
+      <Link
+        href={editUrl}
+        className="flex items-center justify-center px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg text-xs font-medium hover:bg-blue-200 transition-all duration-200 whitespace-nowrap"
+        onClick={(e) => {
+          // Don't trigger drag when clicking edit
+          e.stopPropagation();
+        }}
+      >
+        <svg className="w-3.5 h-3.5 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+        </svg>
+        Edit
+      </Link>
     </div>
   );
 }
@@ -135,7 +156,15 @@ export default function EditFormPage() {
   const searchParams = useSearchParams();
   const formId = (params?.id as string) || '';
   const { userProfile } = useAuth();
-  const [currentStep, setCurrentStep] = useState(1);
+  const [currentStep, setCurrentStep] = useState(() => {
+    // Check if step is in URL (for returning from edit)
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const step = params.get('step');
+      return step ? parseInt(step) : 1;
+    }
+    return 1;
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -144,6 +173,7 @@ export default function EditFormPage() {
   const [selectedTypeFilter, setSelectedTypeFilter] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [form, setForm] = useState<Form | null>(null);
+  const [hasLoadedInitialData, setHasLoadedInitialData] = useState(false); // Track if initial data has been loaded
   
   // Drag and drop sensors
   const sensors = useSensors(
@@ -171,8 +201,13 @@ export default function EditFormPage() {
     { value: 'goals', label: 'Goals & Progress Review' }
   ];
 
-  // Fetch form and questions
+  // Fetch form and questions (only on initial load)
   useEffect(() => {
+    // Only fetch if we haven't loaded initial data yet
+    if (hasLoadedInitialData) {
+      return;
+    }
+
     const fetchData = async () => {
       try {
         if (!userProfile?.uid) {
@@ -195,8 +230,23 @@ export default function EditFormPage() {
               isActive: formDataObj.isActive !== undefined ? formDataObj.isActive : true,
               estimatedTime: formDataObj.estimatedTime || 5
             });
+            // Load thresholds from form if they exist, otherwise use defaults
+            if (formDataObj.thresholds?.redMax !== undefined && formDataObj.thresholds?.orangeMax !== undefined) {
+              setPreviewThresholds({
+                redMax: formDataObj.thresholds.redMax,
+                orangeMax: formDataObj.thresholds.orangeMax
+              });
+            } else {
+              // Default to lifestyle thresholds
+              setPreviewThresholds({ redMax: 33, orangeMax: 80 });
+            }
             // Set selected questions in the order they appear in the form
-            setSelectedQuestions(formDataObj.questions || []);
+            // Handle both cases: questions as IDs (strings) or as objects
+            const questionIds = (formDataObj.questions || []).map((q: any) => 
+              typeof q === 'string' ? q : q.id
+            );
+            setSelectedQuestions(questionIds);
+            setHasLoadedInitialData(true); // Mark as loaded
           }
         }
 
@@ -219,11 +269,13 @@ export default function EditFormPage() {
     if (userProfile?.uid && formId) {
       fetchData();
     }
-  }, [userProfile?.uid, formId]);
+  }, [userProfile?.uid, formId, hasLoadedInitialData]);
 
   // Refresh questions when returning from edit page
   useEffect(() => {
     const questionUpdated = searchParams?.get('questionUpdated');
+    const step = searchParams?.get('step');
+    
     if (questionUpdated === 'true' && userProfile?.uid) {
       // Refresh questions list
       fetch(`/api/questions?coachId=${userProfile.uid}`)
@@ -235,8 +287,15 @@ export default function EditFormPage() {
         })
         .catch(err => console.error('Error refreshing questions:', err));
       
-      // Remove the query parameter from URL
-      router.replace(`/forms/${formId}/edit`);
+      // Return to the step that was specified, or stay on current step
+      if (step) {
+        setCurrentStep(parseInt(step));
+        // Remove the questionUpdated parameter but keep step
+        router.replace(`/forms/${formId}/edit?step=${step}`);
+      } else {
+        // Remove the query parameter from URL
+        router.replace(`/forms/${formId}/edit`);
+      }
     }
   }, [searchParams, userProfile?.uid, formId, router]);
 
@@ -256,15 +315,59 @@ export default function EditFormPage() {
     });
   };
 
-  const handleDragEnd = (event: DragEndEvent) => {
+  const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
 
     if (over && active.id !== over.id) {
-      setSelectedQuestions((items) => {
-        const oldIndex = items.indexOf(active.id as string);
-        const newIndex = items.indexOf(over.id as string);
-        return arrayMove(items, oldIndex, newIndex);
+      // Calculate new order
+      let newOrder: string[] = [];
+      
+      setSelectedQuestions((prev) => {
+        const oldIndex = prev.indexOf(active.id as string);
+        const newIndex = prev.indexOf(over.id as string);
+        newOrder = arrayMove(prev, oldIndex, newIndex);
+        return newOrder;
       });
+
+      // Autosave the new order immediately (after state update)
+      // Use a small delay to ensure state has updated
+      setTimeout(async () => {
+        try {
+          const payload = {
+            ...formData,
+            title: formData.title.trim(),
+            description: formData.description.trim(),
+            questionIds: newOrder, // Save the new order
+            coachId: userProfile?.uid,
+            thresholds: {
+              redMax: previewThresholds.redMax,
+              orangeMax: previewThresholds.orangeMax
+            }
+          };
+
+          const response = await fetch(`/api/forms/${formId}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload)
+          });
+
+          if (response.ok) {
+            const responseData = await response.json();
+            if (responseData.success) {
+              console.log('Question order autosaved successfully');
+            } else {
+              console.error('Autosave failed:', responseData.message);
+            }
+          } else {
+            console.error('Autosave failed with status:', response.status);
+          }
+        } catch (error) {
+          console.error('Error autosaving question order:', error);
+          // Don't show alert for autosave failures - it's a background operation
+        }
+      }, 100);
     }
   };
 
@@ -297,34 +400,46 @@ export default function EditFormPage() {
     setIsSaving(true);
 
     try {
+      const payload = {
+        ...formData,
+        title: formData.title.trim(),
+        description: formData.description.trim(),
+        questionIds: selectedQuestions,
+        coachId: userProfile?.uid,
+        thresholds: {
+          redMax: previewThresholds.redMax,
+          orangeMax: previewThresholds.orangeMax
+        }
+      };
+
+      console.log('Saving form with questionIds:', selectedQuestions.length, 'questions');
+      
       const response = await fetch(`/api/forms/${formId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          ...formData,
-          title: formData.title.trim(),
-          description: formData.description.trim(),
-          questionIds: selectedQuestions,
-          coachId: userProfile?.uid
-        })
+        body: JSON.stringify(payload)
       });
 
       if (!response.ok) {
-        throw new Error('Failed to update form');
+        const errorText = await response.text();
+        console.error('Failed to update form. Response:', errorText);
+        throw new Error(`Failed to update form: ${response.status} ${response.statusText}`);
       }
 
       const responseData = await response.json();
 
       if (responseData.success) {
+        console.log('Form saved successfully with', selectedQuestions.length, 'questions');
         router.push('/forms?success=true&formId=' + formId);
       } else {
+        console.error('Form save returned success: false', responseData);
         throw new Error(responseData.message || 'Failed to update form');
       }
     } catch (error) {
       console.error('Error updating form:', error);
-      alert('Error updating form. Please try again.');
+      alert(`Error updating form: ${error instanceof Error ? error.message : 'Please try again.'}`);
     } finally {
       setIsSaving(false);
     }
@@ -355,7 +470,9 @@ export default function EditFormPage() {
     return typeMap[type] || type;
   };
 
-  const getCategoryLabel = (category: string) => {
+  const getCategoryLabel = (category: string | undefined) => {
+    if (!category || typeof category !== 'string') return 'Uncategorized';
+    
     const categoryMap: { [key: string]: string } = {
       'general': 'General',
       'mental_health': 'Mental Health',
@@ -375,13 +492,16 @@ export default function EditFormPage() {
       'Self-Care': 'Self-Care',
       'Stress Management': 'Stress Management'
     };
-    if (!categoryMap[category]) {
-      return category
-        .split(' ')
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-        .join(' ');
+    if (categoryMap[category]) {
+      return categoryMap[category];
     }
-    return categoryMap[category];
+    // Safe split - ensure category is a string before splitting
+    const categoryStr = String(category).trim();
+    if (!categoryStr) return 'Uncategorized';
+    return categoryStr
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
   };
 
   // Filter questions
@@ -464,7 +584,7 @@ export default function EditFormPage() {
         );
 
       case 2:
-        const uniqueCategories = [...new Set(questions.map(q => q.category))].sort();
+        const uniqueCategories = [...new Set(questions.map(q => q.category).filter(cat => cat != null && cat !== ''))].sort();
         const uniqueTypes = [...new Set(questions.map(q => getQuestionType(q)))].sort();
 
         return (
@@ -909,12 +1029,18 @@ export default function EditFormPage() {
                         const question = questions.find(q => q.id === questionId);
                         if (!question) return null;
                         
+                        // Create return URL to come back to this form preview
+                        const formId = params?.id as string || '';
+                        // Use pathname only to avoid double query params
+                        const returnUrl = `/forms/${formId}/edit?step=3`;
+                        
                         return (
                           <SortableQuestionItem
                             key={questionId}
                             questionId={questionId}
                             question={question}
                             index={index}
+                            returnUrl={returnUrl}
                           />
                         );
                       })}

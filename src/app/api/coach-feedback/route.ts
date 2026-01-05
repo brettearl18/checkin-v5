@@ -18,8 +18,8 @@ interface CoachFeedback {
 }
 
 export async function POST(request: NextRequest) {
-  const db = getDb();
   try {
+    const db = getDb();
     const body = await request.json();
     const { responseId, coachId, clientId, questionId, feedbackType, content } = body;
 
@@ -31,19 +31,42 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if feedback already exists for this combination
-    let existingFeedbackQuery = db.collection('coachFeedback')
-      .where('responseId', '==', responseId)
-      .where('coachId', '==', coachId)
-      .where('feedbackType', '==', feedbackType);
+    let existingFeedbackSnapshot;
     
-    // If questionId is provided, filter by it; otherwise filter for null questionId (overall feedback)
     if (questionId) {
-      existingFeedbackQuery = existingFeedbackQuery.where('questionId', '==', questionId);
+      // Query with questionId filter
+      existingFeedbackSnapshot = await db.collection('coachFeedback')
+        .where('responseId', '==', responseId)
+        .where('coachId', '==', coachId)
+        .where('questionId', '==', questionId)
+        .where('feedbackType', '==', feedbackType)
+        .get();
     } else {
-      existingFeedbackQuery = existingFeedbackQuery.where('questionId', '==', null);
+      // For overall feedback (no questionId), query for documents where questionId doesn't exist or is null
+      // Note: Firestore doesn't support == null directly, so we need to fetch all and filter client-side
+      // OR use a different approach: store overall feedback with a special questionId value
+      // For now, we'll query all feedback and filter client-side for null questionId
+      const allFeedback = await db.collection('coachFeedback')
+        .where('responseId', '==', responseId)
+        .where('coachId', '==', coachId)
+        .where('feedbackType', '==', feedbackType)
+        .get();
+      
+      // Filter for documents where questionId is null or doesn't exist
+      existingFeedbackSnapshot = {
+        empty: true,
+        docs: []
+      } as any;
+      
+      for (const doc of allFeedback.docs) {
+        const data = doc.data();
+        if (!data.questionId || data.questionId === null) {
+          existingFeedbackSnapshot.empty = false;
+          existingFeedbackSnapshot.docs = [doc];
+          break;
+        }
+      }
     }
-
-    const existingFeedbackSnapshot = await existingFeedbackQuery.get();
 
     let feedbackId: string;
     const now = new Date();
@@ -143,6 +166,56 @@ export async function POST(request: NextRequest) {
             `${coachName} has provided feedback on your "${formTitle}" check-in. Click to view your coach's response.`,
             `/client-portal/feedback/${responseId}`
           );
+
+          // Send email notification to client
+          try {
+            // Get client information
+            const clientDoc = await db.collection('clients').doc(clientId).get();
+            if (clientDoc.exists) {
+              const clientData = clientDoc.data();
+              const clientEmail = clientData?.email;
+              const clientName = `${clientData?.firstName || ''} ${clientData?.lastName || ''}`.trim() || 'there';
+
+              if (clientEmail) {
+                const { sendEmail } = await import('@/lib/email-service');
+                const { getCoachFeedbackEmailTemplate } = await import('@/lib/email-templates');
+                const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://checkinv5.web.app';
+                const feedbackUrl = `${baseUrl}/client-portal/feedback/${responseId}`;
+
+                // Check if feedback has voice message (feedbackType comes from request body)
+                const hasVoiceFeedback = feedbackType === 'voice';
+
+                // Get score from response
+                let score = 0;
+                try {
+                  const responseDoc = await db.collection('formResponses').doc(responseId).get();
+                  if (responseDoc.exists) {
+                    score = responseDoc.data()?.score || 0;
+                  }
+                } catch (error) {
+                  console.log('Could not fetch score for feedback email');
+                }
+
+                const { subject, html } = getCoachFeedbackEmailTemplate(
+                  clientName,
+                  formTitle,
+                  score,
+                  feedbackUrl,
+                  hasVoiceFeedback,
+                  coachName === 'Your coach' ? undefined : coachName
+                );
+
+                await sendEmail({
+                  to: clientEmail,
+                  subject,
+                  html,
+                });
+              }
+            }
+          } catch (emailError) {
+            console.error('Error sending feedback email:', emailError);
+            // Don't fail the feedback save if email fails
+          }
         }
       } catch (error) {
         console.error('Error creating client notification:', error);
@@ -168,8 +241,8 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
-  const db = getDb();
   try {
+    const db = getDb();
     const { searchParams } = new URL(request.url);
     let responseId = searchParams.get('responseId');
     const coachId = searchParams.get('coachId');
@@ -302,8 +375,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  const db = getDb();
   try {
+    const db = getDb();
     const body = await request.json();
     const { feedbackId, content } = body;
 
@@ -336,8 +409,81 @@ export async function PUT(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const db = getDb();
   try {
+    const db = getDb();
+    const { searchParams } = new URL(request.url);
+    const feedbackId = searchParams.get('feedbackId');
+
+    if (!feedbackId) {
+      return NextResponse.json({
+        success: false,
+        message: 'Feedback ID is required'
+      }, { status: 400 });
+    }
+
+    // Delete feedback from Firestore
+    await db.collection('coachFeedback').doc(feedbackId).delete();
+    
+    return NextResponse.json({
+      success: true,
+      message: 'Feedback deleted successfully'
+    });
+
+  } catch (error) {
+    console.error('Error deleting coach feedback:', error);
+    return NextResponse.json({
+      success: false,
+      message: 'Failed to delete feedback',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
+  }
+}
+
+    return NextResponse.json({
+      success: false,
+      message: 'Failed to fetch feedback',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
+  }
+}
+
+export async function PUT(request: NextRequest) {
+  try {
+    const db = getDb();
+    const body = await request.json();
+    const { feedbackId, content } = body;
+
+    if (!feedbackId || !content) {
+      return NextResponse.json({
+        success: false,
+        message: 'Feedback ID and content are required'
+      }, { status: 400 });
+    }
+
+    // Update feedback in Firestore
+    await db.collection('coachFeedback').doc(feedbackId).update({
+      content,
+      updatedAt: new Date()
+    });
+    
+    return NextResponse.json({
+      success: true,
+      message: 'Feedback updated successfully'
+    });
+
+  } catch (error) {
+    console.error('Error updating coach feedback:', error);
+    return NextResponse.json({
+      success: false,
+      message: 'Failed to update feedback',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const db = getDb();
     const { searchParams } = new URL(request.url);
     const feedbackId = searchParams.get('feedbackId');
 

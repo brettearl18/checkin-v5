@@ -66,9 +66,29 @@ export async function GET(
     }
 
     const formData = formDoc.data();
+    
+    // If questions are stored as IDs (strings), fetch the actual question documents
+    let questions = formData?.questions || [];
+    if (questions.length > 0 && typeof questions[0] === 'string') {
+      // Questions are IDs - fetch the actual question documents
+      const questionDocs = await Promise.all(
+        questions.map((questionId: string) => 
+          db.collection('questions').doc(questionId).get().catch(() => null)
+        )
+      );
+      
+      questions = questionDocs
+        .filter(doc => doc && doc.exists)
+        .map(doc => ({
+          id: doc!.id,
+          ...doc!.data()
+        }));
+    }
+    
     const form = {
       id: formDoc.id,
       ...formData,
+      questions: questions, // Replace with fetched questions if they were IDs
       createdAt: formData?.createdAt?.toDate?.() || formData?.createdAt,
       updatedAt: formData?.updatedAt?.toDate?.() || formData?.updatedAt
     };
@@ -136,12 +156,67 @@ export async function PUT(
       updateData.isActive = isActive;
     }
 
+    // Save thresholds if provided
+    let thresholdsUpdated = false;
+    if (body.thresholds?.redMax !== undefined && body.thresholds?.orangeMax !== undefined) {
+      updateData.thresholds = {
+        redMax: body.thresholds.redMax,
+        orangeMax: body.thresholds.orangeMax
+      };
+      thresholdsUpdated = true;
+    }
+
+    console.log(`Updating form ${formId} with ${(questionIds || []).length} questions`);
+
     await db.collection('forms').doc(formId).update(updateData);
+
+    console.log(`Form ${formId} updated successfully`);
+
+    // If thresholds were updated, update all pending/future check-in assignments for this form
+    if (thresholdsUpdated && body.thresholds) {
+      try {
+        // Find all pending check-in assignments for this form (status: 'pending' or future due dates)
+        const assignmentsSnapshot = await db.collection('check_in_assignments')
+          .where('formId', '==', formId)
+          .where('status', 'in', ['pending', 'active'])
+          .get();
+
+        if (assignmentsSnapshot.size > 0) {
+          console.log(`Updating thresholds for ${assignmentsSnapshot.size} pending check-in assignments`);
+          
+          // Update all pending assignments with new thresholds
+          const batch = db.batch();
+          assignmentsSnapshot.docs.forEach(doc => {
+            const assignmentData = doc.data();
+            const dueDate = assignmentData.dueDate?.toDate ? assignmentData.dueDate.toDate() : new Date(assignmentData.dueDate || 0);
+            const now = new Date();
+            
+            // Only update if due date is in the future (not yet completed)
+            if (dueDate >= now || !assignmentData.completedAt) {
+              batch.update(doc.ref, {
+                formThresholds: {
+                  redMax: body.thresholds.redMax,
+                  orangeMax: body.thresholds.orangeMax
+                },
+                thresholdsUpdatedAt: new Date()
+              });
+            }
+          });
+          
+          await batch.commit();
+          console.log(`Successfully updated thresholds for ${assignmentsSnapshot.size} check-in assignments`);
+        }
+      } catch (error) {
+        console.error('Error updating check-in assignment thresholds:', error);
+        // Don't fail the form update if assignment update fails
+      }
+    }
 
     return NextResponse.json({
       success: true,
       message: 'Form updated successfully',
-      formId: formId
+      formId: formId,
+      questionsCount: (questionIds || []).length
     });
   } catch (error) {
     console.error('Error updating form:', error);

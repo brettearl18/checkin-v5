@@ -21,7 +21,8 @@ export default function ClientProfilePage() {
     age: userProfile?.profile?.age || '',
     gender: userProfile?.profile?.gender || '',
     fitnessLevel: userProfile?.profile?.fitnessLevel || '',
-    healthGoals: userProfile?.profile?.healthGoals || []
+    healthGoals: userProfile?.profile?.healthGoals || [],
+    emailNotifications: userProfile?.emailNotifications ?? true // Default to true (opt-out)
   });
 
   // Load client data when component mounts or userProfile changes
@@ -43,7 +44,8 @@ export default function ClientProfilePage() {
               age: client.profile?.age || '',
               gender: client.profile?.gender || '',
               fitnessLevel: client.profile?.fitnessLevel || '',
-              healthGoals: client.profile?.healthGoals || []
+              healthGoals: client.profile?.healthGoals || [],
+              emailNotifications: client.emailNotifications ?? true // Default to true if not set
             });
           }
         }
@@ -72,6 +74,13 @@ export default function ClientProfilePage() {
     }));
   };
 
+  const handleEmailNotificationChange = (checked: boolean) => {
+    setFormData(prev => ({
+      ...prev,
+      emailNotifications: checked
+    }));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
@@ -84,6 +93,7 @@ export default function ClientProfilePage() {
         firstName: formData.firstName,
         lastName: formData.lastName,
         phone: formData.phone,
+        emailNotifications: formData.emailNotifications,
         profile: {
           age: formData.age ? parseInt(formData.age) : null,
           gender: formData.gender,
@@ -282,6 +292,27 @@ export default function ClientProfilePage() {
                 </div>
               </div>
 
+              {/* Email Notifications */}
+              <div className="mb-8">
+                <h2 className="text-xl font-semibold text-gray-900 mb-6">Email Notifications</h2>
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <label className="flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.emailNotifications}
+                      onChange={(e) => handleEmailNotificationChange(e.target.checked)}
+                      className="mr-3 h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    />
+                    <div className="flex-1">
+                      <span className="text-base font-medium text-gray-900">Receive email notifications</span>
+                      <p className="text-sm text-gray-600 mt-1">
+                        Get notified via email about check-in reminders, window openings, and important updates from your coach.
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
               {/* Message */}
               {message && (
                 <div className={`mb-6 p-4 rounded-md ${
@@ -349,6 +380,37 @@ export default function ClientProfilePage() {
                 <div>
                   <h3 className="font-medium text-blue-900">View Progress</h3>
                   <p className="text-sm text-blue-700">See your detailed progress report</p>
+                </div>
+              </Link>
+              
+              <Link
+                href="/client-portal/history"
+                className="flex items-center p-4 bg-white rounded-lg border border-blue-200 hover:bg-blue-50 transition-colors"
+              >
+                <span className="text-2xl mr-3">📋</span>
+                <div>
+                  <h3 className="font-medium text-blue-900">Response History</h3>
+                  <p className="text-sm text-blue-700">View all your past check-ins</p>
+                </div>
+              </Link>
+              
+              <button
+                onClick={() => {/* Add logout functionality */}}
+                className="flex items-center p-4 bg-white rounded-lg border border-red-200 hover:bg-red-50 transition-colors text-left"
+              >
+                <span className="text-2xl mr-3">🚪</span>
+                <div>
+                  <h3 className="font-medium text-red-900">Sign Out</h3>
+                  <p className="text-sm text-red-700">Log out of your account</p>
+                </div>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </RoleProtected>
+  );
+} 
                 </div>
               </Link>
               

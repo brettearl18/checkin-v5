@@ -144,7 +144,10 @@ export default function EditQuestionPage() {
             required: question.required || question.isRequired || false,
             description: question.description || '',
             hasWeighting: hasWeighting,
-            questionWeight: question.questionWeight || question.weight || 5,
+            // Text and textarea questions default to weight 0 (don't contribute to scoring)
+        questionWeight: (question.type === 'text' || question.questionType === 'text' || question.type === 'textarea' || question.questionType === 'textarea') 
+          ? (question.questionWeight || question.weight || 0)
+          : (question.questionWeight || question.weight || 5),
             yesIsPositive: question.yesIsPositive !== undefined ? question.yesIsPositive : true
           });
         } else {
@@ -164,10 +167,23 @@ export default function EditQuestionPage() {
   }, [questionId]);
 
   const handleInputChange = (field: keyof QuestionFormData, value: any) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }));
+    setFormData(prev => {
+      const updated = {
+        ...prev,
+        [field]: value
+      };
+      
+      // If changing to text or textarea, set questionWeight to 0 (they don't contribute to scoring)
+      if (field === 'type' && (value === 'text' || value === 'textarea')) {
+        updated.questionWeight = 0;
+      }
+      // If changing from text/textarea to a scorable type, set default weight to 5
+      else if (field === 'type' && value !== 'text' && value !== 'textarea' && (prev.type === 'text' || prev.type === 'textarea') && prev.questionWeight === 0) {
+        updated.questionWeight = 5;
+      }
+      
+      return updated;
+    });
   };
 
   const handleAddOption = () => {
@@ -196,6 +212,17 @@ export default function EditQuestionPage() {
         ...prev,
         options: prev.options?.map((option, i) => 
           i === index ? { ...option, weight } : option
+        )
+      }));
+    }
+  };
+
+  const handleUpdateOptionText = (index: number, text: string) => {
+    if (formData.options) {
+      setFormData(prev => ({
+        ...prev,
+        options: prev.options?.map((option, i) => 
+          i === index ? { ...option, text } : option
         )
       }));
     }
@@ -249,8 +276,9 @@ export default function EditQuestionPage() {
         category: formData.category || 'General',
         required: formData.required || false,
         isRequired: formData.required || false,
-        questionWeight: formData.questionWeight || 5,
-        weight: formData.questionWeight || 5,
+        // Text and textarea questions should have weight 0 (don't contribute to scoring)
+        questionWeight: (formData.type === 'text' || formData.type === 'textarea') ? 0 : (formData.questionWeight || 5),
+        weight: (formData.type === 'text' || formData.type === 'textarea') ? 0 : (formData.questionWeight || 5),
         hasWeighting: formData.hasWeighting
       };
 
@@ -284,7 +312,9 @@ export default function EditQuestionPage() {
         // Redirect back to returnUrl if provided, otherwise to question library
         if (returnUrl) {
           console.log('Redirecting back to:', returnUrl);
-          router.push(`${returnUrl}?questionUpdated=true`);
+          // Properly append questionUpdated parameter
+          const separator = returnUrl.includes('?') ? '&' : '?';
+          router.push(`${returnUrl}${separator}questionUpdated=true`);
         } else {
           console.log('No returnUrl found, redirecting to library');
           router.push('/questions/library?success=true&updated=true');
@@ -480,27 +510,38 @@ export default function EditQuestionPage() {
                     />
                   </div>
 
-                  {/* Question Weight */}
-                  <div className="bg-gradient-to-r from-purple-50 to-pink-50 p-6 rounded-xl border border-purple-200">
-                    <label className="block text-sm font-medium text-purple-900 mb-4">
-                      Question Weight: {formData.questionWeight}/10
-                    </label>
-                    <input
-                      type="range"
-                      min="1"
-                      max="10"
-                      value={formData.questionWeight}
-                      onChange={(e) => handleInputChange('questionWeight', parseInt(e.target.value))}
-                      className="w-full h-2 bg-purple-200 rounded-lg appearance-none cursor-pointer"
-                    />
-                    <div className="flex justify-between text-xs text-purple-700 mt-2">
-                      <span>Low Impact (1)</span>
-                      <span>High Impact (10)</span>
+                  {/* Question Weight - Hidden for text/textarea questions (they don't contribute to scoring) */}
+                  {(formData.type !== 'text' && formData.type !== 'textarea') && (
+                    <div className="bg-gradient-to-r from-purple-50 to-pink-50 p-6 rounded-xl border border-purple-200">
+                      <label className="block text-sm font-medium text-purple-900 mb-4">
+                        Question Weight: {formData.questionWeight}/10
+                      </label>
+                      <input
+                        type="range"
+                        min="1"
+                        max="10"
+                        value={formData.questionWeight}
+                        onChange={(e) => handleInputChange('questionWeight', parseInt(e.target.value))}
+                        className="w-full h-2 bg-purple-200 rounded-lg appearance-none cursor-pointer"
+                      />
+                      <div className="flex justify-between text-xs text-purple-700 mt-2">
+                        <span>Low Impact (1)</span>
+                        <span>High Impact (10)</span>
+                      </div>
+                      <p className="text-xs text-purple-600 mt-2">
+                        This determines how much this question contributes to the overall score
+                      </p>
                     </div>
-                    <p className="text-xs text-purple-600 mt-2">
-                      This determines how much this question contributes to the overall score
-                    </p>
-                  </div>
+                  )}
+                  
+                  {/* Info message for text/textarea questions */}
+                  {(formData.type === 'text' || formData.type === 'textarea') && (
+                    <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+                      <p className="text-sm text-gray-600">
+                        <strong>Note:</strong> Text and Long Text questions do not contribute to scoring. They are used for context and feedback only.
+                      </p>
+                    </div>
+                  )}
 
                   {/* Boolean Question Settings */}
                   {formData.type === 'boolean' && (
@@ -628,9 +669,13 @@ export default function EditQuestionPage() {
                             <div className="space-y-3">
                               {formData.options.map((option, index) => (
                                 <div key={index} className="flex items-center space-x-3">
-                                  <span className="flex-1 px-4 py-3 bg-gray-100 rounded-lg text-gray-900 font-medium">
-                                    {option.text}
-                                  </span>
+                                  <input
+                                    type="text"
+                                    value={option.text}
+                                    onChange={(e) => handleUpdateOptionText(index, e.target.value)}
+                                    className="flex-1 px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 font-medium transition-all"
+                                    placeholder="Option text..."
+                                  />
                                   {formData.hasWeighting && (
                                     <div className="flex items-center space-x-2">
                                       <span className="text-sm text-gray-700">Weight:</span>
@@ -683,6 +728,51 @@ export default function EditQuestionPage() {
                               className="px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl font-medium transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
                             >
                               Add
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Required field */}
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={formData.required}
+                      onChange={(e) => handleInputChange('required', e.target.checked)}
+                      className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 transition-all duration-200"
+                    />
+                    <span className="ml-3 text-sm text-gray-900">This question is required</span>
+                  </div>
+
+                  {/* Submit Button */}
+                  <div className="flex items-center justify-end space-x-4 pt-6 border-t border-gray-200">
+                    <Link
+                      href="/questions/library"
+                      className="px-6 py-3 text-gray-700 bg-gray-100 rounded-xl font-medium hover:bg-gray-200 transition-all duration-200"
+                    >
+                      Cancel
+                    </Link>
+                    <button
+                      type="submit"
+                      disabled={isSubmitting || !formData.text.trim()}
+                      className="px-8 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl font-medium transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                    >
+                      {isSubmitting ? 'Updating...' : 'Update Question'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </RoleProtected>
+  );
+}
+
+
                             </button>
                           </div>
                         </div>

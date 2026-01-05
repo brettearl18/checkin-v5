@@ -6,8 +6,6 @@ import { RoleProtected } from '@/components/ProtectedRoute';
 import ClientNavigation from '@/components/ClientNavigation';
 import Link from 'next/link';
 import NotificationBell from '@/components/NotificationBell';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase-client';
 import {
   getTrafficLightStatus,
   getTrafficLightIcon,
@@ -23,6 +21,7 @@ import {
   DEFAULT_CHECK_IN_WINDOW,
   type CheckInWindow
 } from '@/lib/checkin-window-utils';
+import QuickStatsBar from '@/components/client-portal/QuickStatsBar';
 
 interface ClientStats {
   overallProgress: number;
@@ -46,6 +45,10 @@ interface RecentResponse {
   submittedAt: string;
   score: number;
   status: 'completed' | 'pending';
+  hasFeedback?: boolean;
+  feedbackCount?: number;
+  responseId?: string;
+  formTitle?: string;
 }
 
 interface Coach {
@@ -139,52 +142,92 @@ function ProgressImagesPreview({ clientEmail }: { clientEmail: string }) {
     <div className="p-5">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {images.map((image) => (
-          <div key={image.id} className="group relative aspect-square rounded-xl overflow-hidden border-2 border-gray-200/60 hover:border-pink-400/80 transition-all duration-300 hover:shadow-lg hover:-translate-y-1 bg-white/50 backdrop-blur-sm">
-            <img
-              src={image.imageUrl}
-              alt={image.caption || image.imageType}
-              className="w-full h-full object-cover"
-              onError={(e) => {
-                (e.target as HTMLImageElement).src = `data:image/svg+xml,${encodeURIComponent(`
-                  <svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
-                    <rect width="200" height="200" fill="#f3f4f6"/>
-                    <text x="50%" y="50%" font-family="Arial" font-size="14" fill="#9ca3af" text-anchor="middle" dy=".3em">Image</text>
-                  </svg>
-                `)}`;
+          <div key={image.id} className="flex flex-col">
+            <div className="group relative aspect-square rounded-xl overflow-hidden border-2 border-gray-200/60 hover:border-pink-400/80 transition-all duration-300 hover:shadow-lg hover:-translate-y-1 bg-white/50 backdrop-blur-sm cursor-pointer"
+              onClick={(e) => {
+                window.location.href = `/client-portal/progress-images?scrollTo=${image.id}`;
               }}
-            />
-            <div className="absolute top-1 left-1 flex flex-col gap-0.5">
-              <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
-                image.imageType === 'profile' ? 'bg-blue-100 text-blue-800' :
-                image.imageType === 'before' ? 'bg-orange-100 text-orange-800' :
-                image.imageType === 'after' ? 'bg-green-100 text-green-800' :
-                'bg-purple-100 text-purple-800'
-              }`}>
-                {image.imageType === 'profile' ? 'Profile' :
-                 image.imageType === 'before' ? 'Before' :
-                 image.imageType === 'after' ? 'After' :
-                 'Progress'}
-              </span>
-              {image.orientation && (
+            >
+              <img
+                src={image.imageUrl}
+                alt={image.caption || image.imageType}
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = `data:image/svg+xml,${encodeURIComponent(`
+                    <svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
+                      <rect width="200" height="200" fill="#f3f4f6"/>
+                      <text x="50%" y="50%" font-family="Arial" font-size="14" fill="#9ca3af" text-anchor="middle" dy=".3em">Image</text>
+                    </svg>
+                  `)}`;
+                }}
+              />
+              <div className="absolute top-1 left-1 flex flex-col gap-0.5">
                 <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
-                  image.orientation === 'front' ? 'bg-pink-100 text-pink-800' :
-                  image.orientation === 'back' ? 'bg-indigo-100 text-indigo-800' :
-                  'bg-teal-100 text-teal-800'
+                  image.imageType === 'profile' ? 'bg-blue-100 text-blue-800' :
+                  image.imageType === 'before' ? 'bg-orange-100 text-orange-800' :
+                  image.imageType === 'after' ? 'bg-green-100 text-green-800' :
+                  'bg-purple-100 text-purple-800'
                 }`}>
-                  {image.orientation.charAt(0).toUpperCase() + image.orientation.slice(1)}
+                  {image.imageType === 'profile' ? 'Profile' :
+                   image.imageType === 'before' ? 'Before' :
+                   image.imageType === 'after' ? 'After' :
+                   'Progress'}
                 </span>
-              )}
+                {image.orientation && (
+                  <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
+                    image.orientation === 'front' ? 'bg-pink-100 text-pink-800' :
+                    image.orientation === 'back' ? 'bg-indigo-100 text-indigo-800' :
+                    'bg-teal-100 text-teal-800'
+                  }`}>
+                    {image.orientation.charAt(0).toUpperCase() + image.orientation.slice(1)}
+                  </span>
+                )}
+              </div>
             </div>
-            <div className="absolute bottom-1 right-1">
-              <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-black/60 text-white">
-                {new Date(image.uploadedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-              </span>
+            <div className="mt-2 text-center">
+              <p className="text-gray-700 text-sm font-semibold">
+                {new Date(image.uploadedAt).toLocaleDateString('en-US', { 
+                  month: 'short', 
+                  day: 'numeric',
+                  year: 'numeric'
+                })}
+              </p>
             </div>
           </div>
         ))}
       </div>
     </div>
   );
+}
+
+interface DashboardAnalytics {
+  bodyweight: {
+    current: number | null;
+    baseline: number | null;
+    change: number;
+    trend: 'up' | 'down' | 'stable' | 'no_data';
+    history: Array<{ date: string; weight: number }>;
+  };
+  measurements: {
+    totalChange: number;
+    history: Array<{
+      date: string;
+      measurements: Record<string, number>;
+    }>;
+  };
+  scores: {
+    current: number | null;
+    average: number;
+    trend: 'up' | 'down' | 'stable' | 'no_data';
+    history: Array<{ date: string; score: number; color: 'red' | 'orange' | 'green' }>;
+  };
+  quickStats: {
+    daysActive: number;
+    totalCheckIns: number;
+    weightChange: number;
+    measurementChange: number;
+    currentStreak: number;
+  };
 }
 
 export default function ClientPortalPage() {
@@ -199,76 +242,97 @@ export default function ClientPortalPage() {
   const [recentResponses, setRecentResponses] = useState<RecentResponse[]>([]);
   const [coach, setCoach] = useState<Coach | null>(null);
   const [loading, setLoading] = useState(true);
-  const [thresholds, setThresholds] = useState<ScoringThresholds>(getDefaultThresholds('lifestyle'));
+  const [thresholds, setThresholds] = useState<ScoringThresholds>(getDefaultThresholds('moderate'));
   const [averageTrafficLight, setAverageTrafficLight] = useState<TrafficLightStatus>('orange');
   const [clientId, setClientId] = useState<string | null>(null);
   const [showScoringInfo, setShowScoringInfo] = useState(false);
+  const [onboardingTodos, setOnboardingTodos] = useState({
+    hasWeight: false,
+    hasMeasurements: false,
+    hasBeforePhotos: false,
+  });
+  const [loadingTodos, setLoadingTodos] = useState(true);
+  const [onboardingStatus, setOnboardingStatus] = useState<'not_started' | 'in_progress' | 'completed' | 'submitted' | 'skipped'>('not_started');
+  const [onboardingProgress, setOnboardingProgress] = useState(0);
+  const [nextMeasurementTask, setNextMeasurementTask] = useState<{
+    dueDate: string;
+    status: 'upcoming' | 'due' | 'overdue';
+    daysUntil: number;
+  } | null>(null);
+  const [analytics, setAnalytics] = useState<DashboardAnalytics | null>(null);
+  const [loadingAnalytics, setLoadingAnalytics] = useState(true);
 
   useEffect(() => {
     if (userProfile?.email) {
       fetchClientData();
+      fetchAnalytics();
     } else if (userProfile === null) {
       // User profile is loaded but no email - this is an error state
       setLoading(false);
+      setLoadingAnalytics(false);
     }
     // If userProfile is undefined, it's still loading, so we wait
   }, [userProfile?.email]);
 
-  // Fetch scoring configuration when clientId is available
-  useEffect(() => {
-    const fetchScoringConfig = async () => {
-      if (!clientId) return;
+  const fetchAnalytics = async () => {
+    try {
+      setLoadingAnalytics(true);
       
-      try {
-        const scoringDoc = await getDoc(doc(db, 'clientScoring', clientId));
-        if (scoringDoc.exists()) {
-          const scoringData = scoringDoc.data();
-          let clientThresholds: ScoringThresholds;
-
-          // Check if new format (redMax/orangeMax) exists
-          if (scoringData.thresholds?.redMax !== undefined && scoringData.thresholds?.orangeMax !== undefined) {
-            clientThresholds = {
-              redMax: scoringData.thresholds.redMax,
-              orangeMax: scoringData.thresholds.orangeMax
-            };
-          } else if (scoringData.thresholds?.red !== undefined && scoringData.thresholds?.yellow !== undefined) {
-            // Convert legacy format
-            clientThresholds = convertLegacyThresholds(scoringData.thresholds);
-          } else if (scoringData.scoringProfile) {
-            // Use profile defaults
-            clientThresholds = getDefaultThresholds(scoringData.scoringProfile as any);
-          } else {
-            // Default to lifestyle
-            clientThresholds = getDefaultThresholds('lifestyle');
+      // Get Firebase ID token for authentication
+      let idToken: string | null = null;
+      if (typeof window !== 'undefined' && userProfile?.uid) {
+        try {
+          const { auth } = await import('@/lib/firebase-client');
+          if (auth?.currentUser) {
+            idToken = await auth.currentUser.getIdToken();
           }
-
-          setThresholds(clientThresholds);
-          
-          // Update average traffic light status
-          if (stats.averageScore > 0) {
-            setAverageTrafficLight(getTrafficLightStatus(stats.averageScore, clientThresholds));
-          }
-        } else {
-          // No scoring config, use default lifestyle thresholds
-          const defaultThresholds = getDefaultThresholds('lifestyle');
-          setThresholds(defaultThresholds);
-          if (stats.averageScore > 0) {
-            setAverageTrafficLight(getTrafficLightStatus(stats.averageScore, defaultThresholds));
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching scoring config:', error);
-        // Use default lifestyle thresholds on error
-        const defaultThresholds = getDefaultThresholds('lifestyle');
-        setThresholds(defaultThresholds);
-        if (stats.averageScore > 0) {
-          setAverageTrafficLight(getTrafficLightStatus(stats.averageScore, defaultThresholds));
+        } catch (authError) {
+          console.warn('Could not get auth token:', authError);
         }
       }
-    };
 
-    fetchScoringConfig();
-  }, [clientId, stats.averageScore]);
+      const headers: HeadersInit = {};
+      if (idToken) {
+        headers['Authorization'] = `Bearer ${idToken}`;
+      }
+
+      const response = await fetch('/api/client-portal/analytics', {
+        headers
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.data) {
+          setAnalytics(data.data);
+        }
+      } else {
+        console.error('Analytics API error:', response.status, response.statusText);
+      }
+    } catch (error) {
+      console.error('Error fetching analytics:', error);
+    } finally {
+      setLoadingAnalytics(false);
+    }
+  };
+
+  // Update scoring config when it's loaded from API (Phase 1: Removed client-side Firestore)
+  useEffect(() => {
+    // Scoring config is now included in the API response
+    // This effect is handled in fetchClientData
+  }, []);
+
+  // Refresh onboarding todos when page becomes visible (Phase 1: Consolidated API calls)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden && userProfile?.email) {
+        // Refetch dashboard data when page becomes visible
+        fetchClientData();
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [userProfile?.email]);
 
   const fetchClientData = async () => {
     try {
@@ -281,22 +345,34 @@ export default function ClientPortalPage() {
         return;
       }
       
-      // Fetch real data from API using email
+      // Fetch real data from API using email with timeout
       // Try fetching by email first, but also pass user UID as fallback
-      const response = await fetch(`/api/client-portal?clientEmail=${encodeURIComponent(clientEmail)}${userProfile?.uid ? `&userUid=${encodeURIComponent(userProfile.uid)}` : ''}`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+      
+      try {
+        const response = await fetch(`/api/client-portal?clientEmail=${encodeURIComponent(clientEmail)}${userProfile?.uid ? `&userUid=${encodeURIComponent(userProfile.uid)}` : ''}`, {
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+          // Handle non-OK responses gracefully
+          throw new Error(`API returned ${response.status}: ${response.statusText}`);
+        }
       
       if (response.ok) {
         const data = await response.json();
         
-        if (data.success) {
-          const { client, coach, checkInAssignments, summary } = data.data;
+          if (data.success) {
+          const { client, coach, checkInAssignments, summary, nextMeasurementTask } = data.data;
           
-          // Store client ID for fetching scoring config
+          // Store client ID (Phase 1: All data now comes from API)
           if (client?.id) {
             setClientId(client.id);
           }
           
-          // Calculate average score from recent responses if available
+          // Calculate average score from recent responses if available (must be done before using calculatedStats)
           let averageScore = 0;
           if (summary.recentResponses && summary.recentResponses.length > 0) {
             const scores = summary.recentResponses.map((r: any) => r.score || 0).filter((s: number) => s > 0);
@@ -305,13 +381,53 @@ export default function ClientPortalPage() {
             }
           }
           
-          // Calculate stats from the summary data
+          // Calculate stats from the summary data (must be done before using it)
           const calculatedStats = {
             overallProgress: summary.completedAssignments > 0 ? Math.round((summary.completedAssignments / summary.totalAssignments) * 100) : 0,
             completedCheckins: summary.completedAssignments || 0,
             totalCheckins: summary.totalAssignments || 0,
             averageScore: averageScore
           };
+          
+          // Set scoring config from API response (Phase 1: Removed client-side Firestore)
+          if (data.data.scoringConfig) {
+            setThresholds(data.data.scoringConfig.thresholds);
+            // Update average traffic light status
+            if (calculatedStats.averageScore > 0) {
+              setAverageTrafficLight(getTrafficLightStatus(calculatedStats.averageScore, data.data.scoringConfig.thresholds));
+            }
+          } else {
+            // Fallback to default thresholds if scoring config is missing
+            const defaultThresholds = getDefaultThresholds('moderate');
+            setThresholds(defaultThresholds);
+            if (calculatedStats.averageScore > 0) {
+              setAverageTrafficLight(getTrafficLightStatus(calculatedStats.averageScore, defaultThresholds));
+            }
+          }
+          
+          // Set onboarding data from API response (Phase 1: Consolidated API calls)
+          if (data.data.onboarding) {
+            setOnboardingStatus(data.data.onboarding.status as any);
+            setOnboardingProgress(data.data.onboarding.progress || 0);
+            setOnboardingTodos(data.data.onboarding.todos || {
+              hasWeight: false,
+              hasMeasurements: false,
+              hasBeforePhotos: false
+            });
+            setNextMeasurementTask(data.data.nextMeasurementTask || null);
+            setLoadingTodos(false);
+          } else {
+            // Fallback to defaults if onboarding data is missing
+            setOnboardingStatus('not_started');
+            setOnboardingProgress(0);
+            setOnboardingTodos({
+              hasWeight: false,
+              hasMeasurements: false,
+              hasBeforePhotos: false
+            });
+            setNextMeasurementTask(null);
+            setLoadingTodos(false);
+          }
           
           // Set recent responses if available
           console.log('Dashboard - summary.recentResponses:', summary.recentResponses);
@@ -323,7 +439,10 @@ export default function ClientPortalPage() {
               submittedAt: r.submittedAt || new Date().toISOString(),
               score: r.score || 0,
               status: 'completed' as const,
-              formTitle: r.formTitle || 'Check-in'
+              formTitle: r.formTitle || 'Check-in',
+              hasFeedback: r.hasFeedback || false,
+              feedbackCount: r.feedbackCount || 0,
+              responseId: r.id || r.responseId || ''
             })));
           } else {
             console.log('Dashboard - No recent responses in summary or not an array');
@@ -372,7 +491,6 @@ export default function ClientPortalPage() {
           
           setStats(calculatedStats);
           setAssignedCheckins(transformedCheckins);
-          setRecentResponses([]); // API doesn't provide this yet
           setCoach(coach);
         } else {
           console.error('API returned error:', data.message);
@@ -400,8 +518,32 @@ export default function ClientPortalPage() {
         setRecentResponses([]);
         setCoach(null);
       }
-    } catch (error) {
-      console.error('Error fetching client data:', error);
+      } catch (fetchError: any) {
+        clearTimeout(timeoutId);
+        if (fetchError.name === 'AbortError') {
+          console.error('Request timed out after 15 seconds');
+          // Fallback to empty data on timeout
+        } else {
+          console.error('Error fetching client data:', fetchError);
+        }
+        // Fallback to empty data
+        setStats({
+          overallProgress: 0,
+          completedCheckins: 0,
+          totalCheckins: 0,
+          averageScore: 0
+        });
+        setAssignedCheckins([]);
+        setRecentResponses([]);
+        setCoach(null);
+      }
+    } catch (error: any) {
+      // Handle errors gracefully - don't log network errors as they're often transient
+      // Only log in development or if it's not a network error
+      if (process.env.NODE_ENV === 'development' || (error?.name !== 'TypeError' && error?.message !== 'Failed to fetch')) {
+        console.error('Error in fetchClientData:', error);
+      }
+      
       // Fallback to empty data
       setStats({
         overallProgress: 0,
@@ -413,9 +555,14 @@ export default function ClientPortalPage() {
       setRecentResponses([]);
       setCoach(null);
     } finally {
+      // Always set loading to false, even if there's an error
+      // This ensures the dashboard renders even if data fails to load
       setLoading(false);
     }
   };
+
+  // Phase 1: Removed fetchOnboardingTodos and fetchOnboardingQuestionnaireStatus
+  // These are now handled in the consolidated API call
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -575,19 +722,60 @@ export default function ClientPortalPage() {
   if (loading) {
     return (
       <RoleProtected requiredRole="client">
-        <div className="min-h-screen bg-gray-50 flex">
+        <div className="min-h-screen bg-white flex flex-col lg:flex-row">
           <ClientNavigation />
-          <div className="flex-1 p-6">
-            <div className="max-w-7xl mx-auto">
+          
+          {/* Mobile Top Bar - Same as main content */}
+          <div className="lg:hidden flex items-center justify-between px-4 py-3 bg-white border-b border-gray-100 shadow-[0_1px_3px_rgba(0,0,0,0.1)] fixed top-0 left-0 right-0 z-40 h-16">
+            <div className="flex items-center space-x-2 ml-12 flex-1 min-w-0">
+              <div className="w-8 h-8 rounded-xl flex items-center justify-center text-white font-semibold flex-shrink-0 bg-gray-300 animate-pulse">
+                <span className="text-gray-400">C</span>
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-gray-900 truncate">Client Portal</p>
+                <p className="text-xs text-gray-500 truncate">Dashboard</p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-2 flex-shrink-0">
+              <div className="w-6 h-6 bg-gray-200 rounded animate-pulse"></div>
+            </div>
+          </div>
+          
+          <div className="flex-1 px-4 py-4 sm:px-6 lg:px-8 lg:py-6 pt-20 lg:pt-6 overflow-x-hidden w-full bg-white">
+            <div className="max-w-7xl mx-auto w-full">
               <div className="animate-pulse">
-                <div className="h-8 bg-gray-200 rounded w-1/4 mb-6"></div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                  {[...Array(3)].map((_, i) => (
-                    <div key={i} className="bg-white rounded-lg shadow p-6">
-                      <div className="h-4 bg-gray-200 rounded w-1/2 mb-2"></div>
-                      <div className="h-8 bg-gray-200 rounded w-1/3"></div>
+                {/* Mobile Welcome */}
+                <div className="mb-4 lg:hidden">
+                  <div className="h-7 bg-gray-200 rounded w-48 mb-2"></div>
+                  <div className="h-4 bg-gray-200 rounded w-64"></div>
+                </div>
+                
+                {/* Desktop Header */}
+                <div className="mb-6 hidden lg:block">
+                  <div className="h-8 bg-gray-200 rounded w-1/4 mb-2"></div>
+                  <div className="h-4 bg-gray-200 rounded w-1/3"></div>
+                </div>
+                
+                {/* Stats Grid */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
+                  {[...Array(4)].map((_, i) => (
+                    <div key={i} className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 p-3 sm:p-4">
+                      <div className="h-8 w-8 sm:h-10 sm:w-10 bg-gray-200 rounded-xl mb-3"></div>
+                      <div className="h-6 sm:h-8 bg-gray-200 rounded w-3/4 mb-2"></div>
+                      <div className="h-3 sm:h-4 bg-gray-200 rounded w-1/2"></div>
                     </div>
                   ))}
+                </div>
+                
+                {/* Content Cards */}
+                <div className="space-y-6">
+                  <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 p-4 sm:p-6">
+                    <div className="h-6 bg-gray-200 rounded w-1/3 mb-4"></div>
+                    <div className="space-y-3">
+                      <div className="h-20 bg-gray-100 rounded-lg"></div>
+                      <div className="h-20 bg-gray-100 rounded-lg"></div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -600,319 +788,446 @@ export default function ClientPortalPage() {
   // Note: For dashboard, we'll use a simplified version since we don't have client-specific thresholds loaded
   // In a full implementation, we'd fetch thresholds for each response
   const getScoreColor = (score: number) => {
-    // Default to lifestyle thresholds for dashboard display
-    // Red: 0-33, Orange: 34-80, Green: 81-100
-    if (score <= 33) return 'bg-red-200 text-red-800';
-    if (score <= 80) return 'bg-orange-200 text-orange-800';
+    // Default to moderate thresholds for dashboard display
+    // Red: 0-60, Orange: 61-85, Green: 86-100
+    if (score <= 60) return 'bg-red-200 text-red-800';
+    if (score <= 85) return 'bg-orange-200 text-orange-800';
     return 'bg-green-200 text-green-800';
   };
 
   return (
     <RoleProtected requiredRole="client">
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/50 flex flex-col lg:flex-row">
+      <div className="min-h-screen bg-white flex flex-col lg:flex-row relative">
         <ClientNavigation />
         
         {/* Mobile Top Bar */}
-        <div className="lg:hidden flex items-center justify-between px-4 py-4 bg-white/90 backdrop-blur-sm border-b border-gray-200 shadow-sm">
-          <div className="flex items-center space-x-2">
-            <div className="w-9 h-9 bg-gradient-to-br from-pink-500 to-rose-600 rounded-xl flex items-center justify-center text-white font-semibold">
+        <div className="lg:hidden flex items-center justify-between px-4 py-3 bg-white border-b border-gray-100 shadow-[0_1px_3px_rgba(0,0,0,0.1)] fixed top-0 left-0 right-0 z-40 h-16">
+          <div className="flex items-center space-x-2 ml-12 flex-1 min-w-0">
+            <div className="w-8 h-8 rounded-xl flex items-center justify-center text-white font-semibold flex-shrink-0" style={{ backgroundColor: '#daa450' }}>
               {userProfile?.firstName?.charAt(0) || 'C'}
             </div>
-            <div>
-              <p className="text-sm font-semibold text-gray-900">Client Portal</p>
-              <p className="text-xs text-gray-500">Dashboard</p>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-gray-900 truncate">Client Portal</p>
+              <p className="text-xs text-gray-500 truncate">Dashboard</p>
             </div>
           </div>
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-2 flex-shrink-0">
             <NotificationBell />
             {coach && (
-              <div className="text-right bg-white/60 backdrop-blur-sm px-3 py-1.5 rounded-lg border border-gray-200/50 shadow-sm">
+              <div className="text-right bg-white px-2 py-1 rounded-xl border border-gray-100 shadow-sm hidden xs:block">
                 <p className="text-[10px] text-gray-600 font-medium">Coach</p>
-                <p className="text-xs font-semibold text-gray-900 truncate max-w-[80px]">{coach.firstName} {coach.lastName}</p>
+                <p className="text-xs font-semibold text-gray-900 truncate max-w-[60px]">{coach.firstName} {coach.lastName}</p>
               </div>
             )}
           </div>
         </div>
         
-        <div className="flex-1 lg:ml-4 p-4 lg:p-5 pt-6 lg:pt-5">
-          {/* Header - Hidden on mobile, shown on desktop */}
-          <div className="mb-6 hidden lg:block">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">Welcome Back!</h1>
-                <p className="text-gray-900 text-sm mt-1 font-medium">Track your progress and stay connected</p>
-              </div>
-              <div className="flex items-center space-x-4">
-                <NotificationBell />
-                {coach && (
-                  <div className="text-right bg-white/60 backdrop-blur-sm px-4 py-2 rounded-xl border border-gray-200/50 shadow-sm">
-                    <p className="text-xs text-gray-700 font-medium">Your Coach</p>
-                    <p className="text-sm font-semibold text-gray-900">{coach.firstName} {coach.lastName}</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Mobile Welcome - Shown only on mobile */}
-          <div className="mb-4 lg:hidden">
-            <h1 className="text-xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">Welcome Back!</h1>
-            <p className="text-gray-600 text-xs mt-1">Track your progress and stay connected</p>
-          </div>
-
-          {/* Stats Overview - Mobile: Compact 2x2, Desktop: 4 columns */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4 mb-4 lg:mb-6">
-            <div className="group relative bg-white/80 backdrop-blur-sm rounded-lg lg:rounded-xl shadow-sm border border-gray-200/60 overflow-hidden hover:shadow-lg hover:border-blue-300/50 transition-all duration-300 hover:-translate-y-0.5">
-              <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-indigo-500/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-              <div className="relative px-3 py-2.5 lg:px-4 lg:py-3">
-                <div className="flex items-center justify-between mb-1.5 lg:mb-2">
-                  <div className="w-8 h-8 lg:w-10 lg:h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center shadow-sm">
-                    <svg className="w-4 h-4 lg:w-5 lg:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                  </div>
+        <main className="flex-1 px-4 py-4 sm:px-6 lg:px-8 lg:py-6 pt-20 lg:pt-6 overflow-x-hidden w-full bg-white relative z-0">
+          <div className="max-w-7xl mx-auto w-full">
+            {/* Desktop: Grid layout with main content and sidebar */}
+            <div className="block lg:grid lg:grid-cols-3 lg:gap-6">
+              {/* Main Content Column - Full width on mobile, 2/3 on desktop - Always visible */}
+              <div className="w-full block lg:col-span-2">
+            {/* Header - Hidden on mobile, shown on desktop */}
+            <div className="mb-6 hidden lg:block">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h1 className="text-2xl font-bold text-gray-900">Welcome Back!</h1>
+                  <p className="text-gray-600 text-sm mt-1">Track your progress and stay connected</p>
                 </div>
-                <div className="text-2xl lg:text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">{stats?.totalCheckins || 0}</div>
-                <div className="text-[10px] lg:text-xs text-gray-900 mt-0.5 lg:mt-1 font-medium">Total Check-ins</div>
-              </div>
+                <div className="flex items-center space-x-4">
+                  <NotificationBell />
+                </div>
             </div>
 
-            <div className="group relative bg-white/80 backdrop-blur-sm rounded-lg lg:rounded-xl shadow-sm border border-gray-200/60 overflow-hidden hover:shadow-lg hover:border-emerald-300/50 transition-all duration-300 hover:-translate-y-0.5">
-              <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-green-500/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-              <div className="relative px-3 py-2.5 lg:px-4 lg:py-3">
-                <div className="flex items-center justify-between mb-1.5 lg:mb-2">
-                  <div className="w-8 h-8 lg:w-10 lg:h-10 bg-gradient-to-br from-emerald-500 to-green-600 rounded-lg flex items-center justify-center shadow-sm">
-                    <svg className="w-4 h-4 lg:w-5 lg:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </div>
-                </div>
-                <div className="text-2xl lg:text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">{stats?.completedCheckins || 0}</div>
-                <div className="text-[10px] lg:text-xs text-gray-900 mt-0.5 lg:mt-1 font-medium">Completed</div>
-              </div>
+            {/* Mobile Welcome - Shown only on mobile */}
+            <div className="mb-4 lg:hidden">
+              <h1 className="text-xl font-bold text-gray-900">Welcome Back!</h1>
+              <p className="text-gray-600 text-xs mt-1">Track your progress and stay connected</p>
             </div>
 
-            <div className="group relative bg-white/80 backdrop-blur-sm rounded-lg lg:rounded-xl shadow-sm border border-gray-200/60 overflow-hidden hover:shadow-lg hover:border-purple-300/50 transition-all duration-300 hover:-translate-y-0.5">
-              <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-pink-500/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-              <div className="relative px-3 py-2.5 lg:px-4 lg:py-3">
-                <div className="flex items-center justify-between mb-1.5 lg:mb-2">
-                  <div className="w-8 h-8 lg:w-10 lg:h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-lg flex items-center justify-center shadow-sm">
-                    <span className="text-base lg:text-xl">{getTrafficLightIcon(averageTrafficLight)}</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1.5 lg:gap-2 mb-0.5 lg:mb-1">
-                  <div className="text-2xl lg:text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">{stats?.averageScore || 0}%</div>
-                  {stats?.averageScore > 0 && (
-                    <span className="text-[10px] lg:text-xs font-semibold text-gray-900">
-                      {getTrafficLightLabel(averageTrafficLight)}
-                    </span>
-                  )}
-                </div>
-                <div className="text-[10px] lg:text-xs text-gray-900 mt-0.5 lg:mt-1 font-medium">Average Score</div>
-                {stats?.averageScore > 0 && recentResponses.length > 0 && (
-                  <div className="text-[9px] lg:text-xs text-gray-900 mt-0.5">Based on {recentResponses.length} check-in{recentResponses.length !== 1 ? 's' : ''}</div>
-                )}
-              </div>
+            {/* Quick Stats Bar - New analytics section - Always visible on all devices */}
+            <div className="mb-6 block">
+              <QuickStatsBar stats={analytics?.quickStats || null} loading={loadingAnalytics} />
             </div>
 
-            <div className="group relative bg-white/80 backdrop-blur-sm rounded-lg lg:rounded-xl shadow-sm border border-gray-200/60 overflow-hidden hover:shadow-lg hover:border-amber-300/50 transition-all duration-300 hover:-translate-y-0.5">
-              <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 to-orange-500/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-              <div className="relative px-3 py-2.5 lg:px-4 lg:py-3">
-                <div className="flex items-center justify-between mb-1.5 lg:mb-2">
-                  <div className="w-8 h-8 lg:w-10 lg:h-10 bg-gradient-to-br from-amber-500 to-orange-600 rounded-lg flex items-center justify-center shadow-sm">
-                    <svg className="w-4 h-4 lg:w-5 lg:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </div>
-                </div>
-                <div className="text-lg lg:text-xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
-                  {stats?.lastActivity ? new Date(stats.lastActivity).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'N/A'}
-                </div>
-                <div className="text-[10px] lg:text-xs text-gray-900 mt-0.5 lg:mt-1 font-medium">Last Activity</div>
-              </div>
-            </div>
-          </div>
+            {/* Next Check-in Section - Prominent banner at top - Visible on all devices */}
+            {(() => {
+              // Find next scheduled check-in (not overdue, includes today and future dates)
+              const now = new Date();
+              now.setHours(0, 0, 0, 0);
+              
+              const nextScheduled = assignedCheckins
+                .filter(checkIn => {
+                  const dueDate = new Date(checkIn.dueDate);
+                  dueDate.setHours(0, 0, 0, 0);
+                  const daysDiff = Math.floor((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                  
+                  // Include pending check-ins that are due today or in the future (not overdue)
+                  return checkIn.status === 'pending' && daysDiff >= 0;
+                })
+                .sort((a, b) => {
+                  const dateA = new Date(a.dueDate).getTime();
+                  const dateB = new Date(b.dueDate).getTime();
+                  return dateA - dateB; // Earliest first
+                })[0]; // Get the first one (next upcoming)
 
-          {/* Scoring Formula & Traffic Light Info */}
-          <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200/60 p-5 mb-6">
-            <button
-              onClick={() => setShowScoringInfo(!showScoringInfo)}
-              className="w-full flex items-center justify-between text-left"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-lg flex items-center justify-center">
-                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                  </svg>
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-gray-900">Understanding Your Scores</h3>
-                  <p className="text-xs text-gray-600">Learn how scores are calculated and what they mean</p>
-                </div>
-              </div>
-              <svg 
-                className={`w-5 h-5 text-gray-400 transition-transform ${showScoringInfo ? 'rotate-180' : ''}`}
-                fill="none" 
-                stroke="currentColor" 
-                viewBox="0 0 24 24"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
+              if (!nextScheduled) return null;
 
-            {showScoringInfo && (
-              <div className="mt-6 pt-6 border-t border-gray-200 space-y-6">
-                {/* Scoring Formula */}
-                <div>
-                  <h4 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
-                    <span className="text-blue-600">📊</span>
-                    Scoring Formula
-                  </h4>
-                  <div className="bg-gray-50 rounded-lg p-4 space-y-3">
-                    <div className="text-sm text-gray-700">
-                      <p className="font-semibold mb-2">Each question contributes to your score:</p>
-                      <div className="bg-white rounded p-3 font-mono text-xs border border-gray-200">
-                        <div className="mb-2">weightedScore = questionScore × questionWeight</div>
-                        <div className="mb-2">totalScore = (Σ weightedScores / (Σ weights × 10)) × 100</div>
+              const dueDate = new Date(nextScheduled.dueDate);
+              const daysDiff = Math.floor((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+              
+              return (
+                <div className="mb-6">
+                  <div className="bg-[#fef9e7] border-2 border-[#daa450] rounded-2xl lg:rounded-3xl p-4 sm:p-6 shadow-sm">
+                    <div className="flex items-center gap-3 sm:gap-4">
+                      <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#daa450' }}>
+                        <svg className="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
                       </div>
-                    </div>
-                    <div className="text-xs text-gray-600 space-y-1">
-                      <p>• <strong>Question Weight (1-10):</strong> How important the question is</p>
-                      <p>• <strong>Question Score (1-10):</strong> Your answer converted to a score</p>
-                      <p>• <strong>Final Score (0-100%):</strong> Weighted average of all questions</p>
+                      <div className="flex-1 min-w-0">
+                        <h2 className="text-base sm:text-lg font-bold text-gray-900 mb-1">Next Check-in</h2>
+                        <p className="text-sm sm:text-base font-medium text-gray-900 truncate">{nextScheduled.title}</p>
+                        <p className="text-xs sm:text-sm text-gray-600 mt-1">
+                          Due: {dueDate.toLocaleDateString('en-US', { 
+                            weekday: 'long', 
+                            month: 'long', 
+                            day: 'numeric' 
+                          })}
+                          {daysDiff === 0 ? ' (Today)' : daysDiff === 1 ? ' (Tomorrow)' : daysDiff > 1 ? ` (in ${daysDiff} days)` : ''}
+                        </p>
+                      </div>
+                      <Link
+                        href="/client-portal/check-ins"
+                        className="flex-shrink-0 px-4 py-2 text-sm font-semibold text-white rounded-xl hover:opacity-90 transition-opacity shadow-sm"
+                        style={{ backgroundColor: '#daa450' }}
+                      >
+                        View
+                      </Link>
                     </div>
                   </div>
                 </div>
+              );
+            })()}
 
-                {/* Answer Scoring */}
-                <div>
-                  <h4 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
-                    <span className="text-green-600">✅</span>
-                    How Answers Are Scored
-                  </h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-gray-700">
-                    <div className="bg-gray-50 rounded-lg p-3">
-                      <p className="font-semibold mb-1">Scale (1-10):</p>
-                      <p>Direct value (e.g., 7 = 7/10)</p>
-                    </div>
-                    <div className="bg-gray-50 rounded-lg p-3">
-                      <p className="font-semibold mb-1">Yes/No:</p>
-                      <p>Yes = 8/10, No = 3/10</p>
-                    </div>
-                    <div className="bg-gray-50 rounded-lg p-3">
-                      <p className="font-semibold mb-1">Single/Multiple Choice:</p>
-                      <p>Uses option weights if set</p>
-                    </div>
-                    <div className="bg-gray-50 rounded-lg p-3">
-                      <p className="font-semibold mb-1">Text Questions:</p>
-                      <p>Neutral score of 5/10</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Traffic Light Thresholds */}
-                <div>
-                  <h4 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
-                    <span className="text-yellow-600">🚦</span>
-                    Your Traffic Light Thresholds
-                  </h4>
-                  <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg p-4">
-                    <div className="grid grid-cols-3 gap-3 mb-3">
-                      <div className="bg-white rounded-lg p-3 border-2 border-red-200">
-                        <div className="flex items-center gap-1 mb-1">
-                          <span className="text-lg">🔴</span>
-                          <span className="font-bold text-red-700 text-xs">Red Zone</span>
-                        </div>
-                        <p className="text-xs font-semibold text-gray-900">0 - {thresholds.redMax}%</p>
-                        <p className="text-xs text-gray-600 mt-1">Needs Attention</p>
+            {/* Onboarding Questionnaire Banner - Show if not completed or submitted (prominent on mobile) */}
+            {onboardingStatus !== 'completed' && onboardingStatus !== 'submitted' && onboardingStatus !== 'skipped' && (
+              <div className="bg-gradient-to-r from-[#daa450] to-[#c89540] rounded-2xl lg:rounded-3xl shadow-lg mb-4 sm:mb-6 overflow-hidden border border-[#daa450]/20 w-full">
+                <div className="px-4 py-4 sm:px-6 sm:py-6">
+                  <div className="flex flex-col gap-4">
+                    <div className="flex items-start gap-3 sm:gap-4 flex-1 min-w-0 w-full">
+                      <div className="w-10 h-10 sm:w-12 sm:h-12 bg-white bg-opacity-20 rounded-xl sm:rounded-2xl flex items-center justify-center flex-shrink-0">
+                        <svg className="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
                       </div>
-                      <div className="bg-white rounded-lg p-3 border-2 border-orange-200">
-                        <div className="flex items-center gap-1 mb-1">
-                          <span className="text-lg">🟠</span>
-                          <span className="font-bold text-orange-700 text-xs">Orange Zone</span>
-                        </div>
-                        <p className="text-xs font-semibold text-gray-900">{thresholds.redMax + 1} - {thresholds.orangeMax}%</p>
-                        <p className="text-xs text-gray-600 mt-1">On Track</p>
-                      </div>
-                      <div className="bg-white rounded-lg p-3 border-2 border-green-200">
-                        <div className="flex items-center gap-1 mb-1">
-                          <span className="text-lg">🟢</span>
-                          <span className="font-bold text-green-700 text-xs">Green Zone</span>
-                        </div>
-                        <p className="text-xs font-semibold text-gray-900">{thresholds.orangeMax + 1} - 100%</p>
-                        <p className="text-xs text-gray-600 mt-1">Excellent</p>
+                      <div className="flex-1 min-w-0">
+                        <h2 className="text-base sm:text-lg lg:text-xl font-bold text-white mb-1.5 sm:mb-2">Complete Your Onboarding Questionnaire</h2>
+                        <p className="text-white/90 text-xs sm:text-sm leading-relaxed">
+                          {onboardingStatus === 'not_started' 
+                            ? 'Help us understand your goals and preferences. This must be completed before you can receive check-ins.'
+                            : `You're ${onboardingProgress}% complete. Finish the questionnaire to unlock check-ins.`
+                          }
+                        </p>
+                        {onboardingProgress > 0 && (
+                          <div className="mt-3 w-full bg-white/20 rounded-full h-2">
+                            <div 
+                              className="bg-white h-2 rounded-full transition-all duration-300"
+                              style={{ width: `${onboardingProgress}%` }}
+                            ></div>
+                          </div>
+                        )}
                       </div>
                     </div>
-                    <p className="text-xs text-gray-600 italic">
-                      These thresholds are personalized based on your client profile and goals.
-                    </p>
-                  </div>
-                </div>
-
-                {/* Example Calculation */}
-                <div>
-                  <h4 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
-                    <span className="text-purple-600">💡</span>
-                    Example Calculation
-                  </h4>
-                  <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-                    <div className="text-xs text-gray-700 space-y-2">
-                      <p><strong>3 Questions:</strong></p>
-                      <ul className="list-disc list-inside space-y-1 ml-2">
-                        <li>Q1: Sleep (Weight 8) → Answer: 7 → Score: 7 × 8 = 56</li>
-                        <li>Q2: Exercise (Weight 5) → Answer: Yes → Score: 8 × 5 = 40</li>
-                        <li>Q3: Notes (Weight 2) → Answer: Text → Score: 5 × 2 = 10</li>
-                      </ul>
-                      <div className="mt-3 pt-3 border-t border-blue-200">
-                        <p><strong>Total:</strong> (56 + 40 + 10) / (15 × 10) × 100 = <strong>71%</strong></p>
-                        <p className="mt-1 text-orange-700 font-semibold">→ 🟠 Orange Zone (On Track)</p>
-                      </div>
-                    </div>
+                    <Link
+                      href="/client-portal/onboarding-questionnaire"
+                      className="w-full sm:w-auto px-4 sm:px-6 py-3 sm:py-2.5 bg-white text-[#daa450] rounded-xl font-semibold hover:bg-gray-50 transition-colors shadow-md flex-shrink-0 text-center text-sm sm:text-base min-h-[44px] flex items-center justify-center"
+                    >
+                      {onboardingStatus === 'not_started' ? 'Start Questionnaire' : 'Continue Questionnaire'}
+                    </Link>
                   </div>
                 </div>
               </div>
             )}
-          </div>
 
-          {/* Upcoming Check-ins Section - Front and Centre */}
-          <div className="mb-6 lg:mb-8">
-            <div className="bg-gradient-to-r from-amber-50 via-orange-50 to-red-50 rounded-xl lg:rounded-2xl shadow-xl border border-orange-200 overflow-hidden">
-              <div className="bg-gradient-to-r from-amber-500 to-orange-600 px-4 py-4 lg:px-8 lg:py-6 border-b border-orange-200">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2 lg:space-x-3 flex-1 min-w-0">
-                    <div className="w-8 h-8 lg:w-10 lg:h-10 bg-white bg-opacity-20 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <svg className="w-5 h-5 lg:w-6 lg:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <h2 className="text-lg lg:text-2xl font-bold text-white">Check-ins Requiring Attention</h2>
-                      <p className="text-orange-100 text-xs lg:text-sm hidden sm:block">Complete overdue and upcoming check-ins to stay on track</p>
+            {/* Next Upcoming Tasks - Unified task widget */}
+            {(() => {
+              if (loadingTodos) return null;
+              
+              const hasOnboardingTasks = !onboardingTodos.hasWeight || !onboardingTodos.hasMeasurements || !onboardingTodos.hasBeforePhotos;
+              const hasMeasurementTask = nextMeasurementTask && (nextMeasurementTask.status === 'upcoming' || nextMeasurementTask.status === 'due' || nextMeasurementTask.status === 'overdue');
+              const hasTasks = hasOnboardingTasks || hasMeasurementTask;
+              
+              if (!hasTasks) return null;
+              
+              return (
+                <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 mb-4 sm:mb-6 overflow-hidden w-full">
+                  <div className="px-4 py-3 sm:px-6 sm:py-4 border-b-2" style={{ backgroundColor: '#fef9e7', borderColor: '#daa450' }}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 sm:gap-3">
+                        <div className="w-8 h-8 sm:w-10 sm:h-10 bg-white bg-opacity-20 rounded-lg flex items-center justify-center flex-shrink-0">
+                          <svg className="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                          </svg>
+                        </div>
+                        <div>
+                          <h2 className="text-sm sm:text-base lg:text-lg font-bold text-gray-900">Next Upcoming Tasks</h2>
+                          <p className="text-gray-600 text-[10px] sm:text-xs mt-0.5">Complete these tasks to stay on track</p>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                  <div className="text-right flex-shrink-0 ml-2">
-                    <div className="text-white text-xs lg:text-sm font-medium">Needs Action</div>
-                    <div className="text-xl lg:text-2xl font-bold text-white">
-                      {assignedCheckins.filter(checkIn => {
-                        const dueDate = new Date(checkIn.dueDate);
-                        const now = new Date();
-                        const daysDiff = Math.floor((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-                        // Include ALL overdue check-ins (any number of days) and upcoming (next 7 days) check-ins
-                        return (daysDiff < 0 || (daysDiff >= 0 && daysDiff <= 7)) && checkIn.status === 'pending';
-                      }).length}
+                  
+                  <div className="p-3 sm:p-4 lg:p-6 space-y-2 sm:space-y-3">
+                    {/* Measurement Task - Show first if overdue/due */}
+                    {hasMeasurementTask && (
+                      <Link
+                        href="/client-portal/measurements"
+                        className="flex items-center justify-between p-3 sm:p-4 bg-white rounded-xl sm:rounded-2xl border-2 transition-all group"
+                        style={{ 
+                          borderColor: nextMeasurementTask!.status === 'overdue' ? '#ef4444' : 
+                                       nextMeasurementTask!.status === 'due' ? '#daa450' : '#daa450'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#fef9e7'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ffffff'}
+                      >
+                        <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+                          <div 
+                            className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 flex items-center justify-center flex-shrink-0"
+                            style={{ borderColor: nextMeasurementTask!.status === 'overdue' ? '#ef4444' : '#daa450' }}
+                          >
+                            <svg className="w-4 h-4 sm:w-5 sm:h-5" style={{ color: nextMeasurementTask!.status === 'overdue' ? '#ef4444' : '#daa450' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                            </svg>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-semibold text-sm sm:text-base text-gray-900 truncate">
+                              Update Measurements & Photos
+                            </h3>
+                            <p className="text-xs sm:text-sm text-gray-600 line-clamp-1">
+                              {nextMeasurementTask!.status === 'overdue' && (
+                                <span className="text-red-600 font-medium">Overdue by {nextMeasurementTask!.daysUntil} {nextMeasurementTask!.daysUntil === 1 ? 'day' : 'days'}</span>
+                              )}
+                              {nextMeasurementTask!.status === 'due' && (
+                                <span className="font-medium" style={{ color: '#daa450' }}>Due today - {new Date(nextMeasurementTask!.dueDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+                              )}
+                              {nextMeasurementTask!.status === 'upcoming' && (
+                                <>Due {nextMeasurementTask!.daysUntil === 1 ? 'tomorrow' : `in ${nextMeasurementTask!.daysUntil} days`} - {new Date(nextMeasurementTask!.dueDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</>
+                              )}
+                            </p>
+                          </div>
+                        </div>
+                        <svg className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </Link>
+                    )}
+
+                    {/* Weight Task */}
+                    {!onboardingTodos.hasWeight && (
+                      <Link
+                        href="/client-portal/measurements"
+                        className="flex items-center justify-between p-3 sm:p-4 bg-white rounded-xl sm:rounded-2xl border border-gray-200 hover:border-[#daa450] hover:shadow-md transition-all group"
+                      >
+                        <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+                          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 flex items-center justify-center flex-shrink-0" style={{ borderColor: '#daa450' }}>
+                            <svg className="w-4 h-4 sm:w-5 sm:h-5" style={{ color: '#daa450' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                            </svg>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-semibold text-sm sm:text-base text-gray-900 truncate">Enter Your Weight</h3>
+                            <p className="text-xs sm:text-sm text-gray-600 line-clamp-1">Record your starting weight to track progress</p>
+                          </div>
+                        </div>
+                        <svg className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </Link>
+                    )}
+
+                    {/* Measurements Task */}
+                    {!onboardingTodos.hasMeasurements && (
+                      <Link
+                        href="/client-portal/measurements"
+                        className="flex items-center justify-between p-3 sm:p-4 bg-white rounded-xl sm:rounded-2xl border border-gray-200 hover:border-[#daa450] hover:shadow-md transition-all group"
+                      >
+                        <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+                          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 flex items-center justify-center flex-shrink-0" style={{ borderColor: '#daa450' }}>
+                            <svg className="w-4 h-4 sm:w-5 sm:h-5" style={{ color: '#daa450' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                            </svg>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-semibold text-sm sm:text-base text-gray-900 truncate">Add Your Measurements</h3>
+                            <p className="text-xs sm:text-sm text-gray-600 line-clamp-1">Record body measurements (waist, hips, chest, etc.)</p>
+                          </div>
+                        </div>
+                        <svg className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </Link>
+                    )}
+
+                    {/* Before Photos Task */}
+                    {!onboardingTodos.hasBeforePhotos && (
+                      <Link
+                        href="/client-portal/measurements"
+                        className="flex items-center justify-between p-3 sm:p-4 bg-white rounded-xl sm:rounded-2xl border border-gray-200 hover:border-[#daa450] hover:shadow-md transition-all group"
+                      >
+                        <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+                          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 flex items-center justify-center flex-shrink-0" style={{ borderColor: '#daa450' }}>
+                            <svg className="w-4 h-4 sm:w-5 sm:h-5" style={{ color: '#daa450' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-semibold text-sm sm:text-base text-gray-900 truncate">Upload Before Photos</h3>
+                            <p className="text-xs sm:text-sm text-gray-600 line-clamp-2">Take and upload front, back, and side photos to track your transformation</p>
+                          </div>
+                        </div>
+                        <svg className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </Link>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Check-ins Requiring Attention - Priority action items - Always visible on all devices */}
+            <div className="mb-6 block">
+              <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                <div className="px-4 py-4 sm:px-6 sm:py-5 lg:px-8 lg:py-6 border-b-2" style={{ backgroundColor: '#fef9e7', borderColor: '#daa450' }}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2 lg:space-x-3 flex-1 min-w-0">
+                      <div className="w-8 h-8 lg:w-10 lg:h-10 bg-white bg-opacity-20 rounded-lg flex items-center justify-center flex-shrink-0">
+                        <svg className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h2 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900">Check-ins Requiring Attention</h2>
+                        <p className="text-gray-600 text-xs sm:text-sm">Complete overdue and upcoming check-ins to stay on track</p>
+                      </div>
+                    </div>
+                    <div className="text-right flex-shrink-0 ml-2">
+                      <div className="text-gray-600 text-sm font-medium">Needs Action</div>
+                      <div className="text-2xl font-bold text-gray-900">
+                        {(() => {
+                          // Filter actionable check-ins
+                          const filtered = assignedCheckins.filter(checkIn => {
+                            // Exclude completed check-ins
+                            if (checkIn.status === 'completed') return false;
+
+                            const dueDate = new Date(checkIn.dueDate);
+                            const now = new Date();
+                            
+                            // Normalize dates for comparison (set to start of day) - matches check-ins page logic exactly
+                            const normalizedDueDate = new Date(dueDate);
+                            normalizedDueDate.setHours(0, 0, 0, 0);
+                            const normalizedNow = new Date(now);
+                            normalizedNow.setHours(0, 0, 0, 0);
+                            
+                            // Include if overdue (past due date - always need attention)
+                            if (normalizedDueDate < normalizedNow) return true;
+                            
+                            // Include if due date has arrived AND window is open (available now) - matches getToDoCheckins logic
+                            if (normalizedDueDate <= normalizedNow) {
+                              const checkInWindow = checkIn.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
+                              const windowStatus = isWithinCheckInWindow(checkInWindow);
+                              const isFirstCheckIn = checkIn.recurringWeek === 1;
+                              if (windowStatus.isOpen || isFirstCheckIn) return true;
+                            }
+                            
+                            // Don't include future check-ins - they belong in "Scheduled", not "Requiring Attention"
+                            return false;
+                          });
+
+                          // Deduplicate by formId + normalized due date (same logic as list below)
+                          const deduplicatedMap = new Map<string, CheckIn>();
+                          filtered.forEach(checkIn => {
+                            const dueDate = new Date(checkIn.dueDate);
+                            dueDate.setHours(0, 0, 0, 0);
+                            const key = `${checkIn.formId}_${dueDate.toISOString().split('T')[0]}`;
+                            
+                            if (!deduplicatedMap.has(key)) {
+                              deduplicatedMap.set(key, checkIn);
+                            } else {
+                              const existing = deduplicatedMap.get(key)!;
+                              if (existing.status === 'completed' && checkIn.status !== 'completed') {
+                                deduplicatedMap.set(key, checkIn);
+                              } else if (checkIn.id > existing.id) {
+                                deduplicatedMap.set(key, checkIn);
+                              }
+                            }
+                          });
+
+                          return deduplicatedMap.size;
+                        })()}
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
               <div className="p-4 lg:p-8">
                 {(() => {
-                  const upcomingCheckins = assignedCheckins.filter(checkIn => {
+                  // Filter actionable check-ins
+                  const filteredCheckins = assignedCheckins.filter(checkIn => {
+                    // Exclude completed check-ins
+                    if (checkIn.status === 'completed') return false;
+
                     const dueDate = new Date(checkIn.dueDate);
                     const now = new Date();
-                    const daysDiff = Math.floor((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-                    // Include ALL overdue check-ins (any number of days overdue) and upcoming (next 7 days) check-ins
-                    return (daysDiff < 0 || (daysDiff >= 0 && daysDiff <= 7)) && checkIn.status === 'pending';
-                  }).sort((a, b) => {
+                    
+                    // Normalize dates for comparison (set to start of day) - matches getToDoCheckins logic exactly
+                    const normalizedDueDate = new Date(dueDate);
+                    normalizedDueDate.setHours(0, 0, 0, 0);
+                    const normalizedNow = new Date(now);
+                    normalizedNow.setHours(0, 0, 0, 0);
+                    
+                    // Include if overdue (past due date - always need attention)
+                    if (normalizedDueDate < normalizedNow) return true;
+                    
+                    // Include if due date has arrived AND window is open (available now)
+                    // Special case: Week 1 check-ins are accessible immediately once due date arrives
+                    if (normalizedDueDate <= normalizedNow) {
+                      const checkInWindow = checkIn.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
+                      const windowStatus = isWithinCheckInWindow(checkInWindow);
+                      const isFirstCheckIn = checkIn.recurringWeek === 1;
+                      if (windowStatus.isOpen || isFirstCheckIn) return true;
+                    }
+                    
+                    // Don't include future check-ins - they belong in "Scheduled", not "Requiring Attention"
+                    return false;
+                  });
+
+                  // Deduplicate: Group by formId + normalized due date, keep only one per group
+                  // This handles cases where duplicate assignments exist for the same form/date
+                  const deduplicatedMap = new Map<string, CheckIn>();
+                  filteredCheckins.forEach(checkIn => {
+                    const dueDate = new Date(checkIn.dueDate);
+                    dueDate.setHours(0, 0, 0, 0);
+                    const key = `${checkIn.formId}_${dueDate.toISOString().split('T')[0]}`;
+                    
+                    // If we already have one for this key, keep the one that's not completed and has earlier ID (more recently created)
+                    if (!deduplicatedMap.has(key)) {
+                      deduplicatedMap.set(key, checkIn);
+                    } else {
+                      const existing = deduplicatedMap.get(key)!;
+                      // Prefer non-completed over completed (shouldn't happen as we filtered, but safety check)
+                      if (existing.status === 'completed' && checkIn.status !== 'completed') {
+                        deduplicatedMap.set(key, checkIn);
+                      }
+                      // If both have same status, prefer the one with later ID (more recent assignment)
+                      else if (checkIn.id > existing.id) {
+                        deduplicatedMap.set(key, checkIn);
+                      }
+                    }
+                  });
+
+                  const upcomingCheckins = Array.from(deduplicatedMap.values()).sort((a, b) => {
                     // Sort: overdue check-ins first (most overdue first), then upcoming check-ins (earliest first)
                     const aDue = new Date(a.dueDate).getTime();
                     const bDue = new Date(b.dueDate).getTime();
@@ -926,7 +1241,151 @@ export default function ClientPortalPage() {
                     return aDue - bDue; // Both upcoming - earliest first
                   });
 
+                  // If no actionable check-ins, show the next scheduled check-in
                   if (upcomingCheckins.length === 0) {
+                    // Find the next upcoming scheduled check-in
+                    const nextScheduledCheckIn = assignedCheckins
+                      .filter(checkIn => checkIn.status !== 'completed')
+                      .sort((a, b) => {
+                        const dateA = new Date(a.dueDate).getTime();
+                        const dateB = new Date(b.dueDate).getTime();
+                        return dateA - dateB;
+                      })[0];
+
+                    if (nextScheduledCheckIn) {
+                      // Show next scheduled check-in with window information
+                      const dueDate = new Date(nextScheduledCheckIn.dueDate);
+                      const now = new Date();
+                      const daysDiff = Math.floor((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                      const isToday = daysDiff === 0;
+                      const isTomorrow = daysDiff === 1;
+                      
+                      const checkInWindow = nextScheduledCheckIn.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
+                      const windowStatus = isWithinCheckInWindow(checkInWindow);
+                      
+                      // Helper function to calculate window start date
+                      const calculateWindowStartDate = (dueDate: string, window: CheckInWindow): Date => {
+                        const due = new Date(dueDate);
+                        if (!window.enabled) return due;
+                        
+                        const getDayOfWeek = (dayName: string): number => {
+                          const days: { [key: string]: number } = {
+                            'sunday': 0, 'monday': 1, 'tuesday': 2, 'wednesday': 3,
+                            'thursday': 4, 'friday': 5, 'saturday': 6
+                          };
+                          return days[dayName.toLowerCase()] ?? 5;
+                        };
+                        
+                        const startDayNum = getDayOfWeek(window.startDay);
+                        const dueDayOfWeek = due.getDay();
+                        let daysToAdd = (startDayNum - dueDayOfWeek + 7) % 7;
+                        
+                        const windowStartDate = new Date(due);
+                        windowStartDate.setDate(due.getDate() + daysToAdd);
+                        windowStartDate.setHours(0, 0, 0, 0);
+                        
+                        // Add start time
+                        if (window.startTime) {
+                          const [hours, minutes] = window.startTime.split(':').map(Number);
+                          windowStartDate.setHours(hours, minutes, 0, 0);
+                        }
+                        
+                        return windowStartDate;
+                      };
+                      
+                      const windowStartDate = calculateWindowStartDate(nextScheduledCheckIn.dueDate, checkInWindow);
+                      const windowHasOpened = windowStartDate <= now;
+                      const isAvailable = windowHasOpened && windowStatus.isOpen;
+                      
+                      return (
+                        <div className="space-y-4">
+                          <div className="bg-white rounded-lg lg:rounded-xl p-4 lg:p-6 border-2 border-blue-300 bg-blue-50 transition-all duration-200">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center space-x-2 lg:space-x-3 mb-2">
+                                  <div className="w-7 h-7 lg:w-8 lg:h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-blue-100">
+                                    <svg className="w-3.5 h-3.5 lg:w-4 lg:h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                    </svg>
+                                  </div>
+                                  <h3 className="text-base lg:text-lg font-semibold text-gray-900 truncate">
+                                    {nextScheduledCheckIn.isRecurring && nextScheduledCheckIn.recurringWeek 
+                                      ? `Week ${nextScheduledCheckIn.recurringWeek}: ${nextScheduledCheckIn.title}`
+                                      : nextScheduledCheckIn.title}
+                                  </h3>
+                                </div>
+                                <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 space-y-1 sm:space-y-0 text-xs lg:text-sm ml-9 lg:ml-11">
+                                  <div className="flex items-center space-x-1 text-blue-600">
+                                    <svg className="w-3.5 h-3.5 lg:w-4 lg:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <span className="font-medium">
+                                      {isToday ? 'Due Today!' : 
+                                       isTomorrow ? 'Due Tomorrow' : 
+                                       `Due in ${daysDiff} days`}
+                                    </span>
+                                  </div>
+                                  <span className="text-gray-700">
+                                    {dueDate.toLocaleDateString('en-US', { 
+                                      weekday: 'short', 
+                                      month: 'short', 
+                                      day: 'numeric' 
+                                    })}
+                                  </span>
+                                </div>
+                                {/* Window information */}
+                                {checkInWindow?.enabled && checkInWindow?.startDay && checkInWindow?.startTime && (
+                                  <div className="mt-2 ml-9 lg:ml-11">
+                                    <div className="inline-flex items-center gap-1.5 px-3 py-1.5 lg:py-1 rounded-lg text-xs lg:text-xs font-medium bg-blue-50 text-blue-800">
+                                      <span className="text-base">{isAvailable ? '✅' : '📅'}</span>
+                                      <span>
+                                        {isAvailable 
+                                          ? '✓ Check-in window is open now'
+                                          : windowHasOpened
+                                          ? windowStatus.nextOpenTime
+                                            ? `Window opens: ${windowStatus.nextOpenTime.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })} at ${windowStatus.nextOpenTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`
+                                            : `Window opens ${checkInWindow.startDay.charAt(0).toUpperCase() + checkInWindow.startDay.slice(1)} at ${checkInWindow.startTime}`
+                                          : (() => {
+                                              const startDayName = checkInWindow.startDay.charAt(0).toUpperCase() + checkInWindow.startDay.slice(1);
+                                              const [hours, minutes] = checkInWindow.startTime.split(':').map(Number);
+                                              const period = hours >= 12 ? 'PM' : 'AM';
+                                              const displayHours = hours > 12 ? hours - 12 : hours === 0 ? 12 : hours;
+                                              const displayMinutes = minutes.toString().padStart(2, '0');
+                                              return `Window opens ${startDayName} ${windowStartDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} at ${displayHours}:${displayMinutes} ${period}`;
+                                            })()
+                                        }
+                                      </span>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex items-center justify-between sm:justify-end space-x-2 sm:space-x-3">
+                                <div className="px-2.5 py-1 lg:px-3 lg:py-1 rounded-full text-[10px] lg:text-xs font-medium bg-blue-100 text-blue-700">
+                                  Scheduled
+                                </div>
+                                {isAvailable ? (
+                                  <Link
+                                    href={`/client-portal/check-in/${nextScheduledCheckIn.id}`}
+                                    className="px-3 py-1.5 lg:px-4 lg:py-2 rounded-lg text-xs lg:text-sm font-medium transition-all duration-200 text-white shadow-md hover:shadow-lg bg-green-600 hover:bg-green-700"
+                                  >
+                                    Start Check-in
+                                  </Link>
+                                ) : (
+                                  <button
+                                    disabled
+                                    className="px-3 py-1.5 lg:px-4 lg:py-2 bg-gray-300 text-gray-600 rounded-lg text-xs lg:text-sm font-medium cursor-not-allowed"
+                                  >
+                                    Not Available Yet
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
+                    
+                    // If no scheduled check-ins at all, show "All caught up"
                     return (
                       <div className="text-center py-6">
                         <div className="w-14 h-14 bg-gradient-to-br from-emerald-400 to-green-500 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-lg">
@@ -1035,23 +1494,883 @@ export default function ClientPortalPage() {
                 })()}
               </div>
             </div>
-          </div>
 
-          {/* Main Content and Sidebar */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-4">
-            {/* Main Content */}
-            <div className="lg:col-span-2">
+            {/* Stats Overview - Clean minimal design - Always visible on all devices */}
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mb-6 block">
+              {/* Average Score Card */}
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div className="px-3 py-3 sm:px-4 sm:py-3">
+                  <div className="flex items-center justify-between mb-2.5">
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#daa450' }}>
+                      <span className="text-sm">{getTrafficLightIcon(averageTrafficLight)}</span>
+                    </div>
+                    {analytics?.scores.trend && analytics.scores.trend !== 'no_data' && (
+                      <span className={`text-xs font-semibold ${
+                        analytics.scores.trend === 'up' ? 'text-green-600' : 
+                        analytics.scores.trend === 'down' ? 'text-red-600' : 
+                        'text-gray-500'
+                      }`}>
+                        {analytics.scores.trend === 'up' ? '↑' : analytics.scores.trend === 'down' ? '↓' : '→'}
+                      </span>
+                    )}
+                  </div>
+                  <div className="mb-2.5">
+                    <div className="flex items-baseline gap-1 mb-1">
+                      <span className="text-xl sm:text-2xl font-bold text-gray-900">{stats?.averageScore || 0}</span>
+                      <span className="text-sm text-gray-500">%</span>
+                    </div>
+                    {stats?.averageScore > 0 && (
+                      <div className="inline-block px-1.5 py-0.5 bg-gray-100 rounded text-[10px] font-medium text-gray-700">
+                        {getTrafficLightLabel(averageTrafficLight)}
+                      </div>
+                    )}
+                  </div>
+                  <div className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">Average Score</div>
+                  {stats?.averageScore > 0 && stats?.completedCheckins > 0 && (
+                    <div className="text-[10px] text-gray-600 mt-0.5">Based on {stats.completedCheckins} check-in{stats.completedCheckins !== 1 ? 's' : ''}</div>
+                  )}
+                </div>
+              </div>
+
+              {/* Completion Rate Card */}
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div className="px-3 py-3 sm:px-4 sm:py-3">
+                  <div className="flex items-center justify-between mb-2.5">
+                    <div className="w-8 h-8 bg-green-500 rounded-lg flex items-center justify-center">
+                      <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                    {analytics?.quickStats.currentStreak > 0 && (
+                      <div className="flex items-center gap-0.5 px-1.5 py-0.5 bg-orange-100 rounded">
+                        <span className="text-[10px]">🔥</span>
+                        <span className="text-[10px] font-bold text-orange-700">{analytics.quickStats.currentStreak}</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="mb-2.5">
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-xl sm:text-2xl font-bold text-gray-900">
+                        {stats?.totalCheckins > 0 ? Math.round((stats.completedCheckins / stats.totalCheckins) * 100) : 0}
+                      </span>
+                      <span className="text-sm text-gray-500">%</span>
+                    </div>
+                  </div>
+                  <div className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">Completion Rate</div>
+                  {stats?.totalCheckins > 0 && (
+                    <div className="text-[10px] text-gray-600 mt-0.5">{stats.completedCheckins} of {stats.totalCheckins} completed</div>
+                  )}
+                  {analytics?.quickStats.currentStreak > 0 && (
+                    <div className="mt-1 inline-block px-1.5 py-0.5 bg-orange-50 rounded text-[10px] text-orange-700 font-semibold">
+                      {analytics.quickStats.currentStreak} day{analytics.quickStats.currentStreak !== 1 ? 's' : ''} streak!
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Weight Progress Card */}
+              {analytics?.bodyweight && analytics.bodyweight.baseline && (
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                  <div className="px-3 py-3 sm:px-4 sm:py-3">
+                    <div className="flex items-center justify-between mb-2.5">
+                      <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
+                        <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
+                        </svg>
+                      </div>
+                      {analytics.bodyweight.trend && analytics.bodyweight.trend !== 'no_data' && (
+                        <span className={`text-xs font-semibold ${
+                          analytics.bodyweight.trend === 'down' ? 'text-green-600' : 
+                          analytics.bodyweight.trend === 'up' ? 'text-red-600' : 
+                          'text-gray-500'
+                        }`}>
+                          {analytics.bodyweight.trend === 'down' ? '↓' : analytics.bodyweight.trend === 'up' ? '↑' : '→'}
+                        </span>
+                      )}
+                    </div>
+                    <div className="mb-2.5">
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-xl sm:text-2xl font-bold text-gray-900">
+                          {analytics.bodyweight.current ? analytics.bodyweight.current.toFixed(1) : '-'}
+                        </span>
+                        <span className="text-sm text-gray-500">kg</span>
+                      </div>
+                      {analytics.bodyweight.change !== 0 && (
+                        <div className={`mt-1 inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                          analytics.bodyweight.change > 0 ? 'bg-green-50 text-green-700' : 'bg-orange-50 text-orange-700'
+                        }`}>
+                          {analytics.bodyweight.change > 0 ? '↓' : '↑'} {Math.abs(analytics.bodyweight.change).toFixed(1)}kg
+                        </div>
+                      )}
+                    </div>
+                    <div className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">Current Weight</div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Progress Images - Always visible on all devices */}
+            <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden mb-6 block">
+              <div className="px-4 py-4 sm:px-6 sm:py-5 lg:px-8 lg:py-6 border-b-2" style={{ backgroundColor: '#fef9e7', borderColor: '#daa450' }}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-base sm:text-lg lg:text-2xl font-bold text-gray-900">Progress Images</h2>
+                    <p className="text-gray-600 text-[10px] sm:text-xs lg:text-sm mt-1">Track your transformation</p>
+                  </div>
+                  <Link
+                    href="/client-portal/progress-images"
+                    className="px-3 py-2 sm:px-4 sm:py-2 text-white rounded-xl sm:rounded-2xl hover:opacity-90 transition-all duration-200 text-xs sm:text-sm font-medium shadow-sm"
+                    style={{ backgroundColor: '#daa450' }}
+                  >
+                    Manage
+                  </Link>
+                </div>
+              </div>
+              <ProgressImagesPreview clientEmail={userProfile?.email || ''} />
+            </div>
+
+            {/* Scoring Formula & Traffic Light Info - At bottom of main content */}
+            <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 p-4 sm:p-6 mb-6 lg:mb-0">
+              <button
+                onClick={() => setShowScoringInfo(!showScoringInfo)}
+                className="w-full flex items-center justify-between text-left"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl flex items-center justify-center" style={{ backgroundColor: '#daa450' }}>
+                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-gray-900">Understanding Your Scores</h3>
+                    <p className="text-xs text-gray-600">Learn how scores are calculated and what they mean</p>
+                  </div>
+                </div>
+                <svg 
+                  className={`w-5 h-5 text-gray-400 transition-transform ${showScoringInfo ? 'rotate-180' : ''}`}
+                  fill="none" 
+                  stroke="currentColor" 
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              {showScoringInfo && (
+                <div className="mt-6 pt-6 border-t border-gray-200 space-y-6">
+                {/* Scoring Formula */}
+                <div>
+                  <h4 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
+                    <span className="text-blue-600">📊</span>
+                    Scoring Formula
+                  </h4>
+                  <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+                    <div className="text-sm text-gray-700">
+                      <p className="font-semibold mb-2">Each question contributes to your score:</p>
+                      <div className="bg-white rounded p-3 font-mono text-xs border border-gray-200">
+                        <div className="mb-2">weightedScore = questionScore × questionWeight</div>
+                        <div className="mb-2">totalScore = (Σ weightedScores / (Σ weights × 10)) × 100</div>
+                      </div>
+                    </div>
+                    <div className="text-xs text-gray-600 space-y-1">
+                      <p>• <strong>Question Weight (1-10):</strong> How important the question is</p>
+                      <p>• <strong>Question Score (1-10):</strong> Your answer converted to a score</p>
+                      <p>• <strong>Final Score (0-100%):</strong> Weighted average of all questions</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Answer Scoring */}
+                <div>
+                  <h4 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
+                    <span className="text-green-600">✅</span>
+                    How Answers Are Scored
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-gray-700">
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <p className="font-semibold mb-1">Scale (1-10):</p>
+                      <p>Direct value (e.g., 7 = 7/10)</p>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <p className="font-semibold mb-1">Yes/No:</p>
+                      <p>Yes = 8/10, No = 3/10</p>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <p className="font-semibold mb-1">Single/Multiple Choice:</p>
+                      <p>Uses option weights if set</p>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <p className="font-semibold mb-1">Text Questions:</p>
+                      <p>Neutral score of 5/10</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Traffic Light Thresholds */}
+                <div>
+                  <h4 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
+                    <span className="text-yellow-600">🚦</span>
+                    Your Traffic Light Thresholds
+                  </h4>
+                  <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg p-4">
+                    <div className="grid grid-cols-3 gap-3 mb-3">
+                      <div className="bg-white rounded-lg p-3 border-2 border-red-200">
+                        <div className="flex items-center gap-1 mb-1">
+                          <span className="text-lg">🔴</span>
+                          <span className="font-bold text-red-700 text-xs">Red Zone</span>
+                        </div>
+                        <p className="text-xs font-semibold text-gray-900">0 - {thresholds.redMax}%</p>
+                        <p className="text-xs text-gray-600 mt-1">Needs Attention</p>
+                      </div>
+                      <div className="bg-white rounded-lg p-3 border-2 border-orange-200">
+                        <div className="flex items-center gap-1 mb-1">
+                          <span className="text-lg">🟠</span>
+                          <span className="font-bold text-orange-700 text-xs">Orange Zone</span>
+                        </div>
+                        <p className="text-xs font-semibold text-gray-900">{thresholds.redMax + 1} - {thresholds.orangeMax}%</p>
+                        <p className="text-xs text-gray-600 mt-1">On Track</p>
+                      </div>
+                      <div className="bg-white rounded-lg p-3 border-2 border-green-200">
+                        <div className="flex items-center gap-1 mb-1">
+                          <span className="text-lg">🟢</span>
+                          <span className="font-bold text-green-700 text-xs">Green Zone</span>
+                        </div>
+                        <p className="text-xs font-semibold text-gray-900">{thresholds.orangeMax + 1} - 100%</p>
+                        <p className="text-xs text-gray-600 mt-1">Excellent</p>
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-600 italic">
+                      These thresholds are personalized based on your client profile and goals.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Example Calculation */}
+                <div>
+                  <h4 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
+                    <span className="text-purple-600">💡</span>
+                    Example Calculation
+                  </h4>
+                  <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                    <div className="text-xs text-gray-700 space-y-2">
+                      <p><strong>3 Questions:</strong></p>
+                      <ul className="list-disc list-inside space-y-1 ml-2">
+                        <li>Q1: Sleep (Weight 8) → Answer: 7 → Score: 7 × 8 = 56</li>
+                        <li>Q2: Exercise (Weight 5) → Answer: Yes → Score: 8 × 5 = 40</li>
+                        <li>Q3: Notes (Weight 2) → Answer: Text → Score: 5 × 2 = 10</li>
+                      </ul>
+                      <div className="mt-3 pt-3 border-t border-blue-200">
+                        <p><strong>Total:</strong> (56 + 40 + 10) / (15 × 10) × 100 = <strong>71%</strong></p>
+                        <p className="mt-1 text-orange-700 font-semibold">→ 🟠 Orange Zone (On Track)</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                </div>
+              )}
+            </div>
+              </div>
+
+              {/* Desktop Sidebar - Hidden on mobile (mobile sidebar appears earlier) */}
+              <div className="hidden lg:block lg:col-span-1">
+                <div className="space-y-6">
+                  {/* Quick Actions */}
+                  <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                    <div className="px-4 py-3 sm:px-6 sm:py-4 border-b-2" style={{ backgroundColor: '#fef9e7', borderColor: '#daa450' }}>
+                      <h3 className="text-base sm:text-lg font-bold text-gray-900">Quick Actions</h3>
+                    </div>
+                    <div className="p-4 sm:p-6 space-y-3">
+                      {coach && (
+                        <Link
+                          href="/client-portal/messages"
+                          className="w-full text-white px-4 py-3 rounded-2xl text-sm font-medium text-center transition-all duration-200 shadow-sm hover:shadow flex items-center justify-center"
+                          style={{ backgroundColor: '#daa450' }}
+                        >
+                          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                          </svg>
+                          Message Coach
+                        </Link>
+                      )}
+                      <Link
+                        href="/client-portal/check-ins"
+                        className="w-full text-white px-4 py-3 rounded-2xl text-sm font-medium text-center transition-all duration-200 shadow-sm hover:shadow block"
+                        style={{ backgroundColor: '#daa450' }}
+                      >
+                        View Check-ins
+                      </Link>
+                      <Link
+                        href="/client-portal/progress"
+                        className="w-full text-white px-4 py-3 rounded-2xl text-sm font-medium text-center transition-all duration-200 shadow-sm hover:shadow block"
+                        style={{ backgroundColor: '#daa450' }}
+                      >
+                        View Progress
+                      </Link>
+                      <Link
+                        href="/client-portal/profile"
+                        className="w-full bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-3 rounded-2xl text-sm font-medium text-center transition-all duration-200 shadow-sm hover:shadow block"
+                      >
+                        Update Profile
+                      </Link>
+              </div>
+            </div>
+
+
+            {/* Progress Summary */}
+                  <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                    <div className="px-4 py-3 sm:px-6 sm:py-4 border-b-2" style={{ backgroundColor: '#fef9e7', borderColor: '#daa450' }}>
+                      <h3 className="text-base sm:text-lg font-bold text-gray-900">Progress Summary</h3>
+                    </div>
+                    <div className="p-4 sm:p-6 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-900">Completion Rate</span>
+                        <span className="font-bold text-gray-900">
+                          {stats.totalCheckins > 0 ? Math.round((stats.completedCheckins / stats.totalCheckins) * 100) : 0}%
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-900">Performance</span>
+                        <span className="font-bold text-gray-900">
+                          {stats.averageScore >= 80 ? 'Excellent' : 
+                           stats.averageScore >= 60 ? 'Good' : 'Needs Improvement'}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-900">Active Streak</span>
+                        <span className="font-bold text-gray-900">
+                          {stats.lastActivity ? 'Current' : 'None'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  </div>
+                </div>
+              </div>
+              </div>
+            </div>
+
+            {/* Mobile-only Content - All dashboard elements together on mobile */}
+            <div className="lg:hidden space-y-6 mb-6 mt-6">
+              {/* Mobile Welcome */}
+              <div className="mb-4">
+                <h1 className="text-xl font-bold text-gray-900">Welcome Back!</h1>
+                <p className="text-gray-600 text-xs mt-1">Track your progress and stay connected</p>
+              </div>
+
+              {/* Quick Stats Bar */}
+              <div className="mb-6">
+                <QuickStatsBar stats={analytics?.quickStats || null} loading={loadingAnalytics} />
+              </div>
+
+              {/* Next Check-in Section */}
+              {(() => {
+                const now = new Date();
+                now.setHours(0, 0, 0, 0);
+                
+                const nextScheduled = assignedCheckins
+                  .filter(checkIn => {
+                    const dueDate = new Date(checkIn.dueDate);
+                    dueDate.setHours(0, 0, 0, 0);
+                    const daysDiff = Math.floor((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                    return checkIn.status === 'pending' && daysDiff >= 0;
+                  })
+                  .sort((a, b) => {
+                    const dateA = new Date(a.dueDate).getTime();
+                    const dateB = new Date(b.dueDate).getTime();
+                    return dateA - dateB;
+                  })[0];
+
+                if (!nextScheduled) return null;
+
+                const dueDate = new Date(nextScheduled.dueDate);
+                const daysDiff = Math.floor((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                
+                return (
+                  <div className="mb-6">
+                    <div className="bg-[#fef9e7] border-2 border-[#daa450] rounded-2xl p-4 shadow-sm">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#daa450' }}>
+                          <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h2 className="text-base font-bold text-gray-900 mb-1">Next Check-in</h2>
+                          <p className="text-sm font-medium text-gray-900 truncate">{nextScheduled.title}</p>
+                          <p className="text-xs text-gray-600 mt-1">
+                            Due: {dueDate.toLocaleDateString('en-US', { 
+                              weekday: 'long', 
+                              month: 'long', 
+                              day: 'numeric' 
+                            })}
+                            {daysDiff === 0 ? ' (Today)' : daysDiff === 1 ? ' (Tomorrow)' : daysDiff > 1 ? ` (in ${daysDiff} days)` : ''}
+                          </p>
+                        </div>
+                        <Link
+                          href="/client-portal/check-ins"
+                          className="flex-shrink-0 px-4 py-2 text-sm font-semibold text-white rounded-xl hover:opacity-90 transition-opacity shadow-sm"
+                          style={{ backgroundColor: '#daa450' }}
+                        >
+                          View
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Onboarding Questionnaire Banner */}
+              {onboardingStatus !== 'completed' && onboardingStatus !== 'submitted' && onboardingStatus !== 'skipped' && (
+                <div className="bg-gradient-to-r from-[#daa450] to-[#c89540] rounded-2xl shadow-lg mb-4 overflow-hidden border border-[#daa450]/20 w-full">
+                  <div className="px-4 py-4">
+                    <div className="flex flex-col gap-4">
+                      <div className="flex items-start gap-3 flex-1 min-w-0 w-full">
+                        <div className="w-10 h-10 bg-white bg-opacity-20 rounded-xl flex items-center justify-center flex-shrink-0">
+                          <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h2 className="text-base font-bold text-white mb-1.5">Complete Your Onboarding Questionnaire</h2>
+                          <p className="text-white/90 text-xs leading-relaxed">
+                            {onboardingStatus === 'not_started' 
+                              ? 'Help us understand your goals and preferences. This must be completed before you can receive check-ins.'
+                              : `You're ${onboardingProgress}% complete. Finish the questionnaire to unlock check-ins.`
+                            }
+                          </p>
+                          {onboardingProgress > 0 && (
+                            <div className="mt-3 w-full bg-white/20 rounded-full h-2">
+                              <div 
+                                className="bg-white h-2 rounded-full transition-all duration-300"
+                                style={{ width: `${onboardingProgress}%` }}
+                              ></div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <Link
+                        href="/client-portal/onboarding-questionnaire"
+                        className="w-full px-4 py-3 bg-white text-[#daa450] rounded-xl font-semibold hover:bg-gray-50 transition-colors shadow-md text-center text-sm min-h-[44px] flex items-center justify-center"
+                      >
+                        {onboardingStatus === 'not_started' ? 'Start Questionnaire' : 'Continue Questionnaire'}
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Next Upcoming Tasks */}
+              {(() => {
+                if (loadingTodos) return null;
+                
+                const hasOnboardingTasks = !onboardingTodos.hasWeight || !onboardingTodos.hasMeasurements || !onboardingTodos.hasBeforePhotos;
+                const hasMeasurementTask = nextMeasurementTask && (nextMeasurementTask.status === 'upcoming' || nextMeasurementTask.status === 'due' || nextMeasurementTask.status === 'overdue');
+                const hasTasks = hasOnboardingTasks || hasMeasurementTask;
+                
+                if (!hasTasks) return null;
+                
+                return (
+                  <div className="bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 mb-4 overflow-hidden w-full">
+                    <div className="px-4 py-3 border-b-2" style={{ backgroundColor: '#fef9e7', borderColor: '#daa450' }}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 bg-white bg-opacity-20 rounded-lg flex items-center justify-center flex-shrink-0">
+                            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                            </svg>
+                          </div>
+                          <div>
+                            <h2 className="text-sm font-bold text-gray-900">Next Upcoming Tasks</h2>
+                            <p className="text-gray-600 text-[10px] mt-0.5">Complete these tasks to stay on track</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="p-3 space-y-2">
+                      {hasMeasurementTask && (
+                        <Link
+                          href="/client-portal/measurements"
+                          className="flex items-center justify-between p-3 bg-white rounded-xl border-2 transition-all group"
+                          style={{ 
+                            borderColor: nextMeasurementTask!.status === 'overdue' ? '#ef4444' : '#daa450'
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#fef9e7'}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ffffff'}
+                        >
+                          <div className="flex items-center gap-2 flex-1 min-w-0">
+                            <div 
+                              className="w-7 h-7 rounded-full border-2 flex items-center justify-center flex-shrink-0"
+                              style={{ borderColor: nextMeasurementTask!.status === 'overdue' ? '#ef4444' : '#daa450' }}
+                            >
+                              <svg className="w-4 h-4" style={{ color: nextMeasurementTask!.status === 'overdue' ? '#ef4444' : '#daa450' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                              </svg>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h3 className="font-semibold text-sm text-gray-900 truncate">Update Measurements & Photos</h3>
+                              <p className="text-xs text-gray-600 line-clamp-1">
+                                {nextMeasurementTask!.status === 'overdue' && (
+                                  <span className="text-red-600 font-medium">Overdue by {nextMeasurementTask!.daysUntil} {nextMeasurementTask!.daysUntil === 1 ? 'day' : 'days'}</span>
+                                )}
+                                {nextMeasurementTask!.status === 'due' && (
+                                  <span className="font-medium" style={{ color: '#daa450' }}>Due today - {new Date(nextMeasurementTask!.dueDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+                                )}
+                                {nextMeasurementTask!.status === 'upcoming' && (
+                                  <>Due {nextMeasurementTask!.daysUntil === 1 ? 'tomorrow' : `in ${nextMeasurementTask!.daysUntil} days`} - {new Date(nextMeasurementTask!.dueDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</>
+                                )}
+                              </p>
+                            </div>
+                          </div>
+                          <svg className="w-4 h-4 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </Link>
+                      )}
+                      {!onboardingTodos.hasWeight && (
+                        <Link
+                          href="/client-portal/measurements"
+                          className="flex items-center justify-between p-3 bg-white rounded-xl border border-gray-200 hover:border-[#daa450] hover:shadow-md transition-all group"
+                        >
+                          <div className="flex items-center gap-2 flex-1 min-w-0">
+                            <div className="w-7 h-7 rounded-full border-2 flex items-center justify-center flex-shrink-0" style={{ borderColor: '#daa450' }}>
+                              <svg className="w-4 h-4" style={{ color: '#daa450' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                              </svg>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h3 className="font-semibold text-sm text-gray-900 truncate">Enter Your Weight</h3>
+                              <p className="text-xs text-gray-600 line-clamp-1">Record your starting weight to track progress</p>
+                            </div>
+                          </div>
+                          <svg className="w-4 h-4 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </Link>
+                      )}
+                      {!onboardingTodos.hasMeasurements && (
+                        <Link
+                          href="/client-portal/measurements"
+                          className="flex items-center justify-between p-3 bg-white rounded-xl border border-gray-200 hover:border-[#daa450] hover:shadow-md transition-all group"
+                        >
+                          <div className="flex items-center gap-2 flex-1 min-w-0">
+                            <div className="w-7 h-7 rounded-full border-2 flex items-center justify-center flex-shrink-0" style={{ borderColor: '#daa450' }}>
+                              <svg className="w-4 h-4" style={{ color: '#daa450' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                              </svg>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h3 className="font-semibold text-sm text-gray-900 truncate">Add Your Measurements</h3>
+                              <p className="text-xs text-gray-600 line-clamp-1">Record body measurements (waist, hips, chest, etc.)</p>
+                            </div>
+                          </div>
+                          <svg className="w-4 h-4 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </Link>
+                      )}
+                      {!onboardingTodos.hasBeforePhotos && (
+                        <Link
+                          href="/client-portal/measurements"
+                          className="flex items-center justify-between p-3 bg-white rounded-xl border border-gray-200 hover:border-[#daa450] hover:shadow-md transition-all group"
+                        >
+                          <div className="flex items-center gap-2 flex-1 min-w-0">
+                            <div className="w-7 h-7 rounded-full border-2 flex items-center justify-center flex-shrink-0" style={{ borderColor: '#daa450' }}>
+                              <svg className="w-4 h-4" style={{ color: '#daa450' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                              </svg>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h3 className="font-semibold text-sm text-gray-900 truncate">Upload Before Photos</h3>
+                              <p className="text-xs text-gray-600 line-clamp-2">Take and upload front, back, and side photos to track your transformation</p>
+                            </div>
+                          </div>
+                          <svg className="w-4 h-4 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </Link>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Check-ins Requiring Attention */}
+              <div className="mb-6">
+                <div className="bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                  <div className="px-4 py-4 border-b-2" style={{ backgroundColor: '#fef9e7', borderColor: '#daa450' }}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2 flex-1 min-w-0">
+                        <div className="w-8 h-8 bg-white bg-opacity-20 rounded-lg flex items-center justify-center flex-shrink-0">
+                          <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <h2 className="text-lg font-bold text-gray-900">Check-ins Requiring Attention</h2>
+                          <p className="text-gray-600 text-xs">Complete overdue and upcoming check-ins to stay on track</p>
+                        </div>
+                      </div>
+                      <div className="text-right flex-shrink-0 ml-2">
+                        <div className="text-gray-600 text-sm font-medium">Needs Action</div>
+                        <div className="text-2xl font-bold text-gray-900">
+                          {(() => {
+                            const filtered = assignedCheckins.filter(checkIn => {
+                              if (checkIn.status === 'completed') return false;
+                              const dueDate = new Date(checkIn.dueDate);
+                              const now = new Date();
+                              const normalizedDueDate = new Date(dueDate);
+                              normalizedDueDate.setHours(0, 0, 0, 0);
+                              const normalizedNow = new Date(now);
+                              normalizedNow.setHours(0, 0, 0, 0);
+                              if (normalizedDueDate < normalizedNow) return true;
+                              if (normalizedDueDate <= normalizedNow) {
+                                const checkInWindow = checkIn.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
+                                const windowStatus = isWithinCheckInWindow(checkInWindow);
+                                const isFirstCheckIn = checkIn.recurringWeek === 1;
+                                if (windowStatus.isOpen || isFirstCheckIn) return true;
+                              }
+                              return false;
+                            });
+                            const deduplicatedMap = new Map<string, CheckIn>();
+                            filtered.forEach(checkIn => {
+                              const dueDate = new Date(checkIn.dueDate);
+                              dueDate.setHours(0, 0, 0, 0);
+                              const key = `${checkIn.formId}_${dueDate.toISOString().split('T')[0]}`;
+                              if (!deduplicatedMap.has(key)) {
+                                deduplicatedMap.set(key, checkIn);
+                              }
+                            });
+                            return deduplicatedMap.size;
+                          })()}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="p-4">
+                    {(() => {
+                      const filteredCheckins = assignedCheckins.filter(checkIn => {
+                        if (checkIn.status === 'completed') return false;
+                        const dueDate = new Date(checkIn.dueDate);
+                        const now = new Date();
+                        const normalizedDueDate = new Date(dueDate);
+                        normalizedDueDate.setHours(0, 0, 0, 0);
+                        const normalizedNow = new Date(now);
+                        normalizedNow.setHours(0, 0, 0, 0);
+                        if (normalizedDueDate < normalizedNow) return true;
+                        if (normalizedDueDate <= normalizedNow) {
+                          const checkInWindow = checkIn.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
+                          const windowStatus = isWithinCheckInWindow(checkInWindow);
+                          const isFirstCheckIn = checkIn.recurringWeek === 1;
+                          if (windowStatus.isOpen || isFirstCheckIn) return true;
+                        }
+                        return false;
+                      });
+                      const deduplicatedMap = new Map<string, CheckIn>();
+                      filteredCheckins.forEach(checkIn => {
+                        const dueDate = new Date(checkIn.dueDate);
+                        dueDate.setHours(0, 0, 0, 0);
+                        const key = `${checkIn.formId}_${dueDate.toISOString().split('T')[0]}`;
+                        if (!deduplicatedMap.has(key)) {
+                          deduplicatedMap.set(key, checkIn);
+                        }
+                      });
+                      const upcomingCheckins = Array.from(deduplicatedMap.values()).sort((a, b) => {
+                        const aDue = new Date(a.dueDate).getTime();
+                        const bDue = new Date(b.dueDate).getTime();
+                        const now = new Date().getTime();
+                        const aIsOverdue = aDue < now;
+                        const bIsOverdue = bDue < now;
+                        if (aIsOverdue && !bIsOverdue) return -1;
+                        if (!aIsOverdue && bIsOverdue) return 1;
+                        if (aIsOverdue && bIsOverdue) return aDue - bDue;
+                        return aDue - bDue;
+                      });
+                      if (upcomingCheckins.length === 0) {
+                        return (
+                          <div className="text-center py-6">
+                            <div className="w-14 h-14 bg-gradient-to-br from-emerald-400 to-green-500 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-lg">
+                              <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                            </div>
+                            <p className="text-gray-800 text-base font-bold mb-1">All caught up!</p>
+                            <p className="text-gray-900 text-sm">No check-ins due this week. Great job!</p>
+                          </div>
+                        );
+                      }
+                      return (
+                        <div className="space-y-4">
+                          {upcomingCheckins.slice(0, 3).map((checkIn) => {
+                            const dueDate = new Date(checkIn.dueDate);
+                            const now = new Date();
+                            const daysDiff = Math.floor((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                            const isOverdue = daysDiff < 0;
+                            const colorStatus = getCheckInColorStatus(checkIn);
+                            const borderColor = colorStatus === 'red' ? 'border-red-300 bg-red-50' :
+                                              colorStatus === 'orange' ? 'border-orange-300 bg-orange-50' :
+                                              'border-green-300 bg-green-50';
+                            const buttonBg = colorStatus === 'red' ? 'bg-red-600 hover:bg-red-700' :
+                                            colorStatus === 'orange' ? 'bg-orange-600 hover:bg-orange-700' :
+                                            'bg-green-600 hover:bg-green-700';
+                            const buttonText = colorStatus === 'red' ? 'Complete Now' :
+                                             colorStatus === 'orange' ? 'Complete Soon' :
+                                             'Start Check-in';
+                            return (
+                              <div 
+                                key={checkIn.id} 
+                                className={`bg-white rounded-lg p-4 border-2 transition-all duration-200 ${borderColor}`}
+                              >
+                                <div className="flex flex-col gap-3">
+                                  <div className="flex-1 min-w-0">
+                                    <h3 className="text-base font-semibold text-gray-900 truncate">{checkIn.title}</h3>
+                                    <p className="text-xs text-gray-600 mt-1">
+                                      {isOverdue ? `${Math.abs(daysDiff)} day${Math.abs(daysDiff) !== 1 ? 's' : ''} overdue` :
+                                       daysDiff === 0 ? 'Due Today!' : 
+                                       daysDiff === 1 ? 'Due Tomorrow' : 
+                                       `Due in ${daysDiff} days`}
+                                    </p>
+                                  </div>
+                                  <Link
+                                    href={`/client-portal/check-in/${checkIn.id}`}
+                                    className={`w-full px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 text-white text-center ${buttonBg}`}
+                                  >
+                                    {buttonText}
+                                  </Link>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+              </div>
+
+              {/* Stats Overview - Metric Cards */}
+              <div className="grid grid-cols-2 gap-3 mb-6">
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                  <div className="px-3 py-3">
+                    <div className="flex items-center justify-between mb-2.5">
+                      <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#daa450' }}>
+                        <span className="text-sm">{getTrafficLightIcon(averageTrafficLight)}</span>
+                      </div>
+                      {analytics?.scores.trend && analytics.scores.trend !== 'no_data' && (
+                        <span className={`text-xs font-semibold ${
+                          analytics.scores.trend === 'up' ? 'text-green-600' : 
+                          analytics.scores.trend === 'down' ? 'text-red-600' : 
+                          'text-gray-500'
+                        }`}>
+                          {analytics.scores.trend === 'up' ? '↑' : analytics.scores.trend === 'down' ? '↓' : '→'}
+                        </span>
+                      )}
+                    </div>
+                    <div className="mb-2.5">
+                      <div className="flex items-baseline gap-1 mb-1">
+                        <span className="text-xl font-bold text-gray-900">{stats?.averageScore || 0}</span>
+                        <span className="text-sm text-gray-500">%</span>
+                      </div>
+                      {stats?.averageScore > 0 && (
+                        <div className="inline-block px-1.5 py-0.5 bg-gray-100 rounded text-[10px] font-medium text-gray-700">
+                          {getTrafficLightLabel(averageTrafficLight)}
+                        </div>
+                      )}
+                    </div>
+                    <div className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">Average Score</div>
+                    {stats?.averageScore > 0 && stats?.completedCheckins > 0 && (
+                      <div className="text-[10px] text-gray-600 mt-0.5">Based on {stats.completedCheckins} check-in{stats.completedCheckins !== 1 ? 's' : ''}</div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                  <div className="px-3 py-3">
+                    <div className="flex items-center justify-between mb-2.5">
+                      <div className="w-8 h-8 bg-green-500 rounded-lg flex items-center justify-center">
+                        <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      </div>
+                      {analytics?.quickStats.currentStreak > 0 && (
+                        <div className="flex items-center gap-0.5 px-1.5 py-0.5 bg-orange-100 rounded">
+                          <span className="text-[10px]">🔥</span>
+                          <span className="text-[10px] font-bold text-orange-700">{analytics.quickStats.currentStreak}</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="mb-2.5">
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-xl font-bold text-gray-900">
+                          {stats?.totalCheckins > 0 ? Math.round((stats.completedCheckins / stats.totalCheckins) * 100) : 0}
+                        </span>
+                        <span className="text-sm text-gray-500">%</span>
+                      </div>
+                    </div>
+                    <div className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">Completion Rate</div>
+                    {stats?.totalCheckins > 0 && (
+                      <div className="text-[10px] text-gray-600 mt-0.5">{stats.completedCheckins} of {stats.totalCheckins} completed</div>
+                    )}
+                    {analytics?.quickStats.currentStreak > 0 && (
+                      <div className="mt-1 inline-block px-1.5 py-0.5 bg-orange-50 rounded text-[10px] text-orange-700 font-semibold">
+                        {analytics.quickStats.currentStreak} day{analytics.quickStats.currentStreak !== 1 ? 's' : ''} streak!
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {analytics?.bodyweight && analytics.bodyweight.baseline && (
+                  <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div className="px-3 py-3">
+                      <div className="flex items-center justify-between mb-2.5">
+                        <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
+                          <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
+                          </svg>
+                        </div>
+                        {analytics.bodyweight.trend && analytics.bodyweight.trend !== 'no_data' && (
+                          <span className={`text-xs font-semibold ${
+                            analytics.bodyweight.trend === 'down' ? 'text-green-600' : 
+                            analytics.bodyweight.trend === 'up' ? 'text-red-600' : 
+                            'text-gray-500'
+                          }`}>
+                            {analytics.bodyweight.trend === 'down' ? '↓' : analytics.bodyweight.trend === 'up' ? '↑' : '→'}
+                          </span>
+                        )}
+                      </div>
+                      <div className="mb-2.5">
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-xl font-bold text-gray-900">
+                            {analytics.bodyweight.current ? analytics.bodyweight.current.toFixed(1) : '-'}
+                          </span>
+                          <span className="text-sm text-gray-500">kg</span>
+                        </div>
+                        {analytics.bodyweight.change !== 0 && (
+                          <div className={`mt-1 inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                            analytics.bodyweight.change > 0 ? 'bg-green-50 text-green-700' : 'bg-orange-50 text-orange-700'
+                          }`}>
+                            {analytics.bodyweight.change > 0 ? '↓' : '↑'} {Math.abs(analytics.bodyweight.change).toFixed(1)}kg
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">Current Weight</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* Progress Images */}
-              <div className="bg-white/80 backdrop-blur-sm rounded-xl lg:rounded-2xl shadow-lg border border-gray-200/60 overflow-hidden mb-4 lg:mb-6">
-                <div className="px-4 py-3 lg:px-5 lg:py-4 bg-gradient-to-r from-pink-50/80 to-rose-50/80 border-b border-gray-200/50">
+              <div className="bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden mb-6">
+                <div className="px-4 py-4 border-b-2" style={{ backgroundColor: '#fef9e7', borderColor: '#daa450' }}>
                   <div className="flex items-center justify-between">
                     <div>
-                      <h2 className="text-base lg:text-lg font-bold text-gray-900">Progress Images</h2>
-                      <p className="text-gray-900 text-[10px] lg:text-xs mt-0.5 lg:mt-1 font-medium">Track your transformation</p>
+                      <h2 className="text-base font-bold text-gray-900">Progress Images</h2>
+                      <p className="text-gray-600 text-[10px] mt-1">Track your transformation</p>
                     </div>
                     <Link
                       href="/client-portal/progress-images"
-                      className="px-3 py-1.5 lg:px-4 lg:py-2 bg-gradient-to-r from-pink-600 to-rose-600 text-white rounded-lg lg:rounded-xl hover:from-pink-700 hover:to-rose-700 transition-all duration-300 text-[10px] lg:text-xs font-bold shadow-md hover:shadow-lg"
+                      className="px-3 py-2 text-white rounded-xl hover:opacity-90 transition-all duration-200 text-xs font-medium shadow-sm"
+                      style={{ backgroundColor: '#daa450' }}
                     >
                       Manage
                     </Link>
@@ -1060,178 +2379,12 @@ export default function ClientPortalPage() {
                 <ProgressImagesPreview clientEmail={userProfile?.email || ''} />
               </div>
 
-              {/* Recent Responses */}
-              <div className="bg-white rounded-xl lg:rounded-2xl shadow-xl border border-gray-100 overflow-hidden mb-6 lg:mb-8">
-                <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-4 py-4 lg:px-8 lg:py-6 border-b border-gray-100">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h2 className="text-lg lg:text-2xl font-bold text-gray-900">Recent Responses</h2>
-                      <p className="text-gray-900 text-xs lg:text-sm mt-0.5 lg:mt-1 hidden sm:block">Your latest check-in responses and feedback</p>
-                    </div>
-                    {recentResponses.length > 0 && (
-                      <Link
-                        href="/client-portal/check-ins?filter=completed"
-                        className="text-xs lg:text-sm font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
-                      >
-                        View All
-                        <svg className="w-3.5 h-3.5 lg:w-4 lg:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                        </svg>
-                      </Link>
-                    )}
-                  </div>
-                </div>
-                <div className="p-4 lg:p-8">
-                  {recentResponses.length === 0 ? (
-                    <div className="text-center py-12">
-                      <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                        </svg>
-                      </div>
-                      <p className="text-gray-700 text-lg mb-4">No recent responses</p>
-                      <p className="text-gray-900 text-sm">Your responses will appear here</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {recentResponses.map((response: any) => (
-                        <Link
-                          key={response.id}
-                          href={response.hasFeedback ? `/client-portal/feedback/${response.id}` : `/client-portal/check-in/${response.id}/success?score=${response.score}`}
-                          className="block bg-gradient-to-r from-gray-50 to-gray-100 rounded-lg lg:rounded-xl p-4 lg:p-6 border-2 border-transparent hover:border-indigo-300 hover:shadow-lg transition-all duration-200 group"
-                        >
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="flex items-center space-x-3 lg:space-x-4 flex-1 min-w-0">
-                              <div className="w-10 h-10 lg:w-12 lg:h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg lg:rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform flex-shrink-0">
-                                <svg className="w-5 h-5 lg:w-6 lg:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                </svg>
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 mb-1 flex-wrap">
-                                  <h3 className="text-sm lg:text-lg font-bold text-gray-900 group-hover:text-indigo-600 transition-colors truncate">{response.formTitle}</h3>
-                                  {response.hasFeedback && (
-                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 lg:px-2 lg:py-0.5 bg-green-100 text-green-800 rounded-full text-[10px] lg:text-xs font-semibold animate-pulse flex-shrink-0">
-                                      <svg className="w-2.5 h-2.5 lg:w-3 lg:h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                      </svg>
-                                      <span className="hidden sm:inline">Coach Feedback</span>
-                                      <span className="sm:hidden">Feedback</span>
-                                    </span>
-                                  )}
-                                </div>
-                                <p className="text-gray-900 text-xs lg:text-sm">Submitted {new Date(response.submittedAt).toLocaleDateString()}</p>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2 lg:gap-4 flex-shrink-0">
-                              <div className="text-right">
-                                <div className={`inline-flex items-center gap-1 lg:gap-1.5 px-2 py-1 lg:px-3 lg:py-1.5 rounded-full text-xs lg:text-sm font-semibold ${(() => {
-                                  const status = getTrafficLightStatus(response.score, thresholds);
-                                  return getTrafficLightColor(status);
-                                })()}`}>
-                                  <span>{getTrafficLightIcon(getTrafficLightStatus(response.score, thresholds))}</span>
-                                  <span>{response.score}%</span>
-                                </div>
-                                <div className="text-[10px] lg:text-xs text-gray-900 font-medium mt-0.5 lg:mt-1 hidden sm:block">
-                                  {getTrafficLightLabel(getTrafficLightStatus(response.score, thresholds))}
-                                </div>
-                              </div>
-                              <div className="flex items-center text-indigo-600 group-hover:text-indigo-800 transition-colors">
-                                <svg className="w-4 h-4 lg:w-5 lg:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                </svg>
-                              </div>
-                            </div>
-                          </div>
-                        </Link>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Sidebar */}
-            <div className="space-y-8">
-              {/* Coach Information - Compact */}
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-4 py-3 border-b border-gray-200">
-                  <h3 className="text-sm font-bold text-gray-900">Your Coach</h3>
-                </div>
-                <div className="p-4">
-                  {coach ? (
-                    <div className="text-center">
-                      <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-3 shadow-md">
-                        <span className="text-white font-bold text-base">
-                          {coach.firstName?.charAt(0) || 'C'}
-                        </span>
-                      </div>
-                      <h4 className="text-sm font-semibold text-gray-900 mb-1">
-                        {coach.firstName} {coach.lastName}
-                      </h4>
-                      <p className="text-gray-900 text-xs">{coach.email}</p>
-                      {coach.specialization && (
-                        <p className="text-gray-900 text-xs mt-1">{coach.specialization}</p>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="text-center py-3">
-                      <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                        <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                        </svg>
-                      </div>
-                      <p className="text-gray-900 text-xs mb-2">No coach assigned</p>
-                      <p className="text-gray-900 text-xs">Contact support to get assigned to a coach</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Quick Actions */}
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-4 py-3 border-b border-gray-200">
-                  <h3 className="text-sm font-bold text-gray-900">Quick Actions</h3>
-                </div>
-                <div className="p-4 space-y-2">
-                  {coach && (
-                    <Link
-                      href="/client-portal/messages"
-                      className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white px-3 py-2 rounded-lg text-xs font-medium text-center transition-all duration-200 shadow-sm hover:shadow flex items-center justify-center"
-                    >
-                      <svg className="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                      </svg>
-                      Message Coach
-                    </Link>
-                  )}
-                  <Link
-                    href="/client-portal/check-ins"
-                    className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-3 py-2 rounded-lg text-xs font-medium text-center transition-all duration-200 shadow-sm hover:shadow block"
-                  >
-                    View Check-ins
-                  </Link>
-                  <Link
-                    href="/client-portal/progress"
-                    className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white px-3 py-2 rounded-lg text-xs font-medium text-center transition-all duration-200 shadow-sm hover:shadow block"
-                  >
-                    View Progress
-                  </Link>
-                  <Link
-                    href="/client-portal/profile"
-                    className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white px-3 py-2 rounded-lg text-xs font-medium text-center transition-all duration-200 shadow-sm hover:shadow block"
-                  >
-                    Update Profile
-                  </Link>
-                </div>
-              </div>
-
               {/* Progress Summary */}
-              <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-                <div className="bg-gradient-to-r from-emerald-50 to-teal-50 px-6 py-4 border-b border-gray-100">
-                  <h3 className="text-lg font-bold text-gray-900">Progress Summary</h3>
+              <div className="bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                <div className="px-4 py-3 border-b-2" style={{ backgroundColor: '#fef9e7', borderColor: '#daa450' }}>
+                  <h3 className="text-base font-bold text-gray-900">Progress Summary</h3>
                 </div>
-                <div className="p-6 space-y-4">
+                <div className="p-4 space-y-4">
                   <div className="flex items-center justify-between">
                     <span className="text-gray-900">Completion Rate</span>
                     <span className="font-bold text-gray-900">
@@ -1253,9 +2406,50 @@ export default function ClientPortalPage() {
                   </div>
                 </div>
               </div>
+
+              {/* Quick Actions */}
+              <div className="bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                <div className="px-4 py-3 border-b-2" style={{ backgroundColor: '#fef9e7', borderColor: '#daa450' }}>
+                  <h3 className="text-base font-bold text-gray-900">Quick Actions</h3>
+                </div>
+                <div className="p-4 space-y-3">
+                  {coach && (
+                    <Link
+                      href="/client-portal/messages"
+                      className="w-full text-white px-4 py-3 rounded-2xl text-sm font-medium text-center transition-all duration-200 shadow-sm hover:shadow flex items-center justify-center"
+                      style={{ backgroundColor: '#daa450' }}
+                    >
+                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                      </svg>
+                      Message Coach
+                    </Link>
+                  )}
+                  <Link
+                    href="/client-portal/check-ins"
+                    className="w-full text-white px-4 py-3 rounded-2xl text-sm font-medium text-center transition-all duration-200 shadow-sm hover:shadow block"
+                    style={{ backgroundColor: '#daa450' }}
+                  >
+                    View Check-ins
+                  </Link>
+                  <Link
+                    href="/client-portal/progress"
+                    className="w-full text-white px-4 py-3 rounded-2xl text-sm font-medium text-center transition-all duration-200 shadow-sm hover:shadow block"
+                    style={{ backgroundColor: '#daa450' }}
+                  >
+                    View Progress
+                  </Link>
+                  <Link
+                    href="/client-portal/profile"
+                    className="w-full bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-3 rounded-2xl text-sm font-medium text-center transition-all duration-200 shadow-sm hover:shadow block"
+                  >
+                    Update Profile
+                  </Link>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
+        </main>
       </div>
     </RoleProtected>
   );

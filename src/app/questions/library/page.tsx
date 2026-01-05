@@ -106,111 +106,49 @@ export default function QuestionLibraryPage() {
   };
 
   const handleCreateFemaleLibrary = async () => {
-    if (!userProfile?.uid) {
-      alert('Please log in to create the question library');
-      return;
-    }
-
-    if (!window.confirm('This will create 80+ pre-weighted female-focused questions. Continue?')) {
-      return;
-    }
-
-    try {
-      const response = await fetch('/api/create-female-question-library', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          coachId: userProfile.uid
-        })
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        alert(`Successfully created ${data.count} female-focused questions!\n\nCategories: ${data.categories.join(', ')}`);
-        // Refresh the questions list
-        window.location.reload();
-      } else {
-        alert('Error creating question library: ' + (data.message || 'Unknown error'));
-      }
-    } catch (error) {
-      console.error('Error creating female question library:', error);
-      alert('Error creating question library. Please try again.');
-    }
+    alert('This feature has been removed for production optimization. Please create questions manually or use the form builder.');
   };
 
   const handleCreateVanaCheckInQuestions = async () => {
     if (!userProfile?.uid) {
-      alert('Please log in to create the question library');
+      alert('You must be logged in to create questions.');
       return;
     }
 
-    if (!window.confirm('This will create 27 Vana Check In questions. Continue?')) {
+    if (!window.confirm('This will create 28 Vana Check-in questions in your question library. Continue?')) {
       return;
     }
 
     try {
-      const response = await fetch('/api/create-vana-checkin-questions', {
+      const response = await fetch('/api/questions/seed-vana', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          coachId: userProfile.uid
-        })
+        body: JSON.stringify({ coachId: userProfile.uid })
       });
 
       const data = await response.json();
 
       if (data.success) {
-        alert(`Successfully created ${data.count} Vana Check In questions!\n\nCategories: ${data.categories.join(', ')}`);
+        alert(`Successfully created ${data.created} Vana Check-in questions!`);
         // Refresh the questions list
-        window.location.reload();
+        const questionsResponse = await fetch(`/api/questions?coachId=${userProfile.uid}`);
+        const questionsData = await questionsResponse.json();
+        if (questionsData.success) {
+          setQuestions(questionsData.questions || []);
+        }
       } else {
-        alert('Error creating question library: ' + (data.message || 'Unknown error'));
+        alert(`Failed to create questions: ${data.message || 'Unknown error'}`);
       }
     } catch (error) {
-      console.error('Error creating Vana Check In questions:', error);
-      alert('Error creating question library. Please try again.');
+      console.error('Error creating Vana Check-in questions:', error);
+      alert('Failed to create questions. Please try again.');
     }
   };
 
   const handleResetAndReload = async () => {
-    if (!userProfile?.uid) {
-      alert('Please log in to reset and reload questions');
-      return;
-    }
-
-    if (!window.confirm('⚠️ WARNING: This will DELETE ALL your existing questions and replace them with the updated female-focused question library (with "past week" language and comment support).\n\nThis action cannot be undone. Continue?')) {
-      return;
-    }
-
-    try {
-      const response = await fetch('/api/questions/reset-and-reload', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          coachId: userProfile.uid
-        })
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        alert(`✅ Reset Complete!\n\nDeleted: ${data.deletedCount} questions\nCreated: ${data.createdCount} new questions\n\nCategories: ${data.categories.join(', ')}${data.errors ? `\n\nErrors: ${data.errors.length}` : ''}`);
-        // Refresh the questions list
-        window.location.reload();
-      } else {
-        alert('Error resetting and reloading questions: ' + (data.message || 'Unknown error'));
-      }
-    } catch (error) {
-      console.error('Error resetting and reloading questions:', error);
-      alert('Error resetting and reloading questions. Please try again.');
-    }
+    alert('This feature has been removed for production optimization. Please manage questions through the question builder interface.');
   };
 
   const filteredQuestions = questions.filter(question => {
@@ -520,7 +458,7 @@ export default function QuestionLibraryPage() {
                         <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
-                        Create Vana Check In Questions (27 Questions)
+                        Create Vana Check In Questions (28 Questions)
                       </button>
                     </div>
                     <Link
@@ -591,12 +529,19 @@ export default function QuestionLibraryPage() {
                                 Required
                               </span>
                             )}
-                            {hasWeighting && (
+                            {/* Only show weight for question types that contribute to scoring (not text/textarea) */}
+                            {hasWeighting && questionType !== 'text' && questionType !== 'textarea' && (
                               <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
                                 <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
                                   <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                                 </svg>
                                 Weight: {question.questionWeight}
+                              </span>
+                            )}
+                            {/* Show a badge for text/textarea indicating they don't contribute to scoring */}
+                            {(questionType === 'text' || questionType === 'textarea') && (
+                              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                                Not Scored
                               </span>
                             )}
                             {!question.isActive && (
@@ -677,6 +622,47 @@ export default function QuestionLibraryPage() {
                                 <svg className="w-3.5 h-3.5 mr-1.5" fill="currentColor" viewBox="0 0 20 20">
                                   <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                                 </svg>
+                                Active
+                              </>
+                            ) : (
+                              'Inactive'
+                            )}
+                          </button>
+                          
+                          <div className="flex items-center gap-2">
+                            <Link
+                              href={`/questions/edit/${question.id}`}
+                              className="inline-flex items-center px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg text-xs font-medium hover:bg-blue-200 transition-all duration-200"
+                            >
+                              <svg className="w-3.5 h-3.5 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
+                              Edit
+                            </Link>
+                            
+                            <button
+                              onClick={() => handleDeleteQuestion(question.id)}
+                              className="inline-flex items-center px-3 py-1.5 bg-red-100 text-red-700 rounded-lg text-xs font-medium hover:bg-red-200 transition-all duration-200"
+                            >
+                              <svg className="w-3.5 h-3.5 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+} 
                                 Active
                               </>
                             ) : (

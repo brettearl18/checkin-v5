@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface Client {
   id: string;
@@ -44,6 +45,7 @@ interface RiskMetrics {
 }
 
 export default function RiskAnalysisPage() {
+  const { userProfile } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [riskData, setRiskData] = useState<RiskAnalysis[]>([]);
   const [metrics, setMetrics] = useState<RiskMetrics | null>(null);
@@ -52,14 +54,19 @@ export default function RiskAnalysisPage() {
   const [sortBy, setSortBy] = useState<'riskScore' | 'clientName' | 'lastAssessment'>('riskScore');
 
   useEffect(() => {
-    fetchRiskData();
-  }, []);
+    if (userProfile?.uid) {
+      fetchRiskData();
+    }
+  }, [userProfile?.uid]);
 
   const fetchRiskData = async () => {
+    if (!userProfile?.uid) {
+      return;
+    }
+    
     try {
       setIsLoading(true);
-      // Get coach ID from user context or use a default for testing
-      const coachId = 'BYAUh1d6PwanHhIUhISsmZtgt0B2'; // This should come from auth context
+      const coachId = userProfile.uid;
       
       const response = await fetch(`/api/analytics/risk?coachId=${coachId}`);
       if (response.ok) {

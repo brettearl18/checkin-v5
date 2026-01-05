@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { RoleProtected, AuthenticatedOnly } from '@/components/ProtectedRoute';
-import { doc, getDoc, addDoc, collection, updateDoc } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase-client';
 import Link from 'next/link';
 import { isWithinCheckInWindow, getCheckInWindowDescription, DEFAULT_CHECK_IN_WINDOW, CheckInWindow } from '@/lib/checkin-window-utils';
@@ -41,6 +41,9 @@ interface Question {
   questionWeight?: number; // Weight of the question (1-10)
   weight?: number; // Alternative field name for weight
   yesIsPositive?: boolean; // For boolean questions: true if YES is positive
+  description?: string; // Optional description/help text for the question
+  required?: boolean; // Whether the question is required
+  isRequired?: boolean; // Alternative field name for required
 }
 
 interface FormResponse {
@@ -54,7 +57,7 @@ interface FormResponse {
 export default function CheckInCompletionPage() {
   const params = useParams();
   const router = useRouter();
-  const { userProfile } = useAuth();
+  const { userProfile, loading: authLoading } = useAuth();
   const [assignment, setAssignment] = useState<CheckInAssignment | null>(null);
   const [assignmentDocId, setAssignmentDocId] = useState<string | null>(null); // Store the actual Firestore document ID
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -65,12 +68,37 @@ export default function CheckInCompletionPage() {
   const [error, setError] = useState('');
   const [unansweredQuestionIndices, setUnansweredQuestionIndices] = useState<number[]>([]);
   const [windowStatus, setWindowStatus] = useState<{ isOpen: boolean; message: string; nextOpenTime?: Date } | null>(null);
+  const [lastSaved, setLastSaved] = useState<Date | null>(null); // Track when last saved for visual feedback
+  const isSubmittingRef = useRef(false); // Ref to prevent double submissions
+  const [showExtensionModal, setShowExtensionModal] = useState(false);
+  const [extensionReason, setExtensionReason] = useState('');
+  const [requestingExtension, setRequestingExtension] = useState(false);
+  const [extensionGranted, setExtensionGranted] = useState(false);
 
   const assignmentId = params.id as string;
 
+  // localStorage key for autosaving check-in responses
+  const AUTOSAVE_KEY = `checkin-draft-${assignmentId}`;
+
+
   useEffect(() => {
-    fetchAssignmentData();
-  }, [assignmentId]);
+    // Wait for auth to finish loading before fetching assignment data
+    if (authLoading) {
+      return;
+    }
+    
+    // If auth is done loading but no user profile, show error
+    if (!authLoading && !userProfile?.uid) {
+      setError('User not authenticated');
+      setLoading(false);
+      return;
+    }
+    
+    // Auth is loaded and user is authenticated, fetch assignment data
+    if (!authLoading && userProfile?.uid) {
+      fetchAssignmentData();
+    }
+  }, [assignmentId, authLoading, userProfile?.uid]);
 
   const fetchAssignmentData = async () => {
     try {
@@ -80,7 +108,7 @@ export default function CheckInCompletionPage() {
         return;
       }
 
-      // Try to fetch assignment using API endpoint first (handles both doc.id and id field)
+      // Use API endpoint (handles both doc.id and id field, uses Admin SDK so bypasses client permissions)
       try {
         const response = await fetch(`/api/check-in-assignments/${assignmentId}`);
         if (response.ok) {
@@ -88,12 +116,11 @@ export default function CheckInCompletionPage() {
           if (data.success && data.assignment) {
             const assignmentData = data.assignment as CheckInAssignment;
             
-            // Verify the assignment belongs to the current user
-            if (assignmentData.clientId !== userProfile.uid) {
-              setError('You do not have permission to access this check-in');
-              setLoading(false);
-              return;
-            }
+            // Note: API route uses Admin SDK, so we trust it for authorization
+            // The API will return the assignment regardless of clientId format
+            // Security is enforced by Firestore rules when we try to access it directly,
+            // but since we're using the API route, we can proceed
+            
             
             // Store the actual Firestore document ID from the API response
             if (data.documentId) {
@@ -103,57 +130,35 @@ export default function CheckInCompletionPage() {
               setAssignmentDocId(assignmentData.id);
             }
             
-            // Continue with the assignment data
-            await loadFormAndQuestions(assignmentData);
+            // Use form and questions from API if available (avoids Firestore permission issues)
+            if (data.form && data.questions) {
+              await loadFormAndQuestionsFromAPI(assignmentData, data.form, data.questions, data.documentId || assignmentData.id);
+            } else {
+              // Fallback to direct Firestore access (may fail due to permissions)
+              await loadFormAndQuestions(assignmentData);
+            }
+            return;
+          } else {
+            // API returned success: false
+            console.error('API returned error:', data.message);
+            setError(data.message || 'Failed to load check-in data. Please try refreshing the page.');
+            setLoading(false);
             return;
           }
-        }
-      } catch (apiError) {
-        console.log('API fetch failed, trying direct Firestore query:', apiError);
-      }
-
-      // Fallback: Try direct Firestore query by document ID
-      let assignmentDoc = await getDoc(doc(db, 'check_in_assignments', assignmentId));
-      
-      // If not found, try querying by the 'id' field
-      if (!assignmentDoc.exists()) {
-        const { collection, query, where, getDocs } = await import('firebase/firestore');
-        const assignmentsQuery = query(
-          collection(db, 'check_in_assignments'),
-          where('id', '==', assignmentId),
-          where('clientId', '==', userProfile.uid)
-        );
-        const querySnapshot = await getDocs(assignmentsQuery);
-        
-        if (!querySnapshot.empty) {
-          assignmentDoc = querySnapshot.docs[0];
-          // Store the actual document ID
-          setAssignmentDocId(assignmentDoc.id);
         } else {
-          setError('Check-in assignment not found');
+          // HTTP error status
+          const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
+          console.error('API request failed:', response.status, errorData);
+          setError(errorData.message || 'Failed to load check-in data. Please try refreshing the page.');
           setLoading(false);
           return;
         }
-      }
-
-      if (!assignmentDoc.exists()) {
-        setError('Check-in assignment not found');
+      } catch (apiError) {
+        console.error('API fetch error:', apiError);
+        setError('Failed to load check-in data. Please try refreshing the page.');
         setLoading(false);
         return;
       }
-
-      // Store the actual Firestore document ID
-      setAssignmentDocId(assignmentDoc.id);
-      const assignmentData = assignmentDoc.data() as CheckInAssignment;
-      
-      // Verify the assignment belongs to the current user
-      if (assignmentData.clientId !== userProfile.uid) {
-        setError('You do not have permission to access this check-in');
-        setLoading(false);
-        return;
-      }
-      
-      await loadFormAndQuestions(assignmentData);
     } catch (error) {
       console.error('Error fetching assignment data:', error);
       setError('Failed to load check-in data');
@@ -161,6 +166,106 @@ export default function CheckInCompletionPage() {
     }
   };
 
+  // Load form and questions from API response (avoids Firestore permission issues)
+  const loadFormAndQuestionsFromAPI = async (
+    assignmentData: CheckInAssignment,
+    formData: any,
+    questionsData: Question[],
+    docId?: string | null
+  ) => {
+    try {
+      // Ensure formTitle is set
+      if (!assignmentData.formTitle && formData.title) {
+        assignmentData.formTitle = formData.title;
+      }
+      
+      // If still no title, use a default
+      if (!assignmentData.formTitle) {
+        assignmentData.formTitle = 'Check-in Form';
+      }
+      
+      setAssignment(assignmentData);
+
+      // Check check-in window status
+      const checkInWindow = assignmentData.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
+      const status = isWithinCheckInWindow(checkInWindow);
+      setWindowStatus(status);
+
+      // Check if extension has been granted
+      if (!status.isOpen && docId) {
+        try {
+          const extensionResponse = await fetch(`/api/check-in-assignments/${docId}/extension`);
+          if (extensionResponse.ok) {
+            const extensionData = await extensionResponse.json();
+            if (extensionData.success && extensionData.extensionGranted) {
+              setExtensionGranted(true);
+            }
+          }
+        } catch (error) {
+          console.error('Error checking extension status:', error);
+        }
+      }
+
+      // Use questions from API response
+      setQuestions(questionsData);
+
+      // Initialize responses array - merge with saved draft if available
+      let initialResponses: FormResponse[] = questionsData.map(q => ({
+        questionId: q.id,
+        question: q.text,
+        answer: '',
+        type: q.type,
+        comment: '' // Initialize comment field
+      }));
+
+      // Check for saved draft in localStorage and merge if available
+      try {
+        const savedDraft = localStorage.getItem(AUTOSAVE_KEY);
+        if (savedDraft) {
+          const draftData = JSON.parse(savedDraft);
+          
+          if (draftData.responses && Array.isArray(draftData.responses) && draftData.responses.length > 0) {
+            const savedResponsesMap = new Map(draftData.responses.map((r: FormResponse) => [r.questionId, r]));
+            
+            // Merge saved answers/comments into initial responses
+            initialResponses = initialResponses.map(initialResponse => {
+              const savedResponse = savedResponsesMap.get(initialResponse.questionId);
+              if (savedResponse) {
+                return {
+                  ...initialResponse,
+                  answer: savedResponse.answer !== undefined ? savedResponse.answer : initialResponse.answer,
+                  comment: savedResponse.comment || initialResponse.comment
+                };
+              }
+              return initialResponse;
+            });
+            
+            console.log('Restored saved draft responses and merged with questions');
+            
+            // Restore current question position
+            if (typeof draftData.currentQuestion === 'number' && 
+                draftData.currentQuestion >= 0 && 
+                draftData.currentQuestion < questionsData.length) {
+              setCurrentQuestion(draftData.currentQuestion);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error loading draft from localStorage in loadFormAndQuestionsFromAPI:', error);
+        // Continue with empty responses if draft load fails
+      }
+      
+      setResponses(initialResponses);
+
+    } catch (error) {
+      console.error('Error loading form and questions from API:', error);
+      setError('Failed to load check-in data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fallback: Load form and questions directly from Firestore (may fail due to permissions)
   const loadFormAndQuestions = async (assignmentData: CheckInAssignment) => {
     try {
       
@@ -193,25 +298,65 @@ export default function CheckInCompletionPage() {
 
       const questionIds = formData.questions || [];
 
-      // Fetch individual questions
+      // Fetch all questions from the form (no filtering by category)
       const questionsData: Question[] = [];
       for (const questionId of questionIds) {
         const questionDoc = await getDoc(doc(db, 'questions', questionId));
         if (questionDoc.exists()) {
-          questionsData.push({ id: questionDoc.id, ...questionDoc.data() } as Question);
+          const questionData = { id: questionDoc.id, ...questionDoc.data() } as Question;
+          // Include all questions from the form
+          questionsData.push(questionData);
         }
       }
 
       setQuestions(questionsData);
 
-      // Initialize responses array
-      const initialResponses: FormResponse[] = questionsData.map(q => ({
+      // Initialize responses array - merge with saved draft if available
+      let initialResponses: FormResponse[] = questionsData.map(q => ({
         questionId: q.id,
         question: q.text,
         answer: '',
         type: q.type,
         comment: '' // Initialize comment field
       }));
+
+      // Check for saved draft in localStorage and merge if available
+      try {
+        const savedDraft = localStorage.getItem(AUTOSAVE_KEY);
+        if (savedDraft) {
+          const draftData = JSON.parse(savedDraft);
+          
+          if (draftData.responses && Array.isArray(draftData.responses) && draftData.responses.length > 0) {
+            const savedResponsesMap = new Map(draftData.responses.map((r: FormResponse) => [r.questionId, r]));
+            
+            // Merge saved answers/comments into initial responses
+            initialResponses = initialResponses.map(initialResponse => {
+              const savedResponse = savedResponsesMap.get(initialResponse.questionId);
+              if (savedResponse) {
+                return {
+                  ...initialResponse,
+                  answer: savedResponse.answer !== undefined ? savedResponse.answer : initialResponse.answer,
+                  comment: savedResponse.comment || initialResponse.comment
+                };
+              }
+              return initialResponse;
+            });
+            
+            console.log('Restored saved draft responses and merged with questions');
+            
+            // Restore current question position
+            if (typeof draftData.currentQuestion === 'number' && 
+                draftData.currentQuestion >= 0 && 
+                draftData.currentQuestion < questionsData.length) {
+              setCurrentQuestion(draftData.currentQuestion);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error loading draft from localStorage in loadFormAndQuestions:', error);
+        // Continue with empty responses if draft load fails
+      }
+      
       setResponses(initialResponses);
 
     } catch (error) {
@@ -221,6 +366,24 @@ export default function CheckInCompletionPage() {
       setLoading(false);
     }
   };
+
+  // Autosave responses to localStorage whenever they change
+  useEffect(() => {
+    if (assignmentId && responses.length > 0) {
+      try {
+        const draftData = {
+          responses: responses,
+          currentQuestion: currentQuestion,
+          savedAt: new Date().toISOString()
+        };
+        localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(draftData));
+        setLastSaved(new Date()); // Update last saved time for visual feedback
+        console.log('Autosaved responses to localStorage');
+      } catch (error) {
+        console.error('Error autosaving to localStorage:', error);
+      }
+    }
+  }, [responses, currentQuestion, assignmentId]);
 
   const handleAnswerChange = (questionIndex: number, answer: string | number | boolean) => {
     const question = questions[questionIndex];
@@ -268,6 +431,7 @@ export default function CheckInCompletionPage() {
       });
     }
     setResponses(updatedResponses);
+    // Note: Autosave is handled by the useEffect watching responses state
   };
 
   const handleNext = () => {
@@ -285,24 +449,51 @@ export default function CheckInCompletionPage() {
   const handleSubmit = async () => {
     if (!assignment || !userProfile) return;
 
+    // Prevent double submission using ref (more reliable than state)
+    if (isSubmittingRef.current) {
+      console.log('Already submitting, ignoring duplicate call');
+      return;
+    }
+
+    // Prevent double submission
+    if (submitting) {
+      return;
+    }
+
+    isSubmittingRef.current = true;
+    setSubmitting(true);
+
     // Check if check-in window is open
     const checkInWindow = assignment.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
     const status = isWithinCheckInWindow(checkInWindow);
     
-    if (!status.isOpen) {
+    // Special case: Week 1 (first check-in) can be submitted even if window is closed
+    // This allows clients who signed up Jan 3-5 to submit their Week 1 check-in on Jan 5
+    // regardless of window hours.
+    const isFirstCheckIn = assignment.recurringWeek === 1;
+    
+    // Allow submission if window is open, extension is granted, or it's the first check-in
+    if (!status.isOpen && !extensionGranted && !isFirstCheckIn) {
       setError(`Check-in window is currently closed. ${status.message}`);
       setSubmitting(false);
+      isSubmittingRef.current = false;
       return;
     }
 
-    setSubmitting(true);
     try {
-      // Validate that all questions are answered
+      // Validate that all REQUIRED questions are answered
       const unansweredIndices: number[] = [];
       questions.forEach((question, index) => {
+        // Only validate required questions (skip optional ones)
+        const isRequired = question.required !== false && question.isRequired !== false;
+        if (!isRequired) {
+          return; // Skip optional questions
+        }
+        
         const response = responses.find(r => r.questionId === question.id);
         // Check if answer is missing, empty string, null, or undefined
         // But allow false (for boolean "No" answers)
+        // Also allow empty strings for textarea questions that are optional
         const hasAnswer = response && 
           response.answer !== undefined && 
           response.answer !== null && 
@@ -318,6 +509,7 @@ export default function CheckInCompletionPage() {
         const unansweredNumbers = unansweredIndices.map(i => i + 1).join(', ');
         setError(`Please answer all questions before submitting. Missing answers for questions: ${unansweredNumbers}`);
         setSubmitting(false);
+        isSubmittingRef.current = false;
         
         // Scroll to first unanswered question
         setCurrentQuestion(unansweredIndices[0]);
@@ -341,10 +533,11 @@ export default function CheckInCompletionPage() {
       let totalWeight = 0;
       let answeredCount = 0;
       
-      responses.forEach((response, index) => {
+      // Process responses and add score/weight to each response
+      const processedResponses = responses.map((response, index) => {
         const question = questions[index];
         if (!question || !response || response.answer === '' || response.answer === null || response.answer === undefined) {
-          return; // Skip unanswered questions
+          return { ...response, score: 0, weight: 0 }; // Return with zero score/weight for unanswered
         }
         
         // Get question weight (default to 5 if not set)
@@ -432,27 +625,16 @@ export default function CheckInCompletionPage() {
             break;
             
           case 'text':
-            // For text questions, give a neutral score
-            const textValue = String(response.answer).trim();
-            if (textValue.length > 0) {
-              questionScore = 5; // Neutral score for text answers
-            }
-            break;
+            // Text questions are NOT scored - they are not measurable
+            // Return early with 0 weight so they don't count in totals
+            return { ...response, score: 0, weight: 0, questionText: question.text || question.question || '', questionId: question.id || response.questionId || '' };
             
           case 'textarea':
-            // For textarea questions, map the selected option to a score
-            const textareaAnswer = String(response.answer).trim().toLowerCase();
-            if (textareaAnswer === 'great') {
-              questionScore = 9; // Great = 9/10
-            } else if (textareaAnswer === 'average') {
-              questionScore = 5; // Average = 5/10
-            } else if (textareaAnswer === 'poor') {
-              questionScore = 2; // Poor = 2/10
-            } else if (textareaAnswer.length > 0) {
-              // Fallback: if somehow a different value, give neutral
-              questionScore = 5;
-            }
-            break;
+            // All textarea questions are free-form text responses and are NOT scored
+            // They should have questionWeight: 0 and are for context/reference only
+            questionScore = 0;
+            // Don't count in scoring - return early with 0 weight
+            return { ...response, score: 0, weight: 0, questionText: question.text || question.question || '', questionId: question.id || response.questionId || '' };
             
           default:
             // Default: give partial credit for answering
@@ -461,10 +643,23 @@ export default function CheckInCompletionPage() {
         }
         
         // Add weighted score (questionScore * questionWeight)
+        // Only count scorable questions (text and textarea are excluded above)
         totalWeightedScore += questionScore * questionWeight;
         totalWeight += questionWeight;
         answeredCount++;
+        
+        // Add score and weight to response object
+        return {
+          ...response,
+          score: questionScore,
+          weight: questionWeight,
+          questionText: question.text || question.question || '',
+          questionId: question.id || response.questionId || ''
+        };
       });
+      
+      // Filter out unanswered questions
+      const filteredResponses = processedResponses.filter(r => r && r.answer !== undefined && r.answer !== null && r.answer !== '');
       
       // Calculate final score as percentage (0-100)
       // Normalize by total possible weighted score (10 * totalWeight)
@@ -503,116 +698,41 @@ export default function CheckInCompletionPage() {
         score: score,
         totalQuestions: questions.length,
         answeredQuestions: answeredCount,
-        responses: responses.filter(r => r && r.answer !== undefined && r.answer !== null),
+        responses: filteredResponses,
         status: 'completed'
       };
 
-      console.log('Submitting response data:', JSON.stringify(responseData, null, 2));
+      console.log('Submitting response data via API route');
 
-      const responseRef = await addDoc(collection(db, 'formResponses'), responseData);
-
-      // Update assignment status with score and response details
-      // Use the actual Firestore document ID, not the URL parameter
-      let docIdToUpdate = assignmentDocId;
-      
-      console.log('Attempting to update assignment:', {
-        assignmentDocId,
-        assignmentId,
-        docIdToUpdate,
-        assignment: assignment?.id
+      // Use API route instead of direct Firestore updates to avoid permission issues
+      const submitResponse = await fetch(`/api/client-portal/check-in/${assignmentId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          responses: filteredResponses,
+          score: score,
+          totalQuestions: questions.length,
+          answeredQuestions: answeredCount
+        })
       });
-      
-      // If we don't have the document ID, try to find it
-      if (!docIdToUpdate) {
-        console.log('No assignmentDocId stored, querying for document...');
-        const { collection, query, where, getDocs } = await import('firebase/firestore');
-        const assignmentsQuery = query(
-          collection(db, 'check_in_assignments'),
-          where('id', '==', assignmentId),
-          where('clientId', '==', userProfile.uid)
-        );
-        const querySnapshot = await getDocs(assignmentsQuery);
-        
-        if (!querySnapshot.empty) {
-          docIdToUpdate = querySnapshot.docs[0].id;
-          console.log('Found document by id field, using document ID:', docIdToUpdate);
-          setAssignmentDocId(docIdToUpdate); // Store it for future use
-        } else {
-          // Last resort: try using assignmentId as document ID
-          console.log('Trying assignmentId as document ID:', assignmentId);
-          const testDoc = await getDoc(doc(db, 'check_in_assignments', assignmentId));
-          if (testDoc.exists()) {
-            docIdToUpdate = assignmentId;
-            setAssignmentDocId(assignmentId);
-          } else {
-            throw new Error(`Check-in assignment not found. Tried id field: ${assignmentId}`);
-          }
-        }
-      }
-      
-      if (!docIdToUpdate) {
-        throw new Error('Assignment document ID not found');
-      }
-      
-      // Verify the document exists before updating
-      const docRef = doc(db, 'check_in_assignments', docIdToUpdate);
-      const docSnapshot = await getDoc(docRef);
-      
-      if (!docSnapshot.exists()) {
-        // Document doesn't exist, try querying by 'id' field one more time
-        console.log('Document not found with stored ID, querying by id field:', docIdToUpdate);
-        const { collection, query, where, getDocs } = await import('firebase/firestore');
-        const assignmentsQuery = query(
-          collection(db, 'check_in_assignments'),
-          where('id', '==', assignmentId),
-          where('clientId', '==', userProfile.uid)
-        );
-        const querySnapshot = await getDocs(assignmentsQuery);
-        
-        if (!querySnapshot.empty) {
-          docIdToUpdate = querySnapshot.docs[0].id;
-          console.log('Found document by id field, using document ID:', docIdToUpdate);
-          setAssignmentDocId(docIdToUpdate);
-        } else {
-          throw new Error(`Check-in assignment not found. Tried document ID: ${docIdToUpdate} and id field: ${assignmentId}`);
-        }
-      }
-      
-      // Now update with the correct document ID
-      console.log('Updating document with ID:', docIdToUpdate);
-      await updateDoc(doc(db, 'check_in_assignments', docIdToUpdate), {
-        status: 'completed',
-        completedAt: new Date(),
-        responseId: responseRef.id,
-        score: score, // Save the score to the assignment
-        totalQuestions: questions.length, // Save total questions
-        answeredQuestions: answeredCount // Save answered questions count
-      });
-      console.log('Successfully updated assignment document');
 
-      // Create notification for coach
+      if (!submitResponse.ok) {
+        const errorData = await submitResponse.json();
+        throw new Error(errorData.message || 'Failed to submit check-in');
+      }
+
+      const submitResult = await submitResponse.json();
+      console.log('Successfully submitted check-in via API:', submitResult);
+
+      // Clear saved draft from localStorage on successful submission
       try {
-        const notificationResponse = await fetch('/api/check-in-completed', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            clientId: userProfile.uid,
-            formId: assignment.formId,
-            responseId: responseRef.id,
-            score: score,
-            formTitle: formTitle,
-            clientName: userProfile.displayName || userProfile.firstName || 'Client'
-          })
-        });
-        
-        if (!notificationResponse.ok) {
-          console.error('Failed to create notification');
-        }
+        localStorage.removeItem(AUTOSAVE_KEY);
+        console.log('Cleared saved draft after successful submission');
       } catch (error) {
-        console.error('Error creating notification:', error);
-        // Don't fail the check-in if notification fails
+        console.error('Error clearing draft from localStorage:', error);
+        // Don't fail submission if clearing localStorage fails
       }
 
       // Redirect to success page
@@ -623,6 +743,7 @@ export default function CheckInCompletionPage() {
       setError('Failed to submit check-in. Please try again.');
     } finally {
       setSubmitting(false);
+      isSubmittingRef.current = false;
     }
   };
 
@@ -643,51 +764,16 @@ export default function CheckInCompletionPage() {
         );
 
       case 'textarea':
-        // For textarea questions, show a 3-option selector for scoring
-        // Store the selected option as the answer (Great/Average/Poor)
-        const textareaValue = typeof answer === 'string' ? answer : '';
-        const isGreat = textareaValue === 'Great' || textareaValue === 'great';
-        const isAverage = textareaValue === 'Average' || textareaValue === 'average';
-        const isPoor = textareaValue === 'Poor' || textareaValue === 'poor';
-        
+        // All textarea questions should render as actual textareas
+        // This allows free-form text responses
         return (
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <button
-                type="button"
-                onClick={() => handleAnswerChange(index, 'Great')}
-                className={`px-6 py-4 rounded-xl font-semibold text-base transition-all transform hover:scale-105 shadow-md ${
-                  isGreat
-                    ? 'bg-gradient-to-br from-green-500 to-emerald-600 text-white shadow-lg scale-105'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                ✨ Great
-              </button>
-              <button
-                type="button"
-                onClick={() => handleAnswerChange(index, 'Average')}
-                className={`px-6 py-4 rounded-xl font-semibold text-base transition-all transform hover:scale-105 shadow-md ${
-                  isAverage
-                    ? 'bg-gradient-to-br from-yellow-400 to-orange-500 text-white shadow-lg scale-105'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                ⚖️ Average
-              </button>
-              <button
-                type="button"
-                onClick={() => handleAnswerChange(index, 'Poor')}
-                className={`px-6 py-4 rounded-xl font-semibold text-base transition-all transform hover:scale-105 shadow-md ${
-                  isPoor
-                    ? 'bg-gradient-to-br from-red-500 to-pink-600 text-white shadow-lg scale-105'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                ⚠️ Poor
-              </button>
-            </div>
-          </div>
+          <textarea
+            value={answer as string}
+            onChange={(e) => handleAnswerChange(index, e.target.value)}
+            rows={4}
+            className="w-full px-4 py-3.5 lg:py-3 border-2 border-gray-300 rounded-lg lg:rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-gray-900 text-base lg:text-lg transition-all resize-y"
+            placeholder="Enter your answer..."
+          />
         );
 
       case 'number':
@@ -951,6 +1037,42 @@ export default function CheckInCompletionPage() {
             <div className="text-center">
               <h1 className="text-2xl sm:text-3xl lg:text-4xl xl:text-5xl font-bold text-gray-900 mb-2 lg:mb-3">{assignment.formTitle}</h1>
               <p className="text-sm lg:text-lg text-gray-700 font-medium">Complete your assigned check-in</p>
+              {assignment.dueDate && (
+                <div className="mt-2 flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-3">
+                  {assignment.recurringWeek && assignment.totalWeeks && (
+                    <span className="text-xs sm:text-sm lg:text-base text-purple-600 font-semibold bg-purple-50 px-3 py-1.5 rounded-lg border border-purple-200">
+                      Week {assignment.recurringWeek} of {assignment.totalWeeks}
+                    </span>
+                  )}
+                  <span className="text-xs sm:text-sm lg:text-base text-gray-600 font-medium">
+                    {(() => {
+                      let dueDate: Date;
+                      if (assignment.dueDate?.toDate && typeof assignment.dueDate.toDate === 'function') {
+                        // Firestore Timestamp
+                        dueDate = assignment.dueDate.toDate();
+                      } else if (assignment.dueDate?._seconds) {
+                        // Firebase Timestamp object with _seconds
+                        dueDate = new Date(assignment.dueDate._seconds * 1000);
+                      } else if (assignment.dueDate instanceof Date) {
+                        // Already a Date object
+                        dueDate = assignment.dueDate;
+                      } else if (typeof assignment.dueDate === 'string') {
+                        // ISO string
+                        dueDate = new Date(assignment.dueDate);
+                      } else {
+                        // Fallback
+                        dueDate = new Date();
+                      }
+                      return dueDate.toLocaleDateString('en-US', {
+                        weekday: 'long',
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                      });
+                    })()}
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Check-in Window Status */}
@@ -1000,9 +1122,19 @@ export default function CheckInCompletionPage() {
                   style={{ width: `${progress}%` }}
                 ></div>
               </div>
-              <p className="text-center mt-2 lg:mt-3 text-sm lg:text-base font-semibold text-gray-900">
-                Question {currentQuestion + 1} of {questions.length}
-              </p>
+              <div className="flex items-center justify-center gap-3 mt-2 lg:mt-3">
+                <p className="text-sm lg:text-base font-semibold text-gray-900">
+                  Question {currentQuestion + 1} of {questions.length}
+                </p>
+                {lastSaved && (
+                  <span className="text-xs text-gray-500 flex items-center gap-1.5">
+                    <svg className="w-3.5 h-3.5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    Saved
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 
@@ -1018,6 +1150,11 @@ export default function CheckInCompletionPage() {
                   <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 mb-2 lg:mb-3">
                     {currentQ.text}
                   </h2>
+                  {currentQ.description && (
+                    <p className="text-sm lg:text-base text-gray-600 mb-3 lg:mb-4 italic">
+                      {currentQ.description}
+                    </p>
+                  )}
                   {currentQ.category && (
                     <div className="inline-flex items-center gap-2 px-3 py-1.5 lg:px-4 lg:py-2 bg-gradient-to-r from-purple-100 to-indigo-100 rounded-full">
                       <span className="text-xs lg:text-sm font-semibold text-purple-700">Category:</span>

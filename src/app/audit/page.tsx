@@ -60,18 +60,7 @@ export default function AuditPage() {
   };
 
   const generateSampleData = async () => {
-    try {
-      const response = await fetch('/api/sample-data-generator', { method: 'POST' });
-      if (response.ok) {
-        const data = await response.json();
-        alert(`Sample data generated: ${data.added.formResponses} responses, ${data.added.scoringConfigs} scoring configs`);
-        fetchAuditData(); // Refresh audit data
-      } else {
-        alert('Failed to generate sample data');
-      }
-    } catch (error) {
-      alert('Error generating sample data');
-    }
+    alert('This feature has been removed for production optimization. Sample data generation should be done through proper admin tools.');
   };
 
   if (isLoading) {

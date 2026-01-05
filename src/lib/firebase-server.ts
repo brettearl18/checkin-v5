@@ -34,25 +34,53 @@ function initializeFirebaseAdmin() {
     }
 
     try {
-      const serviceAccount = JSON.parse(serviceAccountString);
+      // Handle both JSON string and already-parsed object
+      let serviceAccount;
+      if (typeof serviceAccountString === 'string') {
+        try {
+          serviceAccount = JSON.parse(serviceAccountString);
+        } catch (parseError) {
+          // If it's not valid JSON, try to fix common issues
+          console.warn('Failed to parse FIREBASE_SERVICE_ACCOUNT as JSON, attempting to fix...');
+          // Try replacing single quotes with double quotes (common issue)
+          const fixed = serviceAccountString.replace(/'/g, '"');
+          try {
+            serviceAccount = JSON.parse(fixed);
+          } catch (e) {
+            console.error('Original parse error:', parseError);
+            console.error('Fixed parse error:', e);
+            throw parseError;
+          }
+        }
+      } else {
+        serviceAccount = serviceAccountString;
+      }
       
       // Validate service account has required fields
       if (!serviceAccount.project_id && !process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) {
         throw new Error('Service account must contain project_id or NEXT_PUBLIC_FIREBASE_PROJECT_ID must be set');
       }
       
+      // Ensure required fields are present
+      if (!serviceAccount.private_key || !serviceAccount.client_email) {
+        throw new Error('Service account missing required fields: private_key or client_email');
+      }
+      
       initializeApp({
         credential: cert(serviceAccount),
         projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || serviceAccount.project_id || 'checkinv5',
       });
-    } catch (error) {
+      console.log('Firebase Admin initialized successfully');
+    } catch (error: any) {
       console.error('Error parsing FIREBASE_SERVICE_ACCOUNT:', error);
+      console.error('Service account string length:', serviceAccountString?.length);
+      console.error('Service account string preview:', serviceAccountString?.substring(0, 100));
       // During build, allow this to fail gracefully
       if (process.env.NEXT_PHASE === 'phase-production-build') {
         console.warn('Firebase Admin initialization failed during build - this is expected');
         return;
       }
-      throw new Error('Invalid FIREBASE_SERVICE_ACCOUNT configuration');
+      throw new Error(`Invalid FIREBASE_SERVICE_ACCOUNT configuration: ${error.message}`);
     }
   }
 }
@@ -86,7 +114,12 @@ export function getDb() {
           }),
         } as any;
       }
+      
+      // If we reach here and getApps().length is still 0 and we're not in build phase,
+      // initialization must have failed - throw error
+      throw new Error('Firebase Admin not initialized. Check FIREBASE_SERVICE_ACCOUNT configuration.');
     }
+    
     const db = getFirestore();
     if (!db) {
       throw new Error('Failed to get Firestore instance');
@@ -171,6 +204,34 @@ export function getStorageInstance() {
         return {
           bucket: () => ({
             file: () => ({
+              save: () => Promise.reject(new Error('Storage not available during build')),
+              delete: () => Promise.reject(new Error('Storage not available during build')),
+            }),
+          }),
+        } as any;
+      }
+    }
+    return getStorage();
+  } catch (error) {
+    // During build, return a mock instead of throwing
+    const isBuildPhase = process.env.NEXT_PHASE === 'phase-production-build' || 
+                         process.env.NEXT_PHASE === 'phase-export' ||
+                         (process.env.NODE_ENV === 'production' && !process.env.FIREBASE_SERVICE_ACCOUNT);
+    
+    if (isBuildPhase) {
+      return {
+        bucket: () => ({
+          file: () => ({
+            save: () => Promise.reject(new Error('Storage not available during build')),
+            delete: () => Promise.reject(new Error('Storage not available during build')),
+          }),
+        }),
+      } as any;
+    }
+    console.error('Error getting Storage instance:', error);
+    throw new Error('Storage connection failed');
+  }
+} 
               save: () => Promise.reject(new Error('Storage not available during build')),
               delete: () => Promise.reject(new Error('Storage not available during build')),
             }),

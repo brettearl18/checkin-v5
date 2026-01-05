@@ -55,12 +55,11 @@ export default function DevFooter() {
       { name: '👥 Client Analytics', url: '/analytics/clients', description: 'Individual client analytics (👑🏋️)', status: '404' },
     ],
     'API Endpoints': [
-      { name: '🔧 Sample Data API', url: '/api/sample-data', description: 'Populate sample data (👑)', status: 'working' },
-      { name: '📊 Sample Data Generator', url: '/api/sample-data-generator', description: 'Generate comprehensive test data (👑)', status: 'working' },
       { name: '🔍 Project Audit', url: '/api/audit', description: 'Comprehensive system audit (👑)', status: 'working' },
-      { name: '👤 Create Client API', url: '/api/create-client-profile', description: 'Create test client (👑)', status: 'working' },
       { name: '📝 Clients API', url: '/api/clients', description: 'Create and manage clients (👑🏋️)', status: 'working' },
-      { name: '🔥 Test Firebase API', url: '/api/test-firebase', description: 'Test Firebase connection (👑)', status: 'working' },
+      { name: '📋 Forms API', url: '/api/forms', description: 'Create and manage forms (👑🏋️)', status: 'working' },
+      { name: '✅ Assignments API', url: '/api/check-in-assignments', description: 'Manage check-in assignments (👑🏋️)', status: 'working' },
+      { name: '📊 Responses API', url: '/api/responses', description: 'View and manage responses (👑🏋️)', status: 'working' },
     ],
     'Future Features': [
       { name: '🤖 AI Insights', url: '/ai-insights', description: 'AI-powered coaching insights (👑🏋️)', status: '404' },

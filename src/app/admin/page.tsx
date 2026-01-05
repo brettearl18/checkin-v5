@@ -8,6 +8,90 @@ import ProtectedRoute from '@/components/ProtectedRoute';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
+function CleanupCoachesButton() {
+  const [isCleaning, setIsCleaning] = useState(false);
+  const [result, setResult] = useState<{ success: boolean; message: string; details?: any } | null>(null);
+
+  const handleCleanup = async () => {
+    const confirmMessage = `Remove all coaches except Silvana Earl?\n\nThis will:\n- Delete all coach records except Silvana Earl (silvi@vanahealth.com.au)\n- Reassign all clients to Silvana Earl\n- Reassign all check-in assignments to Silvana Earl\n- Reassign all forms to Silvana Earl\n- Reassign all questions to Silvana Earl\n- Reassign all form responses to Silvana Earl\n\nThis action cannot be undone. Are you sure?`;
+    
+    if (!window.confirm(confirmMessage)) {
+      return;
+    }
+
+    setIsCleaning(true);
+    setResult(null);
+
+    try {
+      const response = await fetch('/api/admin/cleanup-coaches', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setResult({
+          success: true,
+          message: data.message,
+          details: data
+        });
+      } else {
+        setResult({
+          success: false,
+          message: data.message || 'Failed to clean up coaches'
+        });
+      }
+    } catch (error) {
+      console.error('Error cleaning up coaches:', error);
+      setResult({
+        success: false,
+        message: 'An error occurred while cleaning up coaches'
+      });
+    } finally {
+      setIsCleaning(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <button
+        onClick={handleCleanup}
+        disabled={isCleaning}
+        className="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+      >
+        {isCleaning ? 'Cleaning up...' : 'Remove All Coaches Except Silvana Earl'}
+      </button>
+
+      {result && (
+        <div className={`p-4 rounded-md ${result.success ? 'bg-green-50 border border-green-200 text-green-800' : 'bg-red-50 border border-red-200 text-red-800'}`}>
+          <p className="font-medium">{result.success ? 'Success' : 'Error'}</p>
+          <p className="text-sm mt-1">{result.message}</p>
+          {result.details && (
+            <div className="mt-3 text-xs space-y-1">
+              <p><strong>Deleted coaches:</strong> {result.details.deleted}</p>
+              {result.details.reassigned && (
+                <>
+                  <p><strong>Clients reassigned:</strong> {result.details.reassigned.clients}</p>
+                  <p><strong>Check-in assignments reassigned:</strong> {result.details.reassigned.checkInAssignments}</p>
+                  <p><strong>Forms reassigned:</strong> {result.details.reassigned.forms}</p>
+                  <p><strong>Questions reassigned:</strong> {result.details.reassigned.questions}</p>
+                  <p><strong>Form responses reassigned:</strong> {result.details.reassigned.formResponses}</p>
+                </>
+              )}
+              {result.details.deletedCoachEmails && result.details.deletedCoachEmails.length > 0 && (
+                <p className="mt-2"><strong>Deleted coach emails:</strong> {result.details.deletedCoachEmails.join(', ')}</p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SetAdminButton() {
   const [isSetting, setIsSetting] = useState(false);
   const [userId, setUserId] = useState('k5rT8EGNUqbWCSf5g56msZoFdX02');
@@ -189,25 +273,9 @@ function ClearTestDataButton() {
     setResult(null);
 
     try {
-      const response = await fetch('/api/clear-test-data', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          confirm: 'CLEAR_ALL_TEST_DATA'
-        })
-      });
-
-      const data = await response.json();
-      setResult(data);
-      
-      if (data.success) {
-        alert(`✅ Successfully cleared ${data.totalDeleted} test/demo records!\n\nPlease refresh the page to see updated statistics.`);
-        window.location.reload();
-      } else {
-        alert(`❌ Error: ${data.message}`);
-      }
+      alert('This feature has been removed for production optimization. Data management should be done through proper admin tools.');
+      setIsClearing(false);
+      return;
     } catch (error) {
       console.error('Error clearing test data:', error);
       setResult({
@@ -503,7 +571,7 @@ export default function AdminDashboard() {
           {/* Quick Actions */}
           <div className="bg-white shadow rounded-lg p-6 px-4 sm:px-0 mb-8">
             <h3 className="text-lg font-medium text-gray-900 mb-4">Quick Actions</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
               <Link
                 href="/admin/users"
                 className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
@@ -521,6 +589,18 @@ export default function AdminDashboard() {
                 className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700"
               >
                 Manage Clients
+              </Link>
+              <Link
+                href="/admin/platform-updates"
+                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700"
+              >
+                Platform Updates
+              </Link>
+              <Link
+                href="/admin/email-audit-log"
+                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-orange-600 hover:bg-orange-700"
+              >
+                Email Audit Log
               </Link>
             </div>
           </div>
@@ -541,6 +621,15 @@ export default function AdminDashboard() {
               Set user roles and permissions. Users can have multiple roles (e.g., admin + coach).
             </p>
             <SetAdminButton />
+          </div>
+
+          {/* Coach Cleanup */}
+          <div className="bg-orange-50 border-2 border-orange-200 shadow rounded-lg p-6 px-4 sm:px-0">
+            <h3 className="text-lg font-medium text-orange-900 mb-2">Coach Cleanup</h3>
+            <p className="text-sm text-orange-700 mb-4">
+              Remove all coaches except Silvana Earl (silvi@vanahealth.com.au). All clients, forms, and data will be reassigned to Silvana Earl.
+            </p>
+            <CleanupCoachesButton />
           </div>
         </div>
       </div>

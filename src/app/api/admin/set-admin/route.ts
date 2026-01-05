@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb, getAuthInstance } from '@/lib/firebase-server';
+import { logInfo, logError, logSafeError } from '@/lib/logger';
+import { requireAdmin } from '@/lib/api-auth';
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic';
@@ -8,9 +10,17 @@ export const dynamic = 'force-dynamic';
  * 1. Updating their role in Firestore users collection (supports multiple roles)
  * 2. Setting custom claims in Firebase Auth
  * 3. Ensuring coach record exists
+ * 
+ * Requires: Admin authentication
  */
 export async function POST(request: NextRequest) {
   try {
+    // Require admin authentication
+    const authResult = await requireAdmin(request);
+    if (authResult instanceof NextResponse) {
+      return authResult;
+    }
+
     const body = await request.json();
     const { userId, firstName, lastName, email, password } = body;
 
@@ -28,7 +38,18 @@ export async function POST(request: NextRequest) {
     let userRecord;
     try {
       userRecord = await auth.getUser(userId);
-      console.log(`✅ User ${userId} exists in Firebase Auth`);
+      logInfo(`✅ User exists in Firebase Auth`);
+      
+      // Update password if provided for existing user
+      if (password) {
+        try {
+          await auth.updateUser(userId, { password });
+          logInfo(`✅ Password updated for user`);
+        } catch (updateError: any) {
+          logSafeError('Error updating password', updateError);
+          // Continue even if password update fails
+        }
+      }
     } catch (error: any) {
       if (error.code === 'auth/user-not-found') {
         // User doesn't exist in Firebase Auth - create account if email and password provided
@@ -55,9 +76,9 @@ export async function POST(request: NextRequest) {
             displayName: `${firstName || 'Silvana'} ${lastName || 'Earl'}`,
             emailVerified: false
           });
-          console.log(`✅ Created Firebase Auth account for user ${userId}`);
+          logInfo(`✅ Created Firebase Auth account`);
         } catch (createError: any) {
-          console.error('Error creating Firebase Auth user:', createError);
+          logSafeError('Error creating Firebase Auth user', createError);
           return NextResponse.json({
             success: false,
             message: `Failed to create Firebase Auth account: ${createError.message}`
@@ -74,9 +95,9 @@ export async function POST(request: NextRequest) {
         role: 'admin',
         roles: ['admin', 'coach'] // Support multiple roles
       });
-      console.log(`✅ Set custom claims for user ${userId} as admin and coach`);
+      logInfo(`✅ Set custom claims as admin and coach`);
     } catch (error) {
-      console.error('Error setting custom claims:', error);
+      logSafeError('Error setting custom claims', error);
       // Continue even if custom claims fail - Firestore role is primary
     }
 
@@ -95,7 +116,7 @@ export async function POST(request: NextRequest) {
     };
 
     // If user exists, merge with existing data
-    if (userDoc.exists()) {
+    if (userDoc.exists) {
       const existingData = userDoc.data();
       await userRef.update({
         ...userData,
@@ -149,7 +170,7 @@ export async function POST(request: NextRequest) {
         });
       }
     } catch (error) {
-      console.log('Error creating/updating coach record:', error);
+      logSafeError('Error creating/updating coach record', error);
     }
 
     return NextResponse.json({
@@ -162,7 +183,28 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Error setting admin/coach roles:', error);
+    logSafeError('Error setting admin/coach roles', error);
+    return NextResponse.json({
+      success: false,
+      message: 'Failed to set admin/coach roles',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
+  }
+}
+
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: `Successfully set user ${userId} as admin and coach${userRecord && !userRecord.emailVerified ? '. Account created - user should verify email on first login.' : ''}`,
+      userId,
+      roles: ['admin', 'coach'],
+      accountCreated: userRecord && !userRecord.emailVerified,
+      email: userEmail
+    });
+
+  } catch (error) {
+    logSafeError('Error setting admin/coach roles', error);
     return NextResponse.json({
       success: false,
       message: 'Failed to set admin/coach roles',
