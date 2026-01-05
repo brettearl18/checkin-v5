@@ -232,31 +232,3 @@ export function getStorageInstance() {
     throw new Error('Storage connection failed');
   }
 } 
-              save: () => Promise.reject(new Error('Storage not available during build')),
-              delete: () => Promise.reject(new Error('Storage not available during build')),
-            }),
-          }),
-        } as any;
-      }
-    }
-    return getStorage();
-  } catch (error) {
-    // During build, return a mock instead of throwing
-    const isBuildPhase = process.env.NEXT_PHASE === 'phase-production-build' || 
-                         process.env.NEXT_PHASE === 'phase-export' ||
-                         (process.env.NODE_ENV === 'production' && !process.env.FIREBASE_SERVICE_ACCOUNT);
-    
-    if (isBuildPhase) {
-      return {
-        bucket: () => ({
-          file: () => ({
-            save: () => Promise.reject(new Error('Storage not available during build')),
-            delete: () => Promise.reject(new Error('Storage not available during build')),
-          }),
-        }),
-      } as any;
-    }
-    console.error('Error getting Storage instance:', error);
-    throw new Error('Storage connection failed');
-  }
-} 
