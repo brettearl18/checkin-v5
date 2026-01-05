@@ -525,21 +525,6 @@ export async function GET(request: NextRequest) {
     }, { status: 500 });
   }
 }
-          if (coachIds.includes(doc.id)) {
-            const firstName = coachData.profile?.firstName || '';
-            const lastName = coachData.profile?.lastName || '';
-            coachNames[doc.id] = `${firstName} ${lastName}`.trim() || 'Unknown Coach';
-          }
-        });
-      } catch (error) {
-        console.error('Error fetching coach names:', error);
-      }
-    }
-
-    // Update assignments with coach names
-    assignments.forEach(assignment => {
-      assignment.assignedBy = coachNames[assignment.assignedBy] || assignment.assignedBy || 'Coach';
-    });
 
     // Calculate summary statistics based on ALL assignments (not just current ones)
     const total = allAssignments.length;
