@@ -385,5 +385,3 @@ export default function ClientFormResponsesPage() {
     </AuthenticatedOnly>
   );
 } 
-                  <div>
-                    <span className="font-medium text-gray-700">Submitted:</span>

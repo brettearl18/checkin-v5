@@ -10,6 +10,29 @@
 **Issue**: Large merge from `feature/mobile-dashboard` to `main` introduced duplicate code blocks causing build failures.  
 **Solution**: Partition changes into logical groups and deploy separately to ensure each group builds successfully.
 
+### Build Error Fixes (In Progress)
+
+**Status**: 🔄 Actively fixing duplicate code blocks and syntax errors
+
+**Files Fixed** (commits: cd9942c through a360363):
+- ✅ `src/app/api/notifications/route.ts` - Removed duplicate code blocks
+- ✅ `src/lib/firebase-server.ts` - Removed duplicate code in getStorageInstance
+- ✅ `src/app/api/client-portal/goals-questionnaire/route.ts` - Removed duplicate GET/POST functions
+- ✅ `src/app/api/client-portal/check-ins/route.ts` - Removed duplicate GET function
+- ✅ `src/app/api/client-portal/goals/route.ts` - Removed duplicate PUT/DELETE functions
+- ✅ `src/app/api/client-portal/onboarding/regenerate-summary/route.ts` - Removed duplicate POST function
+- ✅ `src/app/api/client-portal/onboarding/report/route.ts` - Removed orphaned code block
+- ✅ `src/app/api/client-portal/onboarding/submit/route.ts` - Removed orphaned code block
+- ✅ `src/app/api/client-portal/resources/route.ts` - Removed orphaned code block
+- ✅ `src/app/api/clients/[id]/ai-analytics/route.ts` - Removed duplicate GET/POST functions and imports
+- ✅ `src/app/api/clients/[id]/swot-analysis/route.ts` - Removed duplicate GET function and imports
+- ✅ `src/app/api/clients/[id]/weekly-summary/route.ts` - Removed duplicate GET function and imports
+
+**Remaining Issues**:
+- ⚠️ `src/app/api/coach-feedback/route.ts` - Build error to be fixed
+
+**Next Steps**: Continue fixing remaining build errors, then proceed with partitioned deployments.
+
 ---
 
 ## 📦 Partition Groups

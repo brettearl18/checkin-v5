@@ -146,3 +146,41 @@ export async function POST(request: NextRequest) {
 
         // Use test email if provided, otherwise use client email
         const recipientEmail = testEmail || clientEmail;
+
+        await sendEmail({
+          to: recipientEmail,
+          subject: testEmail ? `[TEST - Original: ${clientEmail}] ${subject}` : subject,
+          html,
+        });
+
+        // Mark reminder as sent
+        await db.collection('check_in_assignments').doc(doc.id).update({
+          reminder24hSent: true,
+          reminder24hSentAt: new Date(),
+        });
+
+        results.sent++;
+      } catch (error) {
+        console.error(`Error sending due reminder to ${clientEmail}:`, error);
+        results.errors.push(`Failed to send to ${clientEmail}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: `Processed ${results.checked} assignments. Sent ${results.sent} reminders, skipped ${results.skipped}`,
+      results,
+    });
+
+  } catch (error) {
+    console.error('Error processing check-in due reminders:', error);
+    return NextResponse.json(
+      {
+        success: false,
+        message: 'Failed to process check-in due reminders',
+        error: error instanceof Error ? error.message : 'Unknown error',
+      },
+      { status: 500 }
+    );
+  }
+}
