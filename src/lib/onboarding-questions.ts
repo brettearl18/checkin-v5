@@ -320,7 +320,7 @@ export const ONBOARDING_QUESTIONS: OnboardingQuestion[] = [
     section: 4,
     sectionName: 'Nutrition & Eating Habits',
     order: 6,
-    questionText: 'How many glasses of water do you drink per day?',
+    questionText: 'How many litres of water per day do you drink?',
     questionType: 'number',
     required: true,
   },
