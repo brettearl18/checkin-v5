@@ -203,6 +203,7 @@ export default function ClientProfilePage() {
   const [quickReviewExpanded, setQuickReviewExpanded] = useState(false);
   const [latestCheckInResponses, setLatestCheckInResponses] = useState<any>(null);
   const [loadingCheckInResponses, setLoadingCheckInResponses] = useState(false);
+  const [latestCheckInReactions, setLatestCheckInReactions] = useState<{ [questionId: string]: { [coachId: string]: { emoji: string; coachName: string; createdAt: string } } }>({});
   const [showQuickResponseModal, setShowQuickResponseModal] = useState(false);
   const [selectedCheckInForResponse, setSelectedCheckInForResponse] = useState<any>(null);
   const [quickResponseVoiceBlob, setQuickResponseVoiceBlob] = useState<Blob | null>(null);
@@ -241,9 +242,16 @@ export default function ClientProfilePage() {
                 };
               });
               setLatestCheckInResponses(responsesWithQuestions);
+              // Set reactions if available
+              if (data.response?.reactions) {
+                setLatestCheckInReactions(data.response.reactions);
+              }
             } else if (data.success && data.response?.responses) {
               // Fallback if questions not available
               setLatestCheckInResponses(data.response.responses);
+              if (data.response?.reactions) {
+                setLatestCheckInReactions(data.response.reactions);
+              }
             }
           }
         } catch (error) {
@@ -453,9 +461,16 @@ export default function ClientProfilePage() {
                 };
               });
               setLatestCheckInResponses(responsesWithQuestions);
+              // Set reactions if available
+              if (data.response?.reactions) {
+                setLatestCheckInReactions(data.response.reactions);
+              }
             } else if (data.success && data.response?.responses) {
               // Fallback if questions not available
               setLatestCheckInResponses(data.response.responses);
+              if (data.response?.reactions) {
+                setLatestCheckInReactions(data.response.reactions);
+              }
             }
           }
         } catch (error) {
@@ -2760,6 +2775,9 @@ export default function ClientProfilePage() {
                                         const questionWeight = response.weight;
                                         const status = getCheckInStatus(questionScore, questionWeight);
                                         const isUnweighted = questionWeight === 0 || questionWeight === null || questionWeight === undefined;
+                                        const questionId = response.questionId;
+                                        const questionReactions = latestCheckInReactions[questionId] || {};
+                                        
                                         return (
                                           <div key={response.questionId || index} className="flex items-start gap-3">
                                             <div className={`w-8 h-8 rounded-full ${getCheckInStatusColor(status)} ${getCheckInStatusBorder(status)} border-2 flex items-center justify-center flex-shrink-0`}>
@@ -2772,7 +2790,23 @@ export default function ClientProfilePage() {
                                               )}
                                             </div>
                                             <div className="flex-1">
-                                              <p className="text-sm font-medium text-gray-900 mb-1">{response.question || response.questionText}</p>
+                                              <div className="flex items-start justify-between gap-2">
+                                                <p className="text-sm font-medium text-gray-900 mb-1 flex-1">{response.question || response.questionText}</p>
+                                                {/* Display Reactions */}
+                                                {Object.keys(questionReactions).length > 0 && (
+                                                  <div className="flex items-center space-x-1 flex-shrink-0">
+                                                    {Object.values(questionReactions).map((reaction: any, idx: number) => (
+                                                      <span
+                                                        key={idx}
+                                                        className="text-xl"
+                                                        title={`${reaction.coachName || 'Coach'}: ${new Date(reaction.createdAt).toLocaleDateString()}`}
+                                                      >
+                                                        {reaction.emoji}
+                                                      </span>
+                                                    ))}
+                                                  </div>
+                                                )}
+                                              </div>
                                               <div className="text-sm text-gray-600">
                                                 {typeof response.answer === 'boolean' 
                                                   ? response.answer ? 'Yes' : 'No'

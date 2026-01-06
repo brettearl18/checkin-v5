@@ -77,6 +77,46 @@ export async function GET(
       scorePercentage = responseData.score;
     }
 
+    // Check if coach has responded (has feedback)
+    let coachResponded = false;
+    let coachRespondedAt: string | null = null;
+    try {
+      const feedbackSnapshot = await db.collection('coachFeedback')
+        .where('responseId', '==', responseDoc.id)
+        .limit(1)
+        .get();
+      
+      if (!feedbackSnapshot.empty) {
+        coachResponded = true;
+        const feedbackData = feedbackSnapshot.docs[0].data();
+        if (feedbackData.createdAt) {
+          if (feedbackData.createdAt.toDate && typeof feedbackData.createdAt.toDate === 'function') {
+            coachRespondedAt = feedbackData.createdAt.toDate().toISOString();
+          } else if (feedbackData.createdAt._seconds) {
+            coachRespondedAt = new Date(feedbackData.createdAt._seconds * 1000).toISOString();
+          } else if (typeof feedbackData.createdAt === 'string') {
+            coachRespondedAt = feedbackData.createdAt;
+          }
+        }
+      } else {
+        // Fallback to response data
+        coachResponded = responseData?.coachResponded || false;
+        if (responseData?.coachRespondedAt) {
+          if (responseData.coachRespondedAt.toDate && typeof responseData.coachRespondedAt.toDate === 'function') {
+            coachRespondedAt = responseData.coachRespondedAt.toDate().toISOString();
+          } else if (responseData.coachRespondedAt._seconds) {
+            coachRespondedAt = new Date(responseData.coachRespondedAt._seconds * 1000).toISOString();
+          } else if (typeof responseData.coachRespondedAt === 'string') {
+            coachRespondedAt = responseData.coachRespondedAt;
+          }
+        }
+      }
+    } catch (error) {
+      console.log('Error checking coach feedback:', error);
+      // Fallback to response data
+      coachResponded = responseData?.coachResponded || false;
+    }
+
     const response = {
       id: responseDoc.id,
       checkInTitle: assignment?.formTitle || responseData?.formTitle || 'Unknown Check-in',
@@ -90,7 +130,9 @@ export async function GET(
       responses: responseData?.responses || [],
       assignmentId: responseData?.assignmentId || null,
       recurringWeek: assignment?.recurringWeek || null,
-      totalWeeks: assignment?.totalWeeks || null
+      totalWeeks: assignment?.totalWeeks || null,
+      coachResponded: coachResponded,
+      coachRespondedAt: coachRespondedAt
     };
 
     return NextResponse.json({

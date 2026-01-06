@@ -167,6 +167,22 @@ export async function GET(request: NextRequest) {
         coachResponded = response.coachResponded || false;
       }
 
+      // Check if client has approved the feedback
+      let clientApproved = false;
+      let clientApprovedAt: string | null = null;
+      if (response.clientApproved) {
+        clientApproved = true;
+        if (response.clientApprovedAt) {
+          if (response.clientApprovedAt.toDate && typeof response.clientApprovedAt.toDate === 'function') {
+            clientApprovedAt = response.clientApprovedAt.toDate().toISOString();
+          } else if (response.clientApprovedAt._seconds) {
+            clientApprovedAt = new Date(response.clientApprovedAt._seconds * 1000).toISOString();
+          } else if (typeof response.clientApprovedAt === 'string') {
+            clientApprovedAt = response.clientApprovedAt;
+          }
+        }
+      }
+
       // Serialize nested responses array, ensuring all Timestamps are converted
       const serializedResponses = (response.responses || []).map((resp: any) => {
         const serialized: any = {
@@ -211,7 +227,9 @@ export async function GET(request: NextRequest) {
         recurringWeek: assignment?.recurringWeek ?? null,
         totalWeeks: assignment?.totalWeeks ?? null,
         coachResponded: coachResponded,
-        coachRespondedAt: coachRespondedAt
+        coachRespondedAt: coachRespondedAt,
+        clientApproved: clientApproved,
+        clientApprovedAt: clientApprovedAt
       };
     }));
 

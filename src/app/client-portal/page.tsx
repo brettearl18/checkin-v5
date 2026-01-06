@@ -911,6 +911,57 @@ export default function ClientPortalPage() {
               );
             })()}
 
+            {/* Coach Feedback Available Banner - Show prominently when coach has provided feedback */}
+            {(() => {
+              const feedbackAvailable = recentResponses.filter(r => r.hasFeedback && r.responseId);
+              if (feedbackAvailable.length === 0) return null;
+
+              // Get the most recent feedback
+              const latestFeedback = feedbackAvailable.sort((a, b) => 
+                new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime()
+              )[0];
+
+              return (
+                <div className="mb-4 sm:mb-6">
+                  <div className="bg-gradient-to-r from-purple-500 via-pink-500 to-purple-600 rounded-2xl lg:rounded-3xl shadow-lg overflow-hidden border-2 border-purple-300">
+                    <div className="px-4 py-4 sm:px-6 sm:py-5 lg:px-8 lg:py-6">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                        <div className="flex items-start gap-3 sm:gap-4 flex-1 min-w-0">
+                          <div className="w-12 h-12 sm:w-14 sm:h-14 bg-white bg-opacity-20 rounded-xl sm:rounded-2xl flex items-center justify-center flex-shrink-0 ring-4 ring-white ring-opacity-30">
+                            <svg className="w-6 h-6 sm:w-7 sm:h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h2 className="text-lg sm:text-xl lg:text-2xl font-bold text-white mb-1 sm:mb-2">
+                              Coach Feedback Available! 🎉
+                            </h2>
+                            <p className="text-white/90 text-sm sm:text-base leading-relaxed">
+                              Your coach has reviewed your check-in and provided feedback for <strong>{latestFeedback.formTitle || latestFeedback.checkInTitle}</strong>
+                            </p>
+                            {feedbackAvailable.length > 1 && (
+                              <p className="text-white/80 text-xs sm:text-sm mt-2">
+                                You have {feedbackAvailable.length} check-in{feedbackAvailable.length !== 1 ? 's' : ''} with coach feedback
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <Link
+                          href={`/client-portal/feedback/${latestFeedback.responseId}`}
+                          className="flex-shrink-0 w-full sm:w-auto px-6 py-3 sm:py-3.5 bg-white text-purple-600 rounded-xl font-bold hover:bg-gray-50 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 text-center text-sm sm:text-base min-h-[48px] flex items-center justify-center gap-2"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          View Feedback Now
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Onboarding Questionnaire Banner - Show if not completed or submitted (prominent on mobile) */}
             {onboardingStatus !== 'completed' && onboardingStatus !== 'submitted' && onboardingStatus !== 'skipped' && (
               <div className="bg-gradient-to-r from-[#daa450] to-[#c89540] rounded-2xl lg:rounded-3xl shadow-lg mb-4 sm:mb-6 overflow-hidden border border-[#daa450]/20 w-full">
@@ -1780,6 +1831,28 @@ export default function ClientPortalPage() {
                       <h3 className="text-base sm:text-lg font-bold text-gray-900">Quick Actions</h3>
                     </div>
                     <div className="p-4 sm:p-6 space-y-3">
+                      {/* Coach Feedback Quick Link - Show if feedback is available */}
+                      {recentResponses.some(r => r.hasFeedback && r.responseId) && (() => {
+                        const latestFeedback = recentResponses
+                          .filter(r => r.hasFeedback && r.responseId)
+                          .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime())[0];
+                        return (
+                          <Link
+                            href={`/client-portal/feedback/${latestFeedback.responseId}`}
+                            className="w-full text-white px-4 py-3 rounded-2xl text-sm font-medium text-center transition-all duration-200 shadow-sm hover:shadow flex items-center justify-center relative overflow-hidden group"
+                            style={{ backgroundColor: '#9333ea' }}
+                          >
+                            <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-10 transition-opacity"></div>
+                            <svg className="w-4 h-4 mr-2 relative z-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <span className="relative z-10">View Coach Feedback</span>
+                            <span className="ml-2 relative z-10 bg-white bg-opacity-30 rounded-full px-2 py-0.5 text-xs font-bold">
+                              {recentResponses.filter(r => r.hasFeedback).length}
+                            </span>
+                          </Link>
+                        );
+                      })()}
                       {coach && (
                         <Link
                           href="/client-portal/messages"

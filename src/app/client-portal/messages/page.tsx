@@ -6,6 +6,8 @@ import { RoleProtected } from '@/components/ProtectedRoute';
 import ClientNavigation from '@/components/ClientNavigation';
 import { collection, query, where, orderBy, onSnapshot, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase-client';
+import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 
 interface Message {
   id: string;
@@ -15,15 +17,45 @@ interface Message {
   timestamp: string;
   isRead: boolean;
   type: 'text' | 'file' | 'image';
+  responseId?: string;
+  checkInContext?: {
+    responseId: string;
+    formTitle: string;
+    submittedAt: string;
+  };
 }
 
 export default function ClientMessagesPage() {
   const { userProfile } = useAuth();
+  const searchParams = useSearchParams();
+  const responseId = searchParams.get('responseId');
+  const formTitle = searchParams.get('formTitle');
+  const submittedAtParam = searchParams.get('submittedAt');
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const [newMessage, setNewMessage] = useState('');
   const [sending, setSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [clientApproved, setClientApproved] = useState<boolean>(false);
+  const [approving, setApproving] = useState<boolean>(false);
+  const [checkingApproval, setCheckingApproval] = useState<boolean>(false);
+
+  // Format check-in date for display
+  const formatCheckInDate = (dateString: string | null) => {
+    if (!dateString) return '';
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      });
+    } catch (e) {
+      return '';
+    }
+  };
+
+  const checkInDate = formatCheckInDate(submittedAtParam);
 
   // Auto-scroll to bottom when messages change
   const scrollToBottom = () => {
@@ -42,12 +74,70 @@ export default function ClientMessagesPage() {
       // Also fetch once to ensure we have initial data
       fetchMessages();
       
+      // Check approval status if we have a responseId
+      if (responseId) {
+        checkApprovalStatus();
+      }
+      
       // Cleanup listener on unmount
       return () => {
         if (unsubscribe) unsubscribe();
       };
     }
-  }, [userProfile?.uid]);
+  }, [userProfile?.uid, responseId]);
+
+  const checkApprovalStatus = async () => {
+    if (!responseId || !userProfile?.uid) return;
+    
+    setCheckingApproval(true);
+    try {
+      const response = await fetch(`/api/responses/${responseId}?clientId=${userProfile.uid}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.response?.clientApproved) {
+          setClientApproved(true);
+        }
+      }
+    } catch (error) {
+      console.error('Error checking approval status:', error);
+    } finally {
+      setCheckingApproval(false);
+    }
+  };
+
+  const handleApprove = async () => {
+    if (!responseId || !userProfile?.uid || clientApproved || approving) return;
+
+    setApproving(true);
+    try {
+      const response = await fetch(`/api/responses/${responseId}/approve`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          clientId: userProfile.uid
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setClientApproved(true);
+        } else {
+          alert(data.message || 'Failed to approve feedback');
+        }
+      } else {
+        const errorData = await response.json();
+        alert(errorData.message || 'Failed to approve feedback');
+      }
+    } catch (error) {
+      console.error('Error approving feedback:', error);
+      alert('Failed to approve feedback. Please try again.');
+    } finally {
+      setApproving(false);
+    }
+  };
 
   const setupRealTimeMessages = (clientId: string) => {
     if (!db) {
@@ -173,7 +263,10 @@ export default function ClientMessagesPage() {
         body: JSON.stringify({
           clientId: userProfile.uid,
           content: newMessage,
-          type: 'text'
+          type: 'text',
+          responseId: responseId || undefined,
+          formTitle: formTitle || undefined,
+          submittedAt: submittedAtParam || undefined
         }),
       });
 
@@ -268,6 +361,71 @@ export default function ClientMessagesPage() {
 
           {/* Chat Container - WhatsApp Style */}
           <div className="flex-1 flex flex-col bg-gray-50 lg:bg-white lg:rounded-2xl lg:shadow-[0_1px_3px_rgba(0,0,0,0.1)] lg:border lg:border-gray-100 overflow-hidden">
+            {/* Check-in Context Banner */}
+            {responseId && formTitle && (
+              <div className="bg-gradient-to-r from-purple-50 to-pink-50 border-b border-purple-200 px-4 py-3 lg:px-6 lg:py-4">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-gray-900">Replying to:</p>
+                      <p className="text-xs text-gray-600 truncate">
+                        {decodeURIComponent(formTitle)}
+                        {checkInDate && ` • ${checkInDate}`}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {/* Approval Status/Button */}
+                    {checkingApproval ? (
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-600"></div>
+                    ) : clientApproved ? (
+                      <div className="flex items-center gap-2 px-3 py-1.5 bg-green-100 text-green-700 rounded-lg text-xs font-semibold">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        <span>Approved</span>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={handleApprove}
+                        disabled={approving}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 flex items-center gap-1.5 ${
+                          approving
+                            ? 'bg-gray-400 text-white cursor-not-allowed'
+                            : 'bg-green-600 hover:bg-green-700 text-white shadow-sm hover:shadow'
+                        }`}
+                      >
+                        {approving ? (
+                          <>
+                            <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+                            <span>Approving...</span>
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                            <span>Approve</span>
+                          </>
+                        )}
+                      </button>
+                    )}
+                    <Link
+                      href={`/client-portal/feedback/${responseId}`}
+                      className="text-xs text-purple-600 hover:text-purple-700 font-medium underline whitespace-nowrap"
+                    >
+                      View Feedback
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Chat Header - Fixed */}
             <div className="bg-white border-b border-gray-200 px-4 py-3 lg:px-6 lg:py-4 flex items-center justify-between sticky top-0 z-10">
               <div>

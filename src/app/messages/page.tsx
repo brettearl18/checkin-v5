@@ -18,6 +18,12 @@ interface Message {
   type: 'text' | 'file' | 'image';
   participants: string[];
   conversationId: string;
+  responseId?: string;
+  checkInContext?: {
+    responseId: string;
+    formTitle: string;
+    submittedAt: string;
+  };
 }
 
 interface Client {
@@ -136,7 +142,9 @@ export default function CoachMessagesPage() {
                 isRead: data.isRead || false,
                 type: data.type || 'text',
                 participants: data.participants || [],
-                conversationId: data.conversationId || ''
+                conversationId: data.conversationId || '',
+                responseId: data.responseId || undefined,
+                checkInContext: data.checkInContext || undefined
               });
             }
           });
@@ -225,6 +233,50 @@ export default function CoachMessagesPage() {
     e.preventDefault();
     if (!newMessage.trim() || !selectedClientId) return;
 
+    // Find the most recent message in this conversation that has a responseId
+    // This preserves the check-in context when coach replies
+    const conversationMessages = messages.filter(
+      msg => msg.participants.includes(selectedClientId) && msg.participants.includes(userProfile?.uid || '')
+    );
+    const lastMessageWithContext = [...conversationMessages]
+      .reverse()
+      .find(msg => msg.responseId || msg.checkInContext);
+
+    const messagePayload: any = {
+      coachId: userProfile?.uid,
+      clientId: selectedClientId,
+      content: newMessage,
+      type: 'text'
+    };
+
+    // If replying to a message with check-in context, preserve it
+    if (lastMessageWithContext?.responseId) {
+      messagePayload.responseId = lastMessageWithContext.responseId;
+      if (lastMessageWithContext.checkInContext) {
+        messagePayload.checkInContext = lastMessageWithContext.checkInContext;
+        // Format date for display
+        let dateDisplay = '';
+        if (lastMessageWithContext.checkInContext.submittedAt) {
+          try {
+            const date = new Date(lastMessageWithContext.checkInContext.submittedAt);
+            dateDisplay = date.toLocaleDateString('en-US', {
+              year: 'numeric',
+              month: 'short',
+              day: 'numeric'
+            });
+          } catch (e) {
+            // If date parsing fails, skip date display
+          }
+        }
+        // Prepend context to message with date for clarity
+        const dateSuffix = dateDisplay ? ` (${dateDisplay})` : '';
+        messagePayload.content = `Re: ${lastMessageWithContext.checkInContext.formTitle}${dateSuffix}\n\n${newMessage}`;
+      } else {
+        // If we have responseId but no full context, try to get it from the message
+        messagePayload.responseId = lastMessageWithContext.responseId;
+      }
+    }
+
     setSending(true);
     
     try {
@@ -233,12 +285,7 @@ export default function CoachMessagesPage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          coachId: userProfile?.uid,
-          clientId: selectedClientId,
-          content: newMessage,
-          type: 'text'
-        }),
+        body: JSON.stringify(messagePayload),
       });
 
       if (response.ok) {
@@ -453,6 +500,63 @@ export default function CoachMessagesPage() {
             {/* Chat Area - WhatsApp Style */}
             {selectedClientId ? (
               <div className="flex-1 lg:col-span-2 flex flex-col bg-gray-50 lg:bg-white lg:rounded-2xl lg:shadow-[0_1px_3px_rgba(0,0,0,0.1)] lg:border lg:border-gray-100 overflow-hidden">
+                {/* Check-in Context Banner - Show if there are messages with check-in context */}
+                {(() => {
+                  const conversationMessages = messages.filter(
+                    msg => msg.participants.includes(selectedClientId) && msg.participants.includes(userProfile?.uid || '')
+                  );
+                  const lastMessageWithContext = [...conversationMessages]
+                    .reverse()
+                    .find(msg => msg.responseId || msg.checkInContext);
+                  
+                  if (lastMessageWithContext?.checkInContext) {
+                    // Format date for display
+                    let dateDisplay = '';
+                    if (lastMessageWithContext.checkInContext.submittedAt) {
+                      try {
+                        const date = new Date(lastMessageWithContext.checkInContext.submittedAt);
+                        dateDisplay = date.toLocaleDateString('en-US', {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric'
+                        });
+                      } catch (e) {
+                        // If date parsing fails, skip date display
+                      }
+                    }
+                    
+                    return (
+                      <div className="bg-gradient-to-r from-purple-50 to-pink-50 border-b border-purple-200 px-4 py-3 lg:px-6 lg:py-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                              <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                              </svg>
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold text-gray-900">Replying to check-in:</p>
+                              <p className="text-xs text-gray-600">
+                                {lastMessageWithContext.checkInContext.formTitle}
+                                {dateDisplay && ` • ${dateDisplay}`}
+                              </p>
+                            </div>
+                          </div>
+                          {lastMessageWithContext.responseId && (
+                            <Link
+                              href={`/responses/${lastMessageWithContext.responseId}`}
+                              className="text-xs text-purple-600 hover:text-purple-700 font-medium underline"
+                            >
+                              View Response
+                            </Link>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
+
                 {/* Chat Header - Desktop */}
                 <div className="hidden lg:flex bg-white border-b border-gray-200 px-6 py-4 items-center justify-between">
                   <div className="flex items-center gap-3">

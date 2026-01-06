@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { RoleProtected } from '@/components/ProtectedRoute';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 
 interface FormResponse {
   id: string;
@@ -17,6 +17,7 @@ interface FormResponse {
   totalQuestions: number;
   submittedAt: string;
   status: string;
+  reactions?: { [questionId: string]: { [coachId: string]: { emoji: string; coachName: string; createdAt: string } } };
 }
 
 interface Question {
@@ -48,6 +49,9 @@ export default function ClientFeedbackPage() {
   const [feedback, setFeedback] = useState<CoachFeedback[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [clientApproved, setClientApproved] = useState<boolean>(false);
+  const [approving, setApproving] = useState<boolean>(false);
+  const router = useRouter();
 
   useEffect(() => {
     const fetchData = async () => {
@@ -74,6 +78,11 @@ export default function ClientFeedbackPage() {
 
         setResponse(responseData.response);
         setQuestions(responseData.questions || []);
+        
+        // Check if client has already approved
+        if (responseData.response?.clientApproved) {
+          setClientApproved(true);
+        }
         
         // Fetch coach feedback
         await fetchFeedback();
@@ -193,6 +202,40 @@ export default function ClientFeedbackPage() {
     }
   };
 
+  const handleApprove = async () => {
+    if (!responseId || !userProfile?.uid || clientApproved || approving) return;
+
+    setApproving(true);
+    try {
+      const response = await fetch(`/api/responses/${responseId}/approve`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          clientId: userProfile.uid
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setClientApproved(true);
+        } else {
+          alert(data.message || 'Failed to approve feedback');
+        }
+      } else {
+        const errorData = await response.json();
+        alert(errorData.message || 'Failed to approve feedback');
+      }
+    } catch (error) {
+      console.error('Error approving feedback:', error);
+      alert('Failed to approve feedback. Please try again.');
+    } finally {
+      setApproving(false);
+    }
+  };
+
   if (loading) {
     return (
       <RoleProtected requiredRole="client">
@@ -289,55 +332,6 @@ export default function ClientFeedbackPage() {
             </div>
           </div>
 
-          {/* Overall Coach Summary */}
-          {overallFeedback.length > 0 && (
-            <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden mb-8">
-              <div className="bg-gradient-to-r from-purple-50 to-pink-50 px-8 py-6 border-b border-gray-100">
-                <h2 className="text-2xl font-bold text-gray-900">Overall Coach Summary</h2>
-                <p className="text-gray-600 mt-1">Your coach's overall feedback and recommendations</p>
-              </div>
-              <div className="p-8">
-                <div className="space-y-6">
-                  {/* Voice Summary */}
-                  {overallVoiceFeedback && (
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center">
-                        <svg className="w-5 h-5 text-purple-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                        </svg>
-                        Voice Summary
-                      </h3>
-                      <button
-                        onClick={() => playAudio(overallVoiceFeedback.content)}
-                        className="flex items-center space-x-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        <span>Play Voice Summary</span>
-                      </button>
-                    </div>
-                  )}
-                  
-                  {/* Text Summary */}
-                  {overallTextFeedback && (
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center">
-                        <svg className="w-5 h-5 text-purple-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                        </svg>
-                        Text Summary
-                      </h3>
-                      <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-                        <p className="text-gray-900 leading-relaxed">{overallTextFeedback.content}</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
           {/* Questions and Answers with Coach Feedback */}
           <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
             <div className="bg-gradient-to-r from-green-50 to-emerald-50 px-8 py-6 border-b border-gray-100">
@@ -376,6 +370,7 @@ export default function ClientFeedbackPage() {
                     const questionFeedback = feedback.filter(f => f.questionId === question.id);
                     const voiceFeedback = questionFeedback.find(f => f.feedbackType === 'voice');
                     const textFeedback = questionFeedback.find(f => f.feedbackType === 'text');
+                    const questionReactions = response?.reactions?.[question.id] || {};
                     
                     return (
                       <div key={question.id} className="border border-gray-200 rounded-xl p-6">
@@ -384,16 +379,36 @@ export default function ClientFeedbackPage() {
                             <span className="text-sm font-bold text-blue-600">{index + 1}</span>
                           </div>
                           <div className="flex-1">
-                            <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                              {question.text}
-                            </h3>
+                            <div className="flex items-start justify-between mb-2">
+                              <h3 className="text-lg font-semibold text-gray-900 flex-1">
+                                {question.text}
+                              </h3>
+                              {/* Display Reactions */}
+                              {questionReactions && Object.keys(questionReactions).length > 0 && (
+                                <div className="flex items-center space-x-2 ml-4 flex-shrink-0">
+                                  {Object.values(questionReactions).map((reaction: any, idx: number) => (
+                                    <div
+                                      key={idx}
+                                      className="relative group"
+                                      title={`${reaction.coachName || 'Coach'} reacted ${new Date(reaction.createdAt).toLocaleDateString()}`}
+                                    >
+                                      <span className="text-2xl">{reaction.emoji}</span>
+                                      {/* Tooltip on hover */}
+                                      <div className="absolute bottom-full right-0 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
+                                        {reaction.coachName || 'Coach'}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
                             <div className="mt-4 mb-6">
                               <h4 className="text-sm font-medium text-gray-500 mb-2">Your Answer:</h4>
                               {renderAnswer(question, answer)}
                             </div>
                             
                             {/* Coach Feedback Section */}
-                            {(voiceFeedback || textFeedback) && (
+                            {(voiceFeedback || textFeedback || (questionReactions && Object.keys(questionReactions).length > 0)) && (
                               <div className="border-t border-gray-200 pt-6">
                                 <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                                   <svg className="w-5 h-5 text-green-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -401,6 +416,24 @@ export default function ClientFeedbackPage() {
                                   </svg>
                                   Coach Feedback
                                 </h4>
+                                
+                                {/* Reactions Display */}
+                                {questionReactions && Object.keys(questionReactions).length > 0 && (
+                                  <div className="mb-4 pb-4 border-b border-gray-200">
+                                    <h5 className="text-sm font-medium text-gray-700 mb-2">Coach Reaction:</h5>
+                                    <div className="flex items-center space-x-3">
+                                      {Object.entries(questionReactions).map(([coachId, reaction]: [string, any]) => (
+                                        <div
+                                          key={coachId}
+                                          className="flex items-center space-x-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg"
+                                        >
+                                          <span className="text-2xl">{reaction.emoji}</span>
+                                          <span className="text-sm text-gray-700">{reaction.coachName || 'Coach'}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
                                 
                                 {/* Voice Feedback */}
                                 {voiceFeedback && (
@@ -448,6 +481,105 @@ export default function ClientFeedbackPage() {
               )}
             </div>
           </div>
+
+          {/* Overall Coach Summary - Moved to bottom so clients review question feedback first */}
+          {overallFeedback.length > 0 && (
+            <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden mb-8 mt-8">
+              <div className="bg-gradient-to-r from-purple-50 to-pink-50 px-8 py-6 border-b border-gray-100">
+                <h2 className="text-2xl font-bold text-gray-900">Overall Coach Summary</h2>
+                <p className="text-gray-600 mt-1">Your coach's overall feedback and recommendations</p>
+              </div>
+              <div className="p-8">
+                <div className="space-y-6">
+                  {/* Voice Summary */}
+                  {overallVoiceFeedback && (
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center">
+                        <svg className="w-5 h-5 text-purple-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                        </svg>
+                        Voice Summary
+                      </h3>
+                      <button
+                        onClick={() => playAudio(overallVoiceFeedback.content)}
+                        className="flex items-center space-x-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>Play Voice Summary</span>
+                      </button>
+                    </div>
+                  )}
+                  
+                  {/* Text Summary */}
+                  {overallTextFeedback && (
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center">
+                        <svg className="w-5 h-5 text-purple-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        Text Summary
+                      </h3>
+                      <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                        <p className="text-gray-900 leading-relaxed">{overallTextFeedback.content}</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                
+                {/* Action Buttons */}
+                <div className="mt-8 pt-6 border-t border-gray-200">
+                  <div className="flex flex-col sm:flex-row gap-4">
+                    {/* Received and Approved Button */}
+                    <button
+                      onClick={handleApprove}
+                      disabled={clientApproved || approving}
+                      className={`flex-1 px-6 py-3 rounded-xl font-semibold text-white transition-all duration-200 shadow-md hover:shadow-lg flex items-center justify-center gap-2 ${
+                        clientApproved
+                          ? 'bg-green-600 cursor-default'
+                          : approving
+                          ? 'bg-gray-400 cursor-not-allowed'
+                          : 'bg-green-600 hover:bg-green-700'
+                      }`}
+                    >
+                      {clientApproved ? (
+                        <>
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          <span>✓ Received and Approved</span>
+                        </>
+                      ) : approving ? (
+                        <>
+                          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                          <span>Approving...</span>
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          <span>Received and Approved</span>
+                        </>
+                      )}
+                    </button>
+
+                    {/* Received and Reply Button */}
+                    <Link
+                      href={`/client-portal/messages?responseId=${responseId}&formTitle=${encodeURIComponent(response?.formTitle || 'Check-in')}&submittedAt=${encodeURIComponent(response?.submittedAt || '')}`}
+                      className="flex-1 px-6 py-3 rounded-xl font-semibold text-white bg-purple-600 hover:bg-purple-700 transition-all duration-200 shadow-md hover:shadow-lg flex items-center justify-center gap-2"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                      </svg>
+                      <span>Received and Reply</span>
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </RoleProtected>

@@ -220,6 +220,42 @@ export async function GET(
       workflowStatus = 'responded';
     }
 
+    // Process reactions with coach names
+    const reactions = responseData?.reactions || {};
+    const reactionsWithCoachNames: any = {};
+    
+    for (const [questionId, questionReactions] of Object.entries(reactions)) {
+      if (typeof questionReactions === 'object' && questionReactions !== null) {
+        reactionsWithCoachNames[questionId] = {};
+        
+        for (const [coachId, reactionData] of Object.entries(questionReactions as any)) {
+          try {
+            // Fetch coach info (only if needed - optimize by caching)
+            const coachDoc = await db.collection('coaches').doc(coachId).get();
+            const coachData = coachDoc.data();
+            const coachName = coachData 
+              ? `${coachData.firstName || ''} ${coachData.lastName || ''}`.trim() || coachData.displayName || 'Coach'
+              : 'Coach';
+
+            reactionsWithCoachNames[questionId][coachId] = {
+              ...(reactionData as any),
+              coachName,
+              createdAt: (reactionData as any).createdAt?.toDate?.()?.toISOString() || (reactionData as any).createdAt,
+              updatedAt: (reactionData as any).updatedAt?.toDate?.()?.toISOString() || (reactionData as any).updatedAt
+            };
+          } catch (error) {
+            // If coach lookup fails, still include the reaction
+            reactionsWithCoachNames[questionId][coachId] = {
+              ...(reactionData as any),
+              coachName: 'Coach',
+              createdAt: (reactionData as any).createdAt?.toDate?.()?.toISOString() || (reactionData as any).createdAt,
+              updatedAt: (reactionData as any).updatedAt?.toDate?.()?.toISOString() || (reactionData as any).updatedAt
+            };
+          }
+        }
+      }
+    }
+
     // Format the response
     const formattedResponse = {
       id: responseDoc.id,
@@ -238,7 +274,8 @@ export async function GET(
       coachResponded: coachResponded || responseData?.coachResponded || false,
       coachRespondedAt: coachRespondedAt || responseData?.coachRespondedAt?.toDate?.()?.toISOString() || responseData?.coachRespondedAt || null,
       feedbackCount: feedbackCount,
-      workflowStatus: workflowStatus
+      workflowStatus: workflowStatus,
+      reactions: reactionsWithCoachNames
     };
 
     return NextResponse.json({

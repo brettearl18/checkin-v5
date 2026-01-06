@@ -59,11 +59,15 @@ export async function POST(
       }, { status: 403 });
     }
 
+    const now = reviewedAt || new Date();
+    
     // Update the response document
     await db.collection('formResponses').doc(responseDoc.id).update({
       reviewedByCoach: true,
-      reviewedAt: reviewedAt || new Date(),
-      reviewedBy: coachId
+      reviewedAt: now,
+      reviewedBy: coachId,
+      coachResponded: true, // Mark as coach responded so it shows in "Coach Responses" tab
+      coachRespondedAt: now
     });
 
     // Also update the assignment if it exists
@@ -71,7 +75,10 @@ export async function POST(
       try {
         await db.collection('check_in_assignments').doc(responseData.assignmentId).update({
           reviewedByCoach: true,
-          reviewedAt: reviewedAt || new Date()
+          reviewedAt: now,
+          coachResponded: true, // Mark as coach responded so it shows in "Coach Responses" tab
+          coachRespondedAt: now,
+          workflowStatus: 'responded'
         });
       } catch (error) {
         console.log('Error updating assignment:', error);

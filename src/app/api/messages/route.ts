@@ -132,7 +132,7 @@ export async function POST(request: NextRequest) {
       console.log('Could not find coach data');
     }
 
-    const messageData = {
+    const messageData: any = {
       senderId: coachId,
       senderName: coachName,
       content,
@@ -142,6 +142,31 @@ export async function POST(request: NextRequest) {
       participants: [clientId, coachId],
       conversationId: `${clientId}_${coachId}`
     };
+
+    // Preserve check-in context if provided (coach replying to check-in-related message)
+    if (responseId) {
+      messageData.responseId = responseId;
+      if (checkInContext) {
+        messageData.checkInContext = checkInContext;
+        // Format date for display in message
+        let dateDisplay = '';
+        if (checkInContext.submittedAt) {
+          try {
+            const date = new Date(checkInContext.submittedAt);
+            dateDisplay = date.toLocaleDateString('en-US', {
+              year: 'numeric',
+              month: 'short',
+              day: 'numeric'
+            });
+          } catch (e) {
+            // If date parsing fails, skip date display
+          }
+        }
+        // Prepend context with date to message content
+        const dateSuffix = dateDisplay ? ` (${dateDisplay})` : '';
+        messageData.content = `Re: ${checkInContext.formTitle}${dateSuffix}\n\n${content}`;
+      }
+    }
 
     const docRef = await db.collection('messages').add(messageData);
 

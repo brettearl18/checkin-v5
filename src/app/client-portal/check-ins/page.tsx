@@ -919,17 +919,67 @@ export default function ClientCheckInsPage() {
                                     {item.score}%
                                   </span>
                                 </div>
-                                <p className="text-sm text-gray-600">
+                                <p className="text-sm text-gray-600 mb-2">
                                   Completed on {formatHistoryDate(item.submittedAt)}
                                 </p>
+                                
+                                {/* Status Indicators */}
+                                <div className="flex flex-wrap items-center gap-2 mt-2">
+                                  {/* Coach Response Indicator */}
+                                  {item.coachResponded ? (
+                                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-purple-100 text-purple-700">
+                                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                      </svg>
+                                      <span>Coach Responded</span>
+                                    </div>
+                                  ) : (
+                                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-gray-100 text-gray-600">
+                                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                      </svg>
+                                      <span>Awaiting Coach</span>
+                                    </div>
+                                  )}
+                                  
+                                  {/* Client Approval Indicator - Only show if coach has responded */}
+                                  {item.coachResponded && (
+                                    item.clientApproved ? (
+                                      <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-green-100 text-green-700">
+                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                        </svg>
+                                        <span>Approved</span>
+                                      </div>
+                                    ) : (
+                                      <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-orange-100 text-orange-700">
+                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                        <span>Review Pending</span>
+                                      </div>
+                                    )
+                                  )}
+                                </div>
                               </div>
-                              <Link
-                                href={`/client-portal/check-in/${item.id}/success`}
-                                className="px-5 py-3 lg:px-4 lg:py-2 text-white rounded-xl lg:rounded-lg transition-colors text-base lg:text-sm font-semibold whitespace-nowrap text-center min-h-[48px] lg:min-h-[36px] flex items-center justify-center shadow-sm hover:shadow-md"
-                                style={{ backgroundColor: '#daa450' }}
-                              >
-                                View Details
-                              </Link>
+                              <div className="flex flex-col sm:flex-row gap-2 sm:gap-2">
+                                {/* Feedback Button - Only show if coach has responded */}
+                                {item.coachResponded && (
+                                  <Link
+                                    href={`/client-portal/feedback/${item.id}`}
+                                    className="px-4 py-2.5 lg:px-4 lg:py-2 text-white rounded-xl lg:rounded-lg transition-colors text-sm lg:text-xs font-semibold whitespace-nowrap text-center min-h-[44px] lg:min-h-[36px] flex items-center justify-center shadow-sm hover:shadow-md bg-purple-600 hover:bg-purple-700"
+                                  >
+                                    View Feedback
+                                  </Link>
+                                )}
+                                <Link
+                                  href={`/client-portal/check-in/${item.id}/success`}
+                                  className="px-5 py-3 lg:px-4 lg:py-2 text-white rounded-xl lg:rounded-lg transition-colors text-base lg:text-sm font-semibold whitespace-nowrap text-center min-h-[48px] lg:min-h-[36px] flex items-center justify-center shadow-sm hover:shadow-md"
+                                  style={{ backgroundColor: '#daa450' }}
+                                >
+                                  View Details
+                                </Link>
+                              </div>
                             </div>
                           </div>
                         ))}

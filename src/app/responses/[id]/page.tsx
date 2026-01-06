@@ -6,6 +6,7 @@ import { RoleProtected } from '@/components/ProtectedRoute';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import VoiceRecorder from '@/components/VoiceRecorder';
+import EmojiReactionPicker from '@/components/EmojiReactionPicker';
 
 interface FormResponse {
   id: string;
@@ -66,6 +67,7 @@ export default function ResponseDetailPage() {
   const [showHistoryFor, setShowHistoryFor] = useState<string | null>(null);
   const [expandedQuestions, setExpandedQuestions] = useState<Set<string>>(new Set()); // Track expanded questions
   const [sortBy, setSortBy] = useState<'default' | 'score'>('default'); // Sort order for Answer Summary
+  const [reactions, setReactions] = useState<{ [questionId: string]: { [coachId: string]: { emoji: string; coachName: string; createdAt: string } } }>({});
 
   useEffect(() => {
     // Wait for auth to finish loading before fetching data
@@ -121,6 +123,7 @@ export default function ResponseDetailPage() {
         setCoachResponded(responseData.response?.coachResponded || false);
         setWorkflowStatus(responseData.response?.workflowStatus || 'completed');
         setFeedbackCount(responseData.response?.feedbackCount || 0);
+        setReactions(responseData.response?.reactions || {});
         
         // Find current check-in index after we have both the list and the response
         if (checkIns.length > 0 && responseData.response) {
@@ -1116,6 +1119,39 @@ export default function ResponseDetailPage() {
                                 )}
                               </div>
                               <div className="flex items-center space-x-1 sm:space-x-2 flex-shrink-0">
+                                {/* Emoji Reaction Picker */}
+                                {userProfile?.uid && (
+                                  <div onClick={(e) => e.stopPropagation()}>
+                                    <EmojiReactionPicker
+                                      responseId={responseId}
+                                      questionId={question.id}
+                                      coachId={userProfile.uid}
+                                      currentReaction={reactions[question.id]?.[userProfile.uid]?.emoji}
+                                      onReactionChange={(emoji) => {
+                                        // Update local state
+                                        setReactions(prev => {
+                                          const updated = { ...prev };
+                                          if (!updated[question.id]) {
+                                            updated[question.id] = {};
+                                          }
+                                          if (emoji) {
+                                            updated[question.id][userProfile.uid] = {
+                                              emoji,
+                                              coachName: userProfile.displayName || 'Coach',
+                                              createdAt: new Date().toISOString()
+                                            };
+                                          } else {
+                                            delete updated[question.id][userProfile.uid];
+                                            if (Object.keys(updated[question.id]).length === 0) {
+                                              delete updated[question.id];
+                                            }
+                                          }
+                                          return updated;
+                                        });
+                                      }}
+                                    />
+                                  </div>
+                                )}
                                 {hasFeedback && (
                                   <span className="text-green-600 text-xs sm:text-sm font-medium">✓</span>
                                 )}
@@ -1299,7 +1335,42 @@ export default function ResponseDetailPage() {
                             
                             {/* Coach Feedback Section */}
                             <div className="border-t border-gray-200 pt-4 sm:pt-6 mt-4 sm:mt-6">
-                              <h4 className="text-sm sm:text-base lg:text-lg font-semibold text-gray-900 mb-3 sm:mb-4">Coach Feedback</h4>
+                              <div className="flex items-center justify-between mb-3 sm:mb-4">
+                                <h4 className="text-sm sm:text-base lg:text-lg font-semibold text-gray-900">Coach Feedback</h4>
+                                {/* Emoji Reaction Picker */}
+                                {userProfile?.uid && (
+                                  <div className="flex items-center space-x-2">
+                                    <span className="text-xs text-gray-500 hidden sm:inline">Quick reaction:</span>
+                                    <EmojiReactionPicker
+                                      responseId={responseId}
+                                      questionId={question.id}
+                                      coachId={userProfile.uid}
+                                      currentReaction={reactions[question.id]?.[userProfile.uid]?.emoji}
+                                      onReactionChange={(emoji) => {
+                                        setReactions(prev => {
+                                          const updated = { ...prev };
+                                          if (!updated[question.id]) {
+                                            updated[question.id] = {};
+                                          }
+                                          if (emoji) {
+                                            updated[question.id][userProfile.uid] = {
+                                              emoji,
+                                              coachName: userProfile.displayName || 'Coach',
+                                              createdAt: new Date().toISOString()
+                                            };
+                                          } else {
+                                            delete updated[question.id][userProfile.uid];
+                                            if (Object.keys(updated[question.id]).length === 0) {
+                                              delete updated[question.id];
+                                            }
+                                          }
+                                          return updated;
+                                        });
+                                      }}
+                                    />
+                                  </div>
+                                )}
+                              </div>
                               
                               {/* Voice Feedback */}
                               <div className="mb-3 sm:mb-4">

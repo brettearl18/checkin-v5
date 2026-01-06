@@ -28,6 +28,12 @@ const NotificationsPage: React.FC = () => {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
           </svg>
         );
+      case 'client_approved_feedback':
+        return (
+          <svg className="w-6 h-6 sm:w-7 sm:h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ color: '#10b981' }}>
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        );
       case 'goal_achieved':
         return (
           <svg className="w-6 h-6 sm:w-7 sm:h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ color: '#daa450' }}>
@@ -75,6 +81,8 @@ const NotificationsPage: React.FC = () => {
       case 'message_received':
         return 'bg-blue-100 text-blue-800';
       case 'goal_achieved':
+        return 'bg-green-100 text-green-800';
+      case 'client_approved_feedback':
         return 'bg-green-100 text-green-800';
       case 'check_in_completed':
         return 'bg-green-100 text-green-800';

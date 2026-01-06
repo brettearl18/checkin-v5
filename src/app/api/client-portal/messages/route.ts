@@ -79,7 +79,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { clientId, content, type = 'text' } = await request.json();
+    const { clientId, content, type = 'text', responseId, formTitle, submittedAt } = await request.json();
 
     if (!clientId || !content) {
       return NextResponse.json({
@@ -153,7 +153,7 @@ export async function POST(request: NextRequest) {
       console.log('Could not find client data for name');
     }
 
-    const messageData = {
+    const messageData: any = {
       senderId: clientId,
       senderName: clientName,
       content,
@@ -163,6 +163,36 @@ export async function POST(request: NextRequest) {
       participants: [clientId, coachId],
       conversationId: `${clientId}_${coachId}`
     };
+
+    // Add check-in context if provided
+    if (responseId) {
+      messageData.responseId = responseId;
+      if (formTitle) {
+        // Format date for display
+        let dateDisplay = '';
+        if (submittedAt) {
+          try {
+            const date = new Date(submittedAt);
+            dateDisplay = date.toLocaleDateString('en-US', {
+              year: 'numeric',
+              month: 'short',
+              day: 'numeric'
+            });
+          } catch (e) {
+            // If date parsing fails, skip date display
+          }
+        }
+        
+        messageData.checkInContext = {
+          responseId: responseId,
+          formTitle: formTitle,
+          submittedAt: submittedAt || new Date().toISOString()
+        };
+        // Prepend context to message content with date for better UX
+        const dateSuffix = dateDisplay ? ` (${dateDisplay})` : '';
+        messageData.content = `Re: ${formTitle}${dateSuffix}\n\n${content}`;
+      }
+    }
 
     const docRef = await db.collection('messages').add(messageData);
 

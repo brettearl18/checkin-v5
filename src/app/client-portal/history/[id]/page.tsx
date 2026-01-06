@@ -25,6 +25,8 @@ interface ResponseDetail {
   assignmentId: string | null;
   recurringWeek: number | null;
   totalWeeks: number | null;
+  coachResponded?: boolean;
+  coachRespondedAt?: string | null;
 }
 
 export default function ResponseDetailPage() {
@@ -226,6 +228,43 @@ export default function ResponseDetailPage() {
               </div>
             )}
           </div>
+
+          {/* Coach Feedback Section */}
+          {responseDetail.coachResponded && (
+            <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg shadow mb-8 border border-purple-200">
+              <div className="p-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-purple-100 rounded-lg">
+                      <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900">Coach Feedback Available</h3>
+                      <p className="text-sm text-gray-600">
+                        Your coach has provided feedback on this check-in
+                        {responseDetail.coachRespondedAt && (
+                          <span className="ml-1">
+                            • {formatDate(responseDetail.coachRespondedAt)}
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  <Link
+                    href={`/client-portal/feedback/${responseDetail.id}`}
+                    className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium flex items-center space-x-2 shadow-sm hover:shadow-md"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>View Feedback</span>
+                  </Link>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Responses */}
           <div className="bg-white rounded-lg shadow">

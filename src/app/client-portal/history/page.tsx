@@ -14,6 +14,8 @@ interface ResponseHistory {
   score: number;
   status: 'completed' | 'pending';
   responses: any[];
+  coachResponded?: boolean;
+  coachRespondedAt?: string | null;
 }
 
 export default function ClientHistoryPage() {
@@ -251,15 +253,38 @@ export default function ClientHistoryPage() {
                       </div>
                       
                       <div className="flex items-center space-x-3">
+                        {/* Feedback Indicator */}
+                        {item.coachResponded && (
+                          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold bg-purple-100 text-purple-700">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            Feedback
+                          </div>
+                        )}
                         <div className={`text-2xl font-bold ${getScoreColor(item.score)}`}>
                           {item.score}%
                         </div>
-                        <Link
-                          href={`/client-portal/history/${item.id}`}
-                          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
-                        >
-                          View Details
-                        </Link>
+                        <div className="flex items-center space-x-2">
+                          {item.coachResponded && (
+                            <Link
+                              href={`/client-portal/feedback/${item.id}`}
+                              className="px-4 py-2 text-white rounded-lg hover:opacity-90 transition-opacity text-sm font-medium flex items-center space-x-1 shadow-sm hover:shadow-md"
+                              style={{ backgroundColor: '#daa450' }}
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              <span>Feedback</span>
+                            </Link>
+                          )}
+                          <Link
+                            href={`/client-portal/history/${item.id}`}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                          >
+                            View Details
+                          </Link>
+                        </div>
                       </div>
                     </div>
                   </div>

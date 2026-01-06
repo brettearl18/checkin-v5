@@ -6,6 +6,8 @@ import { RoleProtected } from '@/components/ProtectedRoute';
 import ClientNavigation from '@/components/ClientNavigation';
 import Link from 'next/link';
 import { compressImage, shouldCompressImage } from '@/lib/image-compression';
+import BodyMeasurementsVisualization from '@/components/BodyMeasurementsVisualization';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 interface MeasurementEntry {
   id: string;
@@ -1069,48 +1071,185 @@ export default function MeasurementsPage() {
             </div>
           )}
 
-          {/* Current Measurements Summary */}
-          {measurementHistory.length > 0 && (
-            <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 p-5 lg:p-8 mb-6 lg:mb-8">
-              <h2 className="text-xl lg:text-2xl font-bold text-gray-900 mb-6">Current Measurements</h2>
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
-                {getLatestMeasurement('bodyWeight') && (
-                  <div className="bg-gray-50 rounded-xl lg:rounded-2xl p-4 lg:p-6 border border-gray-200">
-                    <div className="text-xs lg:text-sm text-gray-600 mb-1">Weight</div>
-                    <div className="text-2xl lg:text-3xl font-bold text-gray-900">{getLatestMeasurement('bodyWeight')} kg</div>
-                    <div className="text-[10px] lg:text-xs text-gray-500 mt-2">
-                      {formatDate(measurementHistory[0].date)}
+          {/* Body Measurements Visualization */}
+          {measurementHistory.length > 0 && measurementHistory[0] && (
+            <div className="mb-6 lg:mb-8">
+              <BodyMeasurementsVisualization
+                measurementData={{
+                  bodyWeight: measurementHistory[0].bodyWeight,
+                  measurements: measurementHistory[0].measurements,
+                  date: measurementHistory[0].date
+                }}
+                onEdit={() => handleEdit(measurementHistory[0])}
+                onDelete={() => {
+                  if (!measurementHistory[0].isBaseline) {
+                    handleDelete(measurementHistory[0].id);
+                  }
+                }}
+                showActions={true}
+                showComments={false}
+                useCustomImage={true}
+                isVideo={true}
+                customImageUrl="https://firebasestorage.googleapis.com/v0/b/checkinv5.firebasestorage.app/o/5a79321a-365c-4c05-b198-609463189b7e_3_720_N.mp4?alt=media&token=0f154767-1004-41c8-96b5-ccad4b8c95ff"
+              />
+            </div>
+          )}
+
+          {/* Measurement Trend Charts */}
+          {measurementHistory.length > 1 && (
+            <div className="mb-6 lg:mb-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Body Weight Trend */}
+              {measurementHistory.some(entry => entry.bodyWeight) && (
+                <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                  <div className="px-4 py-4 sm:px-6 sm:py-5 lg:px-8 lg:py-6 border-b-2" style={{ backgroundColor: '#fef9e7', borderColor: '#daa450' }}>
+                    <h2 className="text-xl lg:text-xl font-bold text-gray-900">Weight Trend</h2>
+                    <p className="text-gray-600 text-xs lg:text-sm mt-1">Track your weight over time</p>
+                  </div>
+                  <div className="p-5 lg:p-8">
+                    <div className="h-64 w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart
+                          data={measurementHistory
+                            .filter(entry => entry.bodyWeight)
+                            .map(entry => {
+                              const date = new Date(entry.date);
+                              return {
+                                date: date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }),
+                                weight: entry.bodyWeight,
+                                fullDate: date.toISOString(),
+                                isBaseline: entry.isBaseline
+                              };
+                            })}
+                          margin={{ top: 10, right: 10, left: -20, bottom: 5 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                          <XAxis 
+                            dataKey="date" 
+                            stroke="#6b7280"
+                            fontSize={11}
+                            tick={{ fill: '#6b7280' }}
+                          />
+                          <YAxis
+                            stroke="#6b7280"
+                            fontSize={11}
+                            tick={{ fill: '#6b7280' }}
+                            label={{ value: 'kg', angle: -90, position: 'insideLeft', fill: '#6b7280', fontSize: 11 }}
+                          />
+                          <Tooltip 
+                            contentStyle={{ 
+                              backgroundColor: 'white', 
+                              border: '1px solid #e5e7eb',
+                              borderRadius: '8px',
+                              fontSize: '12px'
+                            }}
+                            formatter={(value: any) => [`${value} kg`, 'Weight']}
+                            labelFormatter={(label) => `Date: ${label}`}
+                          />
+                          <Line 
+                            type="monotone" 
+                            dataKey="weight" 
+                            stroke="#daa450" 
+                            strokeWidth={2}
+                            dot={{ fill: '#daa450', r: 4 }}
+                            activeDot={{ r: 6 }}
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
                     </div>
                   </div>
-                )}
-                {getLatestMeasurement('waist') && (
-                  <div className="bg-gray-50 rounded-xl lg:rounded-2xl p-4 lg:p-6 border border-gray-200">
-                    <div className="text-xs lg:text-sm text-gray-600 mb-1">Waist</div>
-                    <div className="text-2xl lg:text-3xl font-bold text-gray-900">{getLatestMeasurement('waist')} cm</div>
-                    <div className="text-[10px] lg:text-xs text-gray-500 mt-2">
-                      {formatDate(measurementHistory[0].date)}
+                </div>
+              )}
+
+              {/* Measurement Trends (Waist, Hips, Chest) */}
+              {measurementHistory.some(entry => 
+                entry.measurements?.waist || entry.measurements?.hips || entry.measurements?.chest
+              ) && (
+                <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                  <div className="px-4 py-4 sm:px-6 sm:py-5 lg:px-8 lg:py-6 border-b-2" style={{ backgroundColor: '#fef9e7', borderColor: '#daa450' }}>
+                    <h2 className="text-xl lg:text-xl font-bold text-gray-900">Measurement Trends</h2>
+                    <p className="text-gray-600 text-xs lg:text-sm mt-1">Track key measurements over time</p>
+                  </div>
+                  <div className="p-5 lg:p-8">
+                    <div className="h-64 w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart
+                          data={measurementHistory.map(entry => {
+                            const date = new Date(entry.date);
+                            const dataPoint: any = {
+                              date: date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }),
+                              fullDate: date.toISOString(),
+                              isBaseline: entry.isBaseline
+                            };
+                            if (entry.measurements?.waist) dataPoint['Waist'] = entry.measurements.waist;
+                            if (entry.measurements?.hips) dataPoint['Hips'] = entry.measurements.hips;
+                            if (entry.measurements?.chest) dataPoint['Chest'] = entry.measurements.chest;
+                            return dataPoint;
+                          }).filter(point => point.Waist || point.Hips || point.Chest)}
+                          margin={{ top: 10, right: 10, left: -20, bottom: 5 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                          <XAxis 
+                            dataKey="date" 
+                            stroke="#6b7280"
+                            fontSize={11}
+                            tick={{ fill: '#6b7280' }}
+                          />
+                          <YAxis
+                            stroke="#6b7280"
+                            fontSize={11}
+                            tick={{ fill: '#6b7280' }}
+                            label={{ value: 'cm', angle: -90, position: 'insideLeft', fill: '#6b7280', fontSize: 11 }}
+                          />
+                          <Tooltip 
+                            contentStyle={{ 
+                              backgroundColor: 'white', 
+                              border: '1px solid #e5e7eb',
+                              borderRadius: '8px',
+                              fontSize: '12px'
+                            }}
+                            formatter={(value: any) => [`${value} cm`, '']}
+                            labelFormatter={(label) => `Date: ${label}`}
+                          />
+                          <Legend 
+                            wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }}
+                            iconType="line"
+                          />
+                          {measurementHistory.some(entry => entry.measurements?.waist) && (
+                            <Line 
+                              type="monotone" 
+                              dataKey="Waist" 
+                              stroke="#3b82f6" 
+                              strokeWidth={2}
+                              dot={{ fill: '#3b82f6', r: 4 }}
+                              activeDot={{ r: 6 }}
+                            />
+                          )}
+                          {measurementHistory.some(entry => entry.measurements?.hips) && (
+                            <Line 
+                              type="monotone" 
+                              dataKey="Hips" 
+                              stroke="#8b5cf6" 
+                              strokeWidth={2}
+                              dot={{ fill: '#8b5cf6', r: 4 }}
+                              activeDot={{ r: 6 }}
+                            />
+                          )}
+                          {measurementHistory.some(entry => entry.measurements?.chest) && (
+                            <Line 
+                              type="monotone" 
+                              dataKey="Chest" 
+                              stroke="#10b981" 
+                              strokeWidth={2}
+                              dot={{ fill: '#10b981', r: 4 }}
+                              activeDot={{ r: 6 }}
+                            />
+                          )}
+                        </LineChart>
+                      </ResponsiveContainer>
                     </div>
                   </div>
-                )}
-                {getLatestMeasurement('hips') && (
-                  <div className="bg-gray-50 rounded-xl lg:rounded-2xl p-4 lg:p-6 border border-gray-200">
-                    <div className="text-xs lg:text-sm text-gray-600 mb-1">Hips</div>
-                    <div className="text-2xl lg:text-3xl font-bold text-gray-900">{getLatestMeasurement('hips')} cm</div>
-                    <div className="text-[10px] lg:text-xs text-gray-500 mt-2">
-                      {formatDate(measurementHistory[0].date)}
-                    </div>
-                  </div>
-                )}
-                {getLatestMeasurement('chest') && (
-                  <div className="bg-gray-50 rounded-xl lg:rounded-2xl p-4 lg:p-6 border border-gray-200">
-                    <div className="text-xs lg:text-sm text-gray-600 mb-1">Chest</div>
-                    <div className="text-2xl lg:text-3xl font-bold text-gray-900">{getLatestMeasurement('chest')} cm</div>
-                    <div className="text-[10px] lg:text-xs text-gray-500 mt-2">
-                      {formatDate(measurementHistory[0].date)}
-                    </div>
-                  </div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           )}
 
