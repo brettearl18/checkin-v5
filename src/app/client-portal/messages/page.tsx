@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { RoleProtected } from '@/components/ProtectedRoute';
 import ClientNavigation from '@/components/ClientNavigation';
@@ -25,7 +25,7 @@ interface Message {
   };
 }
 
-export default function ClientMessagesPage() {
+function ClientMessagesPageContent() {
   const { userProfile } = useAuth();
   const searchParams = useSearchParams();
   const responseId = searchParams.get('responseId');
@@ -588,5 +588,24 @@ export default function ClientMessagesPage() {
         </div>
       </div>
     </RoleProtected>
+  );
+}
+
+export default function ClientMessagesPage() {
+  return (
+    <Suspense fallback={
+      <RoleProtected requiredRole="client">
+        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/50 flex">
+          <ClientNavigation />
+          <div className="flex-1 ml-4 lg:ml-8 p-5 lg:p-6">
+            <div className="flex items-center justify-center h-64">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
+            </div>
+          </div>
+        </div>
+      </RoleProtected>
+    }>
+      <ClientMessagesPageContent />
+    </Suspense>
   );
 } 
