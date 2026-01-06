@@ -221,6 +221,14 @@ export default function ClientFeedbackPage() {
         const data = await response.json();
         if (data.success) {
           setClientApproved(true);
+          
+          // Show success message and redirect to dashboard
+          alert('Feedback marked as received and approved! Your coach has been notified.');
+          
+          // Redirect to dashboard after a short delay
+          setTimeout(() => {
+            router.push('/client-portal');
+          }, 1000);
         } else {
           alert(data.message || 'Failed to approve feedback');
         }
