@@ -173,9 +173,24 @@ export default function ClientFeedbackPage() {
     }
   };
 
-  const playAudio = (audioUrl: string) => {
-    const audio = new Audio(audioUrl);
-    audio.play();
+  const playAudio = (audioContent: string) => {
+    try {
+      // Check if content is already a data URL
+      let audioSrc = audioContent;
+      if (!audioContent.startsWith('data:') && !audioContent.startsWith('http')) {
+        // If it's base64, convert to data URL
+        // Assume it's audio/wav format (as recorded by VoiceRecorder)
+        audioSrc = `data:audio/wav;base64,${audioContent}`;
+      }
+      const audio = new Audio(audioSrc);
+      audio.play().catch(error => {
+        console.error('Error playing audio:', error);
+        alert('Unable to play audio. Please try again.');
+      });
+    } catch (error) {
+      console.error('Error creating audio element:', error);
+      alert('Unable to play audio. Please try again.');
+    }
   };
 
   if (loading) {
