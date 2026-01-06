@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { RoleProtected } from '@/components/ProtectedRoute';
 import Link from 'next/link';
+import VoiceRecorder from '@/components/VoiceRecorder';
 import { collection, getDocs, query, orderBy, addDoc, updateDoc, doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase-client';
 import { 
@@ -97,7 +98,7 @@ export default function ClientProfilePage() {
   const [progressImages, setProgressImages] = useState<any[]>([]);
   const [loadingImages, setLoadingImages] = useState(false);
   const [filterOrientation, setFilterOrientation] = useState<'all' | 'front' | 'back' | 'side'>('all');
-  const [filterDate, setFilterDate] = useState<'all' | string>('all');
+  const [filterDate, setFilterDate] = useState<'all' | 'latest' | string>('latest');
   const [comparisonMode, setComparisonMode] = useState(false);
   const [selectedForComparison, setSelectedForComparison] = useState<string[]>([]);
   const [onboardingData, setOnboardingData] = useState<any>(null);
@@ -179,7 +180,7 @@ export default function ClientProfilePage() {
   const [scoringThresholds, setScoringThresholds] = useState<ScoringThresholds>(getDefaultThresholds('lifestyle'));
   const [progressTrafficLight, setProgressTrafficLight] = useState<TrafficLightStatus>('orange');
   const [checkInTab, setCheckInTab] = useState<'all' | 'completed' | 'coachResponses' | 'pendingReview'>('all');
-  const [activeTab, setActiveTab] = useState<'overview' | 'progress' | 'checkins' | 'history' | 'ai-analytics'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'goals' | 'checkins' | 'history' | 'ai-analytics'>('overview');
   const [aiAnalytics, setAiAnalytics] = useState<any>(null);
   const [loadingAiAnalytics, setLoadingAiAnalytics] = useState(false);
   const [showGenerateAnalyticsModal, setShowGenerateAnalyticsModal] = useState(false);
@@ -199,6 +200,62 @@ export default function ClientProfilePage() {
   const [measurementsExpanded, setMeasurementsExpanded] = useState(false);
   const [onboardingAiSummary, setOnboardingAiSummary] = useState<{summary: string, generatedAt: string} | null>(null);
   const [loadingOnboardingAiSummary, setLoadingOnboardingAiSummary] = useState(false);
+  const [quickReviewExpanded, setQuickReviewExpanded] = useState(false);
+  const [latestCheckInResponses, setLatestCheckInResponses] = useState<any>(null);
+  const [loadingCheckInResponses, setLoadingCheckInResponses] = useState(false);
+  const [showQuickResponseModal, setShowQuickResponseModal] = useState(false);
+  const [selectedCheckInForResponse, setSelectedCheckInForResponse] = useState<any>(null);
+  const [quickResponseVoiceBlob, setQuickResponseVoiceBlob] = useState<Blob | null>(null);
+  const [quickResponseText, setQuickResponseText] = useState('');
+  const [savingQuickResponse, setSavingQuickResponse] = useState(false);
+
+  // Fetch latest check-in responses when latest check-in changes
+  useEffect(() => {
+    const fetchLatestCheckInResponses = async () => {
+      if (!userProfile?.uid || !allocatedCheckIns.length) return;
+      
+      const completedCheckIns = allocatedCheckIns
+        .filter(ci => ci.status === 'completed')
+        .sort((a, b) => {
+          const dateA = a.completedAt?.toDate ? a.completedAt.toDate() : new Date(a.completedAt || 0);
+          const dateB = b.completedAt?.toDate ? b.completedAt.toDate() : new Date(b.completedAt || 0);
+          return dateB.getTime() - dateA.getTime();
+        });
+      
+      const latestCheckIn = completedCheckIns[0];
+      
+      if (latestCheckIn?.responseId && !latestCheckInResponses) {
+        setLoadingCheckInResponses(true);
+        try {
+          const response = await fetch(`/api/responses/${latestCheckIn.responseId}?coachId=${userProfile.uid}`);
+          if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.response?.responses && data.questions) {
+              // Map responses to questions for display
+              const responsesWithQuestions = data.response.responses.map((resp: any) => {
+                const question = data.questions.find((q: any) => q.id === resp.questionId);
+                return {
+                  ...resp,
+                  question: question?.text || question?.question || resp.question || 'Unknown question',
+                  questionText: question?.text || question?.question || resp.question || 'Unknown question'
+                };
+              });
+              setLatestCheckInResponses(responsesWithQuestions);
+            } else if (data.success && data.response?.responses) {
+              // Fallback if questions not available
+              setLatestCheckInResponses(data.response.responses);
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching latest check-in responses:', error);
+        } finally {
+          setLoadingCheckInResponses(false);
+        }
+      }
+    };
+
+    fetchLatestCheckInResponses();
+  }, [allocatedCheckIns, userProfile?.uid, latestCheckInResponses]);
 
   // Debug forms state changes
   useEffect(() => {
@@ -363,6 +420,54 @@ export default function ClientProfilePage() {
       fetchAllocatedCheckIns();
     }
   }, [client, hasLoadedCheckIns]);
+
+  // Fetch latest check-in responses when check-ins are loaded
+  useEffect(() => {
+    const fetchLatestCheckInResponses = async () => {
+      if (!userProfile?.uid || !allocatedCheckIns.length || latestCheckInResponses) return;
+      
+      const completedCheckIns = allocatedCheckIns
+        .filter(ci => ci.status === 'completed')
+        .sort((a, b) => {
+          const dateA = a.completedAt?.toDate ? a.completedAt.toDate() : new Date(a.completedAt || 0);
+          const dateB = b.completedAt?.toDate ? b.completedAt.toDate() : new Date(b.completedAt || 0);
+          return dateB.getTime() - dateA.getTime();
+        });
+      
+      const latestCheckIn = completedCheckIns[0];
+      
+      if (latestCheckIn?.responseId) {
+        setLoadingCheckInResponses(true);
+        try {
+          const response = await fetch(`/api/responses/${latestCheckIn.responseId}?coachId=${userProfile.uid}`);
+          if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.response?.responses && data.questions) {
+              // Map responses to questions for display
+              const responsesWithQuestions = data.response.responses.map((resp: any) => {
+                const question = data.questions.find((q: any) => q.id === resp.questionId);
+                return {
+                  ...resp,
+                  question: question?.text || question?.question || resp.question || 'Unknown question',
+                  questionText: question?.text || question?.question || resp.question || 'Unknown question'
+                };
+              });
+              setLatestCheckInResponses(responsesWithQuestions);
+            } else if (data.success && data.response?.responses) {
+              // Fallback if questions not available
+              setLatestCheckInResponses(data.response.responses);
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching latest check-in responses:', error);
+        } finally {
+          setLoadingCheckInResponses(false);
+        }
+      }
+    };
+
+    fetchLatestCheckInResponses();
+  }, [allocatedCheckIns, userProfile?.uid]);
 
   // Fetch AI Analytics history and onboarding summary when tab is opened
   useEffect(() => {
@@ -839,6 +944,37 @@ export default function ClientProfilePage() {
       case 'fitness': return 'bg-purple-100 text-purple-800';
       case 'wellness': return 'bg-pink-100 text-pink-800';
       default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  // Helper functions for Check-in Quick Review
+  const getCheckInStatus = (score?: number, weight?: number) => {
+    // Unweighted questions (weight is 0, null, or undefined) should be grey
+    if (weight === 0 || weight === null || weight === undefined) return 'grey';
+    // If score is undefined or null, show grey
+    if (score === undefined || score === null) return 'grey';
+    if (score >= 7) return 'green';
+    if (score >= 4) return 'orange';
+    return 'red';
+  };
+  
+  const getCheckInStatusColor = (status: 'red' | 'orange' | 'green' | 'grey') => {
+    switch (status) {
+      case 'green': return 'bg-green-500';
+      case 'orange': return 'bg-orange-500';
+      case 'red': return 'bg-red-500';
+      case 'grey': return 'bg-gray-400';
+      default: return 'bg-gray-400';
+    }
+  };
+  
+  const getCheckInStatusBorder = (status: 'red' | 'orange' | 'green' | 'grey') => {
+    switch (status) {
+      case 'green': return 'border-green-600';
+      case 'orange': return 'border-orange-600';
+      case 'red': return 'border-red-600';
+      case 'grey': return 'border-gray-500';
+      default: return 'border-gray-500';
     }
   };
 
@@ -1662,6 +1798,190 @@ export default function ClientProfilePage() {
     );
   };
 
+  // Quick Response Modal Component
+  const QuickResponseModal = () => {
+    if (!showQuickResponseModal || !selectedCheckInForResponse) return null;
+
+    const handleSaveVoice = (audioBlob: Blob) => {
+      setQuickResponseVoiceBlob(audioBlob);
+    };
+
+    const convertBlobToBase64 = (blob: Blob): Promise<string> => {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    };
+
+    const handleSubmit = async () => {
+      if (!selectedCheckInForResponse?.responseId || !userProfile?.uid || !clientId) return;
+      
+      // Need at least voice or text
+      if (!quickResponseVoiceBlob && !quickResponseText.trim()) {
+        alert('Please provide a voice note or text message');
+        return;
+      }
+
+      setSavingQuickResponse(true);
+      try {
+        // Save voice feedback if provided
+        if (quickResponseVoiceBlob) {
+          const base64Audio = await convertBlobToBase64(quickResponseVoiceBlob);
+          const voiceResponse = await fetch('/api/coach-feedback', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              responseId: selectedCheckInForResponse.responseId,
+              coachId: userProfile.uid,
+              clientId: clientId,
+              questionId: null, // Overall feedback
+              feedbackType: 'voice',
+              content: base64Audio
+            })
+          });
+          if (!voiceResponse.ok) {
+            throw new Error('Failed to save voice note');
+          }
+        }
+
+        // Save text feedback if provided
+        if (quickResponseText.trim()) {
+          const textResponse = await fetch('/api/coach-feedback', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              responseId: selectedCheckInForResponse.responseId,
+              coachId: userProfile.uid,
+              clientId: clientId,
+              questionId: null,
+              feedbackType: 'text',
+              content: quickResponseText.trim()
+            })
+          });
+          if (!textResponse.ok) {
+            throw new Error('Failed to save text message');
+          }
+
+          // Also send as a message
+          try {
+            await fetch('/api/messages', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                coachId: userProfile.uid,
+                clientId: clientId,
+                content: quickResponseText.trim(),
+                type: 'text'
+              })
+            });
+          } catch (error) {
+            console.error('Error sending message:', error);
+            // Don't fail if message sending fails
+          }
+        }
+
+        alert('Response sent successfully!');
+        setShowQuickResponseModal(false);
+        setSelectedCheckInForResponse(null);
+        setQuickResponseText('');
+        setQuickResponseVoiceBlob(null);
+        
+        // Refresh the page data
+        window.location.reload();
+      } catch (error) {
+        console.error('Error saving quick response:', error);
+        alert('Failed to send response. Please try again.');
+      } finally {
+        setSavingQuickResponse(false);
+      }
+    };
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-3xl shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+          <div className="px-6 py-4 bg-green-50 border-b-2 border-green-200 rounded-t-3xl">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900">
+                Quick Response
+              </h3>
+              <button
+                onClick={() => {
+                  setShowQuickResponseModal(false);
+                  setSelectedCheckInForResponse(null);
+                  setQuickResponseText('');
+                  setQuickResponseVoiceBlob(null);
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          
+          <div className="px-6 py-4 space-y-6">
+            {/* Voice Note */}
+            <div>
+              <label className="block text-sm font-medium text-gray-900 mb-3">
+                Voice Note (Optional)
+              </label>
+              <VoiceRecorder
+                onSave={handleSaveVoice}
+                label="Record Voice Note"
+              />
+            </div>
+
+            {/* Text Message */}
+            <div>
+              <label className="block text-sm font-medium text-gray-900 mb-2">
+                Text Message (Optional)
+              </label>
+              <textarea
+                value={quickResponseText}
+                onChange={(e) => setQuickResponseText(e.target.value)}
+                placeholder="Type your message here..."
+                className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all"
+                rows={4}
+              />
+            </div>
+
+            {/* Info */}
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
+              <p className="text-xs text-blue-800">
+                This will mark the check-in as responded to and send your feedback to the client.
+              </p>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex space-x-3 pt-4">
+              <button
+                onClick={() => {
+                  setShowQuickResponseModal(false);
+                  setSelectedCheckInForResponse(null);
+                  setQuickResponseText('');
+                  setQuickResponseVoiceBlob(null);
+                }}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-2xl text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSubmit}
+                disabled={savingQuickResponse || (!quickResponseVoiceBlob && !quickResponseText.trim())}
+                className="flex-1 px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-2xl text-sm font-medium transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+              >
+                {savingQuickResponse ? 'Sending...' : 'Send & Mark as Responded'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // Status Update Modal Component
   const StatusUpdateModal = () => {
     if (!showStatusModal) return null;
@@ -2012,14 +2332,14 @@ export default function ClientProfilePage() {
                 Overview
               </button>
               <button
-                onClick={() => setActiveTab('progress')}
+                onClick={() => setActiveTab('goals')}
                 className={`flex-1 px-6 py-4 text-sm font-semibold transition-all ${
-                  activeTab === 'progress'
+                  activeTab === 'goals'
                     ? 'text-orange-600 border-b-2 border-orange-600 bg-orange-50/50'
                     : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                 }`}
               >
-                Progress
+                Goals
               </button>
               <button
                 onClick={() => setActiveTab('checkins')}
@@ -2128,233 +2448,10 @@ export default function ClientProfilePage() {
                 </div>
               </div>
 
-              {/* Weekly AI Summary */}
-              {loadingWeeklySummary ? (
+              {/* Quick Insights and Check-in Quick Review */}
+              <div className="space-y-6">
+                {/* Quick Insights Panel */}
                 <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
-                  <div className="bg-gradient-to-r from-purple-50 to-pink-50 px-6 py-4 border-b-2 border-purple-200">
-                    <h2 className="text-xl font-bold text-gray-900">This Week's Status</h2>
-                    <p className="text-sm text-gray-600 mt-1">AI-powered weekly summary</p>
-                  </div>
-                  <div className="p-6">
-                    <div className="animate-pulse space-y-3">
-                      <div className="h-4 bg-gray-200 rounded w-full"></div>
-                      <div className="h-4 bg-gray-200 rounded w-5/6"></div>
-                      <div className="h-4 bg-gray-200 rounded w-4/6"></div>
-                    </div>
-                  </div>
-                </div>
-              ) : !weeklySummary && !loadingWeeklySummary ? (
-                <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
-                  <div className="bg-gradient-to-r from-purple-50 to-pink-50 px-6 py-4 border-b-2 border-purple-200">
-                    <h2 className="text-xl font-bold text-gray-900">This Week's Status</h2>
-                    <p className="text-sm text-gray-600 mt-1">AI-powered weekly summary</p>
-                  </div>
-                  <div className="p-6 text-center">
-                    <p className="text-gray-600 mb-4">Generate an AI-powered weekly summary</p>
-                    <button
-                      onClick={() => handleRefreshWeeklySummary(true)}
-                      disabled={loadingWeeklySummary}
-                      className="px-6 py-3 bg-purple-500 hover:bg-purple-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-xl text-sm font-medium transition-colors flex items-center gap-2 mx-auto"
-                    >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                      </svg>
-                      {loadingWeeklySummary ? 'Generating...' : 'Generate Weekly Summary'}
-                    </button>
-                  </div>
-                </div>
-              ) : weeklySummary ? (
-                <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
-                  <div className="bg-gradient-to-r from-purple-50 to-pink-50 px-6 py-4 border-b-2 border-purple-200">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h2 className="text-xl font-bold text-gray-900">This Week's Status</h2>
-                        <p className="text-sm text-gray-600 mt-1">
-                          AI-powered weekly summary • {new Date(weeklySummary.dateRange.endDate).toLocaleDateString()}
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => handleRefreshWeeklySummary(true)}
-                        disabled={loadingWeeklySummary}
-                        className="px-4 py-2 bg-purple-500 hover:bg-purple-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-xl text-sm font-medium transition-colors flex items-center gap-2"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                        </svg>
-                        {loadingWeeklySummary ? 'Generating...' : 'Refresh'}
-                      </button>
-                    </div>
-                  </div>
-                  <div className="p-6">
-                    <div className="prose max-w-none">
-                      <p className="text-gray-800 leading-relaxed whitespace-pre-line text-sm">
-                        {weeklySummary.summary}
-                      </p>
-                    </div>
-                    {weeklySummary.checkInsCount !== undefined && (
-                      <div className="mt-4 pt-4 border-t border-gray-200 flex items-center gap-6 text-xs text-gray-600">
-                        <span>Check-ins: {weeklySummary.checkInsCount}</span>
-                        {weeklySummary.averageScore !== null && (
-                          <span>Avg Score: {weeklySummary.averageScore}%</span>
-                        )}
-                        {weeklySummary.measurementsCount > 0 && (
-                          <span>Measurements: {weeklySummary.measurementsCount}</span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : null}
-
-              {/* SWOT Analysis */}
-              {loadingSwot ? (
-                <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
-                  <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-6 py-4 border-b-2 border-indigo-200">
-                    <h2 className="text-xl font-bold text-gray-900">SWOT Analysis</h2>
-                    <p className="text-sm text-gray-600 mt-1">Strengths, Weaknesses, Opportunities, Threats</p>
-                  </div>
-                  <div className="p-6">
-                    <div className="animate-pulse space-y-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="h-32 bg-gray-200 rounded-xl"></div>
-                        <div className="h-32 bg-gray-200 rounded-xl"></div>
-                        <div className="h-32 bg-gray-200 rounded-xl"></div>
-                        <div className="h-32 bg-gray-200 rounded-xl"></div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ) : !swotAnalysis && !loadingSwot ? (
-                <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
-                  <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-6 py-4 border-b-2 border-indigo-200">
-                    <h2 className="text-xl font-bold text-gray-900">SWOT Analysis</h2>
-                    <p className="text-sm text-gray-600 mt-1">Comprehensive analysis of current progress</p>
-                  </div>
-                  <div className="p-6 text-center">
-                    <p className="text-gray-600 mb-4">Generate a comprehensive SWOT analysis</p>
-                    <button
-                      onClick={() => handleRefreshSwotAnalysis(true)}
-                      disabled={loadingSwot}
-                      className="px-6 py-3 bg-indigo-500 hover:bg-indigo-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-xl text-sm font-medium transition-colors flex items-center gap-2 mx-auto"
-                    >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                      </svg>
-                      {loadingSwot ? 'Generating...' : 'Generate SWOT Analysis'}
-                    </button>
-                  </div>
-                </div>
-              ) : swotAnalysis ? (
-                <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
-                  <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-6 py-4 border-b-2 border-indigo-200">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h2 className="text-xl font-bold text-gray-900">SWOT Analysis</h2>
-                        <p className="text-sm text-gray-600 mt-1">Comprehensive analysis of current progress</p>
-                      </div>
-                      <button
-                        onClick={() => handleRefreshSwotAnalysis(true)}
-                        disabled={loadingSwot}
-                        className="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-xl text-sm font-medium transition-colors flex items-center gap-2"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                        </svg>
-                        {loadingSwot ? 'Generating...' : 'Refresh'}
-                      </button>
-                    </div>
-                  </div>
-                  
-                  <div className="p-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                      {/* Strengths */}
-                      <div className="bg-green-50 rounded-xl p-5 border-2 border-green-200">
-                        <div className="flex items-center mb-3">
-                          <div className="w-8 h-8 bg-green-500 rounded-lg flex items-center justify-center mr-3">
-                            <span className="text-white font-bold text-sm">S</span>
-                          </div>
-                          <h3 className="text-lg font-bold text-gray-900">Strengths</h3>
-                        </div>
-                        <ul className="space-y-2">
-                          {swotAnalysis.strengths?.map((strength: string, idx: number) => (
-                            <li key={idx} className="flex items-start">
-                              <span className="text-green-600 mr-2 mt-1">✓</span>
-                              <span className="text-gray-800 text-sm">{strength}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-
-                      {/* Weaknesses */}
-                      <div className="bg-orange-50 rounded-xl p-5 border-2 border-orange-200">
-                        <div className="flex items-center mb-3">
-                          <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center mr-3">
-                            <span className="text-white font-bold text-sm">W</span>
-                          </div>
-                          <h3 className="text-lg font-bold text-gray-900">Weaknesses</h3>
-                        </div>
-                        <ul className="space-y-2">
-                          {swotAnalysis.weaknesses?.map((weakness: string, idx: number) => (
-                            <li key={idx} className="flex items-start">
-                              <span className="text-orange-600 mr-2 mt-1">⚠</span>
-                              <span className="text-gray-800 text-sm">{weakness}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-
-                      {/* Opportunities */}
-                      <div className="bg-blue-50 rounded-xl p-5 border-2 border-blue-200">
-                        <div className="flex items-center mb-3">
-                          <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center mr-3">
-                            <span className="text-white font-bold text-sm">O</span>
-                          </div>
-                          <h3 className="text-lg font-bold text-gray-900">Opportunities</h3>
-                        </div>
-                        <ul className="space-y-2">
-                          {swotAnalysis.opportunities?.map((opportunity: string, idx: number) => (
-                            <li key={idx} className="flex items-start">
-                              <span className="text-blue-600 mr-2 mt-1">→</span>
-                              <span className="text-gray-800 text-sm">{opportunity}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-
-                      {/* Threats */}
-                      <div className="bg-red-50 rounded-xl p-5 border-2 border-red-200">
-                        <div className="flex items-center mb-3">
-                          <div className="w-8 h-8 bg-red-500 rounded-lg flex items-center justify-center mr-3">
-                            <span className="text-white font-bold text-sm">T</span>
-                          </div>
-                          <h3 className="text-lg font-bold text-gray-900">Threats</h3>
-                        </div>
-                        <ul className="space-y-2">
-                          {swotAnalysis.threats?.map((threat: string, idx: number) => (
-                            <li key={idx} className="flex items-start">
-                              <span className="text-red-600 mr-2 mt-1">!</span>
-                              <span className="text-gray-800 text-sm">{threat}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    </div>
-
-                    {/* Overall Assessment */}
-                    {swotAnalysis.overallAssessment && (
-                      <div className="bg-gray-50 rounded-xl p-5 border border-gray-200 mt-4">
-                        <h3 className="text-lg font-bold text-gray-900 mb-3">Overall Assessment</h3>
-                        <p className="text-gray-800 leading-relaxed text-sm whitespace-pre-line">
-                          {swotAnalysis.overallAssessment}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : null}
-
-              {/* Quick Insights Panel */}
-              <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
                 <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-6 py-4 border-b-2 border-blue-200">
                   <h2 className="text-xl font-bold text-gray-900">Quick Insights</h2>
                   <p className="text-sm text-gray-600 mt-1">Action items and key information at a glance</p>
@@ -2575,198 +2672,173 @@ export default function ClientProfilePage() {
                     )}
                   </div>
                 </div>
-              </div>
 
-              {/* Onboarding Summary - Compact */}
-              {onboardingData && (
-                <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-                  <div className="bg-green-50 px-6 py-4 border-b-2 border-green-200">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h2 className="text-xl font-bold text-gray-900">Onboarding Questionnaire</h2>
-                        <p className="text-xs text-gray-600 mt-1">
-                          {onboardingData.submittedAt 
-                            ? `Submitted ${new Date(onboardingData.submittedAt).toLocaleDateString()}`
-                            : 'In progress'}
-                        </p>
-                      </div>
-                      {onboardingData.status === 'submitted' && (
-                        <span className="px-2 py-1 bg-green-600 text-white rounded-full text-xs font-medium">
-                          Submitted
-                        </span>
-                      )}
-                    </div>
-                  </div>
+                {/* Check-in Quick Review Panel */}
+                {(() => {
+                  const completedCheckIns = allocatedCheckIns
+                    .filter(ci => ci.status === 'completed')
+                    .sort((a, b) => {
+                      const dateA = a.completedAt?.toDate ? a.completedAt.toDate() : new Date(a.completedAt || 0);
+                      const dateB = b.completedAt?.toDate ? b.completedAt.toDate() : new Date(b.completedAt || 0);
+                      return dateB.getTime() - dateA.getTime();
+                    });
                   
-                  <div className="p-6">
-                    {onboardingData.sections && onboardingData.sections.length > 0 ? (
-                      <div className="space-y-3">
-                        {onboardingData.sections.slice(0, 3).map((section: any) => (
-                          <div key={section.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                            <div className="flex items-center space-x-3">
-                              <span className="text-xl">{section.icon}</span>
-                              <div>
-                                <p className="text-sm font-semibold text-gray-900">
-                                  Section {section.id}: {section.name}
-                                </p>
-                                <p className="text-xs text-gray-600">
-                                  {section.questions.filter((q: any) => q.answered).length} / {section.questions.length} answered
-                                </p>
+                  const latestCheckIn = completedCheckIns[0];
+
+                  return (
+                    <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                      <div className="bg-gradient-to-r from-orange-50 to-orange-50 px-6 py-4 border-b-2 border-orange-200">
+                        <h2 className="text-xl font-bold text-gray-900">Check-in Quick Review</h2>
+                        <p className="text-sm text-gray-600 mt-1">Latest completed check-in with color-coded responses</p>
+                      </div>
+                      <div className="p-6">
+                        {latestCheckIn ? (
+                          <>
+                            <div className="flex items-center justify-between cursor-pointer" onClick={() => setQuickReviewExpanded(!quickReviewExpanded)}>
+                              <div className="flex items-center gap-4">
+                                <span className="text-sm text-gray-600">
+                                  {(() => {
+                                    const date = latestCheckIn.completedAt?.toDate ? latestCheckIn.completedAt.toDate() : new Date(latestCheckIn.completedAt || 0);
+                                    return date.toLocaleDateString('en-US', { 
+                                      month: 'short', 
+                                      day: 'numeric',
+                                      year: 'numeric'
+                                    });
+                                  })()}
+                                </span>
+                                <div className="flex items-center gap-1.5">
+                                  {loadingCheckInResponses ? (
+                                    <div className="flex items-center gap-1.5">
+                                      {[1, 2, 3, 4, 5].map((i) => (
+                                        <div key={i} className="w-3 h-3 rounded-full bg-gray-200 animate-pulse" />
+                                      ))}
+                                    </div>
+                                  ) : latestCheckInResponses && latestCheckInResponses.length > 0 ? (
+                                    latestCheckInResponses.map((response: any, index: number) => {
+                                      const questionScore = response.score;
+                                      const questionWeight = response.weight;
+                                      const status = getCheckInStatus(questionScore, questionWeight);
+                                      const isUnweighted = questionWeight === 0 || questionWeight === null || questionWeight === undefined;
+                                      return (
+                                        <div
+                                          key={response.questionId || index}
+                                          className={`w-3 h-3 rounded-full ${getCheckInStatusColor(status)}`}
+                                          title={`${response.question || response.questionText || 'Question'}: ${isUnweighted ? 'Unweighted' : questionScore !== undefined && questionScore !== null ? `${questionScore}/10` : 'Not scored'}`}
+                                        />
+                                      );
+                                    })
+                                  ) : (
+                                    <span className="text-xs text-gray-400">No questions available</span>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-lg font-semibold text-gray-900">{latestCheckIn.score || 0}%</span>
+                                <svg 
+                                  className={`w-5 h-5 text-gray-400 transition-transform ${quickReviewExpanded ? 'rotate-180' : ''}`} 
+                                  fill="none" 
+                                  stroke="currentColor" 
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                </svg>
                               </div>
                             </div>
-                          </div>
-                        ))}
-                        {onboardingData.sections.length > 3 && (
-                          <p className="text-xs text-gray-500 text-center pt-2">
-                            + {onboardingData.sections.length - 3} more sections
-                          </p>
-                        )}
-                        <Link
-                          href={`/clients/${clientId}/onboarding-report`}
-                          target="_blank"
-                          className="w-full mt-4 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-xl text-sm font-medium text-center transition-all duration-200 shadow-sm block"
-                        >
-                          View Full Report →
-                        </Link>
-                      </div>
-                    ) : (
-                      <div className="text-center py-4 text-gray-500">
-                        <p className="text-sm">No onboarding data available yet.</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-                </div>
-              )}
-
-              {/* PROGRESS TAB */}
-              {activeTab === 'progress' && (
-                <div className="space-y-6">
-              {/* Question Progress Grid */}
-              {questionProgress.length > 0 && (
-                <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
-                  <div className="bg-orange-50 px-8 py-6 border-b-2 border-orange-200">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h2 className="text-2xl font-bold text-gray-900">Question Progress Over Time</h2>
-                        <p className="text-sm text-gray-600 mt-1">Track how each question improves week by week</p>
-                      </div>
-                      <button
-                        onClick={() => setQuestionProgressExpanded(!questionProgressExpanded)}
-                        className="px-4 py-2 bg-white hover:bg-gray-50 text-gray-700 rounded-xl text-sm font-medium transition-all border border-gray-200"
-                      >
-                        {questionProgressExpanded ? 'Collapse' : 'Expand'}
-                      </button>
-                    </div>
-                  </div>
-                  
-                  {questionProgressExpanded && (
-                    <>
-                      {/* Legend */}
-                      <div className="flex items-center gap-3 px-6 py-3 bg-gray-50/50 border-b border-gray-100 flex-wrap">
-                    <div className="flex items-center gap-1">
-                      <div className="w-2.5 h-2.5 rounded-full bg-green-500"></div>
-                      <span className="text-[10px] text-gray-600 font-medium">Good (7-10)</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <div className="w-2.5 h-2.5 rounded-full bg-orange-500"></div>
-                      <span className="text-[10px] text-gray-600 font-medium">Moderate (4-6)</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <div className="w-2.5 h-2.5 rounded-full bg-red-500"></div>
-                      <span className="text-[10px] text-gray-600 font-medium">Needs Attention (0-3)</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <div className="w-2.5 h-2.5 rounded-full bg-gray-400 border border-gray-500"></div>
-                      <span className="text-[10px] text-gray-600 font-medium">Not Scored</span>
-                    </div>
-                  </div>
-
-                  {/* Progress Grid */}
-                  {loadingQuestionProgress ? (
-                    <div className="p-8 text-center">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto mb-4"></div>
-                      <p className="text-gray-500 text-sm">Loading question progress...</p>
-                    </div>
-                  ) : (
-                    <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
-                      <table className="w-full">
-                        <thead className="sticky top-0 bg-gray-50/95 backdrop-blur-sm z-10">
-                          <tr className="bg-gray-50/30">
-                            <th className="text-left py-1.5 px-3 font-semibold text-[10px] text-gray-600 uppercase tracking-wider sticky left-0 bg-gray-50/95 backdrop-blur-sm z-20 min-w-[160px] border-r border-gray-100">
-                              Question
-                            </th>
-                            {questionProgress[0]?.weeks.map((week: any, index: number) => (
-                              <th
-                                key={index}
-                                className="text-center py-1.5 px-1 font-semibold text-[10px] text-gray-600 uppercase tracking-wider min-w-[60px]"
-                              >
-                                <div className="flex flex-col items-center">
-                                  <span className="text-[9px] text-gray-500 font-medium">W{week.week}</span>
-                                  <span className="text-[9px] text-gray-400">{week.date}</span>
-                                </div>
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {questionProgress.map((question, qIndex) => (
-                            <tr 
-                              key={question.questionId} 
-                              className={`transition-colors hover:bg-gray-50/50 ${
-                                qIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'
-                              }`}
-                            >
-                              <td className="py-1.5 px-3 text-xs font-medium text-gray-900 sticky left-0 bg-inherit z-10 border-r border-gray-100">
-                                <div className="max-w-[160px] line-clamp-2 leading-tight">
-                                  {question.questionText}
-                                </div>
-                              </td>
-                              {question.weeks.map((week: any, wIndex: number) => (
-                                <td
-                                  key={wIndex}
-                                  className="text-center py-1.5 px-1"
-                                >
-                                  <div
-                                    className={`w-6 h-6 rounded-full ${getQuestionProgressStatusColor(week.status)} ${getQuestionProgressStatusBorder(week.status)} flex items-center justify-center transition-all hover:scale-125 cursor-pointer shadow-sm mx-auto`}
-                                    title={week.status === 'grey' 
-                                      ? `Week ${week.week}: Not Scored - ${week.date}` 
-                                      : `Week ${week.week}: Score ${week.score}/10 - ${week.date}`}
-                                    onClick={() => setSelectedResponse({
-                                      question: question.questionText,
-                                      answer: week.answer,
-                                      score: week.score,
-                                      date: week.date,
-                                      week: week.week,
-                                      type: week.type
-                                    })}
-                                  >
-                                    {week.status !== 'grey' && (
-                                      <span className="text-white text-[9px] font-bold">{week.score}</span>
-                                    )}
+                            
+                            {quickReviewExpanded && (
+                              <div className="mt-6 border-t border-gray-200 pt-6">
+                                {loadingCheckInResponses ? (
+                                  <div className="text-center py-8">
+                                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500 mx-auto mb-4"></div>
+                                    <p className="text-gray-500 text-sm">Loading check-in responses...</p>
                                   </div>
-                                </td>
-                              ))}
-                              {/* Fill empty weeks if needed */}
-                              {Array.from({ length: Math.max(0, (questionProgress[0]?.weeks.length || 0) - question.weeks.length) }).map((_, emptyIndex) => (
-                                <td key={`empty-${emptyIndex}`} className="text-center py-1.5 px-1">
-                                  <div className="w-6 h-6 rounded-full bg-gray-100 border border-gray-200 mx-auto"></div>
-                                </td>
-                              ))}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                                ) : latestCheckInResponses?.length > 0 ? (
+                                  <>
+                                    <div className="space-y-4 mb-6">
+                                      {latestCheckInResponses.map((response: any, index: number) => {
+                                        const questionScore = response.score;
+                                        const questionWeight = response.weight;
+                                        const status = getCheckInStatus(questionScore, questionWeight);
+                                        const isUnweighted = questionWeight === 0 || questionWeight === null || questionWeight === undefined;
+                                        return (
+                                          <div key={response.questionId || index} className="flex items-start gap-3">
+                                            <div className={`w-8 h-8 rounded-full ${getCheckInStatusColor(status)} ${getCheckInStatusBorder(status)} border-2 flex items-center justify-center flex-shrink-0`}>
+                                              {isUnweighted ? (
+                                                <span className="text-white text-xs">-</span>
+                                              ) : questionScore !== undefined && questionScore !== null ? (
+                                                <span className="text-white text-xs font-bold">{questionScore}</span>
+                                              ) : (
+                                                <span className="text-white text-xs">-</span>
+                                              )}
+                                            </div>
+                                            <div className="flex-1">
+                                              <p className="text-sm font-medium text-gray-900 mb-1">{response.question || response.questionText}</p>
+                                              <div className="text-sm text-gray-600">
+                                                {typeof response.answer === 'boolean' 
+                                                  ? response.answer ? 'Yes' : 'No'
+                                                  : Array.isArray(response.answer)
+                                                  ? response.answer.join(', ')
+                                                  : (() => {
+                                                      const answerText = String(response.answer || '-');
+                                                      // If it's a longer text (likely from textarea), preserve line breaks
+                                                      if (answerText.length > 50 || answerText.includes('\n')) {
+                                                        return (
+                                                          <p className="whitespace-pre-wrap break-words">{answerText}</p>
+                                                        );
+                                                      }
+                                                      return <p>{answerText}</p>;
+                                                    })()}
+                                              </div>
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                    <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
+                                      <button
+                                        onClick={() => {
+                                          setSelectedCheckInForResponse(latestCheckIn);
+                                          setQuickResponseText('');
+                                          setQuickResponseVoiceBlob(null);
+                                          setShowQuickResponseModal(true);
+                                        }}
+                                        className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-xl text-sm font-medium transition-colors"
+                                      >
+                                        Quick Response
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          router.push(`/check-ins/${latestCheckIn.responseId || latestCheckIn.id}`);
+                                        }}
+                                        className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-sm font-medium transition-colors flex items-center gap-2"
+                                      >
+                                        View Full Check-in
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                        </svg>
+                                      </button>
+                                    </div>
+                                  </>
+                                ) : (
+                                  <div className="text-center py-8 text-gray-500">
+                                    <p className="text-sm">No responses available for this check-in</p>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <div className="text-center py-4 text-gray-500">
+                            <p className="text-sm">No completed check-ins yet</p>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  )}
-                    </>
-                  )}
-                </div>
-              )}
+                  );
+                })()}
+              </div>
 
               {/* Progress Images */}
-              {activeTab === 'progress' && (
                 <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
                 <div className="bg-orange-50 px-8 py-6 border-b-2 border-orange-200">
                   <div className="flex items-center justify-between mb-4">
@@ -2870,6 +2942,7 @@ export default function ClientProfilePage() {
                           onChange={(e) => setFilterDate(e.target.value)}
                           className="px-3 py-1.5 rounded-2xl text-xs font-medium bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-orange-500"
                         >
+                          <option value="latest">Latest</option>
                           <option value="all">All Dates</option>
                           {(() => {
                             const dates = progressImages.map(img => {
@@ -2973,13 +3046,28 @@ export default function ClientProfilePage() {
 
                       {/* Filtered Images Grid */}
                       {(() => {
+                        // Get the latest date if filtering by 'latest'
+                        let dateFilter: string | null = null;
+                        if (filterDate === 'latest') {
+                          const dates = progressImages.map(img => {
+                            const date = new Date(img.uploadedAt);
+                            return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+                          });
+                          const uniqueDates = Array.from(new Set(dates)).sort((a, b) => {
+                            return new Date(b).getTime() - new Date(a).getTime();
+                          });
+                          dateFilter = uniqueDates[0] || null;
+                        } else if (filterDate !== 'all') {
+                          dateFilter = filterDate;
+                        }
+
                         const filteredImages = progressImages.filter(img => {
                           const orientationMatch = filterOrientation === 'all' || img.orientation === filterOrientation;
-                          if (filterDate === 'all') return orientationMatch;
+                          if (!dateFilter) return orientationMatch;
                           
                           const imgDate = new Date(img.uploadedAt);
                           const imgDateKey = imgDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-                          return orientationMatch && imgDateKey === filterDate;
+                          return orientationMatch && imgDateKey === dateFilter;
                         });
 
                         if (filteredImages.length === 0) {
@@ -3118,59 +3206,57 @@ export default function ClientProfilePage() {
                   )}
                 </div>
               </div>
-              )}
 
               {/* Measurement History */}
-              {activeTab === 'progress' && (
-                <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-                  <div className="bg-orange-50 px-8 py-6 border-b-2 border-orange-200">
-                    <h2 className="text-2xl font-bold text-gray-900">Measurement History</h2>
-                    <p className="text-sm text-gray-600 mt-1">Track weight and body measurements over time</p>
-                  </div>
-                  
-                  {/* Measurements Graph */}
-                  {allMeasurementsData.length > 0 && (
-                    <div className="p-6 border-b border-gray-100">
-                      <h3 className="text-lg font-semibold text-gray-900 mb-4">Measurements Over Time</h3>
-                      
-                      {/* Measurement Toggles */}
-                      {getAvailableMeasurements().length > 0 && (
-                        <div className="mb-4 flex flex-wrap gap-2">
-                          {getAvailableMeasurements().map((measurement, index) => (
-                            <button
-                              key={measurement}
-                              onClick={() => toggleMeasurement(measurement)}
-                              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                                selectedMeasurements.has(measurement)
-                                  ? `${getMeasurementColor(index)} text-white`
-                                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                              }`}
-                            >
-                              {getMeasurementLabel(measurement)}
-                            </button>
-                          ))}
-                        </div>
-                      )}
+              <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+                <div className="bg-orange-50 px-8 py-6 border-b-2 border-orange-200">
+                  <h2 className="text-2xl font-bold text-gray-900">Measurement History</h2>
+                  <p className="text-sm text-gray-600 mt-1">Track weight and body measurements over time</p>
+                </div>
+                
+                {/* Measurements Graph */}
+                {allMeasurementsData.length > 0 && (
+                  <div className="p-6 border-b border-gray-100">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Measurements Over Time</h3>
+                    
+                    {/* Measurement Toggles */}
+                    {getAvailableMeasurements().length > 0 && (
+                      <div className="mb-4 flex flex-wrap gap-2">
+                        {getAvailableMeasurements().map((measurement, index) => (
+                          <button
+                            key={measurement}
+                            onClick={() => toggleMeasurement(measurement)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                              selectedMeasurements.has(measurement)
+                                ? `${getMeasurementColor(index)} text-white`
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            }`}
+                          >
+                            {getMeasurementLabel(measurement)}
+                          </button>
+                        ))}
+                      </div>
+                    )}
 
-                      {/* Graph */}
-                      {selectedMeasurements.size > 0 ? (
-                        <div className="relative">
-                          <svg className="w-full h-64" viewBox="0 0 800 256" preserveAspectRatio="none">
-                            {/* Y-axis grid lines */}
-                            {[0, 1, 2, 3, 4].map((i) => {
-                              const y = (i * 64);
-                              return (
-                                <line
-                                  key={i}
-                                  x1="40"
-                                  y1={y}
-                                  x2="800"
-                                  y2={y}
-                                  stroke="#e5e7eb"
-                                  strokeWidth="1"
-                                />
-                              );
-                            })}
+                    {/* Graph */}
+                    {selectedMeasurements.size > 0 ? (
+                      <div className="relative">
+                        <svg className="w-full h-64" viewBox="0 0 800 256" preserveAspectRatio="none">
+                          {/* Y-axis grid lines */}
+                          {[0, 1, 2, 3, 4].map((i) => {
+                            const y = (i * 64);
+                            return (
+                              <line
+                                key={i}
+                                x1="40"
+                                y1={y}
+                                x2="800"
+                                y2={y}
+                                stroke="#e5e7eb"
+                                strokeWidth="1"
+                              />
+                            );
+                          })}
                             
                             {/* Calculate max value for scaling */}
                             {(() => {
@@ -3270,8 +3356,8 @@ export default function ClientProfilePage() {
                                 );
                               });
                             })()}
-                          </svg>
-                          
+                        </svg>
+                        
                           {/* X-axis date labels */}
                           <div className="flex justify-between mt-2 px-10">
                             {allMeasurementsData.map((measurement, index) => {
@@ -3403,6 +3489,343 @@ export default function ClientProfilePage() {
                       </div>
                     )}
                   </div>
+                </div>
+
+              {/* Old Check-in Quick Review - REMOVED (moved to top) */}
+              {false && allocatedCheckIns.length > 0 && (() => {
+                const completedCheckIns = allocatedCheckIns
+                  .filter(ci => ci.status === 'completed')
+                  .sort((a, b) => {
+                    const dateA = a.completedAt?.toDate ? a.completedAt.toDate() : new Date(a.completedAt || 0);
+                    const dateB = b.completedAt?.toDate ? b.completedAt.toDate() : new Date(b.completedAt || 0);
+                    return dateB.getTime() - dateA.getTime();
+                  });
+                
+                const latestCheckIn = completedCheckIns[0];
+                const getCheckInStatus = (score?: number, weight?: number) => {
+                  // Unweighted questions (weight is 0, null, or undefined) should be grey
+                  if (weight === 0 || weight === null || weight === undefined) return 'grey';
+                  // If score is undefined or null, show grey
+                  if (score === undefined || score === null) return 'grey';
+                  if (score >= 7) return 'green';
+                  if (score >= 4) return 'orange';
+                  return 'red';
+                };
+                
+                const getCheckInStatusColor = (status: 'red' | 'orange' | 'green' | 'grey') => {
+                  switch (status) {
+                    case 'green': return 'bg-green-500';
+                    case 'orange': return 'bg-orange-500';
+                    case 'red': return 'bg-red-500';
+                    case 'grey': return 'bg-gray-400';
+                    default: return 'bg-gray-400';
+                  }
+                };
+                
+                const getCheckInStatusBorder = (status: 'red' | 'orange' | 'green' | 'grey') => {
+                  switch (status) {
+                    case 'green': return 'border-green-600';
+                    case 'orange': return 'border-orange-600';
+                    case 'red': return 'border-red-600';
+                    case 'grey': return 'border-gray-500';
+                    default: return 'border-gray-500';
+                  }
+                };
+                
+                const averageScore = completedCheckIns.length > 0
+                  ? Math.round(completedCheckIns.reduce((sum, ci) => sum + (ci.score || 0), 0) / completedCheckIns.length)
+                  : 0;
+
+                // Toggle expand/collapse (responses are already loaded via useEffect)
+                const handleExpand = () => {
+                  setQuickReviewExpanded(!quickReviewExpanded);
+                };
+                
+                return (
+                  <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+                    <div className="bg-orange-50 px-8 py-6 border-b-2 border-orange-200">
+                      <h2 className="text-2xl font-bold text-gray-900">Check-in Quick Review</h2>
+                      <p className="text-sm text-gray-600 mt-1">Condensed summary with color indicators</p>
+                    </div>
+                    <div className="p-6">
+                      {latestCheckIn ? (
+                        <>
+                          <div className="flex items-center justify-between cursor-pointer" onClick={handleExpand}>
+                            <div className="flex items-center gap-4">
+                              <span className="text-sm text-gray-600">
+                                {(() => {
+                                  const date = latestCheckIn.completedAt?.toDate ? latestCheckIn.completedAt.toDate() : new Date(latestCheckIn.completedAt || 0);
+                                  return date.toLocaleDateString('en-US', { 
+                                    month: 'short', 
+                                    day: 'numeric',
+                                    year: 'numeric'
+                                  });
+                                })()}
+                              </span>
+                              <div className="flex items-center gap-1.5">
+                                {loadingCheckInResponses ? (
+                                  <div className="flex items-center gap-1.5">
+                                    {[1, 2, 3, 4, 5].map((i) => (
+                                      <div key={i} className="w-3 h-3 rounded-full bg-gray-200 animate-pulse" />
+                                    ))}
+                                  </div>
+                                ) : latestCheckInResponses && latestCheckInResponses.length > 0 ? (
+                                  latestCheckInResponses.map((response: any, index: number) => {
+                                    const questionScore = response.score;
+                                    const questionWeight = response.weight;
+                                    const status = getCheckInStatus(questionScore, questionWeight);
+                                    const isUnweighted = questionWeight === 0 || questionWeight === null || questionWeight === undefined;
+                                    return (
+                                      <div
+                                        key={response.questionId || index}
+                                        className={`w-3 h-3 rounded-full ${getCheckInStatusColor(status)}`}
+                                        title={`${response.question || response.questionText || 'Question'}: ${isUnweighted ? 'Unweighted' : questionScore !== undefined && questionScore !== null ? `${questionScore}/10` : 'Not scored'}`}
+                                      />
+                                    );
+                                  })
+                                ) : (
+                                  <span className="text-xs text-gray-400">No questions available</span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-lg font-semibold text-gray-900">{latestCheckIn.score || 0}%</span>
+                              <svg 
+                                className={`w-5 h-5 text-gray-400 transition-transform ${quickReviewExpanded ? 'rotate-180' : ''}`} 
+                                fill="none" 
+                                stroke="currentColor" 
+                                viewBox="0 0 24 24"
+                              >
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                              </svg>
+                            </div>
+                          </div>
+                          
+                          {quickReviewExpanded && (
+                            <div className="mt-6 border-t border-gray-200 pt-6">
+                              {loadingCheckInResponses ? (
+                                <div className="text-center py-8">
+                                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500 mx-auto mb-4"></div>
+                                  <p className="text-gray-500 text-sm">Loading check-in responses...</p>
+                                </div>
+                              ) : latestCheckInResponses?.length > 0 ? (
+                                <>
+                                  <div className="space-y-4 mb-6">
+                                    {latestCheckInResponses.map((response: any, index: number) => {
+                                      const questionScore = response.score;
+                                      const questionWeight = response.weight;
+                                      const status = getCheckInStatus(questionScore, questionWeight);
+                                      const isUnweighted = questionWeight === 0 || questionWeight === null || questionWeight === undefined;
+                                      return (
+                                        <div key={response.questionId || index} className="flex items-start gap-3">
+                                          <div className={`w-8 h-8 rounded-full ${getCheckInStatusColor(status)} ${getCheckInStatusBorder(status)} border-2 flex items-center justify-center flex-shrink-0`}>
+                                            {isUnweighted ? (
+                                              <span className="text-white text-xs">-</span>
+                                            ) : questionScore !== undefined && questionScore !== null ? (
+                                              <span className="text-white text-xs font-bold">{questionScore}</span>
+                                            ) : (
+                                              <span className="text-white text-xs">-</span>
+                                            )}
+                                          </div>
+                                          <div className="flex-1">
+                                            <p className="text-sm font-medium text-gray-900 mb-1">{response.question || response.questionText}</p>
+                                            <div className="text-sm text-gray-600">
+                                              {typeof response.answer === 'boolean' 
+                                                ? response.answer ? 'Yes' : 'No'
+                                                : Array.isArray(response.answer)
+                                                ? response.answer.join(', ')
+                                                : (() => {
+                                                    const answerText = String(response.answer || '-');
+                                                    // If it's a longer text (likely from textarea), preserve line breaks
+                                                    if (answerText.length > 50 || answerText.includes('\n')) {
+                                                      return (
+                                                        <p className="whitespace-pre-wrap break-words">{answerText}</p>
+                                                      );
+                                                    }
+                                                    return <p>{answerText}</p>;
+                                                  })()}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                  <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
+                                    <button
+                                      onClick={() => {
+                                        setActiveTab('checkins');
+                                        setCheckInTab('pendingReview');
+                                        if (latestCheckIn.id) {
+                                          // Scroll to the specific check-in
+                                          setTimeout(() => {
+                                            const element = document.getElementById(`checkin-${latestCheckIn.id}`);
+                                            if (element) {
+                                              element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                            }
+                                          }, 100);
+                                        }
+                                      }}
+                                      className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-xl text-sm font-medium transition-colors"
+                                    >
+                                      Quick Response
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        router.push(`/check-ins/${latestCheckIn.responseId || latestCheckIn.id}`);
+                                      }}
+                                      className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-sm font-medium transition-colors flex items-center gap-2"
+                                    >
+                                      View Full Check-in
+                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                      </svg>
+                                    </button>
+                                  </div>
+                                </>
+                              ) : (
+                                <div className="text-center py-8 text-gray-500">
+                                  <p className="text-sm">No responses available for this check-in</p>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <div className="text-center py-4 text-gray-500">
+                          <p className="text-sm">No completed check-ins yet</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+              </div>
+
+                </div>
+              )}
+
+              {/* GOALS TAB */}
+              {activeTab === 'goals' && (
+                <div className="space-y-6">
+              {/* Question Progress Grid */}
+              {questionProgress.length > 0 && (
+                <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                  <div className="bg-orange-50 px-8 py-6 border-b-2 border-orange-200">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h2 className="text-2xl font-bold text-gray-900">Question Progress Over Time</h2>
+                        <p className="text-sm text-gray-600 mt-1">Track how each question improves week by week</p>
+                      </div>
+                      <button
+                        onClick={() => setQuestionProgressExpanded(!questionProgressExpanded)}
+                        className="px-4 py-2 bg-white hover:bg-gray-50 text-gray-700 rounded-xl text-sm font-medium transition-all border border-gray-200"
+                      >
+                        {questionProgressExpanded ? 'Collapse' : 'Expand'}
+                      </button>
+                    </div>
+                  </div>
+                  
+                  {questionProgressExpanded && (
+                    <>
+                      {/* Legend */}
+                      <div className="flex items-center gap-3 px-6 py-3 bg-gray-50/50 border-b border-gray-100 flex-wrap">
+                    <div className="flex items-center gap-1">
+                      <div className="w-2.5 h-2.5 rounded-full bg-green-500"></div>
+                      <span className="text-[10px] text-gray-600 font-medium">Good (7-10)</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <div className="w-2.5 h-2.5 rounded-full bg-orange-500"></div>
+                      <span className="text-[10px] text-gray-600 font-medium">Moderate (4-6)</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <div className="w-2.5 h-2.5 rounded-full bg-red-500"></div>
+                      <span className="text-[10px] text-gray-600 font-medium">Needs Attention (0-3)</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <div className="w-2.5 h-2.5 rounded-full bg-gray-400 border border-gray-500"></div>
+                      <span className="text-[10px] text-gray-600 font-medium">Not Scored</span>
+                    </div>
+                  </div>
+
+                  {/* Progress Grid */}
+                  {loadingQuestionProgress ? (
+                    <div className="p-8 text-center">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto mb-4"></div>
+                      <p className="text-gray-500 text-sm">Loading question progress...</p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
+                      <table className="w-full">
+                        <thead className="sticky top-0 bg-gray-50/95 backdrop-blur-sm z-10">
+                          <tr className="bg-gray-50/30">
+                            <th className="text-left py-1.5 px-3 font-semibold text-[10px] text-gray-600 uppercase tracking-wider sticky left-0 bg-gray-50/95 backdrop-blur-sm z-20 min-w-[160px] border-r border-gray-100">
+                              Question
+                            </th>
+                            {questionProgress[0]?.weeks.map((week: any, index: number) => (
+                              <th
+                                key={index}
+                                className="text-center py-1.5 px-1 font-semibold text-[10px] text-gray-600 uppercase tracking-wider min-w-[60px]"
+                              >
+                                <div className="flex flex-col items-center">
+                                  <span className="text-[9px] text-gray-500 font-medium">W{week.week}</span>
+                                  <span className="text-[9px] text-gray-400">{week.date}</span>
+                                </div>
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {questionProgress.map((question, qIndex) => (
+                            <tr 
+                              key={question.questionId} 
+                              className={`transition-colors hover:bg-gray-50/50 ${
+                                qIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'
+                              }`}
+                            >
+                              <td className="py-1.5 px-3 text-xs font-medium text-gray-900 sticky left-0 bg-inherit z-10 border-r border-gray-100">
+                                <div className="max-w-[160px] line-clamp-2 leading-tight">
+                                  {question.questionText}
+                                </div>
+                              </td>
+                              {question.weeks.map((week: any, wIndex: number) => (
+                                <td
+                                  key={wIndex}
+                                  className="text-center py-1.5 px-1"
+                                >
+                                  <div
+                                    className={`w-6 h-6 rounded-full ${getQuestionProgressStatusColor(week.status)} ${getQuestionProgressStatusBorder(week.status)} flex items-center justify-center transition-all hover:scale-125 cursor-pointer shadow-sm mx-auto`}
+                                    title={week.status === 'grey' 
+                                      ? `Week ${week.week}: Not Scored - ${week.date}` 
+                                      : `Week ${week.week}: Score ${week.score}/10 - ${week.date}`}
+                                    onClick={() => setSelectedResponse({
+                                      question: question.questionText,
+                                      answer: week.answer,
+                                      score: week.score,
+                                      date: week.date,
+                                      week: week.week,
+                                      type: week.type
+                                    })}
+                                  >
+                                    {week.status !== 'grey' && (
+                                      <span className="text-white text-[9px] font-bold">{week.score}</span>
+                                    )}
+                                  </div>
+                                </td>
+                              ))}
+                              {/* Fill empty weeks if needed */}
+                              {Array.from({ length: Math.max(0, (questionProgress[0]?.weeks.length || 0) - question.weeks.length) }).map((_, emptyIndex) => (
+                                <td key={`empty-${emptyIndex}`} className="text-center py-1.5 px-1">
+                                  <div className="w-6 h-6 rounded-full bg-gray-100 border border-gray-200 mx-auto"></div>
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                    </>
+                  )}
                 </div>
               )}
 
@@ -3537,7 +3960,7 @@ export default function ClientProfilePage() {
               )}
 
               {/* Notes */}
-              {activeTab === 'progress' && client.notes && (
+              {activeTab === 'goals' && client.notes && (
                 <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
                   <div className="bg-gradient-to-r from-yellow-50 to-amber-50 px-8 py-6 border-b border-gray-100">
                     <h2 className="text-2xl font-bold text-gray-900">Notes</h2>
@@ -4387,6 +4810,231 @@ export default function ClientProfilePage() {
               {/* AI ANALYTICS TAB */}
               {activeTab === 'ai-analytics' && (
                 <div className="space-y-6">
+                  {/* Weekly AI Summary */}
+              {loadingWeeklySummary ? (
+                <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                  <div className="bg-gradient-to-r from-purple-50 to-pink-50 px-6 py-4 border-b-2 border-purple-200">
+                    <h2 className="text-xl font-bold text-gray-900">This Week's Status</h2>
+                    <p className="text-sm text-gray-600 mt-1">AI-powered weekly summary</p>
+                  </div>
+                  <div className="p-6">
+                    <div className="animate-pulse space-y-3">
+                      <div className="h-4 bg-gray-200 rounded w-full"></div>
+                      <div className="h-4 bg-gray-200 rounded w-5/6"></div>
+                      <div className="h-4 bg-gray-200 rounded w-4/6"></div>
+                    </div>
+                  </div>
+                </div>
+              ) : !weeklySummary && !loadingWeeklySummary ? (
+                <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                  <div className="bg-gradient-to-r from-purple-50 to-pink-50 px-6 py-4 border-b-2 border-purple-200">
+                    <h2 className="text-xl font-bold text-gray-900">This Week's Status</h2>
+                    <p className="text-sm text-gray-600 mt-1">AI-powered weekly summary</p>
+                  </div>
+                  <div className="p-6 text-center">
+                    <p className="text-gray-600 mb-4">Generate an AI-powered weekly summary</p>
+                    <button
+                      onClick={() => handleRefreshWeeklySummary(true)}
+                      disabled={loadingWeeklySummary}
+                      className="px-6 py-3 bg-purple-500 hover:bg-purple-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-xl text-sm font-medium transition-colors flex items-center gap-2 mx-auto"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                      {loadingWeeklySummary ? 'Generating...' : 'Generate Weekly Summary'}
+                    </button>
+                  </div>
+                </div>
+              ) : weeklySummary ? (
+                <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                  <div className="bg-gradient-to-r from-purple-50 to-pink-50 px-6 py-4 border-b-2 border-purple-200">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h2 className="text-xl font-bold text-gray-900">This Week's Status</h2>
+                        <p className="text-sm text-gray-600 mt-1">
+                          AI-powered weekly summary • {new Date(weeklySummary.dateRange.endDate).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => handleRefreshWeeklySummary(true)}
+                        disabled={loadingWeeklySummary}
+                        className="px-4 py-2 bg-purple-500 hover:bg-purple-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-xl text-sm font-medium transition-colors flex items-center gap-2"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        {loadingWeeklySummary ? 'Generating...' : 'Refresh'}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="p-6">
+                    <div className="prose max-w-none">
+                      <p className="text-gray-800 leading-relaxed whitespace-pre-line text-sm">
+                        {weeklySummary.summary}
+                      </p>
+                    </div>
+                    {weeklySummary.checkInsCount !== undefined && (
+                      <div className="mt-4 pt-4 border-t border-gray-200 flex items-center gap-6 text-xs text-gray-600">
+                        <span>Check-ins: {weeklySummary.checkInsCount}</span>
+                        {weeklySummary.averageScore !== null && (
+                          <span>Avg Score: {weeklySummary.averageScore}%</span>
+                        )}
+                        {weeklySummary.measurementsCount > 0 && (
+                          <span>Measurements: {weeklySummary.measurementsCount}</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : null}
+
+              {/* SWOT Analysis */}
+              {loadingSwot ? (
+                <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                  <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-6 py-4 border-b-2 border-indigo-200">
+                    <h2 className="text-xl font-bold text-gray-900">SWOT Analysis</h2>
+                    <p className="text-sm text-gray-600 mt-1">Strengths, Weaknesses, Opportunities, Threats</p>
+                  </div>
+                  <div className="p-6">
+                    <div className="animate-pulse space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="h-32 bg-gray-200 rounded-xl"></div>
+                        <div className="h-32 bg-gray-200 rounded-xl"></div>
+                        <div className="h-32 bg-gray-200 rounded-xl"></div>
+                        <div className="h-32 bg-gray-200 rounded-xl"></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : !swotAnalysis && !loadingSwot ? (
+                <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                  <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-6 py-4 border-b-2 border-indigo-200">
+                    <h2 className="text-xl font-bold text-gray-900">SWOT Analysis</h2>
+                    <p className="text-sm text-gray-600 mt-1">Comprehensive analysis of current progress</p>
+                  </div>
+                  <div className="p-6 text-center">
+                    <p className="text-gray-600 mb-4">Generate a comprehensive SWOT analysis</p>
+                    <button
+                      onClick={() => handleRefreshSwotAnalysis(true)}
+                      disabled={loadingSwot}
+                      className="px-6 py-3 bg-indigo-500 hover:bg-indigo-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-xl text-sm font-medium transition-colors flex items-center gap-2 mx-auto"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                      {loadingSwot ? 'Generating...' : 'Generate SWOT Analysis'}
+                    </button>
+                  </div>
+                </div>
+              ) : swotAnalysis ? (
+                <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                  <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-6 py-4 border-b-2 border-indigo-200">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h2 className="text-xl font-bold text-gray-900">SWOT Analysis</h2>
+                        <p className="text-sm text-gray-600 mt-1">Comprehensive analysis of current progress</p>
+                      </div>
+                      <button
+                        onClick={() => handleRefreshSwotAnalysis(true)}
+                        disabled={loadingSwot}
+                        className="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-xl text-sm font-medium transition-colors flex items-center gap-2"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        {loadingSwot ? 'Generating...' : 'Refresh'}
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div className="p-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                      {/* Strengths */}
+                      <div className="bg-green-50 rounded-xl p-5 border-2 border-green-200">
+                        <div className="flex items-center mb-3">
+                          <div className="w-8 h-8 bg-green-500 rounded-lg flex items-center justify-center mr-3">
+                            <span className="text-white font-bold text-sm">S</span>
+                          </div>
+                          <h3 className="text-lg font-bold text-gray-900">Strengths</h3>
+                        </div>
+                        <ul className="space-y-2">
+                          {swotAnalysis.strengths?.map((strength: string, idx: number) => (
+                            <li key={idx} className="flex items-start">
+                              <span className="text-green-600 mr-2 mt-1">✓</span>
+                              <span className="text-gray-800 text-sm">{strength}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      {/* Weaknesses */}
+                      <div className="bg-orange-50 rounded-xl p-5 border-2 border-orange-200">
+                        <div className="flex items-center mb-3">
+                          <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center mr-3">
+                            <span className="text-white font-bold text-sm">W</span>
+                          </div>
+                          <h3 className="text-lg font-bold text-gray-900">Weaknesses</h3>
+                        </div>
+                        <ul className="space-y-2">
+                          {swotAnalysis.weaknesses?.map((weakness: string, idx: number) => (
+                            <li key={idx} className="flex items-start">
+                              <span className="text-orange-600 mr-2 mt-1">⚠</span>
+                              <span className="text-gray-800 text-sm">{weakness}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      {/* Opportunities */}
+                      <div className="bg-blue-50 rounded-xl p-5 border-2 border-blue-200">
+                        <div className="flex items-center mb-3">
+                          <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center mr-3">
+                            <span className="text-white font-bold text-sm">O</span>
+                          </div>
+                          <h3 className="text-lg font-bold text-gray-900">Opportunities</h3>
+                        </div>
+                        <ul className="space-y-2">
+                          {swotAnalysis.opportunities?.map((opportunity: string, idx: number) => (
+                            <li key={idx} className="flex items-start">
+                              <span className="text-blue-600 mr-2 mt-1">→</span>
+                              <span className="text-gray-800 text-sm">{opportunity}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      {/* Threats */}
+                      <div className="bg-red-50 rounded-xl p-5 border-2 border-red-200">
+                        <div className="flex items-center mb-3">
+                          <div className="w-8 h-8 bg-red-500 rounded-lg flex items-center justify-center mr-3">
+                            <span className="text-white font-bold text-sm">T</span>
+                          </div>
+                          <h3 className="text-lg font-bold text-gray-900">Threats</h3>
+                        </div>
+                        <ul className="space-y-2">
+                          {swotAnalysis.threats?.map((threat: string, idx: number) => (
+                            <li key={idx} className="flex items-start">
+                              <span className="text-red-600 mr-2 mt-1">!</span>
+                              <span className="text-gray-800 text-sm">{threat}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+
+                    {/* Overall Assessment */}
+                    {swotAnalysis.overallAssessment && (
+                      <div className="bg-gray-50 rounded-xl p-5 border border-gray-200 mt-4">
+                        <h3 className="text-lg font-bold text-gray-900 mb-3">Overall Assessment</h3>
+                        <p className="text-gray-800 leading-relaxed text-sm whitespace-pre-line">
+                          {swotAnalysis.overallAssessment}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : null}
+
                   {/* Onboarding AI Summary Section */}
                   {loadingOnboardingAiSummary ? (
                     <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 p-6">
@@ -4825,6 +5473,7 @@ export default function ClientProfilePage() {
       </div>
       <QuickSendModal />
       <StatusUpdateModal />
+      <QuickResponseModal />
       
       {/* Allocate Check-in Modal */}
       {showAllocateModal && (

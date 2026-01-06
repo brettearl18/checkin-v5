@@ -125,7 +125,7 @@ export const RateLimitConfig = {
   // File upload endpoints
   FILE_UPLOAD: {
     windowMs: 60 * 1000, // 1 minute
-    maxRequests: 10 // 10 requests per minute
+    maxRequests: 30 // 30 requests per minute (increased to allow multiple image uploads)
   },
   
   // General API endpoints

@@ -8,7 +8,7 @@ import { checkRateLimit, getClientIdentifier, RateLimitConfig } from './lib/rate
  * 
  * Rate Limits:
  * - Authentication endpoints: 5 requests/minute per IP
- * - File upload endpoints: 10 requests/minute per IP
+ * - File upload endpoints: 30 requests/minute per IP
  * - General API endpoints: 100 requests/minute per IP (default)
  */
 
