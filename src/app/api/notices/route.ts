@@ -27,17 +27,45 @@ export async function GET(request: NextRequest) {
       const clientCoachId = clientData?.coachId || clientData?.assignedCoach;
 
       // Fetch notices assigned to this client OR public notices from their coach
-      const [assignedNotices, publicNotices] = await Promise.all([
-        db.collection('notices')
-          .where('clientId', '==', clientId)
-          .orderBy('createdAt', 'desc')
-          .get(),
-        clientCoachId ? db.collection('notices')
-          .where('coachId', '==', clientCoachId)
-          .where('isPublic', '==', true)
-          .orderBy('createdAt', 'desc')
-          .get() : Promise.resolve({ docs: [] })
-      ]);
+      // Try with orderBy first, fall back to fetching without orderBy if index is missing
+      let assignedNotices: any = { docs: [] };
+      let publicNotices: any = { docs: [] };
+
+      try {
+        // Try with orderBy (requires composite index)
+        const [assignedResult, publicResult] = await Promise.all([
+          db.collection('notices')
+            .where('clientId', '==', clientId)
+            .orderBy('createdAt', 'desc')
+            .get(),
+          clientCoachId ? db.collection('notices')
+            .where('coachId', '==', clientCoachId)
+            .where('isPublic', '==', true)
+            .orderBy('createdAt', 'desc')
+            .get() : Promise.resolve({ docs: [] })
+        ]);
+        assignedNotices = assignedResult;
+        publicNotices = publicResult;
+      } catch (indexError: any) {
+        // If index is missing, fetch without orderBy and sort client-side
+        console.warn('Missing Firestore index, fetching without orderBy:', indexError.message);
+        try {
+          const [assignedResult, publicResult] = await Promise.all([
+            db.collection('notices')
+              .where('clientId', '==', clientId)
+              .get(),
+            clientCoachId ? db.collection('notices')
+              .where('coachId', '==', clientCoachId)
+              .where('isPublic', '==', true)
+              .get() : Promise.resolve({ docs: [] })
+          ]);
+          assignedNotices = assignedResult;
+          publicNotices = publicResult;
+        } catch (fallbackError) {
+          console.error('Error fetching notices (fallback):', fallbackError);
+          // Continue with empty results
+        }
+      }
 
       // Combine and deduplicate notices
       const noticeMap = new Map();
@@ -60,10 +88,20 @@ export async function GET(request: NextRequest) {
 
     } else if (coachId) {
       // Fetch all notices for this coach (for coach dashboard)
-      const noticesSnapshot = await db.collection('notices')
-        .where('coachId', '==', coachId)
-        .orderBy('createdAt', 'desc')
-        .get();
+      // Try with orderBy first, fall back to fetching without orderBy if index is missing
+      let noticesSnapshot: any;
+      try {
+        noticesSnapshot = await db.collection('notices')
+          .where('coachId', '==', coachId)
+          .orderBy('createdAt', 'desc')
+          .get();
+      } catch (indexError: any) {
+        // If index is missing, fetch without orderBy and sort client-side
+        console.warn('Missing Firestore index, fetching without orderBy:', indexError.message);
+        noticesSnapshot = await db.collection('notices')
+          .where('coachId', '==', coachId)
+          .get();
+      }
 
       notices = noticesSnapshot.docs.map(doc => {
         const data = doc.data();
@@ -74,6 +112,15 @@ export async function GET(request: NextRequest) {
           updatedAt: data.updatedAt?.toDate?.()?.toISOString() || data.updatedAt
         };
       });
+
+      // Sort by createdAt if we didn't use orderBy
+      if (notices.length > 0 && notices[0].createdAt) {
+        notices.sort((a, b) => {
+          const dateA = new Date(a.createdAt).getTime();
+          const dateB = new Date(b.createdAt).getTime();
+          return dateB - dateA; // Most recent first
+        });
+      }
     } else {
       return NextResponse.json({
         success: false,
