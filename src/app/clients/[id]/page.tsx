@@ -2842,7 +2842,12 @@ export default function ClientProfilePage() {
                                       </button>
                                       <button
                                         onClick={() => {
-                                          router.push(`/check-ins/${latestCheckIn.responseId || latestCheckIn.id}`);
+                                          // If check-in has been responded to, go to response page; otherwise go to check-in page
+                                          if (latestCheckIn.responseId) {
+                                            router.push(`/responses/${latestCheckIn.responseId}`);
+                                          } else {
+                                            router.push(`/check-ins/${latestCheckIn.id}`);
+                                          }
                                         }}
                                         className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-sm font-medium transition-colors flex items-center gap-2"
                                       >
@@ -3705,7 +3710,12 @@ export default function ClientProfilePage() {
                                     </button>
                                     <button
                                       onClick={() => {
-                                        router.push(`/check-ins/${latestCheckIn.responseId || latestCheckIn.id}`);
+                                        // If check-in has been responded to, go to response page; otherwise go to check-in page
+                                        if (latestCheckIn.responseId) {
+                                          router.push(`/responses/${latestCheckIn.responseId}`);
+                                        } else {
+                                          router.push(`/check-ins/${latestCheckIn.id}`);
+                                        }
                                       }}
                                       className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-sm font-medium transition-colors flex items-center gap-2"
                                     >
