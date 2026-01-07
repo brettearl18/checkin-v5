@@ -518,7 +518,7 @@ export default function CoachMessagesPage() {
 
             {/* Chat Area - WhatsApp Style */}
             {selectedClientId ? (
-              <div className="flex-1 lg:col-span-2 flex flex-col bg-gray-50 lg:bg-white lg:rounded-2xl lg:shadow-[0_1px_3px_rgba(0,0,0,0.1)] lg:border lg:border-gray-100 overflow-hidden">
+              <div className="flex-1 flex flex-col bg-gray-50 lg:bg-white lg:rounded-lg lg:shadow-sm lg:border lg:border-gray-200 overflow-hidden">
                 {/* Check-in Context Banner - Show if there are messages with check-in context */}
                 {(() => {
                   const conversationMessages = messages.filter(
