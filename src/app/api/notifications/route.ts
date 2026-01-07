@@ -3,6 +3,8 @@ import { getDb } from '@/lib/firebase-server';
 import { logInfo, logSafeError } from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+export const maxDuration = 30;
 
 interface Notification {
   id: string;
