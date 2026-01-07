@@ -78,9 +78,11 @@ export default function CoachMessagesPage() {
   }, [messages]);
 
   useEffect(() => {
-    fetchConversations();
-    fetchClients();
-  }, []);
+    if (userProfile?.uid) {
+      fetchConversations();
+      fetchClients();
+    }
+  }, [userProfile?.uid]);
 
   useEffect(() => {
     if (selectedClientId && userProfile?.uid) {
@@ -209,15 +211,23 @@ export default function CoachMessagesPage() {
   const fetchClients = async () => {
     try {
       const coachId = userProfile?.uid;
-      if (!coachId) return;
+      if (!coachId) {
+        console.log('No coachId available, skipping client fetch');
+        return;
+      }
 
+      console.log('Fetching clients for coachId:', coachId);
       const response = await fetch(`/api/clients?coachId=${coachId}`);
       
       if (response.ok) {
         const data = await response.json();
+        console.log('Clients API response:', data);
         if (data.success) {
-          setClients(data.clients);
+          console.log(`Loaded ${data.clients?.length || 0} clients`);
+          setClients(data.clients || []);
         }
+      } else {
+        console.error('Failed to fetch clients:', response.status, response.statusText);
       }
     } catch (error) {
       console.error('Error fetching clients:', error);
