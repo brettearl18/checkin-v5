@@ -9,7 +9,10 @@
     "rewrites": [
       {
         "source": "/manifest.json",
-        "destination": "/manifest"
+        "run": {
+          "serviceId": "checkin-v5-api",
+          "region": "us-central1"
+        }
       },
       {
         "source": "**",
