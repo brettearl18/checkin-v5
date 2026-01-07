@@ -18,6 +18,8 @@ interface FormResponse {
   submittedAt: string;
   status: string;
   reactions?: { [questionId: string]: { [coachId: string]: { emoji: string; coachName: string; createdAt: string } } };
+  clientApproved?: boolean;
+  clientApprovedAt?: string;
 }
 
 interface Question {
@@ -50,6 +52,7 @@ export default function ClientFeedbackPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [clientApproved, setClientApproved] = useState<boolean>(false);
+  const [clientApprovedAt, setClientApprovedAt] = useState<string | null>(null);
   const [approving, setApproving] = useState<boolean>(false);
   const router = useRouter();
 
@@ -82,6 +85,7 @@ export default function ClientFeedbackPage() {
         // Check if client has already approved
         if (responseData.response?.clientApproved) {
           setClientApproved(true);
+          setClientApprovedAt(responseData.response?.clientApprovedAt || null);
         }
         
         // Fetch coach feedback
@@ -221,6 +225,7 @@ export default function ClientFeedbackPage() {
         const data = await response.json();
         if (data.success) {
           setClientApproved(true);
+          setClientApprovedAt(data.approvedAt || new Date().toISOString());
           
           // Show success message and redirect to dashboard
           alert('Feedback marked as received and approved! Your coach has been notified.');
@@ -540,49 +545,79 @@ export default function ClientFeedbackPage() {
                 <div className="mt-8 pt-6 border-t border-gray-200">
                   <div className="flex flex-col sm:flex-row gap-4">
                     {/* Received and Approved Button */}
-                    <button
-                      onClick={handleApprove}
-                      disabled={clientApproved || approving}
-                      className={`flex-1 px-6 py-3 rounded-xl font-semibold text-white transition-all duration-200 shadow-md hover:shadow-lg flex items-center justify-center gap-2 ${
-                        clientApproved
-                          ? 'bg-green-600 cursor-default'
-                          : approving
-                          ? 'bg-gray-400 cursor-not-allowed'
-                          : 'bg-green-600 hover:bg-green-700'
-                      }`}
-                    >
-                      {clientApproved ? (
-                        <>
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                          <span>✓ Received and Approved</span>
-                        </>
-                      ) : approving ? (
-                        <>
-                          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                          <span>Approving...</span>
-                        </>
-                      ) : (
-                        <>
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                          <span>Received and Approved</span>
-                        </>
-                      )}
-                    </button>
+                    <div className="flex-1">
+                      <button
+                        onClick={handleApprove}
+                        disabled={clientApproved || approving}
+                        className={`w-full px-6 py-3 rounded-xl font-semibold text-white transition-all duration-200 shadow-md flex flex-col items-center justify-center gap-1 ${
+                          clientApproved
+                            ? 'bg-gray-400 cursor-not-allowed opacity-60'
+                            : approving
+                            ? 'bg-gray-400 cursor-not-allowed'
+                            : 'bg-green-600 hover:bg-green-700 hover:shadow-lg'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          {clientApproved ? (
+                            <>
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                              <span>✓ Received and Approved</span>
+                            </>
+                          ) : approving ? (
+                            <>
+                              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                              <span>Approving...</span>
+                            </>
+                          ) : (
+                            <>
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                              <span>Received and Approved</span>
+                            </>
+                          )}
+                        </div>
+                        {clientApproved && clientApprovedAt && (
+                          <span className="text-xs opacity-90 mt-1">
+                            Approved on {formatDate(clientApprovedAt)}
+                          </span>
+                        )}
+                      </button>
+                    </div>
 
                     {/* Received and Reply Button */}
-                    <Link
-                      href={`/client-portal/messages?responseId=${responseId}&formTitle=${encodeURIComponent(response?.formTitle || 'Check-in')}&submittedAt=${encodeURIComponent(response?.submittedAt || '')}`}
-                      className="flex-1 px-6 py-3 rounded-xl font-semibold text-white bg-purple-600 hover:bg-purple-700 transition-all duration-200 shadow-md hover:shadow-lg flex items-center justify-center gap-2"
-                    >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                      </svg>
-                      <span>Received and Reply</span>
-                    </Link>
+                    <div className="flex-1">
+                      {clientApproved ? (
+                        <button
+                          disabled
+                          className="w-full px-6 py-3 rounded-xl font-semibold text-white bg-gray-400 cursor-not-allowed opacity-60 transition-all duration-200 shadow-md flex flex-col items-center justify-center gap-1"
+                        >
+                          <div className="flex items-center gap-2">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                            </svg>
+                            <span>💬 Received and Reply</span>
+                          </div>
+                          {clientApprovedAt && (
+                            <span className="text-xs opacity-90 mt-1">
+                              Approved on {formatDate(clientApprovedAt)}
+                            </span>
+                          )}
+                        </button>
+                      ) : (
+                        <Link
+                          href={`/client-portal/messages?responseId=${responseId}&formTitle=${encodeURIComponent(response?.formTitle || 'Check-in')}&submittedAt=${encodeURIComponent(response?.submittedAt || '')}`}
+                          className="flex-1 w-full px-6 py-3 rounded-xl font-semibold text-white bg-purple-600 hover:bg-purple-700 transition-all duration-200 shadow-md hover:shadow-lg flex items-center justify-center gap-2"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                          </svg>
+                          <span>Received and Reply</span>
+                        </Link>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>

@@ -275,7 +275,9 @@ export async function GET(
       coachRespondedAt: coachRespondedAt || responseData?.coachRespondedAt?.toDate?.()?.toISOString() || responseData?.coachRespondedAt || null,
       feedbackCount: feedbackCount,
       workflowStatus: workflowStatus,
-      reactions: reactionsWithCoachNames
+      reactions: reactionsWithCoachNames,
+      clientApproved: responseData?.clientApproved || false,
+      clientApprovedAt: responseData?.clientApprovedAt?.toDate?.()?.toISOString() || responseData?.clientApprovedAt || null
     };
 
     return NextResponse.json({
