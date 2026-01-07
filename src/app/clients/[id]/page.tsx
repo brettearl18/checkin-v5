@@ -1288,10 +1288,10 @@ export default function ClientProfilePage() {
     return secondFriday;
   };
 
-  // Calculate first check-in window start date/time
-  const getFirstCheckInWindowStart = (): { date: string; time: string; displayText: string } | null => {
+  // Calculate check-in window based on first check-in date and window settings
+  const calculateCheckInWindow = (): { windowStart: Date | null; windowEnd: Date | null; displayText: string } => {
     if (!allocateFirstCheckInDate || !allocateCheckInWindow.enabled) {
-      return null;
+      return { windowStart: null, windowEnd: null, displayText: '' };
     }
 
     const firstCheckInDate = new Date(allocateFirstCheckInDate);
@@ -1299,10 +1299,11 @@ export default function ClientProfilePage() {
       'sunday': 0, 'monday': 1, 'tuesday': 2, 'wednesday': 3,
       'thursday': 4, 'friday': 5, 'saturday': 6
     };
+    
     const startDayNum = dayMap[allocateCheckInWindow.startDay.toLowerCase()] ?? 5;
     const firstCheckInDay = firstCheckInDate.getDay();
     
-    // Calculate days to go back to get to the start day
+    // Calculate days to go back to find the previous occurrence of start day
     // If firstCheckInDay >= startDayNum, go back (firstCheckInDay - startDayNum) days
     // If firstCheckInDay < startDayNum, go back (firstCheckInDay - startDayNum + 7) days (previous week)
     let daysToStart: number;
@@ -1312,22 +1313,66 @@ export default function ClientProfilePage() {
       daysToStart = firstCheckInDay - startDayNum + 7;
     }
     
+    // Window start date (previous start day)
     const windowStartDate = new Date(firstCheckInDate);
     windowStartDate.setDate(firstCheckInDate.getDate() - daysToStart);
     
-    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const dayName = dayNames[windowStartDate.getDay()];
+    // Set start time
+    const [startHours, startMinutes] = allocateCheckInWindow.startTime.split(':').map(Number);
+    windowStartDate.setHours(startHours, startMinutes, 0, 0);
     
-    // Format time for display (convert 24h to 12h)
-    const [hours, minutes] = allocateCheckInWindow.startTime.split(':').map(Number);
-    const ampm = hours >= 12 ? 'PM' : 'AM';
-    const displayHours = hours % 12 || 12;
-    const displayTime = `${displayHours}:${minutes.toString().padStart(2, '0')} ${ampm}`;
+    // Window end date - find the selected end day on or before the check-in date
+    const endDayNum = dayMap[allocateCheckInWindow.endDay?.toLowerCase()] ?? firstCheckInDay;
+    const windowEndDate = new Date(firstCheckInDate);
+    
+    // Calculate days to go back to find the end day
+    // If firstCheckInDay >= endDayNum, go back (firstCheckInDay - endDayNum) days
+    // If firstCheckInDay < endDayNum, go back (firstCheckInDay - endDayNum + 7) days (previous week)
+    let daysToEnd: number;
+    if (firstCheckInDay >= endDayNum) {
+      daysToEnd = firstCheckInDay - endDayNum;
+    } else {
+      daysToEnd = firstCheckInDay - endDayNum + 7;
+    }
+    
+    windowEndDate.setDate(firstCheckInDate.getDate() - daysToEnd);
+    
+    // Set end time
+    const [endHours, endMinutes] = allocateCheckInWindow.endTime.split(':').map(Number);
+    windowEndDate.setHours(endHours, endMinutes, 0, 0);
+    
+    // Format for display
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const startDayName = dayNames[windowStartDate.getDay()];
+    
+    // Use the selected end day name from settings (capitalize first letter)
+    const selectedEndDay = allocateCheckInWindow.endDay || 'monday';
+    const endDayName = selectedEndDay.charAt(0).toUpperCase() + selectedEndDay.slice(1);
+    
+    // Format start time (12h)
+    const startAmpm = startHours >= 12 ? 'PM' : 'AM';
+    const startDisplayHours = startHours % 12 || 12;
+    const startDisplayTime = `${startDisplayHours}:${startMinutes.toString().padStart(2, '0')} ${startAmpm}`;
+    
+    // Format end time (12h)
+    const endAmpm = endHours >= 12 ? 'PM' : 'AM';
+    const endDisplayHours = endHours % 12 || 12;
+    const endDisplayTime = `${endDisplayHours}:${endMinutes.toString().padStart(2, '0')} ${endAmpm}`;
+    
+    // Format dates (DD/MM/YYYY)
+    const formatDate = (date: Date) => {
+      const day = date.getDate().toString().padStart(2, '0');
+      const month = (date.getMonth() + 1).toString().padStart(2, '0');
+      const year = date.getFullYear();
+      return `${day}/${month}/${year}`;
+    };
+    
+    const displayText = `Opens on ${startDayName}, ${formatDate(windowStartDate)} at ${startDisplayTime}. Window closes ${endDayName} at ${endDisplayTime}.`;
     
     return {
-      date: windowStartDate.toISOString().split('T')[0],
-      time: allocateCheckInWindow.startTime,
-      displayText: `${dayName}, ${windowStartDate.toLocaleDateString()} at ${displayTime}`
+      windowStart: windowStartDate,
+      windowEnd: windowEndDate,
+      displayText
     };
   };
 
@@ -5638,35 +5683,24 @@ export default function ClientProfilePage() {
                 />
               </div>
 
-              {/* First Check-in Window Indicator */}
+              {/* Check-in Window Preview */}
               {allocateFirstCheckInDate && allocateCheckInWindow.enabled && (() => {
-                const windowInfo = getFirstCheckInWindowStart();
-                if (!windowInfo) return null;
+                const windowInfo = calculateCheckInWindow();
+                if (!windowInfo.windowStart || !windowInfo.windowEnd) return null;
                 return (
-                  <div className="bg-orange-50 border border-orange-200 rounded-xl p-4">
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mt-4">
                     <div className="flex items-start">
                       <div className="flex-shrink-0">
-                        <svg className="w-5 h-5 text-orange-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-5 h-5 text-blue-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                         </svg>
                       </div>
                       <div className="ml-3 flex-1">
-                        <h4 className="text-sm font-semibold text-orange-900 mb-1">First Check-in Window</h4>
-                        <p className="text-sm text-orange-700">
-                          Opens on <span className="font-medium">{windowInfo.displayText}</span>
+                        <h4 className="text-sm font-semibold text-blue-900 mb-1">First Check-in Window</h4>
+                        <p className="text-sm text-blue-800 mb-2">{windowInfo.displayText}</p>
+                        <p className="text-xs text-blue-600 italic">
+                          This window pattern will apply to all future check-ins based on their due dates.
                         </p>
-                        {allocateCheckInWindow.endDay && allocateCheckInWindow.endTime && (
-                          <p className="text-xs text-orange-600 mt-1">
-                            Window closes {allocateCheckInWindow.endDay.charAt(0).toUpperCase() + allocateCheckInWindow.endDay.slice(1)} at {
-                              (() => {
-                                const [hours, minutes] = allocateCheckInWindow.endTime.split(':').map(Number);
-                                const ampm = hours >= 12 ? 'PM' : 'AM';
-                                const displayHours = hours % 12 || 12;
-                                return `${displayHours}:${minutes.toString().padStart(2, '0')} ${ampm}`;
-                              })()
-                            }
-                          </p>
-                        )}
                       </div>
                     </div>
                   </div>
@@ -5678,6 +5712,9 @@ export default function ClientProfilePage() {
                 <label className="block text-sm font-medium text-gray-900 mb-3">
                   Check-in Window
                 </label>
+                <p className="text-xs text-gray-500 mb-3">
+                  Configure when clients can submit their check-ins. The window starts on the selected day before each check-in date and closes on the check-in date itself.
+                </p>
                 
                 <div className="mb-3">
                   <label className="flex items-center">
@@ -5731,7 +5768,7 @@ export default function ClientProfilePage() {
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="block text-xs text-gray-600 mb-1">End Day</label>
+                        <label className="block text-xs text-gray-600 mb-1">End Day (Check-in Due Day)</label>
                         <select
                           value={allocateCheckInWindow.endDay}
                           onChange={(e) => setAllocateCheckInWindow({
