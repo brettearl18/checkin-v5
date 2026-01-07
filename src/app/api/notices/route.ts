@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase-server';
-import { requireCoach } from '@/lib/auth-middleware';
+import { requireCoach } from '@/lib/api-auth';
 
 // GET - Fetch notices for a coach's clients or for a specific client
 export async function GET(request: NextRequest) {
@@ -100,13 +100,11 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const authResult = await requireCoach(request);
-    if (!authResult.success) {
-      return NextResponse.json({
-        success: false,
-        message: authResult.error || 'Unauthorized'
-      }, { status: 401 });
+    if (authResult instanceof NextResponse) {
+      return authResult;
     }
 
+    const { user } = authResult;
     const body = await request.json();
     const { title, content, imageUrl, linkUrl, linkText, clientIds, isPublic } = body;
 
@@ -118,7 +116,7 @@ export async function POST(request: NextRequest) {
     }
 
     const db = getDb();
-    const coachId = authResult.userId;
+    const coachId = user.uid;
 
     // If clientIds is provided and isPublic is false, create notices for specific clients
     // If isPublic is true or clientIds is empty, create one public notice for all clients

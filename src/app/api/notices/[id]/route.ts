@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase-server';
-import { requireCoach } from '@/lib/auth-middleware';
+import { requireCoach } from '@/lib/api-auth';
 
 // PUT - Update a notice
 export async function PUT(
@@ -9,19 +9,17 @@ export async function PUT(
 ) {
   try {
     const authResult = await requireCoach(request);
-    if (!authResult.success) {
-      return NextResponse.json({
-        success: false,
-        message: authResult.error || 'Unauthorized'
-      }, { status: 401 });
+    if (authResult instanceof NextResponse) {
+      return authResult;
     }
 
+    const { user } = authResult;
     const { id } = await params;
     const body = await request.json();
     const { title, content, imageUrl, linkUrl, linkText } = body;
 
     const db = getDb();
-    const coachId = authResult.userId;
+    const coachId = user.uid;
 
     // Verify the notice belongs to this coach
     const noticeDoc = await db.collection('notices').doc(id).get();
@@ -72,16 +70,14 @@ export async function DELETE(
 ) {
   try {
     const authResult = await requireCoach(request);
-    if (!authResult.success) {
-      return NextResponse.json({
-        success: false,
-        message: authResult.error || 'Unauthorized'
-      }, { status: 401 });
+    if (authResult instanceof NextResponse) {
+      return authResult;
     }
 
+    const { user } = authResult;
     const { id } = await params;
     const db = getDb();
-    const coachId = authResult.userId;
+    const coachId = user.uid;
 
     // Verify the notice belongs to this coach
     const noticeDoc = await db.collection('notices').doc(id).get();

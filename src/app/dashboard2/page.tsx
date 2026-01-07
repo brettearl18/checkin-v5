@@ -521,6 +521,8 @@ export default function Dashboard2Page() {
                   </div>
                 )}
               </div>
+                </>
+              )}
             </div>
           </div>
         </div>
