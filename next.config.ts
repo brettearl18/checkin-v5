@@ -61,15 +61,8 @@ const nextConfig: NextConfig = {
     ],
   },
   
-  // Rewrite manifest.json to /manifest route
-  async rewrites() {
-    return [
-      {
-        source: '/manifest.json',
-        destination: '/manifest',
-      },
-    ];
-  },
+  // Note: manifest.json is handled by the /manifest route
+  // We use middleware to redirect /manifest.json to /manifest in development
 };
 
 // Bundle analyzer wrapper (only runs when ANALYZE=true)

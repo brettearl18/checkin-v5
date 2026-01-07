@@ -13,6 +13,11 @@ import { checkRateLimit, getClientIdentifier, RateLimitConfig } from './lib/rate
  */
 
 export function middleware(request: NextRequest) {
+  // Handle manifest.json redirect in development
+  if (request.nextUrl.pathname === '/manifest.json') {
+    return NextResponse.redirect(new URL('/manifest', request.url));
+  }
+  
   const { pathname } = request.nextUrl;
 
   // Skip rate limiting in development mode
