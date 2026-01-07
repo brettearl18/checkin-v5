@@ -58,6 +58,16 @@ const nextConfig: NextConfig = {
       'node_modules/@esbuild/linux-x64',
     ],
   },
+  
+  // Rewrite manifest.json to /manifest route
+  async rewrites() {
+    return [
+      {
+        source: '/manifest.json',
+        destination: '/manifest',
+      },
+    ];
+  },
 };
 
 // Bundle analyzer wrapper (only runs when ANALYZE=true)
