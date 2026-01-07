@@ -27,7 +27,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   // Wrap entire function in try-catch to prevent any unhandled errors
   // This ensures we NEVER return a 500 error - always return 200 with error details
   try {
-    logInfo('[Notifications API] GET request started');
+    try {
+      logInfo('[Notifications API] GET request started');
+    } catch (logError) {
+      // Ignore logging errors
+    }
     
     let searchParams;
     let userId;
@@ -37,12 +41,20 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     try {
       const url = new URL(request.url);
       searchParams = url.searchParams;
-      logInfo('[Notifications API] Parsed search params');
+      try {
+        logInfo('[Notifications API] Parsed search params');
+      } catch (logError) {
+        // Ignore logging errors
+      }
       userId = searchParams.get('userId');
       limit = parseInt(searchParams.get('limit') || '50');
       unreadOnly = searchParams.get('unreadOnly') === 'true';
     } catch (urlError: any) {
-      logSafeError('[Notifications API] Error parsing URL', urlError);
+      try {
+        logSafeError('[Notifications API] Error parsing URL', urlError);
+      } catch (logError) {
+        // Ignore logging errors
+      }
       return NextResponse.json({
         success: false,
         message: 'Invalid request URL',
@@ -54,7 +66,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
 
     if (!userId) {
-      logInfo('[Notifications API] No userId provided');
+      try {
+        logInfo('[Notifications API] No userId provided');
+      } catch (logError) {
+        // Ignore logging errors
+      }
       return NextResponse.json({
         success: false,
         message: 'User ID is required',
@@ -64,14 +80,27 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       }, { status: 200 });
     }
 
-    logInfo('[Notifications API] Fetching notifications');
+    try {
+      logInfo('[Notifications API] Fetching notifications');
+    } catch (logError) {
+      // Ignore logging errors
+    }
+    
     let db;
     try {
       db = getDb();
-      logInfo('[Notifications API] Database initialized');
+      try {
+        logInfo('[Notifications API] Database initialized');
+      } catch (logError) {
+        // Ignore logging errors
+      }
       // Validate db is properly initialized
       if (!db || typeof db.collection !== 'function') {
-        logSafeError('Database instance is invalid', { type: typeof db });
+        try {
+          logSafeError('Database instance is invalid', { type: typeof db });
+        } catch (logError) {
+          // Ignore logging errors
+        }
         // Return 200 instead of throwing to prevent 500
         return NextResponse.json({
           success: false,
@@ -82,7 +111,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         }, { status: 200 });
       }
     } catch (dbError: any) {
-      logSafeError('Error getting database instance', dbError);
+      try {
+        logSafeError('Error getting database instance', dbError);
+      } catch (logError) {
+        // Ignore logging errors
+      }
       return NextResponse.json({
         success: false,
         message: 'Database connection failed',
@@ -358,7 +391,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
 
   } catch (error: any) {
-    logSafeError('Error fetching notifications', error);
+    // Catch all errors including any that might occur in logging
+    try {
+      logSafeError('Error fetching notifications', error);
+    } catch (logError) {
+      // Ignore logging errors - we still need to return a response
+    }
     
     // Return 200 with error details instead of 500, since we're handling it gracefully
     // This ensures the UI doesn't break even if notifications fail to load
@@ -373,7 +411,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         { 
           success: false, 
           message: 'Failed to fetch notifications', 
-          error: errorMessage,
+          error: String(errorMessage).substring(0, 100), // Limit error message length
           notifications: [],
           unreadCount: 0,
           totalCount: 0
@@ -383,7 +421,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     } catch (jsonError: any) {
       // If even JSON serialization fails, return a plain text error with 200 status
       // to prevent the client from seeing a 500
-      logSafeError('Critical: Failed to serialize error response', jsonError);
+      try {
+        logSafeError('Critical: Failed to serialize error response', jsonError);
+      } catch (logError) {
+        // Ignore logging errors
+      }
+      
       try {
         return new NextResponse(
           JSON.stringify({ 
