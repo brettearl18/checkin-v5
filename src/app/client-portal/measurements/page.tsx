@@ -1,13 +1,54 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
+import dynamic from 'next/dynamic';
 import { useAuth } from '@/contexts/AuthContext';
 import { RoleProtected } from '@/components/ProtectedRoute';
 import ClientNavigation from '@/components/ClientNavigation';
 import Link from 'next/link';
 import { compressImage, shouldCompressImage } from '@/lib/image-compression';
 import BodyMeasurementsVisualization from '@/components/BodyMeasurementsVisualization';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+
+// Lazy load recharts components to reduce initial bundle size
+const ResponsiveContainer = dynamic(
+  () => import('recharts').then((mod) => mod.ResponsiveContainer),
+  { ssr: false, loading: () => <div className="h-64 w-full flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-300"></div></div> }
+);
+
+const LineChart = dynamic(
+  () => import('recharts').then((mod) => mod.LineChart),
+  { ssr: false }
+);
+
+const Line = dynamic(
+  () => import('recharts').then((mod) => mod.Line),
+  { ssr: false }
+);
+
+const XAxis = dynamic(
+  () => import('recharts').then((mod) => mod.XAxis),
+  { ssr: false }
+);
+
+const YAxis = dynamic(
+  () => import('recharts').then((mod) => mod.YAxis),
+  { ssr: false }
+);
+
+const CartesianGrid = dynamic(
+  () => import('recharts').then((mod) => mod.CartesianGrid),
+  { ssr: false }
+);
+
+const Tooltip = dynamic(
+  () => import('recharts').then((mod) => mod.Tooltip),
+  { ssr: false }
+);
+
+const Legend = dynamic(
+  () => import('recharts').then((mod) => mod.Legend),
+  { ssr: false }
+);
 
 interface MeasurementEntry {
   id: string;
