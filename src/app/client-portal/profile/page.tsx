@@ -14,6 +14,12 @@ export default function ClientProfilePage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
+  const [accountInfo, setAccountInfo] = useState<{
+    createdAt?: Date;
+    updatedAt?: Date;
+    coachName?: string;
+    coachId?: string;
+  }>({});
   const [formData, setFormData] = useState({
     firstName: userProfile?.firstName || '',
     lastName: userProfile?.lastName || '',
@@ -37,6 +43,8 @@ export default function ClientProfilePage() {
           const data = await response.json();
           if (data.success && data.client) {
             const client = data.client;
+            
+            // Set form data
             setFormData({
               firstName: client.firstName || '',
               lastName: client.lastName || '',
@@ -48,6 +56,38 @@ export default function ClientProfilePage() {
               healthGoals: client.profile?.healthGoals || [],
               emailNotifications: client.emailNotifications ?? true // Default to true if not set
             });
+
+            // Set account information
+            const createdAt = client.createdAt 
+              ? (client.createdAt.toDate ? client.createdAt.toDate() : new Date(client.createdAt))
+              : undefined;
+            const updatedAt = client.updatedAt 
+              ? (client.updatedAt.toDate ? client.updatedAt.toDate() : new Date(client.updatedAt))
+              : undefined;
+
+            setAccountInfo({
+              createdAt,
+              updatedAt,
+              coachId: client.coachId
+            });
+
+            // Fetch coach name if coachId exists
+            if (client.coachId) {
+              try {
+                const coachResponse = await fetch(`/api/coaches/${client.coachId}`);
+                if (coachResponse.ok) {
+                  const coachData = await coachResponse.json();
+                  if (coachData.success && coachData.coach) {
+                    const coachName = coachData.coach.firstName && coachData.coach.lastName
+                      ? `${coachData.coach.firstName} ${coachData.coach.lastName}`
+                      : coachData.coach.email || 'Coach';
+                    setAccountInfo(prev => ({ ...prev, coachName }));
+                  }
+                }
+              } catch (error) {
+                console.error('Error fetching coach data:', error);
+              }
+            }
           }
         }
       } catch (error) {
@@ -348,13 +388,25 @@ export default function ClientProfilePage() {
               <div>
                 <p className="text-sm text-gray-500">Account Created</p>
                 <p className="font-medium text-gray-900">
-                  {userProfile?.createdAt?.toDate?.()?.toLocaleDateString() || 'Unknown'}
+                  {accountInfo.createdAt 
+                    ? accountInfo.createdAt.toLocaleDateString('en-US', { 
+                        year: 'numeric', 
+                        month: 'long', 
+                        day: 'numeric' 
+                      })
+                    : 'Unknown'}
                 </p>
               </div>
               <div>
                 <p className="text-sm text-gray-500">Last Updated</p>
                 <p className="font-medium text-gray-900">
-                  {userProfile?.updatedAt?.toDate?.()?.toLocaleDateString() || 'Unknown'}
+                  {accountInfo.updatedAt 
+                    ? accountInfo.updatedAt.toLocaleDateString('en-US', { 
+                        year: 'numeric', 
+                        month: 'long', 
+                        day: 'numeric' 
+                      })
+                    : 'Unknown'}
                 </p>
               </div>
               <div>
@@ -366,7 +418,7 @@ export default function ClientProfilePage() {
               <div>
                 <p className="text-sm text-gray-500">Assigned Coach</p>
                 <p className="font-medium text-gray-900">
-                  {userProfile?.assignedCoach ? 'Coach Assigned' : 'No Coach Assigned'}
+                  {accountInfo.coachName || (accountInfo.coachId ? 'Coach Assigned' : 'No Coach Assigned')}
                 </p>
               </div>
             </div>
