@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
@@ -113,8 +113,34 @@ const coachNavItems: NavItem[] = [
 
 export default function CoachNavigation() {
   const [isOpen, setIsOpen] = useState(false);
+  const [unreadMessageCount, setUnreadMessageCount] = useState(0);
   const pathname = usePathname();
   const { userProfile, logout } = useAuth();
+
+  // Fetch unread message count
+  useEffect(() => {
+    const fetchUnreadCount = async () => {
+      if (!userProfile?.uid) return;
+      
+      try {
+        const response = await fetch(`/api/messages/conversations?coachId=${userProfile.uid}`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.conversations) {
+            const totalUnread = data.conversations.reduce((sum: number, conv: any) => sum + (conv.unreadCount || 0), 0);
+            setUnreadMessageCount(totalUnread);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching unread message count:', error);
+      }
+    };
+
+    fetchUnreadCount();
+    // Refresh every 30 seconds
+    const interval = setInterval(fetchUnreadCount, 30000);
+    return () => clearInterval(interval);
+  }, [userProfile?.uid]);
 
   const isActive = (href: string) => {
     if (href === '/dashboard') {
@@ -168,30 +194,42 @@ export default function CoachNavigation() {
         {/* Navigation Menu */}
         <nav className="px-4 py-6 flex-1">
           <div className="space-y-2">
-            {coachNavItems.map((item) => (
-              <Link
-                key={item.name}
-                href={item.href}
-                onClick={() => setIsOpen(false)}
-                className={`
-                  flex items-center space-x-3 px-4 py-3 rounded-2xl font-medium transition-all duration-200
-                  ${isActive(item.href)
-                    ? 'bg-[#fef9e7] text-gray-900 border-l-4'
-                    : 'text-gray-700 hover:bg-[#fef9e7] hover:text-[#daa450]'
-                  }
-                `}
-                style={isActive(item.href) ? { borderLeftColor: '#daa450' } : {}}
-              >
-                <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${
-                  isActive(item.href) ? 'bg-orange-100' : 'bg-gray-100'
-                }`}>
-                  <div className={isActive(item.href) ? 'text-orange-600' : 'text-gray-600'}>
-                    {item.icon}
+            {coachNavItems.map((item) => {
+              const isMessages = item.href === '/messages';
+              const showBadge = isMessages && unreadMessageCount > 0;
+              
+              return (
+                <Link
+                  key={item.name}
+                  href={item.href}
+                  onClick={() => setIsOpen(false)}
+                  className={`
+                    flex items-center justify-between px-4 py-3 rounded-2xl font-medium transition-all duration-200
+                    ${isActive(item.href)
+                      ? 'bg-[#fef9e7] text-gray-900 border-l-4'
+                      : 'text-gray-700 hover:bg-[#fef9e7] hover:text-[#daa450]'
+                    }
+                  `}
+                  style={isActive(item.href) ? { borderLeftColor: '#daa450' } : {}}
+                >
+                  <div className="flex items-center space-x-3 flex-1 min-w-0">
+                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                      isActive(item.href) ? 'bg-orange-100' : 'bg-gray-100'
+                    }`}>
+                      <div className={isActive(item.href) ? 'text-orange-600' : 'text-gray-600'}>
+                        {item.icon}
+                      </div>
+                    </div>
+                    <span className="truncate">{item.name}</span>
                   </div>
-                </div>
-                <span>{item.name}</span>
-              </Link>
-            ))}
+                  {showBadge && (
+                    <span className="ml-2 px-2 py-0.5 bg-red-500 text-white text-xs font-bold rounded-full flex-shrink-0 min-w-[20px] text-center">
+                      {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
+                    </span>
+                  )}
+                </Link>
+              );
+            })}
           </div>
 
           {/* Divider */}
