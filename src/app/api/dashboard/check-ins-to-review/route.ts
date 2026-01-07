@@ -213,7 +213,7 @@ export async function GET(request: NextRequest) {
       checkInsToReview = [];
     }
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       data: {
         checkIns: checkInsToReview,
@@ -222,6 +222,14 @@ export async function GET(request: NextRequest) {
         sortOrder
       }
     });
+    
+    // Add caching headers for better performance (30s cache, 60s stale-while-revalidate)
+    response.headers.set(
+      'Cache-Control',
+      'public, s-maxage=30, stale-while-revalidate=60'
+    );
+    
+    return response;
 
   } catch (error) {
     console.error('Error in check-ins to review API:', error);

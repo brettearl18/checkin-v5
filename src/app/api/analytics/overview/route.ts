@@ -103,10 +103,18 @@ export async function GET(request: NextRequest) {
 
     const analytics = await calculateAnalyticsOverview(coachId, timeRange);
     
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       data: analytics
     });
+    
+    // Add caching headers for better performance (60s cache, 120s stale-while-revalidate)
+    response.headers.set(
+      'Cache-Control',
+      'public, s-maxage=60, stale-while-revalidate=120'
+    );
+    
+    return response;
 
   } catch (error) {
     console.error('Error in analytics overview:', error);

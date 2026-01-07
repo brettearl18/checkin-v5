@@ -20,10 +20,18 @@ export async function GET(request: NextRequest) {
 
     const recentActivity = await fetchRecentActivity(coachId);
     
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       data: recentActivity
     });
+    
+    // Add caching headers for better performance (30s cache, 60s stale-while-revalidate)
+    response.headers.set(
+      'Cache-Control',
+      'public, s-maxage=30, stale-while-revalidate=60'
+    );
+    
+    return response;
 
   } catch (error) {
     console.error('Error fetching recent activity:', error);

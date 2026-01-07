@@ -13,7 +13,20 @@ const nextConfig: NextConfig = {
   // Image optimization
   images: {
     unoptimized: false,
-    domains: [],
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'firebasestorage.googleapis.com',
+      },
+      {
+        protocol: 'https',
+        hostname: '**.firebasestorage.app',
+      },
+      {
+        protocol: 'https',
+        hostname: 'storage.googleapis.com',
+      },
+    ],
   },
   
   // Allow build to proceed despite ESLint errors (for production deployment)
