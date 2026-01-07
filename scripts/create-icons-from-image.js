@@ -6,9 +6,9 @@
  * 2. Run: node scripts/create-icons-from-image.js
  * 
  * This will create:
- * - public/icon-192.png (192x192)
- * - public/icon-512.png (512x512)
- * - public/apple-touch-icon.png (180x180)
+ * - public/icon-192.png (192x192) - High quality with sharp resampling
+ * - public/icon-512.png (512x512) - High quality with sharp resampling
+ * - public/apple-touch-icon.png (180x180) - High quality for iOS
  * 
  * Note: This requires sharp package. Install with: npm install sharp --save-dev
  */
@@ -40,9 +40,11 @@ async function createIcons() {
     // Create 192x192 icon with safe zone padding for Android
     // For maskable icons, we need a safe zone (80% of the icon = 153x153)
     // But we'll fill 90% of the safe zone to make the figure larger = ~170x170
+    // Use lanczos3 kernel for sharper downscaling and high quality
     await sharp(sourceImage)
       .resize(170, 170, {
         fit: 'contain',
+        kernel: 'lanczos3',
         background: { r: 255, g: 255, b: 255, alpha: 0 }
       })
       .extend({
@@ -52,14 +54,20 @@ async function createIcons() {
         right: 11,
         background: { r: 255, g: 255, b: 255, alpha: 1 }
       })
+      .png({ 
+        quality: 100,
+        compressionLevel: 9,
+        adaptiveFiltering: true
+      })
       .toFile(path.join(publicDir, 'icon-192.png'));
-    console.log('✅ Created icon-192.png (with safe zone padding)');
+    console.log('✅ Created icon-192.png (high quality, with safe zone padding)');
 
     // Create 512x512 icon with safe zone padding for Android
     // Safe zone = 80% = 409x409, fill 90% = ~460x460
     await sharp(sourceImage)
       .resize(460, 460, {
         fit: 'contain',
+        kernel: 'lanczos3',
         background: { r: 255, g: 255, b: 255, alpha: 0 }
       })
       .extend({
@@ -69,13 +77,19 @@ async function createIcons() {
         right: 26,
         background: { r: 255, g: 255, b: 255, alpha: 1 }
       })
+      .png({ 
+        quality: 100,
+        compressionLevel: 9,
+        adaptiveFiltering: true
+      })
       .toFile(path.join(publicDir, 'icon-512.png'));
-    console.log('✅ Created icon-512.png (with safe zone padding)');
+    console.log('✅ Created icon-512.png (high quality, with safe zone padding)');
 
     // Create 180x180 Apple touch icon (iOS doesn't need safe zone, can use more space)
     await sharp(sourceImage)
       .resize(170, 170, {
         fit: 'contain',
+        kernel: 'lanczos3',
         background: { r: 255, g: 255, b: 255, alpha: 0 }
       })
       .extend({
@@ -85,8 +99,13 @@ async function createIcons() {
         right: 5,
         background: { r: 255, g: 255, b: 255, alpha: 1 }
       })
+      .png({ 
+        quality: 100,
+        compressionLevel: 9,
+        adaptiveFiltering: true
+      })
       .toFile(path.join(publicDir, 'apple-touch-icon.png'));
-    console.log('✅ Created apple-touch-icon.png');
+    console.log('✅ Created apple-touch-icon.png (high quality)');
 
     console.log('\n🎉 All icons created successfully!');
     console.log('   Icons saved to: public/');
