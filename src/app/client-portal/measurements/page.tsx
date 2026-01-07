@@ -183,7 +183,12 @@ export default function MeasurementsPage() {
       const response = await fetch(`/api/client-measurements?clientId=${clientId}`);
       const data = await response.json();
       if (data.success) {
-        setMeasurementHistory(data.data || []);
+        const history = data.data || [];
+        console.log('Measurement history loaded:', history.length, 'entries');
+        console.log('First entry:', history[0]);
+        setMeasurementHistory(history);
+      } else {
+        console.error('Failed to fetch measurement history:', data);
       }
     } catch (error) {
       console.error('Error fetching measurement history:', error);
@@ -1077,7 +1082,12 @@ export default function MeasurementsPage() {
           )}
 
           {/* Body Measurements Visualization */}
-          {measurementHistory.length > 0 && measurementHistory[0] && (
+          {(() => {
+            console.log('Rendering check - measurementHistory.length:', measurementHistory.length);
+            console.log('First entry exists:', !!measurementHistory[0]);
+            console.log('isBaselineSetup:', isBaselineSetup);
+            return measurementHistory.length > 0 && measurementHistory[0];
+          })() && (
             <div className="mb-6 lg:mb-8">
               <BodyMeasurementsVisualization
                 measurementData={{
