@@ -227,6 +227,34 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     return () => clearInterval(interval);
   }, [userProfile?.uid, fetchNotifications, isMounted]);
 
+  // When app becomes visible (user returns), fetch notifications immediately
+  // This ensures users see all pending/missed notifications when they come back
+  useEffect(() => {
+    if (!userProfile?.uid || typeof window === 'undefined') return;
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && isMounted) {
+        // User returned to the app - check for new notifications immediately
+        fetchNotifications();
+      }
+    };
+
+    const handleFocus = () => {
+      if (isMounted) {
+        // App window focused - check for new notifications
+        fetchNotifications();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [userProfile?.uid, fetchNotifications, isMounted]);
+
   // Track mount status
   useEffect(() => {
     setIsMounted(true);

@@ -352,6 +352,125 @@ export function getCredentialsEmailTemplate(
 }
 
 /**
+ * Email template for self-registration welcome (when client signs up themselves)
+ */
+export function getSelfRegistrationWelcomeEmailTemplate(
+  clientName: string,
+  email: string,
+  loginUrl: string,
+  coachName?: string
+): { subject: string; html: string } {
+  const subject = 'Welcome to Vana Health Check-In!';
+  
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <style>
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+          line-height: 1.6;
+          color: #333;
+          max-width: 600px;
+          margin: 0 auto;
+          padding: 20px;
+        }
+        .container {
+          background-color: #ffffff;
+          border-radius: 8px;
+          padding: 30px;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .brand-header {
+          background: linear-gradient(135deg, #ea580c 0%, #f97316 100%);
+          color: white;
+          padding: 20px 30px;
+          text-align: center;
+          font-size: 24px;
+          font-weight: 700;
+          letter-spacing: 0.5px;
+          margin-bottom: 0;
+          border-radius: 8px 8px 0 0;
+        }
+        .header {
+          background: linear-gradient(135deg, #ea580c 0%, #f97316 100%);
+          color: white;
+          padding: 30px;
+          border-radius: 8px 8px 0 0;
+          text-align: center;
+          margin: -30px -30px 30px -30px;
+        }
+        .button {
+          display: inline-block;
+          background-color: #ea580c;
+          color: white;
+          padding: 12px 30px;
+          text-decoration: none;
+          border-radius: 6px;
+          margin: 20px 0;
+          font-weight: 600;
+        }
+        .button:hover {
+          background-color: #c2410c;
+        }
+        .info-box {
+          background-color: #f9fafb;
+          border-left: 4px solid #ea580c;
+          padding: 15px;
+          margin: 20px 0;
+          border-radius: 4px;
+        }
+        .footer {
+          margin-top: 30px;
+          padding-top: 20px;
+          border-top: 1px solid #e5e7eb;
+          font-size: 12px;
+          color: #6b7280;
+          text-align: center;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="brand-header">
+          Vana Health Check-In
+        </div>
+        <div class="header">
+          <h1>Welcome to Your Wellness Journey!</h1>
+        </div>
+        <p>Hi ${clientName},</p>
+        <p>Thank you for creating your account with Vana Health Check-In! We're excited to help you track your progress and achieve your health and wellness goals.</p>
+        ${coachName ? `<p>Your account has been linked to your coach, ${coachName}, who will be able to support you throughout your journey.</p>` : '<p>You can now start using the platform to track your health and wellness progress.</p>'}
+        <div class="info-box">
+          <p><strong>Next Steps:</strong></p>
+          <ul>
+            <li>Complete your onboarding questionnaire</li>
+            <li>Set up your profile</li>
+            <li>Take your baseline photos and measurements</li>
+            <li>Start your first check-in when assigned by your coach</li>
+          </ul>
+        </div>
+        <div style="text-align: center;">
+          <a href="${loginUrl}" class="button">Log In to Your Account</a>
+        </div>
+        <p>Or copy and paste this link into your browser:</p>
+        <p style="color: #6b7280; word-break: break-all;">${loginUrl}</p>
+        <p>If you have any questions, please don't hesitate to reach out${coachName ? ` to ${coachName}` : ''}.</p>
+        <p>Best regards,<br>The Vana Health Team</p>
+        <div class="footer">
+          <p>This email was sent to ${email}. If you didn't create this account, please contact us immediately.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return { subject, html };
+}
+
+/**
  * Email template for check-in assignment notification
  */
 export function getCheckInAssignmentEmailTemplate(
@@ -515,5 +634,96 @@ async function logEmailToAudit(logData: {
     // Silently fail - we don't want to break email sending if logging fails
     console.error('Failed to log email to audit log:', error);
   }
+}
+
+/**
+ * Email template for check-in reminder (manual push)
+ */
+export function getCheckInReminderEmailTemplate(
+  clientName: string,
+  coachName: string,
+  loginUrl: string
+): { subject: string; html: string } {
+  const subject = `Check-in Reminder from ${coachName}`;
+  
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <style>
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+          line-height: 1.6;
+          color: #333;
+          max-width: 600px;
+          margin: 0 auto;
+          padding: 20px;
+        }
+        .container {
+          background-color: #ffffff;
+          border-radius: 8px;
+          padding: 30px;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .brand-header {
+          background: linear-gradient(135deg, #ea580c 0%, #f97316 100%);
+          color: white;
+          padding: 20px 30px;
+          text-align: center;
+          font-size: 24px;
+          font-weight: 700;
+          letter-spacing: 0.5px;
+          margin-bottom: 0;
+          border-radius: 8px 8px 0 0;
+        }
+        .info-box {
+          background-color: #fef9e7;
+          border-left: 4px solid #ea580c;
+          padding: 15px;
+          margin: 20px 0;
+          border-radius: 4px;
+        }
+        .button {
+          display: inline-block;
+          background-color: #ea580c;
+          color: white;
+          padding: 12px 30px;
+          text-decoration: none;
+          border-radius: 6px;
+          margin: 20px 0;
+          font-weight: 600;
+        }
+        .button:hover {
+          background-color: #c2410c;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="brand-header">Vana Health Check-In</div>
+        <p>Hi ${clientName},</p>
+        <p>This is a friendly reminder to complete your check-in. Your coach, ${coachName}, is waiting to review your progress.</p>
+        <div class="info-box">
+          <p><strong>Don't forget:</strong></p>
+          <ul>
+            <li>Complete your check-in to track your progress</li>
+            <li>Your coach will review and provide feedback</li>
+            <li>Stay on track with your wellness goals</li>
+          </ul>
+        </div>
+        <div style="text-align: center;">
+          <a href="${loginUrl}" class="button">Complete Check-in</a>
+        </div>
+        <p>Or copy and paste this link into your browser:</p>
+        <p style="color: #6b7280; word-break: break-all;">${loginUrl}</p>
+        <p>Best regards,<br>${coachName}</p>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return { subject, html };
 }
 

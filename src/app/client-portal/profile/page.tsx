@@ -7,6 +7,7 @@ import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase-client';
 import Link from 'next/link';
 import ClientNavigation from '@/components/ClientNavigation';
+import PushNotificationPreferences from '@/components/PushNotificationPreferences';
 
 export default function ClientProfilePage() {
   const { userProfile, user } = useAuth();
@@ -312,6 +313,9 @@ export default function ClientProfilePage() {
                   </label>
                 </div>
               </div>
+
+              {/* Push Notifications */}
+              <PushNotificationPreferences />
 
               {/* Message */}
               {message && (

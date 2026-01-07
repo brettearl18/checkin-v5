@@ -1,6 +1,6 @@
 // Firebase client SDK - browser-only initialization
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { getAuth, setPersistence, browserLocalPersistence } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
 // NOTE: These values come from your Firebase Web App config
@@ -39,7 +39,18 @@ function createFirebaseApp() {
 }
 
 export const app = createFirebaseApp();
-export const auth = app ? getAuth(app) : null;
+
+// Initialize auth with LOCAL persistence (stays logged in even after browser closes)
+let authInstance = null;
+if (app && typeof window !== 'undefined') {
+  authInstance = getAuth(app);
+  // Set persistence to LOCAL - users stay logged in until they manually log out
+  setPersistence(authInstance, browserLocalPersistence).catch((error) => {
+    console.error('Error setting auth persistence:', error);
+  });
+}
+
+export const auth = authInstance;
 export const db = app ? getFirestore(app) : null;
 
 export default app;

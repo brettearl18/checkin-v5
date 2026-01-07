@@ -288,7 +288,7 @@ export async function POST(request: NextRequest) {
       }, { status: 500 });
     }
 
-    const { email, password, firstName, lastName, role, coachId: providedCoachId } = await request.json();
+    const { email, password, firstName, lastName, role, coachCode, coachId: providedCoachId } = await request.json();
 
     // Validate required fields
     if (!email || !password || !firstName || !lastName || !role) {
@@ -315,9 +315,45 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // If registering as a client, validate coach ID if provided
-    let coachId = providedCoachId || null;
-    if (role === 'client' && coachId) {
+    // If registering as a client, coach code is REQUIRED
+    let coachId: string | null = null;
+    if (role === 'client') {
+      // For clients, require coach code (not optional)
+      if (!coachCode || coachCode.trim().length === 0) {
+        return NextResponse.json({
+          success: false,
+          message: 'Coach code is required for client registration'
+        }, { status: 400 });
+      }
+
+      // Look up coach by shortUID (coach code)
+      try {
+        const coachCodeUpper = coachCode.trim().toUpperCase();
+        const coachesSnapshot = await db.collection('coaches')
+          .where('shortUID', '==', coachCodeUpper)
+          .where('status', '==', 'active') // Only allow active coaches
+          .limit(1)
+          .get();
+
+        if (coachesSnapshot.empty) {
+          return NextResponse.json({
+            success: false,
+            message: 'Invalid coach code. Please check the code and try again, or contact your coach.'
+          }, { status: 404 });
+        }
+
+        const coachDoc = coachesSnapshot.docs[0];
+        coachId = coachDoc.id;
+      } catch (error) {
+        console.error('Error validating coach code:', error);
+        return NextResponse.json({
+          success: false,
+          message: 'Failed to validate coach code. Please try again.'
+        }, { status: 500 });
+      }
+    } else if (role !== 'client' && providedCoachId) {
+      // For non-client roles, use providedCoachId if given (backward compatibility)
+      coachId = providedCoachId;
       try {
         const coachDoc = await db.collection('coaches').doc(coachId).get();
         if (!coachDoc.exists) {
@@ -496,6 +532,51 @@ export async function POST(request: NextRequest) {
             console.error('Error auto-creating measurement schedule:', allocationError);
             // Don't fail registration if allocation fails - log it and continue
           }
+        }
+
+        // Send welcome email to self-registered client
+        try {
+          const { sendEmail, getSelfRegistrationWelcomeEmailTemplate } = await import('@/lib/email-service');
+          const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://checkinv5.web.app';
+          const loginUrl = `${baseUrl}/login`;
+          
+          // Get coach name if coachId is provided
+          let coachName: string | undefined;
+          if (coachId) {
+            try {
+              const coachDoc = await db.collection('coaches').doc(coachId).get();
+              if (coachDoc.exists) {
+                const coachData = coachDoc.data();
+                coachName = coachData ? `${coachData.firstName || ''} ${coachData.lastName || ''}`.trim() : undefined;
+              }
+            } catch (coachError) {
+              console.error('Error fetching coach name for welcome email:', coachError);
+              // Continue without coach name
+            }
+          }
+
+          const { subject, html } = getSelfRegistrationWelcomeEmailTemplate(
+            `${firstName} ${lastName}`,
+            email,
+            loginUrl,
+            coachName
+          );
+
+          await sendEmail({
+            to: email,
+            subject,
+            html,
+            emailType: 'self-registration-welcome',
+            metadata: {
+              clientId: userRecord.uid,
+              clientName: `${firstName} ${lastName}`,
+              clientEmail: email,
+              coachId: coachId || null,
+            },
+          });
+        } catch (emailError) {
+          logSafeError('Error sending welcome email to self-registered client', emailError);
+          // Don't fail registration if email fails - log it and continue
         }
       } catch (error: any) {
         console.error('Error saving client record:', error);

@@ -173,6 +173,14 @@ class NotificationService {
       
       console.log(`📧 Notification created: ${notificationData.type} for user ${userId}`);
       
+      // Send push notification if user has subscription and preferences allow it
+      try {
+        await this.sendPushNotificationIfAllowed(userId, notificationData, notificationData.actionUrl);
+      } catch (pushError) {
+        // Don't fail notification creation if push fails
+        console.error('Error sending push notification:', pushError);
+      }
+      
       return {
         success: true,
         notificationId: docRef.id
@@ -184,6 +192,68 @@ class NotificationService {
         error: error instanceof Error ? error.message : 'Unknown error'
       };
     }
+  }
+
+  // Private method to send push notification if user preferences allow it
+  private async sendPushNotificationIfAllowed(
+    userId: string,
+    notificationData: Omit<NotificationData, 'userId'>,
+    actionUrl?: string
+  ) {
+    try {
+      // Get client preferences
+      const clientDoc = await this.db.collection('clients').doc(userId).get();
+      if (!clientDoc.exists) {
+        // Not a client, skip push notifications
+        return;
+      }
+
+      const clientData = clientDoc.data();
+      const pushPreferences = clientData?.pushNotificationPreferences || {};
+
+      // Check if push notifications are enabled for this notification type
+      const notificationType = notificationData.type;
+      const preferenceKey = this.getPreferenceKeyForNotificationType(notificationType);
+      
+      // Default to enabled if preference not set (opt-in by default)
+      const isEnabled = pushPreferences[preferenceKey] !== false;
+
+      if (!isEnabled) {
+        console.log(`Push notification skipped for ${userId}: ${preferenceKey} disabled`);
+        return;
+      }
+
+      // Import push notification service dynamically to avoid loading if not needed
+      const { sendPushNotification } = await import('./push-notification-service');
+      
+      await sendPushNotification(userId, {
+        title: notificationData.title,
+        body: notificationData.message,
+        url: actionUrl || notificationData.actionUrl || '/client-portal',
+        tag: notificationType,
+        icon: '/icon-192.png',
+        badge: '/icon-192.png'
+      });
+    } catch (error) {
+      // Silently fail - we don't want to break notification creation
+      console.error('Error in sendPushNotificationIfAllowed:', error);
+    }
+  }
+
+  // Map notification types to preference keys
+  private getPreferenceKeyForNotificationType(type: string): string {
+    const typeMap: Record<string, string> = {
+      'message_received': 'newMessageFromCoach',
+      'check_in_assigned': 'newCheckInOpen',
+      'check_in_due': 'newCheckInOpen',
+      'check_in_completed': 'checkInCompleted',
+      'coach_feedback': 'newCheckInReplyFromCoach',
+      'goal_achieved': 'goalAchieved',
+      'system_alert': 'systemAlerts',
+      'client_onboarding': 'systemAlerts'
+    };
+
+    return typeMap[type] || 'other';
   }
 
   // Helper method to format due date

@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { validatePassword, getPasswordRequirementsText } from '@/lib/password-validation';
@@ -14,10 +14,10 @@ interface RegistrationForm {
   firstName: string;
   lastName: string;
   role: 'client'; // Only clients can register - coaches are created by admin
-  coachId?: string;
+  coachCode: string; // Required coach code for client registration
 }
 
-interface Coach {
+interface CoachInfo {
   id: string;
   firstName: string;
   lastName: string;
@@ -32,34 +32,17 @@ export default function RegisterPage() {
     confirmPassword: '',
     firstName: '',
     lastName: '',
-    role: 'client' // Always client - coach option removed
+    role: 'client', // Always client - coach option removed
+    coachCode: '' // Required coach code for client registration
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [coaches, setCoaches] = useState<Coach[]>([]);
-  const [loadingCoaches, setLoadingCoaches] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-
-  // Fetch coaches on mount (role is always 'client' now)
-  useEffect(() => {
-    const fetchCoaches = async () => {
-      setLoadingCoaches(true);
-      try {
-        const response = await fetch('/api/coaches/list');
-        const data = await response.json();
-        if (data.success && data.coaches) {
-          setCoaches(data.coaches);
-        }
-      } catch (error) {
-        console.error('Failed to fetch coaches:', error);
-      } finally {
-        setLoadingCoaches(false);
-      }
-    };
-    fetchCoaches();
-  }, []);
+  const [validatingCoachCode, setValidatingCoachCode] = useState(false);
+  const [coachInfo, setCoachInfo] = useState<CoachInfo | null>(null);
+  const [coachCodeError, setCoachCodeError] = useState('');
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -67,6 +50,55 @@ export default function RegisterPage() {
       ...prev,
       [name]: value
     }));
+
+    // Clear validation state when coach code changes, but don't validate automatically
+    if (name === 'coachCode') {
+      setCoachCodeError('');
+      setCoachInfo(null);
+    }
+  };
+
+  const handleVerifyCoachCode = async () => {
+    const code = formData.coachCode.trim().toUpperCase();
+    if (!code) {
+      setCoachCodeError('Please enter a coach code');
+      return;
+    }
+    await validateCoachCode(code);
+  };
+
+  const validateCoachCode = async (code: string) => {
+    if (!code || code.length === 0) {
+      setCoachCodeError('Coach code is required');
+      return;
+    }
+
+    setValidatingCoachCode(true);
+    setCoachCodeError('');
+    
+    try {
+      const response = await fetch(`/api/coaches/lookup?shortUID=${encodeURIComponent(code)}`);
+      const data = await response.json();
+
+      if (data.success && data.coach) {
+        setCoachInfo({
+          id: data.coach.id,
+          firstName: data.coach.firstName,
+          lastName: data.coach.lastName,
+          email: data.coach.email
+        });
+        setCoachCodeError('');
+      } else {
+        setCoachInfo(null);
+        setCoachCodeError(data.message || 'Invalid coach code. Please check and try again.');
+      }
+    } catch (error) {
+      console.error('Failed to validate coach code:', error);
+      setCoachInfo(null);
+      setCoachCodeError('Failed to validate coach code. Please try again.');
+    } finally {
+      setValidatingCoachCode(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -74,6 +106,20 @@ export default function RegisterPage() {
     setLoading(true);
     setError('');
     setSuccess(''); // Clear any previous success messages
+
+    // Validate coach code is provided
+    if (!formData.coachCode || formData.coachCode.trim().length === 0) {
+      setError('Coach code is required');
+      setLoading(false);
+      return;
+    }
+
+    // Validate coach code exists
+    if (!coachInfo) {
+      setError('Please enter a valid coach code');
+      setLoading(false);
+      return;
+    }
 
     // Validate form
     if (formData.password !== formData.confirmPassword) {
@@ -214,33 +260,83 @@ export default function RegisterPage() {
               </div>
             </div>
 
-            {formData.role === 'client' && (
-              <div>
-                <label htmlFor="coachId" className="block text-sm font-semibold text-gray-900 mb-2">
-                  Select Your Coach (Optional)
-                </label>
-                <div className="mt-1">
-                  <select
-                    id="coachId"
-                    name="coachId"
-                    value={formData.coachId || ''}
+            {/* Coach Code Field - Required for client registration */}
+            <div>
+              <label htmlFor="coachCode" className="block text-sm font-semibold text-gray-900 mb-2">
+                Coach Code <span className="text-red-500">*</span>
+              </label>
+              <div className="mt-1 flex gap-2">
+                <div className="flex-1">
+                  <input
+                    id="coachCode"
+                    name="coachCode"
+                    type="text"
+                    required
+                    value={formData.coachCode}
                     onChange={handleInputChange}
-                    disabled={loadingCoaches}
-                    className="appearance-none block w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#daa450] focus:border-[#daa450] transition-all duration-200 sm:text-sm bg-white hover:border-gray-300 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  >
-                    <option value="">-- Select a coach --</option>
-                    {coaches.map((coach) => (
-                      <option key={coach.id} value={coach.id}>
-                        {coach.firstName} {coach.lastName} ({coach.email})
-                      </option>
-                    ))}
-                  </select>
+                    disabled={validatingCoachCode}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleVerifyCoachCode();
+                      }
+                    }}
+                    className="appearance-none block w-full px-4 py-3 border-2 rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#daa450] transition-all duration-200 sm:text-sm bg-white hover:border-gray-300 disabled:bg-gray-100 disabled:cursor-not-allowed uppercase font-mono tracking-wider ${
+                      coachCodeError ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 
+                      coachInfo ? 'border-green-300 focus:border-green-500' : 
+                      'border-gray-200 focus:border-[#daa450]'
+                    }"
+                    placeholder="Enter your coach's code"
+                  />
                 </div>
-                <p className="mt-2 text-xs text-gray-500">
-                  {loadingCoaches ? 'Loading coaches...' : 'Select your coach to link your account (optional)'}
-                </p>
+                <button
+                  type="button"
+                  onClick={handleVerifyCoachCode}
+                  disabled={validatingCoachCode || !formData.coachCode.trim()}
+                  className="px-6 py-3 bg-[#daa450] hover:bg-[#c89440] text-white font-semibold rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-[#daa450] whitespace-nowrap"
+                >
+                  {validatingCoachCode ? (
+                    <div className="flex items-center">
+                      <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Verifying...
+                    </div>
+                  ) : (
+                    'Verify'
+                  )}
+                </button>
               </div>
-            )}
+              {validatingCoachCode && (
+                <p className="mt-2 text-xs text-gray-500 flex items-center">
+                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Validating coach code...
+                </p>
+              )}
+              {coachCodeError && (
+                <p className="mt-2 text-xs text-red-600 flex items-center">
+                  <svg className="h-4 w-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
+                  {coachCodeError}
+                </p>
+              )}
+              {coachInfo && !coachCodeError && (
+                <p className="mt-2 text-xs text-green-600 flex items-center">
+                  <svg className="h-4 w-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                  Coach found: {coachInfo.firstName} {coachInfo.lastName}
+                </p>
+              )}
+              <p className="mt-2 text-xs text-gray-500">
+                Ask your coach for their code to create your account
+              </p>
+            </div>
 
             {/* Password Field */}
             <div>

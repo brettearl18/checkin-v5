@@ -8,7 +8,8 @@ import {
   signOut,
   onAuthStateChanged,
   sendPasswordResetEmail,
-  updateProfile
+  updateProfile,
+  onIdTokenChanged
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, serverTimestamp, collection, query, where, limit, getDocs } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase-client';
@@ -278,6 +279,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           );
           
           await Promise.race([fetchUserProfile(user.uid), timeoutPromise]);
+          
+          // User is now logged in - this will trigger notification fetch
+          // via the NotificationContext useEffect that watches userProfile.uid
         } catch (error: any) {
           console.error('Error or timeout fetching user profile:', error);
           // Continue even if profile fetch fails - set loading to false
@@ -290,6 +294,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
     });
 
+    // Listen for token refresh - automatically refresh tokens before they expire
+    // This ensures users stay logged in and push notifications continue working
+    let tokenRefreshInterval: NodeJS.Timeout | null = null;
+    
+    const unsubscribeToken = onIdTokenChanged(auth, async (user) => {
+      if (user) {
+        // Clear any existing interval
+        if (tokenRefreshInterval) {
+          clearInterval(tokenRefreshInterval);
+        }
+
+        // Force token refresh every 50 minutes (tokens expire after 1 hour)
+        // This ensures the token is always fresh and users stay logged in
+        const refreshToken = async () => {
+          try {
+            await user.getIdToken(true); // Force refresh
+          } catch (error) {
+            console.error('Error refreshing token:', error);
+          }
+        };
+
+        // Refresh immediately and then every 50 minutes
+        refreshToken();
+        tokenRefreshInterval = setInterval(refreshToken, 50 * 60 * 1000); // 50 minutes
+      } else {
+        // Clear interval when user logs out
+        if (tokenRefreshInterval) {
+          clearInterval(tokenRefreshInterval);
+          tokenRefreshInterval = null;
+        }
+      }
+    });
+
     // Safety timeout - if auth state change doesn't fire within 5 seconds, stop loading
     const safetyTimeout = setTimeout(() => {
       setLoading(false);
@@ -297,6 +334,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       unsubscribe();
+      unsubscribeToken();
+      if (tokenRefreshInterval) {
+        clearInterval(tokenRefreshInterval);
+      }
       clearTimeout(safetyTimeout);
     };
   }, []);
