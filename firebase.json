@@ -8,6 +8,10 @@
     ],
     "rewrites": [
       {
+        "source": "/manifest.json",
+        "destination": "/manifest"
+      },
+      {
         "source": "**",
         "run": {
           "serviceId": "checkin-v5-api",
