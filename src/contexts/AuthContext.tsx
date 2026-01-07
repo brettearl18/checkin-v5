@@ -297,6 +297,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Listen for token refresh - automatically refresh tokens before they expire
     // This ensures users stay logged in and push notifications continue working
     let tokenRefreshInterval: NodeJS.Timeout | null = null;
+    let consecutiveFailures = 0;
+    const MAX_CONSECUTIVE_FAILURES = 3;
     
     const unsubscribeToken = onIdTokenChanged(auth, async (user) => {
       if (user) {
@@ -310,20 +312,55 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const refreshToken = async () => {
           try {
             await user.getIdToken(true); // Force refresh
-          } catch (error) {
+            consecutiveFailures = 0; // Reset on success
+          } catch (error: any) {
+            consecutiveFailures++;
             console.error('Error refreshing token:', error);
+            
+            // Check if it's a blocked API error
+            if (error?.code === 'auth/requests-to-this-api-securetoken.googleapis.com-method-google.identity.securetoken.v1.securetoken.granttoken-are-blocked' ||
+                error?.message?.includes('are-blocked')) {
+              console.warn('Firebase Auth API appears to be blocked. Check Firebase Console settings:');
+              console.warn('1. Go to Firebase Console → Project Settings → General');
+              console.warn('2. Check "Authorized domains" includes your domain');
+              console.warn('3. Check "API restrictions" in Google Cloud Console');
+              
+              // Disable automatic refresh if API is blocked
+              if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+                console.warn('Disabling automatic token refresh due to persistent API blocking');
+                if (tokenRefreshInterval) {
+                  clearInterval(tokenRefreshInterval);
+                  tokenRefreshInterval = null;
+                }
+                return;
+              }
+            }
+            
+            // For other errors, use exponential backoff
+            if (consecutiveFailures < MAX_CONSECUTIVE_FAILURES) {
+              // Wait longer between retries (exponential backoff)
+              const backoffDelay = Math.min(1000 * Math.pow(2, consecutiveFailures), 30000); // Max 30 seconds
+              setTimeout(() => {
+                if (user === auth.currentUser) { // Only retry if still logged in
+                  refreshToken();
+                }
+              }, backoffDelay);
+            }
           }
         };
 
-        // Refresh immediately and then every 50 minutes
-        refreshToken();
-        tokenRefreshInterval = setInterval(refreshToken, 50 * 60 * 1000); // 50 minutes
+        // Only refresh immediately if we haven't had too many failures
+        if (consecutiveFailures < MAX_CONSECUTIVE_FAILURES) {
+          refreshToken();
+          tokenRefreshInterval = setInterval(refreshToken, 50 * 60 * 1000); // 50 minutes
+        }
       } else {
         // Clear interval when user logs out
         if (tokenRefreshInterval) {
           clearInterval(tokenRefreshInterval);
           tokenRefreshInterval = null;
         }
+        consecutiveFailures = 0; // Reset on logout
       }
     });
 
