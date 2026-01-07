@@ -109,7 +109,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { coachId, clientId, content, type = 'text' } = await request.json();
+    const { coachId, clientId, content, type = 'text', responseId, checkInContext } = await request.json();
 
     if (!coachId || !clientId || !content) {
       return NextResponse.json({
