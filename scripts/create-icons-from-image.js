@@ -41,7 +41,9 @@ async function createIcons() {
     // For maskable icons, we need a safe zone (80% of the icon = 153x153)
     // But we'll fill 90% of the safe zone to make the figure larger = ~170x170
     // Use lanczos3 kernel for sharper downscaling and high quality
+    // Apply sharpening to improve clarity
     await sharp(sourceImage)
+      .sharpen({ sigma: 1.5, m1: 1.0, m2: 2.0, x1: 2.0, y2: 10.0, y3: 20.0 })
       .resize(170, 170, {
         fit: 'contain',
         kernel: 'lanczos3',
@@ -64,7 +66,9 @@ async function createIcons() {
 
     // Create 512x512 icon with safe zone padding for Android
     // Safe zone = 80% = 409x409, fill 90% = ~460x460
+    // Apply sharpening to improve clarity
     await sharp(sourceImage)
+      .sharpen({ sigma: 1.5, m1: 1.0, m2: 2.0, x1: 2.0, y2: 10.0, y3: 20.0 })
       .resize(460, 460, {
         fit: 'contain',
         kernel: 'lanczos3',
@@ -86,7 +90,9 @@ async function createIcons() {
     console.log('✅ Created icon-512.png (high quality, with safe zone padding)');
 
     // Create 180x180 Apple touch icon (iOS doesn't need safe zone, can use more space)
+    // Apply sharpening to improve clarity
     await sharp(sourceImage)
+      .sharpen({ sigma: 1.5, m1: 1.0, m2: 2.0, x1: 2.0, y2: 10.0, y3: 20.0 })
       .resize(170, 170, {
         fit: 'contain',
         kernel: 'lanczos3',
