@@ -56,4 +56,13 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// Bundle analyzer wrapper (only runs when ANALYZE=true)
+let config = nextConfig;
+if (process.env.ANALYZE === 'true') {
+  const withBundleAnalyzer = require('@next/bundle-analyzer')({
+    enabled: true,
+  });
+  config = withBundleAnalyzer(nextConfig);
+}
+
+export default config;

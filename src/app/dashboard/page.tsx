@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useNotifications } from '@/contexts/NotificationContext';
 import { RoleProtected } from '@/components/ProtectedRoute';
 import Link from 'next/link';
+import Image from 'next/image';
 import CoachNavigation from '@/components/CoachNavigation';
 import NotificationBell from '@/components/NotificationBell';
 import AggregateMeasurementsPanel from '@/components/AggregateMeasurementsPanel';
@@ -1541,10 +1542,14 @@ export default function DashboardPage() {
                           <div key={photo.id} className="group relative">
                             <div className="aspect-square bg-gradient-to-br from-gray-100 to-gray-200 rounded-2xl overflow-hidden border border-gray-200 hover:border-orange-300 transition-all duration-200 hover:shadow-sm">
                               {/* Actual Photo Thumbnail */}
-                              <img
+                              <Image
                                 src={photo.photoUrl}
                                 alt={`${photo.clientName} - ${photo.photoType}`}
+                                width={200}
+                                height={200}
                                 className="w-full h-full object-cover"
+                                loading="lazy"
+                                unoptimized={photo.photoUrl?.includes('firebase') ? false : undefined}
                                 onError={(e) => {
                                   // Fallback to placeholder if image fails to load
                                   const target = e.target as HTMLImageElement;

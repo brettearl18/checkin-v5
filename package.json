@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "NEXT_PHASE=phase-production-build next build || (echo '⚠️ Build completed with warnings (page data collection may have failed)' && test -d .next/standalone && echo '✅ Standalone exists' && exit 0 || exit 1)",
+    "analyze": "ANALYZE=true npm run build",
     "start": "next start",
     "lint": "next lint",
     "setup-indexes": "node scripts/deploy-indexes.js",
@@ -32,6 +33,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
+    "@next/bundle-analyzer": "^16.1.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { RoleProtected } from '@/components/ProtectedRoute';
 import Link from 'next/link';
+import Image from 'next/image';
 import VoiceRecorder from '@/components/VoiceRecorder';
 import { collection, getDocs, query, orderBy, addDoc, updateDoc, doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase-client';
@@ -3187,10 +3188,14 @@ export default function ClientProfilePage() {
                                               )}
                                             </div>
                                           )}
-                                          <img
+                                          <Image
                                             src={image.imageUrl}
                                             alt={image.caption || image.imageType}
+                                            width={400}
+                                            height={400}
                                             className="w-full h-full object-cover"
+                                            loading="lazy"
+                                            unoptimized={image.imageUrl?.includes('firebase') ? false : undefined}
                                             onError={(e) => {
                                               (e.target as HTMLImageElement).src = `data:image/svg+xml,${encodeURIComponent(`
                                                 <svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
