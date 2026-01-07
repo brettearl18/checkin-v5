@@ -76,13 +76,14 @@ export default function ClientProfilePage() {
               try {
                 const coachResponse = await fetch(`/api/coaches/${client.coachId}`);
                 if (coachResponse.ok) {
-                  const coachData = await coachResponse.json();
-                  if (coachData.success && coachData.coach) {
-                    const coachName = coachData.coach.profile?.firstName && coachData.coach.profile?.lastName
-                      ? `${coachData.coach.profile.firstName} ${coachData.coach.profile.lastName}`
-                      : coachData.coach.firstName && coachData.coach.lastName
-                      ? `${coachData.coach.firstName} ${coachData.coach.lastName}`
-                      : coachData.coach.email || 'Coach';
+                  const coachResponseData = await coachResponse.json();
+                  if (coachResponseData.success && coachResponseData.data) {
+                    const coach = coachResponseData.data;
+                    const coachName = coach.profile?.firstName && coach.profile?.lastName
+                      ? `${coach.profile.firstName} ${coach.profile.lastName}`
+                      : coach.firstName && coach.lastName
+                      ? `${coach.firstName} ${coach.lastName}`
+                      : coach.email || 'Coach';
                     setAccountInfo(prev => ({ ...prev, coachName }));
                   }
                 }
