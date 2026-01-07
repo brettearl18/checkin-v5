@@ -7,8 +7,27 @@ import { NotificationProvider } from '@/contexts/NotificationContext'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'CheckinV5 - Health & Wellness Coaching Platform',
-  description: 'A comprehensive platform for health and wellness coaching with check-ins, progress tracking, and client management.',
+  title: 'Vana Check-In',
+  description: 'Health & Wellness Coaching Platform',
+  manifest: '/manifest.json',
+  icons: {
+    icon: [
+      { url: '/favicon.ico', sizes: 'any' },
+      { url: '/favicon-16x16.png', sizes: '16x16', type: 'image/png' },
+      { url: '/favicon-32x32.png', sizes: '32x32', type: 'image/png' },
+      { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icon-512.png', sizes: '512x512', type: 'image/png' },
+    ],
+    apple: [
+      { url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
+    ],
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'Vana Check-In',
+  },
+  themeColor: '#ea580c',
 }
 
 export default function RootLayout({
