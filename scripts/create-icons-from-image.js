@@ -39,21 +39,21 @@ async function createIcons() {
 
     // Create 192x192 icon with safe zone padding for Android
     // For maskable icons, we need a safe zone (80% of the icon = 153x153)
-    // But we'll fill 90% of the safe zone to make the figure larger = ~170x170
+    // Fill 95% to make logo/text as large as possible = ~182x182
     // Use lanczos3 kernel for sharper downscaling and high quality
-    // Apply sharpening to improve clarity
+    // Apply sharpening to improve clarity, especially for text
     await sharp(sourceImage)
-      .sharpen({ sigma: 1.5, m1: 1.0, m2: 2.0, x1: 2.0, y2: 10.0, y3: 20.0 })
-      .resize(170, 170, {
+      .sharpen({ sigma: 2.0, m1: 1.5, m2: 3.0, x1: 2.0, y2: 10.0, y3: 20.0 })
+      .resize(182, 182, {
         fit: 'contain',
         kernel: 'lanczos3',
         background: { r: 255, g: 255, b: 255, alpha: 0 }
       })
       .extend({
-        top: 11,
-        bottom: 11,
-        left: 11,
-        right: 11,
+        top: 5,
+        bottom: 5,
+        left: 5,
+        right: 5,
         background: { r: 255, g: 255, b: 255, alpha: 1 }
       })
       .png({ 
@@ -65,20 +65,20 @@ async function createIcons() {
     console.log('✅ Created icon-192.png (high quality, with safe zone padding)');
 
     // Create 512x512 icon with safe zone padding for Android
-    // Safe zone = 80% = 409x409, fill 90% = ~460x460
-    // Apply sharpening to improve clarity
+    // Safe zone = 80% = 409x409, fill 95% = ~486x486 for maximum size
+    // Apply stronger sharpening for text clarity
     await sharp(sourceImage)
-      .sharpen({ sigma: 1.5, m1: 1.0, m2: 2.0, x1: 2.0, y2: 10.0, y3: 20.0 })
-      .resize(460, 460, {
+      .sharpen({ sigma: 2.0, m1: 1.5, m2: 3.0, x1: 2.0, y2: 10.0, y3: 20.0 })
+      .resize(486, 486, {
         fit: 'contain',
         kernel: 'lanczos3',
         background: { r: 255, g: 255, b: 255, alpha: 0 }
       })
       .extend({
-        top: 26,
-        bottom: 26,
-        left: 26,
-        right: 26,
+        top: 13,
+        bottom: 13,
+        left: 13,
+        right: 13,
         background: { r: 255, g: 255, b: 255, alpha: 1 }
       })
       .png({ 
