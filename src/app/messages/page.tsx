@@ -355,95 +355,83 @@ export default function CoachMessagesPage() {
           <CoachNavigation />
         </div>
 
-        {/* Mobile Header - Fixed at top when chat is open */}
-        {selectedClientId && (
-          <div className="lg:hidden sticky top-0 z-20 bg-white border-b border-gray-200">
+        {/* Mobile Header */}
+        <div className="lg:hidden sticky top-0 z-20 bg-white border-b border-gray-200">
+          {selectedClientId ? (
             <div className="px-4 py-3 flex items-center justify-between">
               <button
                 onClick={() => setShowClientList(true)}
-                className="flex items-center gap-3 flex-1 min-w-0"
+                className="flex items-center gap-2 flex-1 min-w-0"
               >
                 <svg className="w-5 h-5 text-gray-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                 </svg>
-                <div className="flex items-center gap-2 flex-1 min-w-0">
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center flex-shrink-0">
-                    <span className="text-white font-semibold text-xs">
-                      {selectedClient?.firstName?.charAt(0)}{selectedClient?.lastName?.charAt(0)}
-                    </span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h1 className="text-base font-semibold text-gray-900 truncate">
-                      {selectedClient?.firstName} {selectedClient?.lastName}
-                    </h1>
-                    <p className="text-xs text-gray-500 truncate">{selectedClient?.email}</p>
-                  </div>
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center flex-shrink-0">
+                  <span className="text-white font-semibold text-xs">
+                    {selectedClient?.firstName?.charAt(0)}{selectedClient?.lastName?.charAt(0)}
+                  </span>
+                </div>
+                <div className="flex-1 min-w-0 ml-2 text-left">
+                  <h1 className="text-base font-semibold text-gray-900 truncate">
+                    {selectedClient?.firstName} {selectedClient?.lastName}
+                  </h1>
                 </div>
               </button>
-              {totalUnreadCount > 0 && (
-                <div className="ml-2 px-2 py-1 bg-red-100 text-red-800 rounded-full text-xs font-medium flex-shrink-0">
-                  {totalUnreadCount}
-                </div>
-              )}
             </div>
-          </div>
-        )}
-
-        {/* Mobile Header - When no chat selected */}
-        {!selectedClientId && (
-          <div className="lg:hidden sticky top-0 z-20 bg-white border-b border-gray-200">
+          ) : (
             <div className="px-4 py-3 flex items-center justify-between">
-              <h1 className="text-xl font-bold text-gray-900">Messages</h1>
+              <h1 className="text-lg font-semibold text-gray-900">Messages</h1>
               {totalUnreadCount > 0 && (
-                <div className="px-3 py-1 bg-red-100 text-red-800 rounded-full text-xs font-medium">
+                <span className="px-2 py-1 bg-red-500 text-white rounded-full text-xs font-medium">
                   {totalUnreadCount}
-                </div>
+                </span>
               )}
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
         {/* Main Content Area */}
-        <div className="flex-1 flex flex-col lg:ml-4 lg:mr-8 lg:mt-6 lg:mb-6 lg:max-w-7xl lg:mx-auto">
-          <div className="flex-1 flex flex-col lg:grid lg:grid-cols-[350px_1fr] gap-4 lg:h-[calc(100vh-180px)]">
-            {/* Client List - Mobile: Full screen overlay, Desktop: Sidebar */}
-            <div className={`${
-              showClientList || !selectedClientId 
-                ? 'flex flex-col' 
-                : 'hidden'
-            } lg:flex lg:flex-col bg-white lg:rounded-lg lg:shadow-sm lg:border lg:border-gray-200 overflow-hidden`}>
-              {/* Client List Header with Search */}
-              <div className="px-3 py-3 border-b border-gray-200 bg-white">
-                <div className="mb-3">
-                  <h2 className="text-sm font-semibold text-gray-900 mb-1">Messages</h2>
-                  {totalUnreadCount > 0 && (
-                    <p className="text-xs text-gray-500">{totalUnreadCount} unread</p>
-                  )}
-                </div>
-                {/* Search Input */}
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder="Search clients..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full px-3 py-2 pl-9 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                  <svg className="absolute left-2.5 top-2.5 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                  </svg>
-                  {searchQuery && (
-                    <button
-                      onClick={() => setSearchQuery('')}
-                      className="absolute right-2.5 top-2.5 text-gray-400 hover:text-gray-600"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  )}
-                </div>
+        <div className="flex-1 flex flex-col lg:flex-row lg:h-[calc(100vh-80px)]">
+          {/* Client List - Mobile: Full screen overlay, Desktop: Sidebar */}
+          <div className={`${
+            showClientList || !selectedClientId 
+              ? 'flex flex-col' 
+              : 'hidden'
+          } lg:flex lg:flex-col w-full lg:w-80 bg-white lg:border-r lg:border-gray-200 flex-shrink-0`}>
+            {/* Client List Header with Search */}
+            <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-base font-semibold text-gray-900">Messages</h2>
+                {totalUnreadCount > 0 && (
+                  <span className="px-2 py-0.5 bg-red-500 text-white text-xs font-medium rounded-full">
+                    {totalUnreadCount}
+                  </span>
+                )}
               </div>
+              {/* Search Input */}
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Search clients..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full px-3 py-2 pl-9 pr-9 text-sm bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+                <svg className="absolute left-2.5 top-2.5 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2.5 top-2.5 text-gray-400 hover:text-gray-600"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+            </div>
               
               {/* Client List - Scrollable */}
               <div className="flex-1 overflow-y-auto">
@@ -473,12 +461,13 @@ export default function CoachMessagesPage() {
                     )}
                   </div>
                 ) : (
-                  <div className="divide-y divide-gray-100">
+                  <div>
                     {filteredClients.map((client) => {
                       const conversation = conversations.find(c => c.clientId === client.id);
                       const unreadCount = conversation?.unreadCount || 0;
                       const lastMessage = conversation?.lastMessage || 'No messages yet';
                       const lastMessageTime = conversation?.lastMessageTime || '';
+                      const isSelected = selectedClientId === client.id;
                       
                       return (
                         <button
@@ -487,35 +476,43 @@ export default function CoachMessagesPage() {
                             setSelectedClientId(client.id);
                             setSearchQuery(''); // Clear search when selecting
                           }}
-                          className={`w-full p-2.5 text-left hover:bg-gray-50 transition-colors ${
-                            selectedClientId === client.id ? 'bg-blue-50 border-r-2 border-blue-500' : ''
+                          className={`w-full px-3 py-2.5 text-left hover:bg-gray-50 transition-colors border-b border-gray-100 ${
+                            isSelected ? 'bg-blue-50' : ''
                           }`}
                         >
-                          <div className="flex items-center gap-2.5">
+                          <div className="flex items-center gap-3">
                             <div className="relative flex-shrink-0">
-                              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
-                                <span className="text-white font-medium text-xs">
+                              <div className={`w-11 h-11 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center ${
+                                isSelected ? 'ring-2 ring-blue-500' : ''
+                              }`}>
+                                <span className="text-white font-medium text-sm">
                                   {client.firstName?.charAt(0)}{client.lastName?.charAt(0)}
                                 </span>
                               </div>
                               {unreadCount > 0 && (
-                                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-medium">
+                                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-bold">
                                   {unreadCount > 9 ? '9+' : unreadCount}
                                 </span>
                               )}
                             </div>
                             <div className="flex-1 min-w-0">
-                              <div className="flex items-center justify-between mb-0.5">
-                                <h3 className="font-medium text-gray-900 text-sm truncate">
+                              <div className="flex items-center justify-between mb-1">
+                                <h3 className={`font-semibold text-sm truncate ${
+                                  isSelected ? 'text-blue-900' : 'text-gray-900'
+                                }`}>
                                   {client.firstName} {client.lastName}
                                 </h3>
                                 {lastMessageTime && (
-                                  <p className="text-[10px] text-gray-400 ml-2 flex-shrink-0">
+                                  <p className="text-xs text-gray-400 ml-2 flex-shrink-0">
                                     {formatTime(lastMessageTime)}
                                   </p>
                                 )}
                               </div>
-                              <p className="text-xs text-gray-500 truncate">{lastMessage}</p>
+                              <p className={`text-xs truncate ${
+                                unreadCount > 0 ? 'text-gray-900 font-medium' : 'text-gray-500'
+                              }`}>
+                                {lastMessage}
+                              </p>
                             </div>
                           </div>
                         </button>
@@ -526,9 +523,9 @@ export default function CoachMessagesPage() {
               </div>
             </div>
 
-            {/* Chat Area - WhatsApp Style */}
+            {/* Chat Area */}
             {selectedClientId ? (
-              <div className="flex-1 flex flex-col bg-gray-50 lg:bg-white lg:rounded-lg lg:shadow-sm lg:border lg:border-gray-200 overflow-hidden">
+              <div className="flex-1 flex flex-col bg-white overflow-hidden">
                 {/* Check-in Context Banner - Show if there are messages with check-in context */}
                 {(() => {
                   const conversationMessages = messages.filter(
@@ -588,9 +585,9 @@ export default function CoachMessagesPage() {
 
                 {/* Chat Header - Desktop */}
                 <div className="hidden lg:flex bg-white border-b border-gray-200 px-4 py-3 items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
-                      <span className="text-white font-medium text-xs">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
+                      <span className="text-white font-medium text-sm">
                         {selectedClient?.firstName?.charAt(0)}{selectedClient?.lastName?.charAt(0)}
                       </span>
                     </div>
@@ -601,19 +598,10 @@ export default function CoachMessagesPage() {
                       <p className="text-xs text-gray-500">{selectedClient?.email}</p>
                     </div>
                   </div>
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
-                    selectedClient?.status === 'active' 
-                      ? 'bg-green-100 text-green-800' 
-                      : selectedClient?.status === 'pending'
-                      ? 'bg-yellow-100 text-yellow-800'
-                      : 'bg-gray-100 text-gray-800'
-                  }`}>
-                    {selectedClient?.status}
-                  </span>
                 </div>
 
                 {/* Messages List - Scrollable */}
-                <div className="flex-1 overflow-y-auto px-4 py-4 lg:px-6 lg:py-6" style={{ maxHeight: 'calc(100vh - 200px)' }}>
+                <div className="flex-1 overflow-y-auto px-4 py-4 bg-gray-50">
                   {messages.length === 0 ? (
                     <div className="text-center py-12">
                       <div className="text-5xl mb-4">💬</div>
@@ -641,10 +629,10 @@ export default function CoachMessagesPage() {
                             )}
                             
                             {/* Message Bubble */}
-                            <div className={`max-w-[85%] lg:max-w-md px-3 py-2 rounded-2xl ${
+                            <div className={`max-w-[75%] lg:max-w-md px-4 py-2.5 rounded-lg ${
                               isOwnMessage
-                                ? 'bg-[#dcf8c6] text-gray-900 rounded-br-sm'
-                                : 'bg-white text-gray-900 rounded-bl-sm shadow-sm'
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-white text-gray-900 shadow-sm border border-gray-200'
                             }`}>
                               {/* Sender name for received messages */}
                               {!isOwnMessage && (
@@ -659,23 +647,19 @@ export default function CoachMessagesPage() {
                               </p>
                               
                               {/* Timestamp */}
-                              <div className={`flex items-center justify-end gap-1 mt-1 ${
-                                isOwnMessage ? 'flex-row-reverse' : ''
+                              <div className={`flex items-center gap-1.5 mt-1.5 ${
+                                isOwnMessage ? 'justify-end' : 'justify-start'
                               }`}>
-                                <p className={`text-[10px] ${
-                                  isOwnMessage ? 'text-gray-500' : 'text-gray-400'
+                                <p className={`text-xs ${
+                                  isOwnMessage ? 'text-blue-100' : 'text-gray-400'
                                 }`}>
                                   {formatTime(message.timestamp)}
                                 </p>
                                 {/* Read receipt for sent messages */}
                                 {isOwnMessage && (
-                                  <svg className="w-3 h-3 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <svg className="w-3.5 h-3.5 text-blue-100" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                                   </svg>
-                                )}
-                                {/* Unread indicator for received messages */}
-                                {!message.isRead && !isOwnMessage && (
-                                  <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
                                 )}
                               </div>
                             </div>
@@ -696,40 +680,27 @@ export default function CoachMessagesPage() {
                 </div>
 
                 {/* Message Input - Fixed at bottom */}
-                <div className="bg-white border-t border-gray-200 px-4 py-3 lg:px-6 lg:py-4 sticky bottom-0 z-10">
-                  <form onSubmit={sendMessage} className="flex items-end gap-2 lg:gap-3">
-                    <div className="flex-1 bg-gray-100 rounded-full px-4 py-2.5 lg:px-5 lg:py-3 flex items-center">
+                <div className="bg-white border-t border-gray-200 px-4 py-3">
+                  <form onSubmit={sendMessage} className="flex items-center gap-2">
+                    <div className="flex-1 bg-gray-100 rounded-lg px-4 py-2.5 flex items-center">
                       <input
                         type="text"
                         value={newMessage}
                         onChange={(e) => setNewMessage(e.target.value)}
-                        placeholder="Type your message..."
-                        className="flex-1 bg-transparent text-sm lg:text-base focus:outline-none text-gray-900 placeholder-gray-500"
+                        placeholder="Type a message..."
+                        className="flex-1 bg-transparent text-sm focus:outline-none text-gray-900 placeholder-gray-500"
                         disabled={sending}
                       />
                     </div>
                     <button
                       type="submit"
                       disabled={!newMessage.trim() || sending}
-                      className="rounded-full p-3 lg:p-3.5 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center min-w-[48px] min-h-[48px]"
-                      style={{ 
-                        backgroundColor: !newMessage.trim() || sending ? '#9ca3af' : '#daa450'
-                      }}
-                      onMouseEnter={(e) => {
-                        if (newMessage.trim() && !sending) {
-                          e.currentTarget.style.backgroundColor = '#c89540';
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        if (newMessage.trim() && !sending) {
-                          e.currentTarget.style.backgroundColor = '#daa450';
-                        }
-                      }}
+                      className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-lg p-2.5 transition-colors flex items-center justify-center"
                     >
                       {sending ? (
                         <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
                       ) : (
-                        <svg className="w-5 h-5 lg:w-6 lg:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                         </svg>
                       )}
@@ -738,11 +709,11 @@ export default function CoachMessagesPage() {
                 </div>
               </div>
             ) : (
-              <div className="hidden lg:flex lg:col-span-2 items-center justify-center bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100">
+              <div className="hidden lg:flex flex-1 items-center justify-center bg-gray-50">
                 <div className="text-center">
-                  <div className="text-6xl mb-4">💬</div>
-                  <h3 className="text-xl font-semibold text-gray-900 mb-2">Select a Conversation</h3>
-                  <p className="text-gray-600">Choose a client from the list to start messaging</p>
+                  <div className="text-5xl mb-4">💬</div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Select a Conversation</h3>
+                  <p className="text-sm text-gray-500">Choose a client from the list to start messaging</p>
                 </div>
               </div>
             )}
