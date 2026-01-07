@@ -2,43 +2,84 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase-server';
 import { requireCoach } from '@/lib/auth-middleware';
 
-// GET - Fetch notices for a coach's clients
+// GET - Fetch notices for a coach's clients or for a specific client
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const coachId = searchParams.get('coachId');
     const clientId = searchParams.get('clientId'); // Optional: filter by specific client
 
-    if (!coachId) {
+    const db = getDb();
+    let notices: any[] = [];
+
+    // If clientId is provided, fetch notices for that specific client
+    if (clientId) {
+      // Get client's coach
+      const clientDoc = await db.collection('clients').doc(clientId).get();
+      if (!clientDoc.exists) {
+        return NextResponse.json({
+          success: false,
+          message: 'Client not found'
+        }, { status: 404 });
+      }
+
+      const clientData = clientDoc.data();
+      const clientCoachId = clientData?.coachId || clientData?.assignedCoach;
+
+      // Fetch notices assigned to this client OR public notices from their coach
+      const [assignedNotices, publicNotices] = await Promise.all([
+        db.collection('notices')
+          .where('clientId', '==', clientId)
+          .orderBy('createdAt', 'desc')
+          .get(),
+        clientCoachId ? db.collection('notices')
+          .where('coachId', '==', clientCoachId)
+          .where('isPublic', '==', true)
+          .orderBy('createdAt', 'desc')
+          .get() : Promise.resolve({ docs: [] })
+      ]);
+
+      // Combine and deduplicate notices
+      const noticeMap = new Map();
+      
+      [...assignedNotices.docs, ...publicNotices.docs].forEach(doc => {
+        const data = doc.data();
+        noticeMap.set(doc.id, {
+          id: doc.id,
+          ...data,
+          createdAt: data.createdAt?.toDate?.()?.toISOString() || data.createdAt,
+          updatedAt: data.updatedAt?.toDate?.()?.toISOString() || data.updatedAt
+        });
+      });
+
+      notices = Array.from(noticeMap.values()).sort((a, b) => {
+        const dateA = new Date(a.createdAt).getTime();
+        const dateB = new Date(b.createdAt).getTime();
+        return dateB - dateA; // Most recent first
+      });
+
+    } else if (coachId) {
+      // Fetch all notices for this coach (for coach dashboard)
+      const noticesSnapshot = await db.collection('notices')
+        .where('coachId', '==', coachId)
+        .orderBy('createdAt', 'desc')
+        .get();
+
+      notices = noticesSnapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          createdAt: data.createdAt?.toDate?.()?.toISOString() || data.createdAt,
+          updatedAt: data.updatedAt?.toDate?.()?.toISOString() || data.updatedAt
+        };
+      });
+    } else {
       return NextResponse.json({
         success: false,
-        message: 'Coach ID is required'
+        message: 'Either coachId or clientId is required'
       }, { status: 400 });
     }
-
-    const db = getDb();
-    let noticesQuery: any = db.collection('notices');
-
-    // If clientId is provided, filter by clientId, otherwise get all notices for coach's clients
-    if (clientId) {
-      noticesQuery = noticesQuery.where('clientId', '==', clientId);
-    } else {
-      noticesQuery = noticesQuery.where('coachId', '==', coachId);
-    }
-
-    const noticesSnapshot = await noticesQuery
-      .orderBy('createdAt', 'desc')
-      .get();
-
-    const notices = noticesSnapshot.docs.map(doc => {
-      const data = doc.data();
-      return {
-        id: doc.id,
-        ...data,
-        createdAt: data.createdAt?.toDate?.()?.toISOString() || data.createdAt,
-        updatedAt: data.updatedAt?.toDate?.()?.toISOString() || data.updatedAt
-      };
-    });
 
     return NextResponse.json({
       success: true,
