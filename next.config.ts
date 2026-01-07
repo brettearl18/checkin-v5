@@ -54,6 +54,15 @@ const nextConfig: NextConfig = {
       'node_modules/@esbuild/linux-x64',
     ],
   },
+  
+  // Ensure public files are included in standalone build
+  experimental: {
+    outputFileTracingIncludes: {
+      '/manifest.json': ['./public/manifest.json'],
+      '/sw.js': ['./public/sw.js'],
+      '/icon-*.png': ['./public/icon-*.png'],
+    },
+  },
 };
 
 // Bundle analyzer wrapper (only runs when ANALYZE=true)
