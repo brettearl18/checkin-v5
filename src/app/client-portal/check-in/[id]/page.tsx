@@ -472,13 +472,8 @@ export default function CheckInCompletionPage() {
     // regardless of window hours.
     const isFirstCheckIn = assignment.recurringWeek === 1;
     
-    // Allow submission if window is open, extension is granted, or it's the first check-in
-    if (!status.isOpen && !extensionGranted && !isFirstCheckIn) {
-      setError(`Check-in window is currently closed. ${status.message}`);
-      setSubmitting(false);
-      isSubmittingRef.current = false;
-      return;
-    }
+    // Allow submission even if window is closed - it will be reviewed during the next check-in period
+    // The notice already indicates this to the client
 
     try {
       // Validate that all REQUIRED questions are answered
@@ -1092,11 +1087,13 @@ export default function CheckInCompletionPage() {
                     <p className={`text-sm lg:text-base ${
                       windowStatus.isOpen ? 'text-green-700' : 'text-yellow-700'
                     }`}>
-                      {windowStatus.message}
+                      {windowStatus.isOpen 
+                        ? windowStatus.message 
+                        : windowStatus.message + ' Your check-in can still be updated and will be reviewed during the next check-in period.'}
                     </p>
                     {windowStatus.nextOpenTime && (
                       <p className="text-xs lg:text-sm mt-2 text-yellow-700 font-medium">
-                        Next available: {windowStatus.nextOpenTime.toLocaleString('en-US', {
+                        Next check-in window: {windowStatus.nextOpenTime.toLocaleString('en-US', {
                           weekday: 'short',
                           month: 'short',
                           day: 'numeric',

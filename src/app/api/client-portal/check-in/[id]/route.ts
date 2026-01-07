@@ -189,24 +189,9 @@ export async function POST(
     const windowStatus = isWithinCheckInWindow(checkInWindow);
     const isFirstCheckIn = assignmentData.recurringWeek === 1;
     
-    // Check for granted extension
-    let extensionGranted = false;
-    if (!windowStatus.isOpen && !isFirstCheckIn) {
-      const extensionsQuery = await db.collection('check_in_extensions')
-        .where('assignmentId', '==', assignmentId)
-        .where('status', '==', 'granted')
-        .limit(1)
-        .get();
-      
-      extensionGranted = !extensionsQuery.empty || assignmentData.extensionGranted === true;
-      
-      if (!extensionGranted) {
-        return NextResponse.json({
-          success: false,
-          message: `Check-in window is currently closed. ${windowStatus.message}. Please request an extension if needed.`
-        }, { status: 403 });
-      }
-    }
+    // Allow submissions even when window is closed - they will be reviewed during the next check-in period
+    // This allows clients to update and submit their check-ins regardless of window status
+    // The frontend notice already informs clients that their check-in may be reviewed next period
 
     // Save response to Firestore
     const docRef = await db.collection('formResponses').add(responseData);
