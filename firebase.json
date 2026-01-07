@@ -10,8 +10,8 @@
       {
         "source": "**",
         "run": {
-          "serviceId": "checkinv5",
-          "region": "australia-southeast2"
+          "serviceId": "checkin-v5-api",
+          "region": "us-central1"
         }
       }
     ],
