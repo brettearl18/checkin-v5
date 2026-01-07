@@ -85,7 +85,13 @@ async function addChangelogEntry() {
 - Better visual feedback throughout client portal
 - Consistent purple/green color scheme for feedback features
 - Improved button states and loading indicators
-- Enhanced mobile responsiveness`,
+- Enhanced mobile responsiveness
+
+**🔧 Technical Improvements:**
+- Fixed body measurements visualization display issue in production
+- Improved baseline setup flow logic
+- Enhanced error handling and console logging for debugging
+- Fixed Firebase Hosting service routing`,
     status: 'completed',
     impact: 'high',
     createdAt: Timestamp.now(),

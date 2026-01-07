@@ -49,6 +49,7 @@ interface RecentResponse {
   feedbackCount?: number;
   responseId?: string;
   formTitle?: string;
+  clientApproved?: boolean;
 }
 
 interface Coach {
@@ -442,7 +443,8 @@ export default function ClientPortalPage() {
               formTitle: r.formTitle || 'Check-in',
               hasFeedback: r.hasFeedback || false,
               feedbackCount: r.feedbackCount || 0,
-              responseId: r.id || r.responseId || ''
+              responseId: r.id || r.responseId || '',
+              clientApproved: r.clientApproved || false
             })));
           } else {
             console.log('Dashboard - No recent responses in summary or not an array');
@@ -913,7 +915,12 @@ export default function ClientPortalPage() {
 
             {/* Coach Feedback Available Banner - Show prominently when coach has provided feedback */}
             {(() => {
-              const feedbackAvailable = recentResponses.filter(r => r.hasFeedback && r.responseId);
+              // Only show feedback that hasn't been approved yet
+              const feedbackAvailable = recentResponses.filter(r => 
+                r.hasFeedback && 
+                r.responseId && 
+                !r.clientApproved // Hide if client has already approved
+              );
               if (feedbackAvailable.length === 0) return null;
 
               // Get the most recent feedback
@@ -1832,9 +1839,9 @@ export default function ClientPortalPage() {
                     </div>
                     <div className="p-4 sm:p-6 space-y-3">
                       {/* Coach Feedback Quick Link - Show if feedback is available */}
-                      {recentResponses.some(r => r.hasFeedback && r.responseId) && (() => {
+                      {recentResponses.some(r => r.hasFeedback && r.responseId && !r.clientApproved) && (() => {
                         const latestFeedback = recentResponses
-                          .filter(r => r.hasFeedback && r.responseId)
+                          .filter(r => r.hasFeedback && r.responseId && !r.clientApproved)
                           .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime())[0];
                         return (
                           <Link
@@ -1848,7 +1855,7 @@ export default function ClientPortalPage() {
                             </svg>
                             <span className="relative z-10">View Coach Feedback</span>
                             <span className="ml-2 relative z-10 bg-white bg-opacity-30 rounded-full px-2 py-0.5 text-xs font-bold">
-                              {recentResponses.filter(r => r.hasFeedback).length}
+                              {recentResponses.filter(r => r.hasFeedback && !r.clientApproved).length}
                             </span>
                           </Link>
                         );

@@ -338,7 +338,8 @@ export async function GET(request: NextRequest) {
               score: responseData.score || responseData.percentageScore || 0,
               submittedAt: responseData.submittedAt?.toDate?.()?.toISOString() || responseData.submittedAt || new Date().toISOString(),
               hasFeedback: hasFeedback,
-              feedbackCount: feedbackCount
+              feedbackCount: feedbackCount,
+              clientApproved: responseData.clientApproved || false
             };
           })
         );
@@ -399,7 +400,8 @@ export async function GET(request: NextRequest) {
                   score: responseData.score || responseData.percentageScore || 0,
                   submittedAt: responseData.submittedAt?.toDate?.()?.toISOString() || responseData.submittedAt || new Date().toISOString(),
                   hasFeedback: hasFeedback,
-                  feedbackCount: feedbackCount
+                  feedbackCount: feedbackCount,
+                  clientApproved: responseData.clientApproved || false
                 };
               })
             );
