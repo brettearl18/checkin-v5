@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface Notice {
   id: string;
@@ -21,6 +22,7 @@ interface NoticeBoardProps {
 }
 
 export default function NoticeBoard({ coachId, clientId, readOnly = false }: NoticeBoardProps) {
+  const { userProfile } = useAuth();
   const [notices, setNotices] = useState<Notice[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -32,6 +34,20 @@ export default function NoticeBoard({ coachId, clientId, readOnly = false }: Not
     linkUrl: '',
     linkText: ''
   });
+
+  // Helper function to get Firebase ID token
+  const getIdToken = async (): Promise<string | null> => {
+    if (typeof window === 'undefined' || !userProfile?.uid) return null;
+    try {
+      const { auth } = await import('@/lib/firebase-client');
+      if (auth?.currentUser) {
+        return await auth.currentUser.getIdToken();
+      }
+    } catch (authError) {
+      console.warn('Could not get auth token:', authError);
+    }
+    return null;
+  };
 
   useEffect(() => {
     if (coachId || clientId) {
@@ -63,14 +79,21 @@ export default function NoticeBoard({ coachId, clientId, readOnly = false }: Not
     if (!coachId) return;
 
     try {
+      const idToken = await getIdToken();
       const url = editingNotice ? `/api/notices/${editingNotice.id}` : '/api/notices';
       const method = editingNotice ? 'PUT' : 'POST';
 
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      };
+
+      if (idToken) {
+        headers['Authorization'] = `Bearer ${idToken}`;
+      }
+
       const response = await fetch(url, {
         method,
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({
           ...formData,
           clientIds: clientId ? [clientId] : [],
@@ -104,8 +127,16 @@ export default function NoticeBoard({ coachId, clientId, readOnly = false }: Not
     if (!confirm('Are you sure you want to delete this notice?')) return;
 
     try {
+      const idToken = await getIdToken();
+      const headers: HeadersInit = {};
+      
+      if (idToken) {
+        headers['Authorization'] = `Bearer ${idToken}`;
+      }
+
       const response = await fetch(`/api/notices/${noticeId}`, {
         method: 'DELETE',
+        headers,
       });
 
       const data = await response.json();
