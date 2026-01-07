@@ -40,6 +40,7 @@ export default function ClientGoalsPage() {
     description: '',
     category: 'general' as Goal['category'],
     targetValue: 0,
+    startingValue: 0,
     unit: '',
     deadline: ''
   });
@@ -148,9 +149,16 @@ export default function ClientGoalsPage() {
         return;
       }
 
+      // Set initial currentValue from startingValue if provided, otherwise 0
       const goalData = {
         clientId,
-        ...newGoal
+        title: newGoal.title,
+        description: newGoal.description,
+        category: newGoal.category,
+        targetValue: newGoal.targetValue,
+        currentValue: newGoal.startingValue || 0, // Use startingValue as currentValue
+        unit: newGoal.unit,
+        deadline: newGoal.deadline
       };
       
       console.log('Submitting goal:', goalData);
@@ -175,6 +183,7 @@ export default function ClientGoalsPage() {
           description: '',
           category: 'general',
           targetValue: 0,
+          startingValue: 0,
           unit: '',
           deadline: ''
         });
@@ -204,6 +213,7 @@ export default function ClientGoalsPage() {
       description: goal.description,
       category: goal.category,
       targetValue: goal.targetValue,
+      startingValue: goal.currentValue || 0,
       unit: goal.unit,
       deadline: deadlineDate
     });
@@ -357,6 +367,7 @@ export default function ClientGoalsPage() {
           description: '',
           category: 'general',
           targetValue: 0,
+          startingValue: 0,
           unit: '',
           deadline: ''
         });
@@ -702,43 +713,81 @@ export default function ClientGoalsPage() {
                     </select>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                    <p className="text-sm text-blue-800 font-medium mb-1">💡 How to set your goal:</p>
+                    <ul className="text-xs text-blue-700 list-disc list-inside space-y-1">
+                      <li><strong>For weight loss:</strong> Enter your goal weight (e.g., if you're 80kg and want to lose 10kg, enter 70kg as the target)</li>
+                      <li><strong>For weight gain/other goals:</strong> Enter the final value you want to reach (e.g., gain 5kg to reach 75kg)</li>
+                      <li><strong>Starting value</strong> is optional - you can update it later when tracking progress</li>
+                    </ul>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Starting Value <span className="text-gray-500 font-normal">(Optional - Your current measurement)</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={newGoal.startingValue > 0 ? newGoal.startingValue : ''}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setNewGoal({...newGoal, startingValue: value ? Number(value) : 0});
+                      }}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 mb-1"
+                      placeholder="e.g., 80 (your current weight/measurement)"
+                    />
+                    <p className="text-xs text-gray-500">
+                      For weight loss: Enter your current weight (e.g., 80kg). You can leave this blank and update it later.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 mt-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Target Value
+                        Target Value <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="number"
                         required
-                        min="1"
+                        min="0.01"
                         step="any"
                         value={newGoal.targetValue > 0 ? newGoal.targetValue : ''}
                         onChange={(e) => {
                           const value = e.target.value;
                           setNewGoal({...newGoal, targetValue: value ? Number(value) : 0});
                         }}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="Enter target value"
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 mb-1"
+                        placeholder="e.g., 70"
                       />
+                      <p className="text-xs text-gray-500">
+                        {newGoal.title.toLowerCase().includes('loss') || newGoal.title.toLowerCase().includes('lose')
+                          ? 'Your goal weight (e.g., 70kg). The system will track your progress toward this target.'
+                          : 'The final value you want to reach (e.g., 75kg, 100km, etc.)'}
+                      </p>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Unit
+                        Unit <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="text"
                         required
                         value={newGoal.unit}
                         onChange={(e) => setNewGoal({...newGoal, unit: e.target.value})}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="e.g., km, kg, days"
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 mb-1"
+                        placeholder="e.g., kg, km, days"
                       />
+                      <p className="text-xs text-gray-500">
+                        Measurement unit (kg, lbs, km, etc.)
+                      </p>
                     </div>
                   </div>
 
-                  <div>
+                  <div className="mt-4">
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Deadline
+                      Deadline <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="date"

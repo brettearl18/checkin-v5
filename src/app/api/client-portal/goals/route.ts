@@ -126,9 +126,9 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { clientId, title, description, category, targetValue, unit, deadline } = body;
+    const { clientId, title, description, category, targetValue, currentValue, startingValue, unit, deadline } = body;
 
-    console.log('Received goal data:', { clientId, title, targetValue, unit, deadline, category });
+    console.log('Received goal data:', { clientId, title, targetValue, currentValue, startingValue, unit, deadline, category });
 
     if (!clientId || !title || targetValue === undefined || targetValue === null || !unit || !deadline) {
       return NextResponse.json({
@@ -157,17 +157,24 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
+    // Use currentValue if provided, otherwise startingValue, otherwise default to 0
+    const initialCurrentValue = currentValue !== undefined ? Number(currentValue) : 
+                                 (startingValue !== undefined ? Number(startingValue) : 0);
+    
+    // Calculate initial progress based on currentValue and targetValue
+    const initialProgress = targetValue > 0 ? Math.min((initialCurrentValue / Number(targetValue)) * 100, 100) : 0;
+
     const goalData = {
       clientId,
       title,
       description: description || '',
       category: category || 'general',
       targetValue: Number(targetValue),
-      currentValue: 0,
+      currentValue: initialCurrentValue,
       unit,
       deadline: deadlineDate,
       status: 'active',
-      progress: 0,
+      progress: initialProgress,
       createdAt: new Date(),
       updatedAt: new Date()
     };
