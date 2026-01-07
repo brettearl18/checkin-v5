@@ -37,28 +37,52 @@ async function createIcons() {
 
     console.log('🖼️  Creating app icons from source image...\n');
 
-    // Create 192x192 icon
+    // Create 192x192 icon with safe zone padding for Android
+    // For maskable icons, we need a safe zone (80% of the icon = 153x153)
+    // But we'll fill 90% of the safe zone to make the figure larger = ~170x170
     await sharp(sourceImage)
-      .resize(192, 192, {
+      .resize(170, 170, {
         fit: 'contain',
+        background: { r: 255, g: 255, b: 255, alpha: 0 }
+      })
+      .extend({
+        top: 11,
+        bottom: 11,
+        left: 11,
+        right: 11,
         background: { r: 255, g: 255, b: 255, alpha: 1 }
       })
       .toFile(path.join(publicDir, 'icon-192.png'));
-    console.log('✅ Created icon-192.png');
+    console.log('✅ Created icon-192.png (with safe zone padding)');
 
-    // Create 512x512 icon
+    // Create 512x512 icon with safe zone padding for Android
+    // Safe zone = 80% = 409x409, fill 90% = ~460x460
     await sharp(sourceImage)
-      .resize(512, 512, {
+      .resize(460, 460, {
         fit: 'contain',
+        background: { r: 255, g: 255, b: 255, alpha: 0 }
+      })
+      .extend({
+        top: 26,
+        bottom: 26,
+        left: 26,
+        right: 26,
         background: { r: 255, g: 255, b: 255, alpha: 1 }
       })
       .toFile(path.join(publicDir, 'icon-512.png'));
-    console.log('✅ Created icon-512.png');
+    console.log('✅ Created icon-512.png (with safe zone padding)');
 
-    // Create 180x180 Apple touch icon
+    // Create 180x180 Apple touch icon (iOS doesn't need safe zone, can use more space)
     await sharp(sourceImage)
-      .resize(180, 180, {
+      .resize(170, 170, {
         fit: 'contain',
+        background: { r: 255, g: 255, b: 255, alpha: 0 }
+      })
+      .extend({
+        top: 5,
+        bottom: 5,
+        left: 5,
+        right: 5,
         background: { r: 255, g: 255, b: 255, alpha: 1 }
       })
       .toFile(path.join(publicDir, 'apple-touch-icon.png'));
