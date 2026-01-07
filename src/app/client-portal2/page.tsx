@@ -8,6 +8,7 @@ import ClientNavigation from '@/components/ClientNavigation';
 import Link from 'next/link';
 import NotificationBell from '@/components/NotificationBell';
 import QuickStatsBar from '@/components/client-portal/QuickStatsBar';
+import NoticeBoard from '@/components/NoticeBoard';
 
 // Lazy load recharts components to reduce initial bundle size
 const ResponsiveContainer = dynamic(
@@ -1370,6 +1371,13 @@ export default function ClientPortalPageV2() {
                     </Link>
                   </div>
                 </div>
+
+                {/* Section 5: Notice Board */}
+                {clientId && (
+                  <div className="bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 p-4 sm:p-6">
+                    <NoticeBoard clientId={clientId} readOnly={true} />
+                  </div>
+                )}
 
               </div>
 

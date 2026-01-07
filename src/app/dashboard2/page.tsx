@@ -6,6 +6,7 @@ import { RoleProtected } from '@/components/ProtectedRoute';
 import Link from 'next/link';
 import CoachNavigation from '@/components/CoachNavigation';
 import NotificationBell from '@/components/NotificationBell';
+import NoticeBoard from '@/components/NoticeBoard';
 
 interface DashboardStats {
   totalClients: number;
@@ -58,7 +59,7 @@ export default function Dashboard2Page() {
   const [trendData, setTrendData] = useState<TrendDataPoint[]>([]);
   const [checkInsPerWeek, setCheckInsPerWeek] = useState<number>(0);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'summary' | 'check-ins' | 'responses' | 'messages'>('summary');
+  const [activeTab, setActiveTab] = useState<'summary' | 'check-ins' | 'responses' | 'messages' | 'notices'>('summary');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'name' | 'lastCheckIn' | 'status'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
@@ -292,9 +293,19 @@ export default function Dashboard2Page() {
             </div>
           </div>
 
-          {/* Content */}
+              {/* Content */}
           <div className="flex-1 overflow-auto">
             <div className="p-6 space-y-6">
+              {/* Notice Board Tab */}
+              {activeTab === 'notices' && (
+                <div className="bg-white rounded-lg shadow-sm p-6">
+                  <NoticeBoard coachId={userProfile?.uid} />
+                </div>
+              )}
+
+              {/* Other Tabs Content */}
+              {activeTab !== 'notices' && (
+                <>
               {/* Business Analytics Charts */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Business Growth Chart */}
@@ -347,6 +358,16 @@ export default function Dashboard2Page() {
                         {tab.label}
                       </button>
                     ))}
+                    <button
+                      onClick={() => setActiveTab('notices')}
+                      className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                        activeTab === 'notices'
+                          ? 'border-blue-600 text-blue-600'
+                          : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
+                      }`}
+                    >
+                      Notice Board
+                    </button>
                   </nav>
                 </div>
 

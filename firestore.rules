@@ -340,6 +340,38 @@ service cloud.firestore {
     }
     
     // ============================================
+    // Notices Collection
+    // ============================================
+    match /notices/{noticeId} {
+      // Clients can read notices assigned to them (clientId) or public notices (isPublic = true)
+      // Coaches can read their own notices
+      // Admins can read all notices
+      allow read: if isAuthenticated() && (
+        (isClient() && (
+          resource.data.clientId == getUserId() ||
+          resource.data.clientId == null ||
+          (resource.data.isPublic == true && resource.data.coachId != null)
+        )) ||
+        (isCoach() && resource.data.coachId == getUserId()) ||
+        hasAdminRole()
+      );
+      
+      // Coaches can create notices for their clients or public notices
+      // Admins can create any notice
+      allow create: if isAuthenticated() && (
+        (isCoach() && request.resource.data.coachId == getUserId()) ||
+        hasAdminRole()
+      );
+      
+      // Coaches can update/delete their own notices
+      // Admins can update/delete any notice
+      allow update, delete: if isAuthenticated() && (
+        (isCoach() && resource.data.coachId == getUserId()) ||
+        hasAdminRole()
+      );
+    }
+    
+    // ============================================
     // Client Scoring Collection
     // ============================================
     match /clientScoring/{scoringId} {
