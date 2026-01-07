@@ -103,12 +103,13 @@ export const config = {
      * Match all request paths except for the ones starting with:
      * - _next/static (static files)
      * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - manifest.json (PWA manifest)
+     * - favicon.ico (favicon file) - NOTE: manifest.json is included so middleware can redirect it
      * - sw.js (service worker)
      * - public folder files (icons, etc.)
      */
-    '/((?!_next/static|_next/image|favicon.ico|manifest.json|sw.js|icon-.*\\.png|apple-touch-icon.*\\.png|favicon-.*\\.png|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|sw.js|icon-.*\\.png|apple-touch-icon.*\\.png|favicon-.*\\.png|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    // Also match manifest.json specifically so we can redirect it
+    '/manifest.json',
   ],
 };
 
