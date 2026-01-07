@@ -74,17 +74,17 @@ export default function ClientProfilePage() {
             // Fetch coach name if coachId exists
             if (client.coachId) {
               try {
-                // Fetch coach from Firestore directly
-                const { doc, getDoc } = await import('firebase/firestore');
-                const coachDoc = await getDoc(doc(db, 'users', client.coachId));
-                if (coachDoc.exists()) {
-                  const coachData = coachDoc.data();
-                  const coachName = coachData.profile?.firstName && coachData.profile?.lastName
-                    ? `${coachData.profile.firstName} ${coachData.profile.lastName}`
-                    : coachData.firstName && coachData.lastName
-                    ? `${coachData.firstName} ${coachData.lastName}`
-                    : coachData.email || 'Coach';
-                  setAccountInfo(prev => ({ ...prev, coachName }));
+                const coachResponse = await fetch(`/api/coaches/${client.coachId}`);
+                if (coachResponse.ok) {
+                  const coachData = await coachResponse.json();
+                  if (coachData.success && coachData.coach) {
+                    const coachName = coachData.coach.profile?.firstName && coachData.coach.profile?.lastName
+                      ? `${coachData.coach.profile.firstName} ${coachData.coach.profile.lastName}`
+                      : coachData.coach.firstName && coachData.coach.lastName
+                      ? `${coachData.coach.firstName} ${coachData.coach.lastName}`
+                      : coachData.coach.email || 'Coach';
+                    setAccountInfo(prev => ({ ...prev, coachName }));
+                  }
                 }
               } catch (error) {
                 console.error('Error fetching coach data:', error);
