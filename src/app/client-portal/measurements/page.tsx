@@ -184,14 +184,15 @@ export default function MeasurementsPage() {
       const data = await response.json();
       if (data.success) {
         const history = data.data || [];
-        console.log('Measurement history loaded:', history.length, 'entries');
-        console.log('First entry:', history[0]);
+        console.log('✅ Measurement history loaded:', history.length, 'entries');
+        console.log('✅ First entry:', history[0]);
+        console.log('✅ Will render visualization:', history.length > 0 && !!history[0]);
         setMeasurementHistory(history);
       } else {
-        console.error('Failed to fetch measurement history:', data);
+        console.error('❌ Failed to fetch measurement history:', data);
       }
     } catch (error) {
-      console.error('Error fetching measurement history:', error);
+      console.error('❌ Error fetching measurement history:', error);
     }
   };
 
@@ -962,6 +963,10 @@ export default function MeasurementsPage() {
   }
 
   // NORMAL MEASUREMENT TRACKING MODE
+  console.log('🔍 Rendering measurements page - isBaselineSetup:', isBaselineSetup);
+  console.log('🔍 measurementHistory.length:', measurementHistory.length);
+  console.log('🔍 Should render visualization:', measurementHistory.length > 0 && !!measurementHistory[0]);
+  
   return (
     <RoleProtected requiredRole="client">
       <div className="min-h-screen bg-white flex">
@@ -1082,12 +1087,7 @@ export default function MeasurementsPage() {
           )}
 
           {/* Body Measurements Visualization */}
-          {(() => {
-            console.log('Rendering check - measurementHistory.length:', measurementHistory.length);
-            console.log('First entry exists:', !!measurementHistory[0]);
-            console.log('isBaselineSetup:', isBaselineSetup);
-            return measurementHistory.length > 0 && measurementHistory[0];
-          })() && (
+          {measurementHistory.length > 0 && measurementHistory[0] && (
             <div className="mb-6 lg:mb-8">
               <BodyMeasurementsVisualization
                 measurementData={{
