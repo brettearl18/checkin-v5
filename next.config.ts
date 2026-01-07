@@ -44,10 +44,12 @@ const nextConfig: NextConfig = {
     serverActions: {
       bodySizeLimit: '2mb',
     },
-    outputFileTracingIncludes: {
-      '/manifest.json': ['./public/manifest.json'],
-      '/sw.js': ['./public/sw.js'],
-    },
+  },
+  
+  // Include public files in standalone build
+  outputFileTracingIncludes: {
+    '/manifest.json': ['./public/manifest.json'],
+    '/sw.js': ['./public/sw.js'],
   },
   
   // Skip static optimization for API routes
