@@ -523,8 +523,8 @@ export default function CoachMessagesPage() {
               </div>
             </div>
 
-            {/* Chat Area */}
-            {selectedClientId ? (
+          {/* Chat Area */}
+          {selectedClientId ? (
               <div className="flex-1 flex flex-col bg-white overflow-hidden">
                 {/* Check-in Context Banner - Show if there are messages with check-in context */}
                 {(() => {
@@ -724,7 +724,6 @@ export default function CoachMessagesPage() {
             <CoachNavigation />
           </div>
         </div>
-      </div>
     </RoleProtected>
   );
 }
