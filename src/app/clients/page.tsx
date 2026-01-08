@@ -62,6 +62,22 @@ export default function ClientsPage() {
   const [statusModal, setStatusModal] = useState<{ clientId: string; status: string; pausedUntil?: string } | null>(null);
   const [clientsWithMetrics, setClientsWithMetrics] = useState<Client[]>([]);
   const [deletingClient, setDeletingClient] = useState<string | null>(null);
+  
+  // Bulk selection state
+  const [selectedClients, setSelectedClients] = useState<Set<string>>(new Set());
+  const [bulkActionMenuOpen, setBulkActionMenuOpen] = useState(false);
+  const [bulkActionLoading, setBulkActionLoading] = useState(false);
+  
+  // Quick actions state
+  const [quickActionsClientId, setQuickActionsClientId] = useState<string | null>(null);
+  
+  // Export state
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  
+  // Filter presets state
+  const [filterPresets, setFilterPresets] = useState<Array<{ id: string; name: string; filter: any; sort: any }>>([]);
+  const [showPresetModal, setShowPresetModal] = useState(false);
+  const [presetName, setPresetName] = useState('');
 
   useEffect(() => {
     if (userProfile?.uid) {
@@ -210,6 +226,159 @@ export default function ClientsPage() {
              (client.email?.toLowerCase() || '').includes(searchLower);
     });
   }, [clientsWithMetrics, clients, searchTerm]);
+
+  // Bulk selection handlers
+  const toggleClientSelection = (clientId: string) => {
+    setSelectedClients(prev => {
+      const next = new Set(prev);
+      if (next.has(clientId)) {
+        next.delete(clientId);
+      } else {
+        next.add(clientId);
+      }
+      return next;
+    });
+  };
+  
+  const toggleSelectAll = () => {
+    if (selectedClients.size === filteredClients.length && filteredClients.length > 0) {
+      setSelectedClients(new Set());
+    } else {
+      setSelectedClients(new Set(filteredClients.map(c => c.id)));
+    }
+  };
+  
+  const clearSelection = () => {
+    setSelectedClients(new Set());
+    setBulkActionMenuOpen(false);
+  };
+  
+  // Bulk actions handlers
+  const handleBulkAction = async (action: 'email' | 'status' | 'archive') => {
+    if (selectedClients.size === 0) return;
+    const selectedIds = Array.from(selectedClients);
+    setBulkActionLoading(true);
+    try {
+      if (action === 'email') {
+        const subject = prompt('Enter email subject:');
+        if (!subject) { setBulkActionLoading(false); return; }
+        const message = prompt('Enter email message:');
+        if (!message) { setBulkActionLoading(false); return; }
+        const { getAuth } = await import('firebase/auth');
+        const auth = getAuth();
+        const token = await auth.currentUser?.getIdToken();
+        const response = await fetch('/api/emails/manual-push', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token || ''}` },
+          body: JSON.stringify({ clientIds: selectedIds, emailType: 'custom', subject, customContent: message })
+        });
+        const result = await response.json();
+        if (result.success) {
+          alert(`Successfully sent ${result.summary.successful} email(s)`);
+          clearSelection();
+        } else {
+          alert(`Error: ${result.message}`);
+        }
+      } else if (action === 'status') {
+        const newStatus = prompt('Enter new status (active/paused/completed/inactive/archived):');
+        if (!newStatus) { setBulkActionLoading(false); return; }
+        await Promise.all(selectedIds.map(id => fetch(`/api/clients/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: newStatus }) })));
+        alert(`Updated ${selectedIds.length} client(s)`);
+        clearSelection();
+        fetchClients();
+      } else if (action === 'archive') {
+        if (!confirm(`Archive ${selectedIds.length} client(s)?`)) { setBulkActionLoading(false); return; }
+        await Promise.all(selectedIds.map(id => fetch(`/api/clients/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'archived' }) })));
+        alert(`Archived ${selectedIds.length} client(s)`);
+        clearSelection();
+        fetchClients();
+      }
+    } catch (error) {
+      console.error('Bulk action error:', error);
+      alert('Error performing bulk action');
+    } finally {
+      setBulkActionLoading(false);
+      setBulkActionMenuOpen(false);
+    }
+  };
+  
+  // Export functionality
+  const handleExport = async (clientIds?: string[], format: 'csv' | 'pdf' | 'excel' = 'csv') => {
+    const clientsToExport = clientIds ? filteredClients.filter(c => clientIds.includes(c.id)) : filteredClients;
+    if (format === 'csv') {
+      const headers = ['Name', 'Email', 'Phone', 'Status', 'Progress Score', 'Completion Rate', 'Total Check-ins', 'Completed Check-ins', 'Weeks on Program', 'Last Check-in'];
+      const rows = clientsToExport.map(client => {
+        let weeksOnProgram = 0;
+        try {
+          const dateToUse = (client as any).joinDate || client.createdAt;
+          let startDate: Date;
+          if (typeof dateToUse === 'string') startDate = new Date(dateToUse);
+          else if (dateToUse?.toDate) startDate = dateToUse.toDate();
+          else startDate = new Date(dateToUse);
+          weeksOnProgram = Math.floor((Date.now() - startDate.getTime()) / (1000 * 60 * 60 * 24 * 7));
+        } catch { weeksOnProgram = 0; }
+        return [`${client.firstName} ${client.lastName}`, client.email || '', client.phone || '', client.status || '', client.progressScore?.toString() || '0', `${client.completionRate || 0}%`, client.totalCheckIns?.toString() || '0', client.completedCheckIns?.toString() || '0', weeksOnProgram.toString(), client.lastCheckIn || 'Never'];
+      });
+      const csvContent = [headers.join(','), ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))].join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `clients-export-${new Date().toISOString().split('T')[0]}.csv`;
+      link.click();
+      setExportMenuOpen(false);
+    } else {
+      alert(`${format.toUpperCase()} export coming soon!`);
+    }
+  };
+  
+  // Filter presets handlers
+  const saveFilterPreset = () => {
+    if (!presetName.trim()) { alert('Please enter a preset name'); return; }
+    const preset = { id: Date.now().toString(), name: presetName.trim(), filter: { status: statusFilter, search: searchTerm }, sort: { by: clientTableSortBy, order: clientTableSortOrder } };
+    const presets = [...filterPresets, preset];
+    setFilterPresets(presets);
+    localStorage.setItem('clientFilterPresets', JSON.stringify(presets));
+    setShowPresetModal(false);
+    setPresetName('');
+    alert('Filter preset saved!');
+  };
+  const loadFilterPreset = (preset: typeof filterPresets[0]) => {
+    setStatusFilter(preset.filter.status);
+    setSearchTerm(preset.filter.search);
+    setClientTableSortBy(preset.sort.by);
+    setClientTableSortOrder(preset.sort.order);
+  };
+  const deleteFilterPreset = (presetId: string) => {
+    const presets = filterPresets.filter(p => p.id !== presetId);
+    setFilterPresets(presets);
+    localStorage.setItem('clientFilterPresets', JSON.stringify(presets));
+  };
+
+  // Load presets from localStorage on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('clientFilterPresets');
+    if (saved) {
+      try {
+        setFilterPresets(JSON.parse(saved));
+      } catch (e) {
+        console.error('Error loading filter presets:', e);
+      }
+    }
+  }, []);
+
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.relative')) {
+        setBulkActionMenuOpen(false);
+        setExportMenuOpen(false);
+        setQuickActionsClientId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -548,35 +717,180 @@ export default function ClientsPage() {
                     <span className="text-xs sm:text-sm text-gray-600">
                       {filteredClients.length} {statusFilter === 'needsAttention' ? 'need attention' : statusFilter === 'archived' ? 'archived clients' : 'total clients'}
                     </span>
-                    <select
-                      value={`${clientTableSortBy}-${clientTableSortOrder}`}
-                      onChange={(e) => {
-                        const [sortBy, sortOrder] = e.target.value.split('-') as [string, 'asc' | 'desc'];
-                        setClientTableSortBy(sortBy);
-                        setClientTableSortOrder(sortOrder);
-                      }}
-                      className="px-3 py-2 border border-gray-200 rounded-2xl text-xs sm:text-sm focus:outline-none focus:ring-2 bg-white min-h-[44px]"
-                      style={{ focusRingColor: '#daa450' }}
-                    >
-                      <option value="name-asc">Name A-Z</option>
-                      <option value="name-desc">Name Z-A</option>
-                      <option value="weeks-asc">Weeks (Low to High)</option>
-                      <option value="weeks-desc">Weeks (High to Low)</option>
-                      <option value="score-asc">Score (Low to High)</option>
-                      <option value="score-desc">Score (High to Low)</option>
-                      <option value="status-asc">Status A-Z</option>
-                      <option value="status-desc">Status Z-A</option>
-                      <option value="lastCheckIn-desc">Last Check-in (Recent)</option>
-                      <option value="lastCheckIn-asc">Last Check-in (Oldest)</option>
-                    </select>
+                    <div className="flex items-center gap-2">
+                      {/* Filter Presets */}
+                      {filterPresets.length > 0 && (
+                        <div className="relative">
+                          <select
+                            onChange={(e) => {
+                              if (e.target.value) {
+                                const preset = filterPresets.find(p => p.id === e.target.value);
+                                if (preset) loadFilterPreset(preset);
+                              }
+                            }}
+                            className="px-3 py-2 border border-gray-200 rounded-2xl text-xs sm:text-sm bg-white min-h-[44px]"
+                            defaultValue=""
+                          >
+                            <option value="">Load Preset...</option>
+                            {filterPresets.map(preset => (
+                              <option key={preset.id} value={preset.id}>{preset.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                      <button
+                        onClick={() => setShowPresetModal(true)}
+                        className="px-3 py-2 border border-gray-200 rounded-2xl text-xs sm:text-sm bg-white hover:bg-gray-50 min-h-[44px] flex items-center gap-1"
+                        title="Save current filter as preset"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                        </svg>
+                        Save Preset
+                      </button>
+                      {/* Export Button */}
+                      <div className="relative">
+                        <button
+                          onClick={() => setExportMenuOpen(!exportMenuOpen)}
+                          className="px-3 py-2 border border-gray-200 rounded-2xl text-xs sm:text-sm bg-white hover:bg-gray-50 min-h-[44px] flex items-center gap-1"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          Export
+                        </button>
+                        {exportMenuOpen && (
+                          <div className="absolute right-0 mt-2 w-40 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+                            <button
+                              onClick={() => handleExport(undefined, 'csv')}
+                              className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                            >
+                              Export to CSV
+                            </button>
+                            <button
+                              onClick={() => handleExport(undefined, 'pdf')}
+                              className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                            >
+                              Export to PDF
+                            </button>
+                            <button
+                              onClick={() => handleExport(undefined, 'excel')}
+                              className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                            >
+                              Export to Excel
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      <select
+                        value={`${clientTableSortBy}-${clientTableSortOrder}`}
+                        onChange={(e) => {
+                          const [sortBy, sortOrder] = e.target.value.split('-') as [string, 'asc' | 'desc'];
+                          setClientTableSortBy(sortBy);
+                          setClientTableSortOrder(sortOrder);
+                        }}
+                        className="px-3 py-2 border border-gray-200 rounded-2xl text-xs sm:text-sm focus:outline-none focus:ring-2 bg-white min-h-[44px]"
+                        style={{ focusRingColor: '#daa450' }}
+                      >
+                        <option value="name-asc">Name A-Z</option>
+                        <option value="name-desc">Name Z-A</option>
+                        <option value="weeks-asc">Weeks (Low to High)</option>
+                        <option value="weeks-desc">Weeks (High to Low)</option>
+                        <option value="score-asc">Score (Low to High)</option>
+                        <option value="score-desc">Score (High to Low)</option>
+                        <option value="status-asc">Status A-Z</option>
+                        <option value="status-desc">Status Z-A</option>
+                        <option value="lastCheckIn-desc">Last Check-in (Recent)</option>
+                        <option value="lastCheckIn-asc">Last Check-in (Oldest)</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
               </div>
+              {/* Bulk Action Toolbar */}
+              {selectedClients.size > 0 && (
+                <div className="px-4 py-3 bg-orange-50 border-b border-orange-200 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-medium text-gray-900">
+                      {selectedClients.size} client{selectedClients.size > 1 ? 's' : ''} selected
+                    </span>
+                    <button
+                      onClick={clearSelection}
+                      className="text-xs text-gray-600 hover:text-gray-900 underline"
+                    >
+                      Clear selection
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="relative">
+                      <button
+                        onClick={() => setBulkActionMenuOpen(!bulkActionMenuOpen)}
+                        disabled={bulkActionLoading}
+                        className="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-medium hover:bg-orange-700 disabled:opacity-50 flex items-center gap-2"
+                      >
+                        Bulk Actions
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+                      {bulkActionMenuOpen && (
+                        <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+                          <button
+                            onClick={() => handleBulkAction('email')}
+                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                            </svg>
+                            Send Email
+                          </button>
+                          <button
+                            onClick={() => handleBulkAction('status')}
+                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                            Update Status
+                          </button>
+                          <button
+                            onClick={() => handleBulkAction('archive')}
+                            className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                            </svg>
+                            Archive
+                          </button>
+                          <button
+                            onClick={() => handleExport(Array.from(selectedClients), 'csv')}
+                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2 border-t border-gray-200"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            Export Selected
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Desktop Table */}
               <div className="hidden lg:block overflow-x-auto">
                 <table className="w-full">
                   <thead className="bg-gray-50 border-b border-gray-200">
                     <tr>
+                      <th className="px-4 py-2.5 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider w-12">
+                        <input
+                          type="checkbox"
+                          checked={selectedClients.size === filteredClients.length && filteredClients.length > 0}
+                          onChange={toggleSelectAll}
+                          className="w-4 h-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
+                        />
+                      </th>
                       <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Name</th>
                       <th className="px-4 py-2.5 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Status</th>
                       <th className="px-4 py-2.5 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Progress</th>
@@ -686,7 +1000,7 @@ export default function ClientsPage() {
                       if (sortedClients.length === 0) {
                         return (
                           <tr>
-                            <td colSpan={9} className="px-4 py-8 text-center">
+                            <td colSpan={10} className="px-4 py-8 text-center">
                               <div className="text-gray-500">
                                 <svg className="w-12 h-12 mx-auto mb-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
@@ -1262,6 +1576,55 @@ export default function ClientsPage() {
           </div>
         </div>
       </div>
+
+      {/* Filter Preset Modal */}
+      {showPresetModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowPresetModal(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-gray-900">Save Filter Preset</h3>
+                <button onClick={() => setShowPresetModal(false)} className="text-gray-400 hover:text-gray-600">
+                  <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div className="px-6 py-4 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-900 mb-2">Preset Name</label>
+                <input
+                  type="text"
+                  value={presetName}
+                  onChange={(e) => setPresetName(e.target.value)}
+                  placeholder="e.g., Active Clients, Needs Attention"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') saveFilterPreset();
+                    if (e.key === 'Escape') setShowPresetModal(false);
+                  }}
+                  autoFocus
+                />
+              </div>
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  onClick={saveFilterPreset}
+                  className="flex-1 px-4 py-2 bg-orange-600 text-white rounded-lg font-medium hover:bg-orange-700"
+                >
+                  Save Preset
+                </button>
+                <button
+                  onClick={() => { setShowPresetModal(false); setPresetName(''); }}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Status Update Modal */}
       {statusModal && (
