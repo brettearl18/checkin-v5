@@ -75,7 +75,13 @@ export async function GET(request: NextRequest) {
     const emailNotifications = clientData.emailNotifications ?? true;
     
     // This is the same logic used by the email reminder system
-    const isCompleted = onboardingStatus === 'completed' || canStartCheckIns === true;
+    // Onboarding is considered completed if:
+    // 1. onboardingStatus is 'completed' or 'submitted' (both indicate completion)
+    // 2. OR canStartCheckIns is true (indicates they can start check-ins)
+    const isCompleted = 
+      onboardingStatus === 'completed' || 
+      onboardingStatus === 'submitted' ||
+      canStartCheckIns === true;
     
     // Check onboarding responses
     let onboardingResponsesCount = 0;

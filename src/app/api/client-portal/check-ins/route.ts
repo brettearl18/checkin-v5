@@ -29,7 +29,11 @@ export async function GET(request: NextRequest) {
         const clientData = clientDoc.data();
         const canStartCheckIns = clientData?.canStartCheckIns;
         const onboardingStatus = clientData?.onboardingStatus;
-        onboardingCompleted = (canStartCheckIns && onboardingStatus === 'completed');
+        // Onboarding is completed if status is 'completed' or 'submitted', OR canStartCheckIns is true
+        onboardingCompleted = 
+          onboardingStatus === 'completed' || 
+          onboardingStatus === 'submitted' ||
+          canStartCheckIns === true;
       }
     } catch (error) {
       console.error('Error checking client onboarding status:', error);
