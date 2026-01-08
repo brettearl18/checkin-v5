@@ -101,3 +101,13 @@ select::placeholder {
 }
 
 /* Keep gray-800 and gray-900 as is (already dark) */
+
+/* Utility class for hiding scrollbars */
+.scrollbar-hide {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;  /* Chrome, Safari and Opera */
+}
