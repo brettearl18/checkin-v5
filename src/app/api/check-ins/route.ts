@@ -49,6 +49,11 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      data: {
+        checkIns,
+        metrics
+      },
+      // Also include at top level for backward compatibility
       checkIns,
       metrics
     });
