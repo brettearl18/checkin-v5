@@ -125,10 +125,56 @@ async function fetchCheckIns(coachId: string, status?: string, sortBy: string = 
 
     if (!status || status === 'completed') {
       // Fetch completed form responses for these clients
-      const responsesSnapshot = await db.collection('formResponses')
-        .where('clientId', 'in', Array.from(clientIds))
-        .where('status', '==', 'completed')
-        .get();
+      // Try filtering by coachId first (more efficient, no 10-item limit)
+      // Then filter to only include clients for this coach
+      let responsesSnapshot: any = { docs: [] };
+      const clientIdsArray = Array.from(clientIds);
+      
+      if (clientIdsArray.length === 0) {
+        // No clients, return empty
+        responsesSnapshot = { docs: [] };
+      } else {
+        try {
+          // Primary method: Filter by coachId (more efficient and no item limit)
+          responsesSnapshot = await db.collection('formResponses')
+            .where('coachId', '==', coachId)
+            .where('status', '==', 'completed')
+            .get();
+          
+          // Filter to only include clients that belong to this coach (safety check)
+          responsesSnapshot.docs = responsesSnapshot.docs.filter((doc: any) => {
+            const data = doc.data();
+            return clientIds.has(data.clientId);
+          });
+        } catch (coachIdError: any) {
+          // Fallback to clientId filter if coachId filter fails (missing index or field)
+          console.log('coachId filter not available, using clientId filter:', coachIdError?.message);
+          
+          if (clientIdsArray.length <= 10) {
+            // Single query if 10 or fewer clients (Firestore 'in' limit is 10)
+            responsesSnapshot = await db.collection('formResponses')
+              .where('clientId', 'in', clientIdsArray)
+              .where('status', '==', 'completed')
+              .get();
+          } else {
+            // Batch queries if more than 10 clients
+            const batches: any[] = [];
+            for (let i = 0; i < clientIdsArray.length; i += 10) {
+              const batch = clientIdsArray.slice(i, i + 10);
+              try {
+                const batchSnapshot = await db.collection('formResponses')
+                  .where('clientId', 'in', batch)
+                  .where('status', '==', 'completed')
+                  .get();
+                batches.push(...batchSnapshot.docs);
+              } catch (batchError) {
+                console.error(`Error fetching batch ${i}-${i + 10}:`, batchError);
+              }
+            }
+            responsesSnapshot = { docs: batches };
+          }
+        }
+      }
 
       responsesSnapshot.docs.forEach(doc => {
         const responseData = doc.data();
