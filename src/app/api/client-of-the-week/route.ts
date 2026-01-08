@@ -19,6 +19,17 @@ interface ClientOfTheWeekRequest {
     recentScores: number[];
     trend: 'improving' | 'stable' | 'declining';
     lastCheckInDate?: string;
+    recentCheckIns?: Array<{
+      formTitle: string;
+      submittedAt: string;
+      score: number;
+      responses: Array<{
+        question: string;
+        answer: any;
+        type: string;
+        score?: number;
+      }>;
+    }>;
   };
   goals?: {
     totalGoals: number;
@@ -244,8 +255,15 @@ async function aggregateClientData(coachId: string): Promise<ClientOfTheWeekRequ
     const completedAssignments = clientAssignments.filter(a => a.status === 'completed' || a.responseId);
     const clientResponses = responsesByClient.get(clientId) || [];
     
+    // Sort responses by submitted date (most recent first)
+    const sortedResponses = [...clientResponses].sort((a, b) => {
+      const dateA = a.submittedAt?.toDate ? a.submittedAt.toDate().getTime() : (typeof a.submittedAt === 'string' ? new Date(a.submittedAt).getTime() : 0);
+      const dateB = b.submittedAt?.toDate ? b.submittedAt.toDate().getTime() : (typeof b.submittedAt === 'string' ? new Date(b.submittedAt).getTime() : 0);
+      return dateB - dateA;
+    });
+    
     // Calculate check-in metrics
-    const recentScores = clientResponses
+    const recentScores = sortedResponses
       .slice(0, 6) // Last 6 check-ins
       .map(r => r.score || 0)
       .filter(s => s > 0);
@@ -260,7 +278,61 @@ async function aggregateClientData(coachId: string): Promise<ClientOfTheWeekRequ
     
     const trend = calculateTrend([...recentScores].reverse()); // Reverse to get chronological order
     
-    const lastCheckIn = clientResponses[0];
+    // Get recent check-ins with questions and answers (last 3 for detailed analysis)
+    const recentCheckInsWithDetails = sortedResponses.slice(0, 3).map(response => {
+      const formData = formsMap.get(response.formId);
+      const responses = Array.isArray(response.responses) ? response.responses : [];
+      
+      // Build detailed responses with question text
+      const detailedResponses = responses.map((resp: any) => {
+        // Try to find question text from form data or use the response's question field
+        let questionText = resp.question || '';
+        
+        if (formData && formData.questions && Array.isArray(formData.questions)) {
+          const questionObj = formData.questions.find((q: any) => 
+            q.id === resp.questionId || q.questionId === resp.questionId
+          );
+          if (questionObj && questionObj.text) {
+            questionText = questionObj.text;
+          } else if (questionObj && questionObj.question) {
+            questionText = questionObj.question;
+          }
+        }
+        
+        return {
+          question: questionText || resp.question || 'Question',
+          answer: resp.answer,
+          type: resp.type || 'text',
+          score: resp.score
+        };
+      });
+      
+      // Convert submittedAt to ISO string
+      let submittedAtStr = '';
+      try {
+        const dateValue = response.submittedAt;
+        if (typeof dateValue === 'string') {
+          submittedAtStr = dateValue;
+        } else if (dateValue?.toDate && typeof dateValue.toDate === 'function') {
+          submittedAtStr = dateValue.toDate().toISOString();
+        } else if (dateValue?.seconds) {
+          submittedAtStr = new Date(dateValue.seconds * 1000).toISOString();
+        } else {
+          submittedAtStr = new Date(dateValue).toISOString();
+        }
+      } catch {
+        submittedAtStr = new Date().toISOString();
+      }
+      
+      return {
+        formTitle: response.formTitle || 'Check-in Form',
+        submittedAt: submittedAtStr,
+        score: response.score || 0,
+        responses: detailedResponses
+      };
+    });
+    
+    const lastCheckIn = sortedResponses[0];
     let lastCheckInDate: string | undefined;
     
     // Properly handle Firestore Timestamp conversion
@@ -321,7 +393,8 @@ async function aggregateClientData(coachId: string): Promise<ClientOfTheWeekRequ
         completionRate,
         recentScores,
         trend,
-        lastCheckInDate
+        lastCheckInDate,
+        recentCheckIns: recentCheckInsWithDetails
       },
       goals: clientGoals.length > 0 ? {
         totalGoals: clientGoals.length,
@@ -372,19 +445,32 @@ async function selectClientOfTheWeek(
 
 Consider multiple factors:
 1. **Check-in Performance**: Average scores, completion rates, trends (improving/stable/declining)
-2. **Goals Progress**: Active goals, completion rates, progress toward goals
-3. **Habit Consistency**: Daily habit completion rates, streaks, consistency
-4. **Engagement**: Weeks on program, consistency, recent activity
-5. **Improvements**: Score improvements, goal achievements, habit formation
-6. **Overall Excellence**: Exceptional performance across multiple areas
+2. **Check-in Responses**: Read the actual questions and answers from recent check-ins to understand:
+   - Client's self-reported progress, challenges, and achievements
+   - Specific improvements mentioned in their responses
+   - Honesty and reflection in their answers
+   - Areas where they're excelling or struggling
+3. **Goals Progress**: Active goals, completion rates, progress toward goals
+4. **Habit Consistency**: Daily habit completion rates, streaks, consistency
+5. **Engagement**: Weeks on program, consistency, recent activity
+6. **Improvements**: Score improvements, goal achievements, habit formation
+7. **Overall Excellence**: Exceptional performance across multiple areas
 
 Select the client who demonstrates:
 - Strong commitment and consistency
-- Notable improvements or achievements
+- Notable improvements or achievements (both in scores AND in their actual responses)
 - Exceptional performance in check-ins, goals, or habits
+- Genuine engagement and thoughtful responses in their check-ins
 - Overall excellence deserving recognition
 
-Provide a detailed explanation of why this client was selected, highlighting specific achievements and metrics.`;
+When analyzing check-in responses, look for:
+- Specific achievements or milestones mentioned
+- Positive changes in attitude or behavior
+- Honest reflection and self-awareness
+- Consistent effort and dedication
+- Meaningful progress beyond just scores
+
+Provide a detailed explanation of why this client was selected, highlighting specific achievements, metrics, AND meaningful insights from their check-in responses.`;
 
   // Build user prompt with client data
   const clientSummaries = clientsData.map((client, index) => {
@@ -407,11 +493,18 @@ ${clientSummaries}
 
 Select the client who best exemplifies excellence, improvement, and commitment. Consider:
 1. Overall performance across all metrics
-2. Notable improvements or achievements
+2. Notable improvements or achievements (both quantitative scores AND qualitative insights from responses)
 3. Consistency and engagement
 4. Specific accomplishments that stand out
+5. Meaningful insights from their check-in responses - what are they saying about their progress, challenges, and achievements?
 
-Provide a detailed analysis explaining your selection.`;
+When writing the reasoning, reference specific examples from their check-in responses where possible, such as:
+- Specific achievements they mentioned
+- Improvements they noted
+- Challenges they're overcoming
+- Positive changes in their responses over time
+
+Provide a detailed analysis explaining your selection, making sure to incorporate insights from their actual check-in responses, not just scores.`;
 
   const structure = `{
   "winner": {
