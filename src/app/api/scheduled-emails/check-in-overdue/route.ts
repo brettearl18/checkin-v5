@@ -105,7 +105,14 @@ export async function POST(request: NextRequest) {
       const clientData = clientDoc.data();
       
       // Skip if client hasn't completed onboarding
-      if (clientData?.onboardingStatus !== 'completed' || !clientData?.canStartCheckIns) {
+      // Onboarding is completed if status is 'completed' or 'submitted', OR canStartCheckIns is true
+      const onboardingStatus = clientData?.onboardingStatus;
+      const isOnboardingCompleted = 
+        onboardingStatus === 'completed' || 
+        onboardingStatus === 'submitted' ||
+        clientData?.canStartCheckIns === true;
+      
+      if (!isOnboardingCompleted) {
         results.skipped++;
         continue;
       }
