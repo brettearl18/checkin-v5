@@ -137,8 +137,8 @@ export default function CoachNavigation() {
     };
 
     fetchUnreadCount();
-    // Refresh every 30 seconds
-    const interval = setInterval(fetchUnreadCount, 30000);
+    // Refresh every hour (3600000 milliseconds)
+    const interval = setInterval(fetchUnreadCount, 3600000);
     return () => clearInterval(interval);
   }, [userProfile?.uid]);
 
