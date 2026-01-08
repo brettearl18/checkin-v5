@@ -9,7 +9,6 @@ import Image from 'next/image';
 import CoachNavigation from '@/components/CoachNavigation';
 import NotificationBell from '@/components/NotificationBell';
 import AggregateMeasurementsPanel from '@/components/AggregateMeasurementsPanel';
-import ClientOfTheWeek from '@/components/ClientOfTheWeek';
 
 interface DashboardStats {
   totalClients: number;
@@ -1255,11 +1254,6 @@ export default function DashboardPage() {
             <div className="grid grid-cols-1 gap-10">
               {/* Main Content */}
               <div className="space-y-10">
-                {/* Client of the Week - Prominent Display */}
-                {userProfile?.uid && (
-                  <ClientOfTheWeek coachId={userProfile.uid} />
-                )}
-
                 {/* Weight & Measurements Tracking */}
                 {userProfile?.uid && (
                   <AggregateMeasurementsPanel coachId={userProfile.uid} />

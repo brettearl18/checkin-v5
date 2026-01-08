@@ -13,6 +13,7 @@ import {
   type ScoringThresholds,
   type TrafficLightStatus
 } from '@/lib/scoring-utils';
+import ClientOfTheWeekCompact from '@/components/ClientOfTheWeekCompact';
 
 interface Client {
   id: string;
