@@ -508,6 +508,13 @@ export default function ClientsPage() {
 
           <div className="px-4 lg:px-0">
 
+            {/* Client of the Week - Compact */}
+            {userProfile?.uid && (
+              <div className="mb-4 lg:mb-6">
+                <ClientOfTheWeekCompact coachId={userProfile.uid} />
+              </div>
+            )}
+
             {/* Stats Overview */}
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 lg:gap-6 mb-6 lg:mb-8">
               <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
