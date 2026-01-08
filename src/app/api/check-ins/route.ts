@@ -136,16 +136,18 @@ async function fetchCheckIns(coachId: string, status?: string, sortBy: string = 
       } else {
         try {
           // Primary method: Filter by coachId (more efficient and no item limit)
-          responsesSnapshot = await db.collection('formResponses')
+          const coachIdSnapshot = await db.collection('formResponses')
             .where('coachId', '==', coachId)
             .where('status', '==', 'completed')
             .get();
           
           // Filter to only include clients that belong to this coach (safety check)
-          responsesSnapshot.docs = responsesSnapshot.docs.filter((doc: any) => {
+          const filteredDocs = coachIdSnapshot.docs.filter((doc: any) => {
             const data = doc.data();
             return clientIds.has(data.clientId);
           });
+          
+          responsesSnapshot = { docs: filteredDocs };
         } catch (coachIdError: any) {
           // Fallback to clientId filter if coachId filter fails (missing index or field)
           console.log('coachId filter not available, using clientId filter:', coachIdError?.message);
