@@ -198,6 +198,27 @@ async function aggregateClientData(coachId: string): Promise<ClientOfTheWeekRequ
     responsesByClient.get(clientId)!.push({ id: doc.id, ...data });
   });
   
+  // Fetch forms to get question details
+  const formIds = new Set<string>();
+  responsesSnapshot.docs.forEach(doc => {
+    const data = doc.data();
+    if (data.formId) {
+      formIds.add(data.formId);
+    }
+  });
+  
+  const formsMap = new Map<string, any>();
+  for (const formId of formIds) {
+    try {
+      const formDoc = await db.collection('forms').doc(formId).get();
+      if (formDoc.exists) {
+        formsMap.set(formId, formDoc.data());
+      }
+    } catch (error) {
+      console.error(`Error fetching form ${formId}:`, error);
+    }
+  }
+  
   // Fetch goals
   const goalsSnapshot = clientIds.length > 0
     ? await db.collection('goals')
