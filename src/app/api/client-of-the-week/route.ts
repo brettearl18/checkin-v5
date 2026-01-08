@@ -253,7 +253,30 @@ async function aggregateClientData(coachId: string): Promise<ClientOfTheWeekRequ
     const trend = calculateTrend([...recentScores].reverse()); // Reverse to get chronological order
     
     const lastCheckIn = clientResponses[0];
-    const lastCheckInDate = lastCheckIn?.submittedAt || lastCheckIn?.completedAt;
+    let lastCheckInDate: string | undefined;
+    
+    // Properly handle Firestore Timestamp conversion
+    if (lastCheckIn) {
+      const dateValue = lastCheckIn?.submittedAt || lastCheckIn?.completedAt;
+      if (dateValue) {
+        if (typeof dateValue === 'string') {
+          lastCheckInDate = dateValue;
+        } else if (dateValue?.toDate && typeof dateValue.toDate === 'function') {
+          // Firestore Timestamp
+          lastCheckInDate = dateValue.toDate().toISOString();
+        } else if (dateValue?.seconds) {
+          // Firestore Timestamp with seconds
+          lastCheckInDate = new Date(dateValue.seconds * 1000).toISOString();
+        } else {
+          // Try to convert to Date
+          try {
+            lastCheckInDate = new Date(dateValue).toISOString();
+          } catch {
+            lastCheckInDate = undefined;
+          }
+        }
+      }
+    }
     
     // Get goals for this client
     const clientGoals = goalsByClient.get(clientId) || [];
@@ -290,7 +313,7 @@ async function aggregateClientData(coachId: string): Promise<ClientOfTheWeekRequ
         completionRate,
         recentScores,
         trend,
-        lastCheckInDate: lastCheckInDate ? (typeof lastCheckInDate === 'string' ? lastCheckInDate : lastCheckInDate.toISOString()) : undefined
+        lastCheckInDate
       },
       goals: clientGoals.length > 0 ? {
         totalGoals: clientGoals.length,
