@@ -79,114 +79,73 @@ export default function ClientsPage() {
         return;
       }
 
-      const response = await fetch(`/api/clients?coachId=${userProfile.uid}`);
+      // Use the new optimized inventory endpoint that aggregates all data
+      const response = await fetch(
+        `/api/clients/inventory?coachId=${userProfile.uid}&status=${statusFilter === 'all' ? 'all' : statusFilter}&sortBy=${clientTableSortBy}&sortOrder=${clientTableSortOrder}`
+      );
+      
       if (response.ok) {
         const data = await response.json();
-        const clientsData = data.clients || [];
-        setClients(clientsData);
-        
-        // Fetch additional metrics for each client
-        const clientsWithMetricsData = await Promise.all(
-          clientsData.map(async (client: Client) => {
-            try {
-              // Fetch check-ins for this client
-              const checkInsResponse = await fetch(`/api/clients/${client.id}/check-ins`);
-              if (checkInsResponse.ok) {
-                const checkInsData = await checkInsResponse.json();
-                const checkIns = checkInsData.checkIns || [];
-                const completedCheckIns = checkInsData.completedCheckIns || [];
-                
-                // Calculate overdue check-ins
-                const now = new Date();
-                const overdueCount = checkIns.filter((ci: any) => {
-                  if (ci.status === 'completed') return false;
-                  if (!ci.dueDate) return false;
-                  const dueDate = new Date(ci.dueDate);
-                  return dueDate < now;
-                }).length;
-                
-                // Calculate days since last check-in
-                let daysSinceLastCheckIn: number | undefined;
-                if (client.lastCheckIn) {
-                  const lastCheckInDate = new Date(client.lastCheckIn);
-                  const diffTime = now.getTime() - lastCheckInDate.getTime();
-                  daysSinceLastCheckIn = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-                }
-                
-                // Get scoring thresholds (default to moderate)
-                const thresholds = getDefaultThresholds('moderate');
-                
-                // Get last 4 completed check-ins with traffic light status
-                const recentCheckIns = completedCheckIns
-                  .slice(0, 4)
-                  .map((ci: any) => {
-                    const score = ci.score || 0;
-                    const trafficLightStatus = getTrafficLightStatus(score, thresholds);
-                    return {
-                      id: ci.id,
-                      score: score,
-                      completedAt: ci.completedAt || ci.assignedAt || '',
-                      trafficLightStatus: trafficLightStatus
-                    };
-                  });
-                
-                // Get last check-in score and traffic light
-                const lastCheckIn = completedCheckIns[0];
-                const lastCheckInScore = lastCheckIn?.score;
-                const lastCheckInTrafficLight = lastCheckInScore !== undefined 
-                  ? getTrafficLightStatus(lastCheckInScore, thresholds)
-                  : undefined;
-                
-                // Use lastActivity from metrics as lastCheckIn if it exists (overrides client.lastCheckIn)
-                const updatedLastCheckIn = checkInsData.metrics?.lastActivity || client.lastCheckIn;
-                
-                // Recalculate daysSinceLastCheckIn if we updated lastCheckIn from metrics
-                let updatedDaysSinceLastCheckIn = daysSinceLastCheckIn;
-                if (checkInsData.metrics?.lastActivity) {
-                  try {
-                    const lastCheckInDate = new Date(checkInsData.metrics.lastActivity);
-                    if (!isNaN(lastCheckInDate.getTime())) {
-                      const diffTime = now.getTime() - lastCheckInDate.getTime();
-                      updatedDaysSinceLastCheckIn = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-                    }
-                  } catch (error) {
-                    console.error('Error calculating daysSinceLastCheckIn:', error);
-                  }
-                }
-                
-                return {
-                  ...client,
-                  overdueCheckIns: overdueCount,
-                  daysSinceLastCheckIn: updatedDaysSinceLastCheckIn,
-                  scoringThresholds: thresholds,
-                  recentCheckIns,
-                  lastCheckInScore,
-                  lastCheckInTrafficLight,
-                  ...checkInsData.metrics,
-                  lastCheckIn: updatedLastCheckIn
-                };
-              }
-            } catch (error) {
-              console.error(`Error fetching metrics for client ${client.id}:`, error);
-            }
+        if (data.success && data.data?.clients) {
+          const inventoryClients = data.data.clients;
+          
+          // Transform inventory data to match existing Client interface
+          const transformedClients: Client[] = inventoryClients.map((item: any) => {
+            const m = item.metrics;
+            const thresholds = getDefaultThresholds('moderate');
             
-            // Return client with default values if fetch fails
             return {
-              ...client,
-              overdueCheckIns: 0,
-              daysSinceLastCheckIn: client.lastCheckIn ? Math.floor((Date.now() - new Date(client.lastCheckIn).getTime()) / (1000 * 60 * 60 * 24)) : undefined,
-              scoringThresholds: getDefaultThresholds('moderate'),
-              recentCheckIns: [],
-              lastCheckInScore: undefined,
-              lastCheckInTrafficLight: undefined
+              id: item.id,
+              firstName: item.firstName,
+              lastName: item.lastName,
+              email: item.email,
+              phone: item.phone,
+              status: item.status,
+              createdAt: item.createdAt,
+              assignedCoach: userProfile.uid,
+              lastCheckIn: m.lastCheckInDate,
+              progressScore: m.progressScore,
+              completionRate: m.completionRate,
+              totalCheckIns: m.totalCheckIns,
+              completedCheckIns: m.completedCheckIns,
+              overdueCheckIns: m.overdueCheckIns,
+              daysSinceLastCheckIn: m.daysSinceLastCheckIn,
+              scoringThresholds: thresholds,
+              recentCheckIns: m.recentCheckIns.map((ci: any) => ({
+                id: ci.id || '',
+                score: ci.score,
+                completedAt: ci.completedAt,
+                trafficLightStatus: ci.trafficLight
+              })),
+              lastCheckInScore: m.lastCheckInScore,
+              lastCheckInTrafficLight: m.lastCheckInTrafficLight
             };
-          })
-        );
-        
-        setClientsWithMetrics(clientsWithMetricsData);
+          });
+          
+          setClients(transformedClients);
+          setClientsWithMetrics(transformedClients);
+        } else {
+          // Fallback to old endpoint if new one fails
+          console.warn('Inventory endpoint failed, falling back to legacy endpoint');
+          const fallbackResponse = await fetch(`/api/clients?coachId=${userProfile.uid}`);
+          if (fallbackResponse.ok) {
+            const fallbackData = await fallbackResponse.json();
+            setClients(fallbackData.clients || []);
+          }
+        }
       }
     } catch (error) {
       console.error('Error fetching clients:', error);
+      // Fallback to old endpoint on error
+      try {
+        const fallbackResponse = await fetch(`/api/clients?coachId=${userProfile.uid}`);
+        if (fallbackResponse.ok) {
+          const fallbackData = await fallbackResponse.json();
+          setClients(fallbackData.clients || []);
+        }
+      } catch (fallbackError) {
+        console.error('Fallback endpoint also failed:', fallbackError);
+      }
     } finally {
       setLoading(false);
     }
@@ -236,32 +195,17 @@ export default function ClientsPage() {
     }
   };
 
+  // Client-side search filtering only (status filtering is handled server-side)
+  // The server already filters by status, so we only need to filter by search term here
   const filteredClients = (clientsWithMetrics.length > 0 ? clientsWithMetrics : clients).filter(client => {
-    const matchesSearch = (client.firstName?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-                         (client.lastName?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-                         (client.email?.toLowerCase() || '').includes(searchTerm.toLowerCase());
+    if (!searchTerm) return true; // No search term, show all
     
-    if (statusFilter === 'needsAttention') {
-      // Filter for clients that need attention
-      const hasOverdue = (client.overdueCheckIns || 0) > 0;
-      const lowScore = client.progressScore !== undefined && client.progressScore < 60;
-      const noActivity = client.daysSinceLastCheckIn !== undefined && client.daysSinceLastCheckIn > 7;
-      const lowCompletion = (client.completionRate || 0) < 50;
-      const trafficLight = client.progressScore !== undefined 
-        ? getTrafficLightStatus(client.progressScore, client.scoringThresholds || getDefaultThresholds('moderate'))
-        : null;
-      const isRedOrOrange = trafficLight === 'red' || trafficLight === 'orange';
-      
-      return matchesSearch && (hasOverdue || lowScore || noActivity || lowCompletion || isRedOrOrange);
-    }
+    const searchLower = searchTerm.toLowerCase();
+    const matchesSearch = (client.firstName?.toLowerCase() || '').includes(searchLower) ||
+                         (client.lastName?.toLowerCase() || '').includes(searchLower) ||
+                         (client.email?.toLowerCase() || '').includes(searchLower);
     
-    // Handle archived clients separately - don't show them unless archive filter is selected
-    if (client.status === 'archived' && statusFilter !== 'archived') {
-      return false;
-    }
-    
-    const matchesStatus = statusFilter === 'all' || client.status === statusFilter;
-    return matchesSearch && matchesStatus;
+    return matchesSearch;
   });
 
   const getStatusColor = (status: string) => {
