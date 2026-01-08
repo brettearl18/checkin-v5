@@ -364,7 +364,7 @@ export async function GET(request: NextRequest) {
     const hasMore = offset + limit < total;
     const paginatedClients = clients.slice(offset, offset + limit);
     
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       data: {
         clients: paginatedClients,
@@ -376,6 +376,11 @@ export async function GET(request: NextRequest) {
         }
       }
     });
+    
+    // Add caching headers for client-side caching
+    response.headers.set('Cache-Control', 'public, s-maxage=30, stale-while-revalidate=60');
+    
+    return response;
     
   } catch (error: any) {
     console.error('Error fetching client inventory:', error);

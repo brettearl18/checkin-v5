@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { RoleProtected } from '@/components/ProtectedRoute';
 import CoachNavigation from '@/components/CoachNavigation';
@@ -70,7 +70,8 @@ export default function ClientsPage() {
       // User profile is loaded but user is not authenticated
       setLoading(false);
     }
-  }, [userProfile]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userProfile, statusFilter, clientTableSortBy, clientTableSortOrder]);
 
   const fetchClients = async () => {
     try {
@@ -196,17 +197,19 @@ export default function ClientsPage() {
   };
 
   // Client-side search filtering only (status filtering is handled server-side)
-  // The server already filters by status, so we only need to filter by search term here
-  const filteredClients = (clientsWithMetrics.length > 0 ? clientsWithMetrics : clients).filter(client => {
-    if (!searchTerm) return true; // No search term, show all
+  // Use useMemo to optimize search filtering performance
+  const filteredClients = useMemo(() => {
+    const clientsToFilter = clientsWithMetrics.length > 0 ? clientsWithMetrics : clients;
+    
+    if (!searchTerm) return clientsToFilter; // No search term, return all
     
     const searchLower = searchTerm.toLowerCase();
-    const matchesSearch = (client.firstName?.toLowerCase() || '').includes(searchLower) ||
-                         (client.lastName?.toLowerCase() || '').includes(searchLower) ||
-                         (client.email?.toLowerCase() || '').includes(searchLower);
-    
-    return matchesSearch;
-  });
+    return clientsToFilter.filter(client => {
+      return (client.firstName?.toLowerCase() || '').includes(searchLower) ||
+             (client.lastName?.toLowerCase() || '').includes(searchLower) ||
+             (client.email?.toLowerCase() || '').includes(searchLower);
+    });
+  }, [clientsWithMetrics, clients, searchTerm]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
