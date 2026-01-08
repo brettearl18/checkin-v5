@@ -579,8 +579,8 @@ export default function ClientsPage() {
                     <tr>
                       <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Name</th>
                       <th className="px-4 py-2.5 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Status</th>
-                      <th className="px-4 py-2.5 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Progress Status</th>
-                      <th className="px-4 py-2.5 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Recent Trend</th>
+                      <th className="px-4 py-2.5 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Progress</th>
+                      <th className="px-4 py-2.5 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Trend</th>
                       <th className="px-4 py-2.5 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Weeks</th>
                       <th className="px-4 py-2.5 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Avg Score</th>
                       <th className="px-4 py-2.5 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Engagement</th>
@@ -780,16 +780,16 @@ export default function ClientsPage() {
                                 <div className="w-8 h-8 bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl flex items-center justify-center text-white font-semibold text-xs mr-2">
                                   {client.displayName.charAt(0).toUpperCase()}
                                 </div>
-                                <div>
-                                  <div className="text-sm font-medium text-gray-900">{client.displayName}</div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <div className="text-sm font-medium text-gray-900 truncate">{client.displayName}</div>
+                                    {getStatusBadge(client.status || 'active')}
+                                  </div>
                                   {client.phone && (
                                     <div className="text-xs text-gray-500">{client.phone}</div>
                                   )}
                                 </div>
                               </div>
-                            </td>
-                            <td className="px-4 py-2.5 whitespace-nowrap text-center">
-                              {getStatusBadge(client.status || 'active')}
                             </td>
                             <td className="px-4 py-2.5 whitespace-nowrap text-center">
                               {trafficLightStatus ? (
@@ -810,17 +810,17 @@ export default function ClientsPage() {
                             </td>
                             <td className="px-4 py-2.5 whitespace-nowrap text-center">
                               {client.recentCheckIns && client.recentCheckIns.length > 0 ? (
-                                <div className="flex items-center justify-center gap-1" title={client.recentCheckIns.map((ci, idx) => 
+                                <div className="flex items-center justify-center gap-0.5" title={client.recentCheckIns.map((ci, idx) => 
                                   `Check-in ${idx + 1}: ${ci.score}% (${ci.trafficLightStatus}) - ${new Date(ci.completedAt).toLocaleDateString()}`
                                 ).join('\n')}>
                                   {client.recentCheckIns.map((ci, idx) => (
-                                    <div key={ci.id || idx} className="text-base" title={`${ci.score}% - ${new Date(ci.completedAt).toLocaleDateString()}`}>
+                                    <div key={ci.id || idx} className="text-lg" title={`${ci.score}% - ${new Date(ci.completedAt).toLocaleDateString()}`}>
                                       {getTrafficLightIcon(ci.trafficLightStatus)}
                                     </div>
                                   ))}
                                   {/* Fill remaining slots if less than 4 */}
                                   {Array.from({ length: 4 - client.recentCheckIns.length }).map((_, idx) => (
-                                    <div key={`empty-${idx}`} className="text-base text-gray-300">
+                                    <div key={`empty-${idx}`} className="text-lg text-gray-300">
                                       ⚪
                                     </div>
                                   ))}
@@ -843,21 +843,26 @@ export default function ClientsPage() {
                               </div>
                             </td>
                             <td className="px-4 py-2.5 whitespace-nowrap text-center">
-                              <div className="text-xs font-medium text-gray-900">
-                                {totalCheckIns > 0 
-                                  ? `${completedCheckIns || 0}/${totalCheckIns} (${isNaN(completionRate) ? '0' : String(completionRate)}%)`
-                                  : '0/0 (0%)'
-                                }
-                              </div>
-                              <div className="w-16 bg-gray-200 rounded-full h-1 mx-auto mt-0.5">
-                                <div 
-                                  className={`h-1 rounded-full ${
-                                    completionRate >= 80 ? 'bg-green-500' :
-                                    completionRate >= 60 ? 'bg-yellow-500' :
-                                    'bg-red-500'
-                                  }`}
-                                  style={{ width: `${Math.min(isNaN(completionRate) ? 0 : completionRate, 100)}%` }}
-                                ></div>
+                              <div className="flex flex-col items-center">
+                                <div className="text-xs font-semibold text-gray-900 mb-1">
+                                  {totalCheckIns > 0 
+                                    ? `${completedCheckIns || 0}/${totalCheckIns}`
+                                    : '0/0'
+                                  }
+                                </div>
+                                <div className="text-[10px] text-gray-600 mb-1.5">
+                                  ({isNaN(completionRate) ? '0' : String(completionRate)}%)
+                                </div>
+                                <div className="w-16 bg-gray-200 rounded-full h-1.5 mx-auto">
+                                  <div 
+                                    className={`h-1.5 rounded-full transition-all ${
+                                      completionRate >= 80 ? 'bg-green-500' :
+                                      completionRate >= 60 ? 'bg-yellow-500' :
+                                      'bg-red-500'
+                                    }`}
+                                    style={{ width: `${Math.min(isNaN(completionRate) ? 0 : completionRate, 100)}%` }}
+                                  ></div>
+                                </div>
                               </div>
                             </td>
                             <td className="px-4 py-2.5 whitespace-nowrap">
@@ -1162,25 +1167,28 @@ export default function ClientsPage() {
                               </div>
                               
                               {/* Engagement */}
-                              <div className="bg-gray-50 rounded-lg p-2 col-span-2">
-                                <div className="text-[10px] text-gray-500 mb-1">Engagement</div>
-                                <div className="flex items-center justify-between gap-2">
-                                  <div className="text-xs font-medium text-gray-900">
+                              <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-lg p-2.5 col-span-2 border border-green-200">
+                                <div className="text-[10px] font-medium text-green-700 mb-1.5 uppercase tracking-wide">Engagement</div>
+                                <div className="flex items-center justify-between gap-2 mb-1.5">
+                                  <div className="text-sm font-bold text-gray-900">
                                     {totalCheckIns > 0 
-                                      ? `${completedCheckIns || 0}/${totalCheckIns} (${isNaN(completionRate) ? '0' : String(completionRate)}%)`
-                                      : '0/0 (0%)'
+                                      ? `${completedCheckIns || 0}/${totalCheckIns}`
+                                      : '0/0'
                                     }
                                   </div>
-                                  <div className="flex-1 max-w-[100px] bg-gray-200 rounded-full h-1.5">
-                                    <div 
-                                      className={`h-1.5 rounded-full ${
-                                        completionRate >= 80 ? 'bg-green-500' :
-                                        completionRate >= 60 ? 'bg-yellow-500' :
-                                        'bg-red-500'
-                                      }`}
-                                      style={{ width: `${Math.min(isNaN(completionRate) ? 0 : completionRate, 100)}%` }}
-                                    ></div>
+                                  <div className="text-xs font-semibold text-green-700">
+                                    ({isNaN(completionRate) ? '0' : String(completionRate)}%)
                                   </div>
+                                </div>
+                                <div className="w-full bg-green-200 rounded-full h-2 overflow-hidden">
+                                  <div 
+                                    className={`h-2 rounded-full transition-all ${
+                                      completionRate >= 80 ? 'bg-green-600' :
+                                      completionRate >= 60 ? 'bg-yellow-500' :
+                                      'bg-red-500'
+                                    }`}
+                                    style={{ width: `${Math.min(isNaN(completionRate) ? 0 : completionRate, 100)}%` }}
+                                  ></div>
                                 </div>
                               </div>
                             </div>
