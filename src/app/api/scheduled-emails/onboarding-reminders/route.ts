@@ -55,7 +55,14 @@ export async function POST(request: NextRequest) {
       const clientName = `${clientData.firstName || ''} ${clientData.lastName || ''}`.trim() || 'there';
 
       // Check if this client should be skipped
-      const isCompleted = clientData.onboardingStatus === 'completed' || clientData.canStartCheckIns === true;
+      // Onboarding is considered completed if:
+      // 1. onboardingStatus is 'completed' or 'submitted' (both indicate completion)
+      // 2. OR canStartCheckIns is true (indicates they can start check-ins)
+      const onboardingStatus = clientData.onboardingStatus;
+      const isCompleted = 
+        onboardingStatus === 'completed' || 
+        onboardingStatus === 'submitted' ||
+        clientData.canStartCheckIns === true;
       const hasNoEmail = !clientEmail;
       const emailNotificationsDisabled = (clientData.emailNotifications ?? true) === false && !testEmail;
       const lastReminderSent = clientData.lastOnboardingReminderSent;
