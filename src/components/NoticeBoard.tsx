@@ -231,8 +231,8 @@ export default function NoticeBoard({ coachId, clientId, readOnly = false }: Not
                 required
                 value={formData.title}
                 onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                className="w-full border border-gray-300 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-opacity-50 transition-colors"
-                style={{ focusRingColor: '#daa450' }}
+                className="w-full border border-gray-300 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:border-transparent transition-colors"
+                style={{ '--tw-ring-color': '#daa450' } as React.CSSProperties}
                 placeholder="Enter notice title"
               />
             </div>
@@ -246,8 +246,8 @@ export default function NoticeBoard({ coachId, clientId, readOnly = false }: Not
                 value={formData.content}
                 onChange={(e) => setFormData({ ...formData, content: e.target.value })}
                 rows={4}
-                className="w-full border border-gray-300 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-opacity-50 transition-colors"
-                style={{ focusRingColor: '#daa450' }}
+                className="w-full border border-gray-300 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:border-transparent transition-colors"
+                style={{ '--tw-ring-color': '#daa450' } as React.CSSProperties}
                 placeholder="Enter notice content"
               />
             </div>
@@ -260,8 +260,8 @@ export default function NoticeBoard({ coachId, clientId, readOnly = false }: Not
                 type="url"
                 value={formData.imageUrl}
                 onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
-                className="w-full border border-gray-300 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-opacity-50 transition-colors"
-                style={{ focusRingColor: '#daa450' }}
+                className="w-full border border-gray-300 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:border-transparent transition-colors"
+                style={{ '--tw-ring-color': '#daa450' } as React.CSSProperties}
                 placeholder="https://example.com/image.jpg"
               />
             </div>
@@ -275,8 +275,8 @@ export default function NoticeBoard({ coachId, clientId, readOnly = false }: Not
                   type="url"
                   value={formData.linkUrl}
                   onChange={(e) => setFormData({ ...formData, linkUrl: e.target.value })}
-                  className="w-full border border-gray-300 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-opacity-50 transition-colors"
-                style={{ focusRingColor: '#daa450' }}
+                  className="w-full border border-gray-300 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:border-transparent transition-colors"
+                  style={{ '--tw-ring-color': '#daa450' } as React.CSSProperties}
                   placeholder="https://example.com"
                 />
               </div>
@@ -288,8 +288,8 @@ export default function NoticeBoard({ coachId, clientId, readOnly = false }: Not
                   type="text"
                   value={formData.linkText}
                   onChange={(e) => setFormData({ ...formData, linkText: e.target.value })}
-                  className="w-full border border-gray-300 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-opacity-50 transition-colors"
-                style={{ focusRingColor: '#daa450' }}
+                  className="w-full border border-gray-300 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:border-transparent transition-colors"
+                  style={{ '--tw-ring-color': '#daa450' } as React.CSSProperties}
                   placeholder="e.g., Read More"
                 />
               </div>
