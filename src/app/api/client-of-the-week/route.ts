@@ -226,10 +226,18 @@ async function aggregateClientData(coachId: string): Promise<ClientOfTheWeekRequ
     console.log('Habits collection not found, skipping habit data');
   }
   
+  // Email addresses to exclude from Client of the Week selection
+  const EXCLUDED_EMAILS = ['brett@test2.com', 'brett.earl@gmail.com'];
+  
   // Process each client
   for (const doc of clientsSnapshot.docs) {
     const client = { id: doc.id, ...doc.data() };
     const clientId = client.id;
+    
+    // Skip excluded email addresses
+    if (client.email && EXCLUDED_EMAILS.includes(client.email.toLowerCase())) {
+      continue;
+    }
     
     // Get check-ins for this client
     const clientAssignments = allAssignments.filter(a => a.clientId === clientId);
