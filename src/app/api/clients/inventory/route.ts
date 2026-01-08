@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase-server';
 import { getTrafficLightStatus, getDefaultThresholds } from '@/lib/scoring-utils';
 
-export const dynamic = 'force-dynamic';
-// Enable caching for 30 seconds
+// Enable ISR caching for 30 seconds (allows stale-while-revalidate)
 export const revalidate = 30;
 
 interface ClientInventoryMetrics {
