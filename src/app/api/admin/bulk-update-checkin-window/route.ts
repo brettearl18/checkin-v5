@@ -36,6 +36,9 @@ export async function GET(request: NextRequest) {
         };
       });
 
+      // Sort forms by title if orderBy didn't work
+      forms.sort((a, b) => a.title.localeCompare(b.title));
+
       return NextResponse.json({
         success: true,
         forms
