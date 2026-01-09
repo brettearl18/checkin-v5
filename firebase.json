@@ -10,15 +10,15 @@
       {
         "source": "/manifest.json",
         "run": {
-          "serviceId": "checkin-v5-api",
-          "region": "us-central1"
+          "serviceId": "checkinv5",
+          "region": "australia-southeast2"
         }
       },
       {
         "source": "**",
         "run": {
-          "serviceId": "checkin-v5-api",
-          "region": "us-central1"
+          "serviceId": "checkinv5",
+          "region": "australia-southeast2"
         }
       }
     ],
