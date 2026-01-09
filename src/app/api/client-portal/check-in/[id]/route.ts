@@ -184,9 +184,11 @@ export async function POST(
 
     // Check if check-in window is closed (server-side validation)
     // Allow submission if: window is open, extension is granted, or it's Week 1
+    // Calculate window relative to this check-in's week (Monday start)
     const { isWithinCheckInWindow, DEFAULT_CHECK_IN_WINDOW } = await import('@/lib/checkin-window-utils');
     const checkInWindow = assignmentData.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
-    const windowStatus = isWithinCheckInWindow(checkInWindow);
+    const dueDate = assignmentData.dueDate?.toDate ? assignmentData.dueDate.toDate() : new Date(assignmentData.dueDate);
+    const windowStatus = isWithinCheckInWindow(checkInWindow, dueDate);
     const isFirstCheckIn = assignmentData.recurringWeek === 1;
     
     // Allow submissions even when window is closed - they will be reviewed during the next check-in period

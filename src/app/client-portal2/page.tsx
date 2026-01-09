@@ -514,7 +514,8 @@ export default function ClientPortalPageV2() {
     if (daysDiff < 0) return 'red'; // Overdue
     
     const checkInWindow = checkIn.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
-    const windowStatus = isWithinCheckInWindow(checkInWindow);
+    // Calculate window relative to this check-in's week (Monday start)
+    const windowStatus = isWithinCheckInWindow(checkInWindow, checkIn.dueDate);
     const isFirstCheckIn = checkIn.recurringWeek === 1;
     
     if (daysDiff === 0 && (windowStatus.isOpen || isFirstCheckIn)) {

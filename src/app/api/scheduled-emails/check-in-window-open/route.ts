@@ -53,9 +53,10 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      // Check if window just opened (within the last hour)
+      // Check if window just opened (relative to this check-in's week - Monday start)
       const checkInWindow = assignmentData.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
-      const windowStatus = isWithinCheckInWindow(checkInWindow);
+      const dueDate = assignmentData.dueDate?.toDate ? assignmentData.dueDate.toDate() : new Date(assignmentData.dueDate);
+      const windowStatus = isWithinCheckInWindow(checkInWindow, dueDate);
       
       if (!windowStatus.isOpen) {
         results.skipped++;

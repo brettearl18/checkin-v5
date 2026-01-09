@@ -44,11 +44,31 @@ function parseTime(timeString: string): { hours: number; minutes: number } {
 }
 
 /**
+ * Get the Monday that starts a week for a given date
+ * If the date is already a Monday, return it. Otherwise, find the Monday of that week.
+ */
+function getWeekStart(date: Date): Date {
+  const d = new Date(date);
+  const dayOfWeek = d.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+  
+  // Calculate days to subtract to get to Monday
+  // If it's Sunday (0), go back 6 days. If it's Monday (1), go back 0 days. etc.
+  const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  
+  d.setDate(d.getDate() - daysToMonday);
+  d.setHours(0, 0, 0, 0);
+  
+  return d;
+}
+
+/**
  * Check if the current time is within the check-in window
+ * @param window - The check-in window configuration
+ * @param dueDate - Optional: If provided, calculate window relative to this week's Monday
  */
 export function isWithinCheckInWindow(
   window?: CheckInWindow,
-  timezone?: string
+  dueDate?: Date | string
 ): { isOpen: boolean; message: string; nextOpenTime?: Date } {
   // If window is not enabled, always allow check-ins
   if (!window || !window.enabled) {
@@ -56,6 +76,59 @@ export function isWithinCheckInWindow(
   }
 
   const now = new Date();
+  
+  // If dueDate is provided, calculate window relative to that week's Monday
+  if (dueDate) {
+    const due = typeof dueDate === 'string' ? new Date(dueDate) : dueDate;
+    const weekStart = getWeekStart(due); // Monday of that week
+    
+    // Window opens: Friday BEFORE that Monday (3 days before)
+    const windowStart = new Date(weekStart);
+    windowStart.setDate(weekStart.getDate() - 3); // Friday before
+    
+    // Window closes: Tuesday OF that week (1 day after Monday)
+    const windowEnd = new Date(weekStart);
+    windowEnd.setDate(weekStart.getDate() + 1); // Tuesday
+    
+    // Set times
+    const [startHours, startMinutes] = parseTime(window.startTime);
+    const [endHours, endMinutes] = parseTime(window.endTime);
+    
+    windowStart.setHours(startHours, startMinutes, 0, 0);
+    windowEnd.setHours(endHours, endMinutes, 0, 0);
+    
+    // Check if now is within this specific week's window
+    const isOpen = now >= windowStart && now <= windowEnd;
+    
+    if (isOpen) {
+      return {
+        isOpen: true,
+        message: 'Check-in window is open',
+        nextOpenTime: undefined
+      };
+    } else if (now < windowStart) {
+      return {
+        isOpen: false,
+        message: `Check-in window opens ${windowStart.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })} at ${formatTime(window.startTime)}`,
+        nextOpenTime: windowStart
+      };
+    } else {
+      // Window has passed for this week - calculate next week's window
+      const nextWeekStart = new Date(weekStart);
+      nextWeekStart.setDate(weekStart.getDate() + 7);
+      const nextWindowStart = new Date(nextWeekStart);
+      nextWindowStart.setDate(nextWeekStart.getDate() - 3);
+      nextWindowStart.setHours(startHours, startMinutes, 0, 0);
+      
+      return {
+        isOpen: false,
+        message: `Check-in window closed. Next window opens ${nextWindowStart.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })} at ${formatTime(window.startTime)}`,
+        nextOpenTime: nextWindowStart
+      };
+    }
+  }
+
+  // Fallback: Global window check (for backwards compatibility)
   const currentDay = now.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
   const currentHour = now.getHours();
   const currentMinute = now.getMinutes();

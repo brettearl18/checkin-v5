@@ -380,19 +380,23 @@ export async function GET(request: NextRequest) {
         const maxExistingWeek = Math.max(...deduplicatedSeries.map(a => a.recurringWeek || 1));
         
         // Generate assignments for weeks beyond the existing ones
+        // Each week starts on Monday, so calculate Monday dates
+        const firstWeekStart = getWeekStart(firstDueDate); // Get Monday of first week
+        
         for (let week = maxExistingWeek + 1; week <= baseAssignment.totalWeeks; week++) {
-          // Calculate due date for this week (7 days * (week - 1) from first due date)
-          const weekDueDate = new Date(firstDueDate);
-          weekDueDate.setDate(firstDueDate.getDate() + (7 * (week - 1)));
+          // Calculate Monday for this week (7 days * (week - 1) from first Monday)
+          const weekMonday = new Date(firstWeekStart);
+          weekMonday.setDate(firstWeekStart.getDate() + (7 * (week - 1)));
+          weekMonday.setHours(9, 0, 0, 0); // Set to 9:00 AM (default due time)
           
           // Only include future weeks (not past weeks that weren't created)
-          if (weekDueDate >= now) {
+          if (weekMonday >= now) {
             expandedAssignments.push({
               ...baseAssignment,
               id: `${baseAssignment.id}_week_${week}`, // Unique ID for each week
               recurringWeek: week,
-              dueDate: weekDueDate.toISOString(),
-              status: weekDueDate < now ? 'overdue' : 'pending',
+              dueDate: weekMonday.toISOString(),
+              status: weekMonday < now ? 'overdue' : 'pending',
               checkInWindow: checkInWindow,
               responseId: undefined,
               coachResponded: false,

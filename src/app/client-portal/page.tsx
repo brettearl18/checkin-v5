@@ -1195,7 +1195,8 @@ export default function ClientPortalPage() {
                             // Include if due date has arrived AND window is open (available now) - matches getToDoCheckins logic
                             if (normalizedDueDate <= normalizedNow) {
                               const checkInWindow = checkIn.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
-                              const windowStatus = isWithinCheckInWindow(checkInWindow);
+                              // Calculate window relative to this check-in's week (Monday start)
+                              const windowStatus = isWithinCheckInWindow(checkInWindow, checkIn.dueDate);
                               const isFirstCheckIn = checkIn.recurringWeek === 1;
                               if (windowStatus.isOpen || isFirstCheckIn) return true;
                             }
@@ -1252,7 +1253,8 @@ export default function ClientPortalPage() {
                     // Special case: Week 1 check-ins are accessible immediately once due date arrives
                     if (normalizedDueDate <= normalizedNow) {
                       const checkInWindow = checkIn.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
-                      const windowStatus = isWithinCheckInWindow(checkInWindow);
+                      // Calculate window relative to this check-in's week (Monday start)
+                      const windowStatus = isWithinCheckInWindow(checkInWindow, checkIn.dueDate);
                       const isFirstCheckIn = checkIn.recurringWeek === 1;
                       if (windowStatus.isOpen || isFirstCheckIn) return true;
                     }
@@ -1319,7 +1321,8 @@ export default function ClientPortalPage() {
                       const isTomorrow = daysDiff === 1;
                       
                       const checkInWindow = nextScheduledCheckIn.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
-                      const windowStatus = isWithinCheckInWindow(checkInWindow);
+                      // Calculate window relative to this check-in's week (Monday start)
+                      const windowStatus = isWithinCheckInWindow(checkInWindow, nextScheduledCheckIn.dueDate);
                       
                       // Helper function to calculate window start date
                       const calculateWindowStartDate = (dueDate: string, window: CheckInWindow): Date => {

@@ -335,7 +335,8 @@ export default function ClientCheckInsPage() {
       // Special case: Week 1 check-ins are accessible immediately once due date arrives
       if (dueDate <= today) {
         const checkInWindow = checkin.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
-        const windowStatus = isWithinCheckInWindow(checkInWindow);
+        // Calculate window relative to this check-in's week (Monday start)
+        const windowStatus = isWithinCheckInWindow(checkInWindow, checkin.dueDate);
         const isFirstCheckIn = checkin.recurringWeek === 1;
         if (windowStatus.isOpen || isFirstCheckIn) return true;
       }
@@ -444,8 +445,9 @@ export default function ClientCheckInsPage() {
           // Then available now
           const aWindow = a.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
           const bWindow = b.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
-          const aAvailable = isWithinCheckInWindow(aWindow).isOpen;
-          const bAvailable = isWithinCheckInWindow(bWindow).isOpen;
+          // Calculate windows relative to each check-in's week (Monday start)
+          const aAvailable = isWithinCheckInWindow(aWindow, a.dueDate).isOpen;
+          const bAvailable = isWithinCheckInWindow(bWindow, b.dueDate).isOpen;
           if (aAvailable && !bAvailable) return -1;
           if (bAvailable && !aAvailable) return 1;
           
@@ -536,7 +538,8 @@ export default function ClientCheckInsPage() {
     
     if (dueDate <= today) {
       const checkInWindow = checkin.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
-      const windowStatus = isWithinCheckInWindow(checkInWindow);
+      // Calculate window relative to this check-in's week (Monday start)
+      const windowStatus = isWithinCheckInWindow(checkInWindow, checkin.dueDate);
       if (windowStatus.isOpen) return 'border-l-4 border-green-500';
     }
     
@@ -625,19 +628,21 @@ export default function ClientCheckInsPage() {
               
               if (!currentCheckin && !nextScheduled) return null;
               
-              // If we have a current check-in, use its window; otherwise use next scheduled's window
-              const checkInWindow = currentCheckin?.checkInWindow || nextScheduled?.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
-              const windowStatus = isWithinCheckInWindow(checkInWindow);
+              // Calculate window status relative to each check-in's week (Monday start)
+              const now = new Date();
+              
+              // Current check-in window check (relative to its due date/week)
+              const currentWindow = currentCheckin?.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
+              const currentDueDate = currentCheckin ? new Date(currentCheckin.dueDate) : null;
+              const windowStatus = currentDueDate ? isWithinCheckInWindow(currentWindow, currentDueDate) : { isOpen: false, message: '', nextOpenTime: undefined };
               
               // Check if current check-in is available now
-              const now = new Date();
-              const dueDate = currentCheckin ? new Date(currentCheckin.dueDate) : null;
               let dueDateHasArrived = false;
-              if (dueDate) {
-                dueDate.setHours(0, 0, 0, 0);
+              if (currentDueDate) {
+                currentDueDate.setHours(0, 0, 0, 0);
                 const today = new Date(now);
                 today.setHours(0, 0, 0, 0);
-                dueDateHasArrived = dueDate <= today;
+                dueDateHasArrived = currentDueDate <= today;
               }
               
               // Special case: Week 1 (first check-in) is accessible immediately once due date arrives,
@@ -648,7 +653,7 @@ export default function ClientCheckInsPage() {
                 (isFirstCheckIn || windowStatus.isOpen) && 
                 currentCheckin.status !== 'completed';
               
-              // Check if next scheduled check-in is available
+              // Check if next scheduled check-in is available (relative to its week)
               const nextDueDate = nextScheduled ? new Date(nextScheduled.dueDate) : null;
               let nextDueDateHasArrived = false;
               if (nextDueDate) {
@@ -658,7 +663,7 @@ export default function ClientCheckInsPage() {
                 nextDueDateHasArrived = nextDueDate <= today;
               }
               const nextWindow = nextScheduled?.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
-              const nextWindowStatus = isWithinCheckInWindow(nextWindow);
+              const nextWindowStatus = nextDueDate ? isWithinCheckInWindow(nextWindow, nextDueDate) : { isOpen: false, message: '', nextOpenTime: undefined };
               const isNextAvailable = nextScheduled && nextDueDateHasArrived && nextWindowStatus.isOpen && nextScheduled.status !== 'completed';
               
               return (
@@ -1015,14 +1020,16 @@ export default function ClientCheckInsPage() {
                   <div className="space-y-3">
                     {filteredCheckins.map((checkin) => {
                       const checkInWindow = checkin.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
-                      const windowStatus = isWithinCheckInWindow(checkInWindow);
+                      
+                      // Calculate window relative to this check-in's week (Monday start)
+                      const dueDate = new Date(checkin.dueDate);
+                      const windowStatus = isWithinCheckInWindow(checkInWindow, dueDate);
                       
                       // A check-in is only available if:
                       // 1. The due date has arrived (today >= due date)
-                      // 2. AND we're currently within the check-in window period (or it's Week 1)
+                      // 2. AND we're currently within the check-in window period for that week (or it's Week 1)
                       // 3. AND the check-in is not completed
                       const now = new Date();
-                      const dueDate = new Date(checkin.dueDate);
                       dueDate.setHours(0, 0, 0, 0); // Reset to start of day for comparison
                       const today = new Date(now);
                       today.setHours(0, 0, 0, 0);

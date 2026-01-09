@@ -186,9 +186,11 @@ export default function CheckInCompletionPage() {
       
       setAssignment(assignmentData);
 
-      // Check check-in window status
+      // Check check-in window status (relative to this check-in's week - Monday start)
       const checkInWindow = assignmentData.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
-      const status = isWithinCheckInWindow(checkInWindow);
+      const dueDate = assignmentData.dueDate?.toDate ? assignmentData.dueDate.toDate() : 
+                     (assignmentData.dueDate ? new Date(assignmentData.dueDate) : new Date());
+      const status = isWithinCheckInWindow(checkInWindow, dueDate);
       setWindowStatus(status);
 
       // Check if extension has been granted
@@ -291,9 +293,11 @@ export default function CheckInCompletionPage() {
       
       setAssignment(assignmentData);
 
-      // Check check-in window status
+      // Check check-in window status (relative to this check-in's week - Monday start)
       const checkInWindow = assignmentData.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
-      const status = isWithinCheckInWindow(checkInWindow);
+      const dueDate = assignmentData.dueDate?.toDate ? assignmentData.dueDate.toDate() : 
+                     (assignmentData.dueDate ? new Date(assignmentData.dueDate) : new Date());
+      const status = isWithinCheckInWindow(checkInWindow, dueDate);
       setWindowStatus(status);
 
       const questionIds = formData.questions || [];
@@ -463,9 +467,10 @@ export default function CheckInCompletionPage() {
     isSubmittingRef.current = true;
     setSubmitting(true);
 
-    // Check if check-in window is open
+    // Check if check-in window is open (relative to this check-in's week - Monday start)
     const checkInWindow = assignment.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
-    const status = isWithinCheckInWindow(checkInWindow);
+    const dueDate = assignment.dueDate ? (assignment.dueDate.toDate ? assignment.dueDate.toDate() : new Date(assignment.dueDate)) : new Date();
+    const status = isWithinCheckInWindow(checkInWindow, dueDate);
     
     // Special case: Week 1 (first check-in) can be submitted even if window is closed
     // This allows clients who signed up Jan 3-5 to submit their Week 1 check-in on Jan 5
