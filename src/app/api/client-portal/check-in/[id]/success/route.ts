@@ -81,13 +81,25 @@ export async function GET(
       return false;
     };
 
+    // Check if this is a dynamically generated week ID (e.g., "assignment-123_week_2")
+    // These IDs are generated for Week 2+ check-ins that don't exist as separate documents
+    const weekMatch = id.match(/^(.+)_week_(\d+)$/);
+    let isDynamicWeek = false;
+    let baseAssignmentId: string | null = null;
+
+    if (weekMatch) {
+      isDynamicWeek = true;
+      baseAssignmentId = weekMatch[1];
+      console.log(`[Success API] Dynamic week ID detected: ${id}, base assignment: ${baseAssignmentId}`);
+    }
+
     // First, try as assignment ID (by document ID)
     try {
       let assignmentDoc = await db.collection('check_in_assignments').doc(id).get();
       let assignmentDocId = assignmentDoc.exists ? assignmentDoc.id : null;
 
-      // If not found by document ID, try querying by 'id' field
-      if (!assignmentDoc.exists) {
+      // If not found by document ID and it's not a dynamic week ID, try querying by 'id' field
+      if (!assignmentDoc.exists && !isDynamicWeek) {
         const assignmentsQuery = await db.collection('check_in_assignments')
           .where('id', '==', id)
           .limit(1)
@@ -96,6 +108,36 @@ export async function GET(
         if (!assignmentsQuery.empty) {
           assignmentDoc = assignmentsQuery.docs[0];
           assignmentDocId = assignmentDoc.id;
+        }
+      }
+
+      // For dynamic week IDs, try to find the Week X assignment that was created on submission
+      // or find via the base assignment and responseId
+      if (isDynamicWeek && !assignmentDoc.exists && baseAssignmentId) {
+        // Try to find by base assignment ID first
+        const baseAssignmentDoc = await db.collection('check_in_assignments').doc(baseAssignmentId).get();
+        if (!baseAssignmentDoc.exists) {
+          const baseQuery = await db.collection('check_in_assignments')
+            .where('id', '==', baseAssignmentId)
+            .limit(1)
+            .get();
+          if (!baseQuery.empty) {
+            const baseDoc = baseQuery.docs[0];
+            const baseData = baseDoc.data();
+            // Look for the Week X assignment that was created for this dynamic week
+            const weekNumber = parseInt(weekMatch[2], 10);
+            const weekAssignmentQuery = await db.collection('check_in_assignments')
+              .where('clientId', '==', baseData.clientId)
+              .where('formId', '==', baseData.formId)
+              .where('recurringWeek', '==', weekNumber)
+              .limit(1)
+              .get();
+            
+            if (!weekAssignmentQuery.empty) {
+              assignmentDoc = weekAssignmentQuery.docs[0];
+              assignmentDocId = assignmentDoc.id;
+            }
+          }
         }
       }
 

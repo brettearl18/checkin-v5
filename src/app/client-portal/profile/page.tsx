@@ -8,6 +8,7 @@ import { db } from '@/lib/firebase-client';
 import Link from 'next/link';
 import ClientNavigation from '@/components/ClientNavigation';
 import PushNotificationPreferences from '@/components/PushNotificationPreferences';
+import { timezones } from '@/lib/timezone-utils';
 
 export default function ClientProfilePage() {
   const { userProfile, user } = useAuth();
@@ -29,7 +30,8 @@ export default function ClientProfilePage() {
     gender: userProfile?.profile?.gender || '',
     fitnessLevel: userProfile?.profile?.fitnessLevel || '',
     healthGoals: userProfile?.profile?.healthGoals || [],
-    emailNotifications: userProfile?.emailNotifications ?? true // Default to true (opt-out)
+    emailNotifications: userProfile?.emailNotifications ?? true, // Default to true (opt-out)
+    timezone: userProfile?.timezone || 'Australia/Perth' // Default to Perth if not set
   });
 
   // Load client data when component mounts or userProfile changes
@@ -54,7 +56,8 @@ export default function ClientProfilePage() {
               gender: client.profile?.gender || '',
               fitnessLevel: client.profile?.fitnessLevel || '',
               healthGoals: client.profile?.healthGoals || [],
-              emailNotifications: client.emailNotifications ?? true // Default to true if not set
+              emailNotifications: client.emailNotifications ?? true, // Default to true if not set
+              timezone: client.timezone || 'Australia/Perth' // Default to Perth if not set
             });
 
             // Set account information
@@ -138,6 +141,7 @@ export default function ClientProfilePage() {
         lastName: formData.lastName,
         phone: formData.phone,
         emailNotifications: formData.emailNotifications,
+        timezone: formData.timezone,
         profile: {
           age: formData.age ? parseInt(formData.age) : null,
           gender: formData.gender,
@@ -354,6 +358,34 @@ export default function ClientProfilePage() {
                       </p>
                     </div>
                   </label>
+                </div>
+              </div>
+
+              {/* Preferences */}
+              <div className="mb-8">
+                <h2 className="text-xl font-semibold text-gray-900 mb-6">Preferences</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label htmlFor="timezone" className="block text-sm font-medium text-gray-700 mb-2">
+                      Timezone
+                    </label>
+                    <select
+                      id="timezone"
+                      name="timezone"
+                      value={formData.timezone}
+                      onChange={handleInputChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      {timezones.map((tz) => (
+                        <option key={tz.value} value={tz.value}>
+                          {tz.label} ({tz.offset})
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Check-in windows and times will be displayed in your timezone.
+                    </p>
+                  </div>
                 </div>
               </div>
 

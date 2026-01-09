@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase-server';
 import { notificationService } from '@/lib/notification-service';
 import { logInfo, logSafeError } from '@/lib/logger';
+import { Timestamp } from 'firebase-admin/firestore';
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic';
@@ -25,39 +26,140 @@ export async function POST(
 
     const db = getDb();
 
-    // Get the assignment - try as document ID first, then query by 'id' field
-    logInfo('[Check-in API] Attempting to find assignment');
-    let assignmentDoc = await db.collection('check_in_assignments').doc(id).get();
-    let assignmentData = assignmentDoc.exists ? assignmentDoc.data() : null;
-    let assignmentDocId = assignmentDoc.exists ? assignmentDoc.id : null;
-
-    // If not found by document ID, try querying by 'id' field
-    if (!assignmentDoc.exists) {
-      logInfo('[Check-in API] Not found by document ID, querying by id field');
-      const assignmentsQuery = await db.collection('check_in_assignments')
-        .where('id', '==', id)
-        .limit(1)
-        .get();
+    // Check if this is a dynamically generated week ID (e.g., "assignment-123_week_2")
+    // These IDs are generated for Week 2+ check-ins that don't exist as separate documents
+    const weekMatch = id.match(/^(.+)_week_(\d+)$/);
+    let assignmentDoc: any = null;
+    let isDynamicWeek = false;
+    let dynamicWeekNumber = 1;
+    let assignmentData: any = null;
+    let assignmentDocId: string | null = null;
+    
+    if (weekMatch) {
+      // This is a dynamically generated week check-in (Week 2+)
+      isDynamicWeek = true;
+      const baseAssignmentId = weekMatch[1];
+      dynamicWeekNumber = parseInt(weekMatch[2], 10);
       
-      if (!assignmentsQuery.empty) {
-        assignmentDoc = assignmentsQuery.docs[0];
-        assignmentData = assignmentDoc.data();
-        assignmentDocId = assignmentDoc.id;
-        logInfo('[Check-in API] Found by id field');
+      logInfo(`[Check-in API] Dynamic week check-in detected: Week ${dynamicWeekNumber} for base assignment ${baseAssignmentId}`);
+      
+      // For dynamic week IDs, the baseAssignmentId could be either:
+      // 1. The original 'id' field from the assignment document (e.g., "assignment-123-abc")
+      // 2. The Firestore document ID (if the original id field wasn't preserved)
+      // Try both lookup methods
+      try {
+        // First, try to find by the 'id' field (original assignment ID)
+        const assignmentsQuery = await db.collection('check_in_assignments')
+          .where('id', '==', baseAssignmentId)
+          .limit(1)
+          .get();
+        
+        if (!assignmentsQuery.empty) {
+          assignmentDoc = assignmentsQuery.docs[0];
+          assignmentData = assignmentDoc.data();
+          assignmentDocId = assignmentDoc.id;
+          logInfo(`[Check-in API] Base assignment found by id field (${baseAssignmentId}), document ID: ${assignmentDocId}`);
+        } else {
+          // Fallback: try by document ID (in case baseAssignmentId is actually a document ID)
+          assignmentDoc = await db.collection('check_in_assignments').doc(baseAssignmentId).get();
+          if (assignmentDoc.exists) {
+            assignmentData = assignmentDoc.data();
+            assignmentDocId = assignmentDoc.id;
+            logInfo(`[Check-in API] Base assignment found by document ID (${baseAssignmentId})`);
+          } else {
+            logInfo(`[Check-in API] Base assignment not found by id field or document ID: ${baseAssignmentId}`);
+          }
+        }
+      } catch (queryError: any) {
+        logSafeError('Error querying assignments', queryError);
+        // Final fallback: try by document ID
+        try {
+          assignmentDoc = await db.collection('check_in_assignments').doc(baseAssignmentId).get();
+          if (assignmentDoc.exists) {
+            assignmentData = assignmentDoc.data();
+            assignmentDocId = assignmentDoc.id;
+            logInfo(`[Check-in API] Base assignment found by document ID (error fallback): ${baseAssignmentId}`);
+          }
+        } catch (docError: any) {
+          logSafeError('Error fetching assignment by document ID', docError);
+        }
+      }
+      
+      if (assignmentDoc && assignmentDoc.exists && assignmentData && assignmentDocId) {
+        logInfo(`[Check-in API] Base assignment found, will create Week ${dynamicWeekNumber} assignment on submission`);
+      }
+    } else {
+      // Regular assignment ID - try to fetch by Firestore document ID
+      logInfo('[Check-in API] Regular assignment ID, attempting to find assignment');
+      assignmentDoc = await db.collection('check_in_assignments').doc(id).get();
+      assignmentData = assignmentDoc.exists ? assignmentDoc.data() : null;
+      assignmentDocId = assignmentDoc.exists ? assignmentDoc.id : null;
+
+      // If not found by document ID, try querying by 'id' field
+      if (!assignmentDoc.exists) {
+        logInfo('[Check-in API] Not found by document ID, querying by id field');
+        const assignmentsQuery = await db.collection('check_in_assignments')
+          .where('id', '==', id)
+          .limit(1)
+          .get();
+        
+        if (!assignmentsQuery.empty) {
+          assignmentDoc = assignmentsQuery.docs[0];
+          assignmentData = assignmentDoc.data();
+          assignmentDocId = assignmentDoc.id;
+          logInfo('[Check-in API] Found by id field');
+        }
       }
     }
 
     if (!assignmentData || !assignmentDocId) {
-      logInfo('[Check-in API] Assignment not found');
+      logInfo(`[Check-in API] Assignment not found for ID: ${id}`);
+      if (isDynamicWeek) {
+        logInfo(`[Check-in API] Tried to find base assignment with id field: ${weekMatch?.[1]}`);
+      }
       return NextResponse.json({
         success: false,
-        message: 'Assignment not found'
+        message: 'Assignment not found',
+        debug: process.env.NODE_ENV === 'development' ? {
+          providedId: id,
+          isDynamicWeek,
+          baseAssignmentId: isDynamicWeek ? weekMatch?.[1] : undefined
+        } : undefined
       }, { status: 404 });
     }
 
     logInfo('[Check-in API] Assignment found');
 
-    const assignmentId = assignmentDocId; // Use the actual Firestore document ID
+    // For dynamic weeks, we need to check if a Week X assignment already exists, or create one
+    let assignmentId: string;
+    let finalAssignmentData = assignmentData;
+    let finalAssignmentDocId = assignmentDocId;
+    
+    if (isDynamicWeek) {
+      // Check if a Week X assignment already exists for this recurring series
+      const weekAssignmentQuery = await db.collection('check_in_assignments')
+        .where('clientId', '==', assignmentData.clientId)
+        .where('formId', '==', assignmentData.formId)
+        .where('recurringWeek', '==', dynamicWeekNumber)
+        .limit(1)
+        .get();
+      
+      if (!weekAssignmentQuery.empty) {
+        // Week X assignment already exists, use it
+        const existingWeekDoc = weekAssignmentQuery.docs[0];
+        assignmentId = existingWeekDoc.id;
+        finalAssignmentDocId = existingWeekDoc.id;
+        finalAssignmentData = existingWeekDoc.data();
+        logInfo(`[Check-in API] Found existing Week ${dynamicWeekNumber} assignment`);
+      } else {
+        // Week X assignment doesn't exist yet - we'll create it after form submission
+        // For now, use the base assignment ID, but we'll create the Week X assignment
+        assignmentId = assignmentDocId;
+        logInfo(`[Check-in API] Week ${dynamicWeekNumber} assignment will be created on submission`);
+      }
+    } else {
+      assignmentId = assignmentDocId; // Use the actual Firestore document ID
+    }
 
     // Get the form
     const formDoc = await db.collection('forms').doc(assignmentData.formId).get();
@@ -136,18 +238,22 @@ export async function POST(
       return true; // number, boolean, etc. are considered answered
     }).length : 0;
 
+    // Determine the correct assignmentId to store in the response
+    // For dynamic weeks that don't have a Week X document yet, we'll create one and use its ID
+    // For now, we'll use the base assignment ID and update it after creating the Week X assignment
     const responseData = {
-      assignmentId: assignmentId,
-      formId: assignmentData.formId,
+      assignmentId: isDynamicWeek && finalAssignmentDocId === assignmentDocId ? assignmentDocId : assignmentId, // Will be updated after Week X assignment is created
+      formId: finalAssignmentData.formId,
       formTitle: formData.title, // We know this exists now due to validation above
-      clientId: assignmentData.clientId,
-      coachId: assignmentData.coachId,
+      clientId: finalAssignmentData.clientId,
+      coachId: finalAssignmentData.coachId,
       responses: requestData.responses || [],
       score: finalScore,
       totalQuestions: requestData.responses ? requestData.responses.length : 0,
       answeredQuestions: answeredCount,
       submittedAt: new Date(),
-      status: 'completed'
+      status: 'completed',
+      recurringWeek: isDynamicWeek ? dynamicWeekNumber : (finalAssignmentData.recurringWeek || null) // Store which week this is
     };
 
     logInfo('Prepared response data');
@@ -162,23 +268,41 @@ export async function POST(
     }
 
     // Check if assignment is already completed (prevent duplicate submissions)
-    if (assignmentData.status === 'completed' && assignmentData.responseId) {
+    // For dynamic weeks, check the Week X assignment; otherwise check the regular assignment
+    if (isDynamicWeek && finalAssignmentDocId !== assignmentDocId) {
+      // Week X assignment exists, check its status
+      if (finalAssignmentData.status === 'completed' && finalAssignmentData.responseId) {
+        logInfo(`[Check-in API] Week ${dynamicWeekNumber} assignment already completed`);
+        try {
+          const existingResponseDoc = await db.collection('formResponses').doc(finalAssignmentData.responseId).get();
+          if (existingResponseDoc.exists) {
+            return NextResponse.json({
+              success: true,
+              message: 'Check-in already completed',
+              responseId: finalAssignmentData.responseId,
+              score: finalAssignmentData.score || 0,
+              alreadyCompleted: true
+            });
+          }
+        } catch (error) {
+          logSafeError('Error fetching existing response', error);
+        }
+      }
+    } else if (finalAssignmentData.status === 'completed' && finalAssignmentData.responseId) {
       logInfo('[Check-in API] Assignment already completed, returning existing response');
-      // Return existing response instead of creating a new one
       try {
-        const existingResponseDoc = await db.collection('formResponses').doc(assignmentData.responseId).get();
+        const existingResponseDoc = await db.collection('formResponses').doc(finalAssignmentData.responseId).get();
         if (existingResponseDoc.exists) {
           return NextResponse.json({
             success: true,
             message: 'Check-in already completed',
-            responseId: assignmentData.responseId,
-            score: assignmentData.score || 0,
+            responseId: finalAssignmentData.responseId,
+            score: finalAssignmentData.score || 0,
             alreadyCompleted: true
           });
         }
       } catch (error) {
         logSafeError('Error fetching existing response', error);
-        // Continue to create new response if existing one can't be found
       }
     }
 
@@ -186,39 +310,110 @@ export async function POST(
     // Allow submission if: window is open, extension is granted, or it's Week 1
     // Calculate window relative to this check-in's week (Monday start)
     const { isWithinCheckInWindow, DEFAULT_CHECK_IN_WINDOW } = await import('@/lib/checkin-window-utils');
-    const checkInWindow = assignmentData.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
-    const dueDate = assignmentData.dueDate?.toDate ? assignmentData.dueDate.toDate() : new Date(assignmentData.dueDate);
+    const checkInWindow = finalAssignmentData.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
+    
+    // For dynamic weeks, calculate the correct due date for that week
+    let dueDate: Date;
+    if (isDynamicWeek) {
+      const firstDueDate = assignmentData.dueDate?.toDate?.() || new Date(assignmentData.dueDate);
+      dueDate = new Date(firstDueDate);
+      dueDate.setDate(firstDueDate.getDate() + (7 * (dynamicWeekNumber - 1)));
+      dueDate.setHours(9, 0, 0, 0);
+    } else {
+      dueDate = finalAssignmentData.dueDate?.toDate ? finalAssignmentData.dueDate.toDate() : new Date(finalAssignmentData.dueDate);
+    }
+    
     const windowStatus = isWithinCheckInWindow(checkInWindow, dueDate);
-    const isFirstCheckIn = assignmentData.recurringWeek === 1;
+    const isFirstCheckIn = (isDynamicWeek ? dynamicWeekNumber : (finalAssignmentData.recurringWeek || 1)) === 1;
     
     // Allow submissions even when window is closed - they will be reviewed during the next check-in period
     // This allows clients to update and submit their check-ins regardless of window status
     // The frontend notice already informs clients that their check-in may be reviewed next period
 
-    // Save response to Firestore
+    // Save response to Firestore (we'll update assignmentId after creating Week X assignment if needed)
     const docRef = await db.collection('formResponses').add(responseData);
+    let finalAssignmentId = assignmentId; // This will be the actual assignment document ID used
 
-    // Update assignment status
-    await db.collection('check_in_assignments').doc(assignmentId).update({
-      status: 'completed',
-      completedAt: new Date(),
-      responseId: docRef.id,
-      score: finalScore,
-      responseCount: answeredCount, // Set response count from actual answered questions
-      totalQuestions: requestData.responses ? requestData.responses.length : 0,
-      answeredQuestions: answeredCount
-    });
+    // Handle assignment update - for dynamic weeks, create a new assignment document
+    if (isDynamicWeek && finalAssignmentDocId === assignmentDocId) {
+      // Week X assignment doesn't exist yet - create it
+      // Calculate the due date for this week
+      const firstDueDate = assignmentData.dueDate?.toDate?.() || new Date(assignmentData.dueDate);
+      const weekMonday = new Date(firstDueDate);
+      weekMonday.setDate(firstDueDate.getDate() + (7 * (dynamicWeekNumber - 1)));
+      weekMonday.setHours(9, 0, 0, 0);
+      
+      const weekAssignmentData = {
+        ...assignmentData,
+        id: id, // Use the dynamic ID format for reference
+        recurringWeek: dynamicWeekNumber,
+        dueDate: Timestamp.fromDate(weekMonday),
+        status: 'completed',
+        completedAt: Timestamp.fromDate(new Date()),
+        responseId: docRef.id,
+        score: finalScore,
+        responseCount: answeredCount,
+        totalQuestions: requestData.responses ? requestData.responses.length : 0,
+        answeredQuestions: answeredCount,
+        assignedAt: assignmentData.assignedAt || Timestamp.fromDate(new Date()), // Preserve existing Timestamp or create new one
+        createdAt: Timestamp.fromDate(new Date()),
+        updatedAt: Timestamp.fromDate(new Date())
+      };
+      
+      const weekAssignmentRef = await db.collection('check_in_assignments').add(weekAssignmentData);
+      finalAssignmentId = weekAssignmentRef.id; // Use the newly created assignment document ID
+      
+      // Update the response with the correct assignment ID
+      await db.collection('formResponses').doc(docRef.id).update({
+        assignmentId: finalAssignmentId
+      });
+      
+      logInfo(`[Check-in API] Created new Week ${dynamicWeekNumber} assignment document with ID: ${finalAssignmentId}`);
+    } else if (isDynamicWeek && finalAssignmentDocId !== assignmentDocId) {
+      // Week X assignment already exists, update it
+      await db.collection('check_in_assignments').doc(finalAssignmentDocId).update({
+        status: 'completed',
+        completedAt: Timestamp.fromDate(new Date()),
+        responseId: docRef.id,
+        score: finalScore,
+        responseCount: answeredCount,
+        totalQuestions: requestData.responses ? requestData.responses.length : 0,
+        answeredQuestions: answeredCount,
+        updatedAt: Timestamp.fromDate(new Date())
+      });
+      finalAssignmentId = finalAssignmentDocId;
+      
+      // Update the response with the correct assignment ID
+      await db.collection('formResponses').doc(docRef.id).update({
+        assignmentId: finalAssignmentId
+      });
+      
+      logInfo(`[Check-in API] Updated existing Week ${dynamicWeekNumber} assignment`);
+    } else {
+      // Regular assignment - update existing document
+      await db.collection('check_in_assignments').doc(assignmentId).update({
+        status: 'completed',
+        completedAt: Timestamp.fromDate(new Date()),
+        responseId: docRef.id,
+        score: finalScore,
+        responseCount: answeredCount,
+        totalQuestions: requestData.responses ? requestData.responses.length : 0,
+        answeredQuestions: answeredCount,
+        updatedAt: Timestamp.fromDate(new Date())
+      });
+      finalAssignmentId = assignmentId;
+    }
 
     // Create notification for coach
     try {
       await notificationService.createCheckInCompletedNotification(
-        assignmentData.coachId,
+        finalAssignmentData.coachId,
         clientName,
         formData.title,
         finalScore,
         docRef.id, // responseId
-        assignmentData.clientId, // clientId
-        assignmentData.formId // formId
+        finalAssignmentData.clientId, // clientId
+        finalAssignmentData.formId // formId
       );
     } catch (error) {
       logSafeError('Error creating notification', error);
@@ -233,13 +428,13 @@ export async function POST(
         const { sendEmail } = await import('@/lib/email-service');
         const { getCheckInCompletedEmailTemplate } = await import('@/lib/email-templates');
         const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://checkinv5.web.app';
-        const checkInUrl = `${baseUrl}/client-portal/check-in/${assignmentId}`;
+        const checkInUrl = `${baseUrl}/client-portal/check-in/${finalAssignmentId}`;
 
         // Get coach name
         let coachName: string | undefined;
-        if (assignmentData.coachId) {
+        if (finalAssignmentData.coachId) {
           try {
-            const coachDoc = await db.collection('coaches').doc(assignmentData.coachId).get();
+            const coachDoc = await db.collection('coaches').doc(finalAssignmentData.coachId).get();
             if (coachDoc.exists) {
               const coachData = coachDoc.data();
               coachName = `${coachData?.firstName || ''} ${coachData?.lastName || ''}`.trim() || undefined;
@@ -273,7 +468,7 @@ export async function POST(
       fetch('/api/goals/track-progress', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientId: assignmentData.clientId })
+        body: JSON.stringify({ clientId: finalAssignmentData.clientId })
       }).catch(error => {
         logSafeError('Error tracking goal progress after check-in', error);
         // Don't fail the check-in if goal tracking fails

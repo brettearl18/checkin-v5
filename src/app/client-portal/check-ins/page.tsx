@@ -7,7 +7,31 @@ import ClientNavigation from '@/components/ClientNavigation';
 import Link from 'next/link';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase-client';
-import { isWithinCheckInWindow, getCheckInWindowDescription, DEFAULT_CHECK_IN_WINDOW, CheckInWindow } from '@/lib/checkin-window-utils';
+// Window system removed - using simple Friday 10am to Tuesday 12pm logic
+// Helper function to check if check-in is currently open
+const isCheckInCurrentlyOpen = (dueDate: Date | string): boolean => {
+  const due = typeof dueDate === 'string' ? new Date(dueDate) : dueDate;
+  const now = new Date();
+  
+  // Find the Monday of the week containing the due date
+  const dayOfWeek = due.getDay();
+  const daysToMonday = dayOfWeek === 0 ? 1 : (dayOfWeek === 1 ? 0 : (8 - dayOfWeek));
+  const weekMonday = new Date(due);
+  weekMonday.setDate(due.getDate() - daysToMonday);
+  weekMonday.setHours(0, 0, 0, 0);
+  
+  // Window opens: Friday 10am before that Monday (3 days before)
+  const windowOpen = new Date(weekMonday);
+  windowOpen.setDate(weekMonday.getDate() - 3);
+  windowOpen.setHours(10, 0, 0, 0);
+  
+  // Window closes: Tuesday 12pm after that Monday (1 day after)
+  const windowClose = new Date(weekMonday);
+  windowClose.setDate(weekMonday.getDate() + 1);
+  windowClose.setHours(12, 0, 0, 0);
+  
+  return now >= windowOpen && now <= windowClose;
+};
 import { getTrafficLightStatus, getDefaultThresholds, convertLegacyThresholds, type ScoringThresholds } from '@/lib/scoring-utils';
 
 interface CheckIn {
@@ -21,7 +45,7 @@ interface CheckIn {
   assignedAt: string;
   completedAt?: string;
   score?: number;
-  checkInWindow?: CheckInWindow;
+  checkInWindow?: any; // Deprecated - kept for backwards compatibility
   isRecurring?: boolean;
   recurringWeek?: number;
   totalWeeks?: number;
@@ -198,22 +222,9 @@ export default function ClientCheckInsPage() {
             status: checkin.status
           });
 
-          // Ensure checkInWindow has the correct structure
-          let checkInWindow = DEFAULT_CHECK_IN_WINDOW;
-          if (checkin.checkInWindow) {
-            if (typeof checkin.checkInWindow === 'object' && 
-                checkin.checkInWindow.enabled !== undefined &&
-                checkin.checkInWindow.startDay &&
-                checkin.checkInWindow.startTime) {
-              checkInWindow = checkin.checkInWindow;
-            } else {
-              console.warn('Invalid checkInWindow structure for check-in:', checkin.id, checkin.checkInWindow);
-            }
-          }
-
+          // Window field kept for backwards compatibility but no longer used
           return {
-            ...checkin,
-            checkInWindow
+            ...checkin
           };
         });
         
@@ -312,10 +323,11 @@ export default function ClientCheckInsPage() {
   };
 
   // "To Do" - Actionable check-ins that need attention
-  // Includes: overdue check-ins OR check-ins that are available now (window is open)
-  // Does NOT include future check-ins whose window hasn't opened yet (those go in "Scheduled")
+  // Priority: Overdue check-ins first, then available check-ins (window open), then upcoming (within 7 days)
   const getToDoCheckins = () => {
     const now = new Date();
+    const today = new Date(now);
+    today.setHours(0, 0, 0, 0);
 
     return checkins.filter(checkin => {
       // Exclude completed check-ins from "To Do"
@@ -325,24 +337,51 @@ export default function ClientCheckInsPage() {
       
       // Normalize dates for comparison (set to start of day)
       dueDate.setHours(0, 0, 0, 0);
-      const today = new Date(now);
-      today.setHours(0, 0, 0, 0);
       
-      // Include if overdue (past due date)
+      // Always include overdue check-ins (past due date) - these are priority
       if (dueDate < today) return true;
       
-      // Include if due date has arrived AND window is open (available now)
-      // Special case: Week 1 check-ins are accessible immediately once due date arrives
-      if (dueDate <= today) {
-        const checkInWindow = checkin.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
-        // Calculate window relative to this check-in's week (Monday start)
-        const windowStatus = isWithinCheckInWindow(checkInWindow, checkin.dueDate);
-        const isFirstCheckIn = checkin.recurringWeek === 1;
-        if (windowStatus.isOpen || isFirstCheckIn) return true;
-      }
+      // Include check-ins due today
+      if (dueDate.getTime() === today.getTime()) return true;
       
-      // Do NOT include future check-ins - they belong in "Scheduled" tab
+      // Include if window is open (Friday 10am to Tuesday 12pm) - available now
+      const isCheckInOpenForWeek = (due: Date): boolean => {
+        const d = new Date(due);
+        const dayOfWeek = d.getDay();
+        const daysToMonday = dayOfWeek === 0 ? 1 : (dayOfWeek === 1 ? 0 : (8 - dayOfWeek));
+        const weekMonday = new Date(d);
+        weekMonday.setDate(d.getDate() - daysToMonday);
+        weekMonday.setHours(0, 0, 0, 0);
+        
+        const windowOpen = new Date(weekMonday);
+        windowOpen.setDate(weekMonday.getDate() - 3); // Friday
+        windowOpen.setHours(10, 0, 0, 0);
+        
+        const windowClose = new Date(weekMonday);
+        windowClose.setDate(weekMonday.getDate() + 1); // Tuesday
+        windowClose.setHours(12, 0, 0, 0);
+        
+        return now >= windowOpen && now <= windowClose;
+      };
+      
+      if (isCheckInOpenForWeek(dueDate)) return true;
+      
+      // Don't include future check-ins whose window isn't open yet - they belong in "Scheduled"
       return false;
+    }).sort((a, b) => {
+      // Sort by priority: overdue first, then available (window open), then by due date
+      const aDue = new Date(a.dueDate).getTime();
+      const bDue = new Date(b.dueDate).getTime();
+      const todayTime = today.getTime();
+      
+      // Overdue check-ins come first
+      const aOverdue = aDue < todayTime;
+      const bOverdue = bDue < todayTime;
+      if (aOverdue && !bOverdue) return -1;
+      if (!aOverdue && bOverdue) return 1;
+      
+      // Then sort by due date (earliest first)
+      return aDue - bDue;
     });
   };
 
@@ -375,20 +414,27 @@ export default function ClientCheckInsPage() {
   };
 
 
-  const filteredCompletedResponses = completedResponses.filter(item => {
-    switch (completedFilter) {
-      case 'recent':
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-        return new Date(item.submittedAt) > thirtyDaysAgo;
-      case 'high-score':
-        return item.score >= 80;
-      case 'low-score':
-        return item.score < 60;
-      default:
-        return true;
-    }
-  });
+  const filteredCompletedResponses = completedResponses
+    .filter(item => {
+      switch (completedFilter) {
+        case 'recent':
+          const thirtyDaysAgo = new Date();
+          thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+          return new Date(item.submittedAt) > thirtyDaysAgo;
+        case 'high-score':
+          return item.score >= 80;
+        case 'low-score':
+          return item.score < 60;
+        default:
+          return true;
+      }
+    })
+    .sort((a, b) => {
+      // Sort by newest first (submittedAt descending)
+      const dateA = new Date(a.submittedAt).getTime();
+      const dateB = new Date(b.submittedAt).getTime();
+      return dateB - dateA; // Newest first
+    });
 
   const formatHistoryDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -442,14 +488,8 @@ export default function ClientCheckInsPage() {
           if (aDue < now && bDue >= now) return -1;
           if (bDue < now && aDue >= now) return 1;
           
-          // Then available now
-          const aWindow = a.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
-          const bWindow = b.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
-          // Calculate windows relative to each check-in's week (Monday start)
-          const aAvailable = isWithinCheckInWindow(aWindow, a.dueDate).isOpen;
-          const bAvailable = isWithinCheckInWindow(bWindow, b.dueDate).isOpen;
-          if (aAvailable && !bAvailable) return -1;
-          if (bAvailable && !aAvailable) return 1;
+          // DISABLED: Window-based sorting removed - sort by due date only
+          // Overdue/due check-ins already sorted above, so just sort by date
           
           // Then by due date (earliest first)
           return aDue - bDue;
@@ -536,11 +576,9 @@ export default function ClientCheckInsPage() {
     const today = new Date(now);
     today.setHours(0, 0, 0, 0);
     
+    // DISABLED: Window-based styling removed - use due date status only
     if (dueDate <= today) {
-      const checkInWindow = checkin.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
-      // Calculate window relative to this check-in's week (Monday start)
-      const windowStatus = isWithinCheckInWindow(checkInWindow, checkin.dueDate);
-      if (windowStatus.isOpen) return 'border-l-4 border-green-500';
+      return 'border-l-4 border-green-500';
     }
     
     return 'border-l-4 border-yellow-500';
@@ -628,43 +666,49 @@ export default function ClientCheckInsPage() {
               
               if (!currentCheckin && !nextScheduled) return null;
               
-              // Calculate window status relative to each check-in's week (Monday start)
+              // Simplified: Check-ins are available if it's Friday 10am or later before Tuesday 12pm close
               const now = new Date();
               
-              // Current check-in window check (relative to its due date/week)
-              const currentWindow = currentCheckin?.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
+              // Helper function to check if check-in is open (Friday 10am to Tuesday 12pm of the week)
+              const isCheckInOpen = (dueDate: Date): boolean => {
+                const due = new Date(dueDate);
+                // Find the Monday of the week containing the due date
+                const dayOfWeek = due.getDay();
+                const daysToMonday = dayOfWeek === 0 ? 1 : (dayOfWeek === 1 ? 0 : (8 - dayOfWeek));
+                const weekMonday = new Date(due);
+                weekMonday.setDate(due.getDate() - daysToMonday);
+                weekMonday.setHours(0, 0, 0, 0);
+                
+                // Window opens: Friday 10am before that Monday (3 days before)
+                const windowOpen = new Date(weekMonday);
+                windowOpen.setDate(weekMonday.getDate() - 3);
+                windowOpen.setHours(10, 0, 0, 0);
+                
+                // Window closes: Tuesday 12pm after that Monday (1 day after)
+                const windowClose = new Date(weekMonday);
+                windowClose.setDate(weekMonday.getDate() + 1);
+                windowClose.setHours(12, 0, 0, 0);
+                
+                return now >= windowOpen && now <= windowClose;
+              };
+              
+              // Check if current check-in is available
+              // Overdue check-ins are always available (even if window closed)
+              // Future check-ins are available if their window is open
               const currentDueDate = currentCheckin ? new Date(currentCheckin.dueDate) : null;
-              const windowStatus = currentDueDate ? isWithinCheckInWindow(currentWindow, currentDueDate) : { isOpen: false, message: '', nextOpenTime: undefined };
-              
-              // Check if current check-in is available now
-              let dueDateHasArrived = false;
-              if (currentDueDate) {
-                currentDueDate.setHours(0, 0, 0, 0);
-                const today = new Date(now);
-                today.setHours(0, 0, 0, 0);
-                dueDateHasArrived = currentDueDate <= today;
-              }
-              
-              // Special case: Week 1 (first check-in) is accessible immediately once due date arrives,
-              // bypassing window restrictions. This allows clients who signed up Jan 3-5 to access
-              // their Week 1 check-in on Jan 5 regardless of window hours.
-              const isFirstCheckIn = currentCheckin?.recurringWeek === 1;
-              const isAvailable = currentCheckin && dueDateHasArrived && 
-                (isFirstCheckIn || windowStatus.isOpen) && 
+              const today = new Date(now);
+              today.setHours(0, 0, 0, 0);
+              const isOverdue = currentDueDate && currentDueDate < today;
+              const isWindowOpen = currentDueDate && isCheckInOpen(currentDueDate);
+              const isAvailable = currentCheckin && currentDueDate && 
+                (isOverdue || isWindowOpen) && 
                 currentCheckin.status !== 'completed';
               
-              // Check if next scheduled check-in is available (relative to its week)
+              // Check if next scheduled check-in is available
               const nextDueDate = nextScheduled ? new Date(nextScheduled.dueDate) : null;
-              let nextDueDateHasArrived = false;
-              if (nextDueDate) {
-                nextDueDate.setHours(0, 0, 0, 0);
-                const today = new Date(now);
-                today.setHours(0, 0, 0, 0);
-                nextDueDateHasArrived = nextDueDate <= today;
-              }
-              const nextWindow = nextScheduled?.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
-              const nextWindowStatus = nextDueDate ? isWithinCheckInWindow(nextWindow, nextDueDate) : { isOpen: false, message: '', nextOpenTime: undefined };
-              const isNextAvailable = nextScheduled && nextDueDateHasArrived && nextWindowStatus.isOpen && nextScheduled.status !== 'completed';
+              const isNextAvailable = nextScheduled && nextDueDate && 
+                isCheckInOpen(nextDueDate) && 
+                nextScheduled.status !== 'completed';
               
               return (
                 <div className="mb-4 lg:mb-6">
@@ -692,15 +736,34 @@ export default function ClientCheckInsPage() {
                               ? `Week ${currentCheckin.recurringWeek}: ${currentCheckin.title}`
                               : currentCheckin.title}
                           </p>
-                          {windowStatus.isOpen ? (
-                            <p className="text-green-700 font-semibold text-sm lg:text-sm mb-4">✓ Check-in window is open now - Ready to complete!</p>
-                          ) : windowStatus.nextOpenTime ? (
-                            <p className="text-gray-600 text-sm lg:text-sm mb-4 leading-relaxed">
-                              Next opens: {windowStatus.nextOpenTime.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })} at {windowStatus.nextOpenTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                          {currentDueDate && (() => {
+                            // Calculate the reference week (the week this check-in is ABOUT)
+                            // If due date is Monday Jan 12, reference week is the week BEFORE (Mon Jan 5 - Sun Jan 11)
+                            const due = new Date(currentDueDate);
+                            const referenceWeekStart = new Date(due);
+                            referenceWeekStart.setDate(due.getDate() - 7); // Go back 7 days to get previous Monday
+                            const referenceWeekEnd = new Date(referenceWeekStart);
+                            referenceWeekEnd.setDate(referenceWeekStart.getDate() + 6); // Sunday of that week
+                            
+                            const formatDateShort = (date: Date) => {
+                              return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                            };
+                            
+                            return (
+                              <p className="text-xs text-gray-500 mb-2">
+                                Reflecting on: Week of {formatDateShort(referenceWeekStart)} - {formatDateShort(referenceWeekEnd)}
+                              </p>
+                            );
+                          })()}
+                          {isAvailable ? (
+                            <p className={`font-semibold text-sm lg:text-sm mb-4 ${isOverdue ? 'text-red-700' : 'text-green-700'}`}>
+                              {isOverdue ? '⚠️ Check-in is overdue - please complete now' : '✓ Check-in is available now - Ready to complete!'}
                             </p>
-                          ) : (
-                            <p className="text-gray-600 text-sm lg:text-sm mb-4">{windowStatus.message}</p>
-                          )}
+                          ) : currentDueDate ? (
+                            <p className="text-gray-600 text-sm lg:text-sm mb-4">
+                              Opens Friday at 10:00 AM, closes Tuesday at 12:00 PM
+                            </p>
+                          ) : null}
                           {isAvailable && (
                             <Link
                               href={`/client-portal/check-in/${currentCheckin.id}`}
@@ -918,7 +981,9 @@ export default function ClientCheckInsPage() {
                               <div className="flex-1 min-w-0">
                                 <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 mb-2">
                                   <h3 className="text-base lg:text-base font-semibold text-gray-900 break-words">
-                                    {item.checkInTitle || item.formTitle || 'Check-in'}
+                                    {item.recurringWeek 
+                                      ? `Week ${item.recurringWeek}: ${item.checkInTitle || item.formTitle || 'Check-in'}`
+                                      : (item.checkInTitle || item.formTitle || 'Check-in')}
                                   </h3>
                                   <span className={`px-3 py-1 rounded-full text-sm lg:text-xs font-semibold ${getScoreBadge(item.score)} self-start sm:self-auto`}>
                                     {item.score}%
@@ -1019,28 +1084,37 @@ export default function ClientCheckInsPage() {
                 {filteredCheckins.length > 0 ? (
                   <div className="space-y-3">
                     {filteredCheckins.map((checkin) => {
-                      const checkInWindow = checkin.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
-                      
-                      // Calculate window relative to this check-in's week (Monday start)
+                      // Check-in is available if: Friday 10am to Tuesday 12pm of the week
                       const dueDate = new Date(checkin.dueDate);
-                      const windowStatus = isWithinCheckInWindow(checkInWindow, dueDate);
-                      
-                      // A check-in is only available if:
-                      // 1. The due date has arrived (today >= due date)
-                      // 2. AND we're currently within the check-in window period for that week (or it's Week 1)
-                      // 3. AND the check-in is not completed
                       const now = new Date();
-                      dueDate.setHours(0, 0, 0, 0); // Reset to start of day for comparison
+                      
+                      // Helper to check if check-in is open (Friday 10am to Tuesday 12pm)
+                      const isCheckInOpenForWeek = (due: Date): boolean => {
+                        const d = new Date(due);
+                        const dayOfWeek = d.getDay();
+                        const daysToMonday = dayOfWeek === 0 ? 1 : (dayOfWeek === 1 ? 0 : (8 - dayOfWeek));
+                        const weekMonday = new Date(d);
+                        weekMonday.setDate(d.getDate() - daysToMonday);
+                        weekMonday.setHours(0, 0, 0, 0);
+                        
+                        const windowOpen = new Date(weekMonday);
+                        windowOpen.setDate(weekMonday.getDate() - 3); // Friday
+                        windowOpen.setHours(10, 0, 0, 0);
+                        
+                        const windowClose = new Date(weekMonday);
+                        windowClose.setDate(weekMonday.getDate() + 1); // Tuesday
+                        windowClose.setHours(12, 0, 0, 0);
+                        
+                        return now >= windowOpen && now <= windowClose;
+                      };
+                      
+                      const dueDateNormalized = new Date(dueDate);
+                      dueDateNormalized.setHours(0, 0, 0, 0);
                       const today = new Date(now);
                       today.setHours(0, 0, 0, 0);
                       
-                      const dueDateHasArrived = dueDate <= today;
-                      // Special case: Week 1 (first check-in) is accessible immediately once due date arrives,
-                      // bypassing window restrictions for clients who signed up Jan 3-5, 2026
-                      const isFirstCheckIn = checkin.recurringWeek === 1;
-                      const isAvailable = dueDateHasArrived && 
-                        (isFirstCheckIn || windowStatus.isOpen) && 
-                        checkin.status !== 'completed';
+                      const dueDateHasArrived = dueDateNormalized <= today;
+                      const isAvailable = isCheckInOpenForWeek(dueDate) && checkin.status !== 'completed';
                       const isOverdue = checkin.status === 'overdue';
                       const isCompleted = checkin.status === 'completed';
                       
@@ -1065,6 +1139,27 @@ export default function ClientCheckInsPage() {
                                         : checkin.title
                                       }
                                     </h3>
+                                    {checkin.dueDate && (() => {
+                                      // Calculate the reference week (the week this check-in is ABOUT)
+                                      // Check-ins are retrospective - they're about the PREVIOUS week
+                                      // If due date is Monday Jan 12, reference week is the week BEFORE (Mon Jan 5 - Sun Jan 11)
+                                      const due = new Date(checkin.dueDate);
+                                      const referenceWeekStart = new Date(due);
+                                      referenceWeekStart.setDate(due.getDate() - 7); // Go back 7 days to get previous Monday
+                                      referenceWeekStart.setHours(0, 0, 0, 0);
+                                      const referenceWeekEnd = new Date(referenceWeekStart);
+                                      referenceWeekEnd.setDate(referenceWeekStart.getDate() + 6); // Sunday of that week
+                                      
+                                      const formatDateShort = (date: Date) => {
+                                        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                                      };
+                                      
+                                      return (
+                                        <div className="text-xs text-gray-500 mt-1">
+                                          About: Week ending {formatDateShort(referenceWeekEnd)} (Mon {formatDateShort(referenceWeekStart)} - Sun {formatDateShort(referenceWeekEnd)})
+                                        </div>
+                                      );
+                                    })()}
                                     {checkin.status === 'overdue' && (
                                       <span className="px-2 py-1 rounded-full text-xs lg:text-xs font-semibold bg-red-100 text-red-800 flex-shrink-0">
                                         Overdue
@@ -1104,38 +1199,29 @@ export default function ClientCheckInsPage() {
                                       }`}>
                                         <span className="text-base">{isAvailable ? '✅' : dueDateHasArrived ? '⏰' : '📅'}</span>
                                         <span>
-                                          {isAvailable ? windowStatus.message : dueDateHasArrived ? windowStatus.message : (() => {
-                                            const windowStartDate = getCheckInWindowStartDate(checkin.dueDate, checkInWindow);
-                                            return `Available on ${formatDate(windowStartDate.toISOString())}`;
-                                          })()}
+                                          {isAvailable 
+                                            ? '✓ Check-in is available now' 
+                                            : dueDateHasArrived 
+                                            ? 'Check-in opens Friday 10am, closes Tuesday 12pm'
+                                            : (() => {
+                                                // Calculate when window opens (Friday 10am before Monday due date)
+                                                const d = new Date(dueDate);
+                                                const dayOfWeek = d.getDay();
+                                                const daysToMonday = dayOfWeek === 0 ? 1 : (dayOfWeek === 1 ? 0 : (8 - dayOfWeek));
+                                                const weekMonday = new Date(d);
+                                                weekMonday.setDate(d.getDate() - daysToMonday);
+                                                weekMonday.setHours(0, 0, 0, 0);
+                                                const windowOpen = new Date(weekMonday);
+                                                windowOpen.setDate(weekMonday.getDate() - 3);
+                                                windowOpen.setHours(10, 0, 0, 0);
+                                                return `Opens ${formatDate(windowOpen.toISOString())} at 10:00 AM`;
+                                              })()}
                                         </span>
                                       </div>
                                       {/* Show window details for scheduled check-ins */}
-                                      {filter === 'scheduled' && checkInWindow?.enabled && checkInWindow?.startDay && checkInWindow?.startTime && (
+                                      {filter === 'scheduled' && (
                                         <div className="text-xs lg:text-xs text-gray-700 font-medium leading-relaxed mt-1">
-                                          {(() => {
-                                            const windowStartDate = getCheckInWindowStartDate(checkin.dueDate, checkInWindow);
-                                            const startDayName = checkInWindow.startDay.charAt(0).toUpperCase() + checkInWindow.startDay.slice(1);
-                                            const [hours, minutes] = checkInWindow.startTime.split(':').map(Number);
-                                            const period = hours >= 12 ? 'PM' : 'AM';
-                                            const displayHours = hours > 12 ? hours - 12 : hours === 0 ? 12 : hours;
-                                            const displayMinutes = minutes.toString().padStart(2, '0');
-                                            
-                                            // Check if window has already opened
-                                            const now = new Date();
-                                            if (windowStartDate <= now) {
-                                              // Window should be open, check actual window status
-                                              if (windowStatus.isOpen) {
-                                                return `✓ Check-in window is open now`;
-                                              } else if (windowStatus.nextOpenTime) {
-                                                return `Window opens: ${windowStatus.nextOpenTime.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })} at ${windowStatus.nextOpenTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
-                                              } else {
-                                                return `Window opens ${startDayName} ${formatDate(windowStartDate.toISOString())} at ${displayHours}:${displayMinutes} ${period}`;
-                                              }
-                                            } else {
-                                              return `Window opens ${startDayName} ${formatDate(windowStartDate.toISOString())} at ${displayHours}:${displayMinutes} ${period}`;
-                                            }
-                                          })()}
+                                          Opens Friday 10:00 AM, closes Tuesday 12:00 PM
                                         </div>
                                       )}
                                     </div>
@@ -1225,10 +1311,9 @@ export default function ClientCheckInsPage() {
                                     <button
                                       disabled
                                       className="w-full sm:w-auto px-5 py-3.5 lg:px-4 lg:py-2 bg-gray-300 text-gray-600 rounded-xl lg:rounded-lg text-base lg:text-sm font-semibold cursor-not-allowed min-h-[48px] lg:min-h-[36px]"
-                                      title={dueDateHasArrived ? getCheckInWindowDescription(checkInWindow) : (() => {
-                                        const windowStartDate = getCheckInWindowStartDate(checkin.dueDate, checkInWindow);
-                                        return `Check-in available on ${formatDate(windowStartDate.toISOString())}`;
-                                      })()}
+                                      title={isAvailable 
+                                        ? 'Check-in is available now' 
+                                        : 'Opens Friday 10am, closes Tuesday 12pm'}
                                     >
                                       {dueDateHasArrived ? 'Window Closed' : 'Not Available Yet'}
                                     </button>

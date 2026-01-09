@@ -322,7 +322,100 @@ export async function GET(
     
     const allCheckIns = await Promise.all(checkInsPromises);
     
+    // Group assignments by formId + clientId to handle recurring series
+    const recurringSeriesMap = new Map<string, CheckIn[]>();
+    const nonRecurringCheckIns: CheckIn[] = [];
+    
     allCheckIns.forEach((checkIn) => {
+      if (checkIn.isRecurring && checkIn.formId) {
+        const key = `${checkIn.formId}_${checkIn.formTitle}`;
+        if (!recurringSeriesMap.has(key)) {
+          recurringSeriesMap.set(key, []);
+        }
+        recurringSeriesMap.get(key)!.push(checkIn);
+      } else {
+        nonRecurringCheckIns.push(checkIn);
+      }
+    });
+    
+    // Expand recurring series to include future weeks (same logic as client portal)
+    const expandedCheckIns: CheckIn[] = [...nonRecurringCheckIns];
+    const now = new Date();
+    
+    // Helper to get Monday of the week
+    const getWeekStart = (date: Date): Date => {
+      const d = new Date(date);
+      const dayOfWeek = d.getDay();
+      const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+      d.setDate(d.getDate() - daysToMonday);
+      d.setHours(0, 0, 0, 0);
+      return d;
+    };
+    
+    recurringSeriesMap.forEach((seriesAssignments) => {
+      // Deduplicate by recurringWeek, keeping most recent
+      const weekMap = new Map<number, CheckIn>();
+      seriesAssignments.forEach(assignment => {
+        const week = assignment.recurringWeek || 1;
+        const existing = weekMap.get(week);
+        if (!existing) {
+          weekMap.set(week, assignment);
+        } else if (assignment.status === 'completed' && existing.status !== 'completed') {
+          weekMap.set(week, assignment);
+        }
+      });
+      
+      const deduplicatedSeries = Array.from(weekMap.values()).sort((a, b) => {
+        const weekA = a.recurringWeek || 1;
+        const weekB = b.recurringWeek || 1;
+        return weekA - weekB;
+      });
+      
+      // Get base assignment (Week 1 if available)
+      const baseAssignment = deduplicatedSeries.find(a => a.recurringWeek === 1) || deduplicatedSeries[0];
+      if (!baseAssignment) return;
+      
+      // Add existing assignments
+      deduplicatedSeries.forEach(assignment => {
+        expandedCheckIns.push(assignment);
+      });
+      
+      // Generate future weeks if needed
+      if (baseAssignment.totalWeeks && baseAssignment.totalWeeks > 1) {
+        const firstDueDate = baseAssignment.dueDate ? new Date(baseAssignment.dueDate) : new Date();
+        const firstWeekStart = getWeekStart(firstDueDate);
+        const maxExistingWeek = Math.max(...deduplicatedSeries.map(a => a.recurringWeek || 1));
+        
+        for (let week = maxExistingWeek + 1; week <= baseAssignment.totalWeeks; week++) {
+          const weekMonday = new Date(firstWeekStart);
+          weekMonday.setDate(firstWeekStart.getDate() + (7 * (week - 1)));
+          weekMonday.setHours(9, 0, 0, 0);
+          
+          // Include future weeks OR recent past weeks (within 3 weeks)
+          const weeksAgo = (now.getTime() - weekMonday.getTime()) / (1000 * 60 * 60 * 24 * 7);
+          const isFuture = weekMonday >= now;
+          const isRecentPast = weeksAgo <= 3 && weekMonday < now;
+          
+          if (isFuture || isRecentPast) {
+            expandedCheckIns.push({
+              ...baseAssignment,
+              id: `${baseAssignment.id}_week_${week}`,
+              recurringWeek: week,
+              dueDate: weekMonday.toISOString(),
+              status: weekMonday < now ? 'overdue' : 'pending',
+              completedAt: undefined,
+              score: 0,
+              responseCount: 0,
+              responseId: undefined,
+              coachResponded: false
+            } as CheckIn);
+          }
+        }
+      }
+    });
+    
+    // Process all check-ins
+    expandedCheckIns.forEach((checkIn) => {
       checkIns.push(checkIn);
       
       if (checkIn.status === 'completed') {

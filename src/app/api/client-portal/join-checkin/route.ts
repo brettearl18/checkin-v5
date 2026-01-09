@@ -81,25 +81,33 @@ export async function POST(request: NextRequest) {
     let firstCheckInDate: Date;
     let firstCheckInDateString: string;
     
-    // Check if signup is between Jan 3-5, 2026 (inclusive)
+    // Each week starts on Monday, so first check-in due date should be a Monday
     if (todayDateString >= signupStartDateString && todayDateString <= signupEndDateString) {
       // Special case: Week 1 starts on Jan 5, 2026 (Monday)
       // Use the date string directly to avoid timezone conversion issues
-      firstCheckInDateString = week1StartDateString; // '2026-01-05'
+      firstCheckInDateString = week1StartDateString; // '2026-01-05' (already a Monday)
       firstCheckInDate = new Date(week1StartDateString + 'T09:00:00'); // 9:00 AM local time
-    } else if (today.getDay() === 5) {
-      // Today is Friday - use today
-      firstCheckInDate = new Date(today);
-      firstCheckInDateString = firstCheckInDate.toISOString().split('T')[0];
     } else {
-      // Calculate next Friday
-      const daysUntilFriday = (5 - today.getDay() + 7) % 7 || 7;
+      // Calculate next Monday (each week starts on Monday)
+      const dayOfWeek = today.getDay();
+      let daysUntilMonday: number;
+      if (dayOfWeek === 1) {
+        // Today is Monday - use today
+        daysUntilMonday = 0;
+      } else if (dayOfWeek === 0) {
+        // Today is Sunday - next Monday is tomorrow
+        daysUntilMonday = 1;
+      } else {
+        // Calculate days to next Monday (8 - dayOfWeek works for Tue-Sat)
+        daysUntilMonday = 8 - dayOfWeek;
+      }
       firstCheckInDate = new Date(today);
-      firstCheckInDate.setDate(today.getDate() + daysUntilFriday);
+      firstCheckInDate.setDate(today.getDate() + daysUntilMonday);
+      firstCheckInDate.setHours(0, 0, 0, 0);
       firstCheckInDateString = firstCheckInDate.toISOString().split('T')[0];
     }
     
-    // Set due date to the first check-in date at 9:00 AM
+    // Set due date to the first check-in date (Monday) at 9:00 AM
     const dueDate = new Date(firstCheckInDateString + 'T09:00:00');
     
     // Create assignment

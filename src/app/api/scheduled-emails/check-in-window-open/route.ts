@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
 
       // Check if window opened in the last hour (to avoid sending multiple emails)
       // We'll track this by checking if we've already sent a window-open email today
-      const dueDate = assignmentData.dueDate?.toDate ? assignmentData.dueDate.toDate() : new Date(assignmentData.dueDate);
+      // (dueDate already declared above)
       const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       
       if (assignmentData.windowOpenEmailSentDate) {

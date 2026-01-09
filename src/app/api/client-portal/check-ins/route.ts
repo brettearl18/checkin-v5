@@ -1,9 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase-server';
 import { notificationService } from '@/lib/notification-service';
-import { DEFAULT_CHECK_IN_WINDOW } from '@/lib/checkin-window-utils';
+// Window system removed - using fixed Friday 10am to Tuesday 12pm schedule
 
 export const dynamic = 'force-dynamic';
+
+/**
+ * Get the Monday that starts a week for a given date
+ */
+function getWeekStart(date: Date): Date {
+  const d = new Date(date);
+  const dayOfWeek = d.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+  const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  d.setDate(d.getDate() - daysToMonday);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
 
 
 
@@ -153,24 +165,12 @@ export async function GET(request: NextRequest) {
           }
         }
 
-        // Ensure checkInWindow is properly structured
-        let checkInWindow = DEFAULT_CHECK_IN_WINDOW;
-        if (data.checkInWindow) {
-          // Check if it's a valid checkInWindow object
-          if (typeof data.checkInWindow === 'object' && 
-              data.checkInWindow.enabled !== undefined &&
-              data.checkInWindow.startDay &&
-              data.checkInWindow.startTime) {
-            checkInWindow = data.checkInWindow;
-          } else {
-            console.log('Invalid checkInWindow structure for assignment:', doc.id, 'Raw data:', JSON.stringify(data.checkInWindow));
-          }
-        } else {
-          console.log('No checkInWindow found for assignment:', doc.id, 'Using default');
-        }
+        // Window system removed - kept for backwards compatibility only
+        const checkInWindow = data.checkInWindow || null;
 
         const assignmentData = {
-          id: doc.id,
+          id: data.id || doc.id, // Use original id field if it exists, otherwise use document ID
+          documentId: doc.id, // Preserve the Firestore document ID separately
           title: data.formTitle || 'Check-in Assignment',
           description: data.description || 'Complete your assigned check-in',
           dueDate: dueDate,
@@ -271,7 +271,7 @@ export async function GET(request: NextRequest) {
         }
 
         // Ensure checkInWindow is properly structured (same logic as above)
-        let checkInWindow = DEFAULT_CHECK_IN_WINDOW;
+        let checkInWindow = null; // Window system removed - kept for backwards compatibility
         if (data.checkInWindow) {
           if (typeof data.checkInWindow === 'object' && 
               data.checkInWindow.enabled !== undefined &&
@@ -284,7 +284,8 @@ export async function GET(request: NextRequest) {
         }
 
         return {
-          id: doc.id,
+          id: data.id || doc.id, // Use original id field if it exists, otherwise use document ID
+          documentId: doc.id, // Preserve the Firestore document ID separately
           title: data.formTitle || 'Check-in Assignment',
           description: data.description || 'Complete your assigned check-in',
           dueDate: dueDate,
@@ -376,7 +377,7 @@ export async function GET(request: NextRequest) {
       // Check if we need to generate future weeks beyond the existing ones
       if (baseAssignment.totalWeeks > 1) {
         const firstDueDate = new Date(baseAssignment.dueDate);
-        const checkInWindow = baseAssignment.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
+        const checkInWindow = baseAssignment.checkInWindow || null; // Window system removed
         const maxExistingWeek = Math.max(...deduplicatedSeries.map(a => a.recurringWeek || 1));
         
         // Generate assignments for weeks beyond the existing ones
@@ -389,8 +390,15 @@ export async function GET(request: NextRequest) {
           weekMonday.setDate(firstWeekStart.getDate() + (7 * (week - 1)));
           weekMonday.setHours(9, 0, 0, 0); // Set to 9:00 AM (default due time)
           
-          // Only include future weeks (not past weeks that weren't created)
-          if (weekMonday >= now) {
+          // Include weeks that are:
+          // 1. Future weeks (not yet arrived), OR
+          // 2. Recent weeks (within 3 weeks in the past) that weren't completed
+          // This ensures Week 2, Week 3, etc. show up even if their Monday has passed
+          const weeksAgo = (now.getTime() - weekMonday.getTime()) / (1000 * 60 * 60 * 24 * 7);
+          const isFuture = weekMonday >= now;
+          const isRecentPast = weeksAgo <= 3 && weekMonday < now;
+          
+          if (isFuture || isRecentPast) {
             expandedAssignments.push({
               ...baseAssignment,
               id: `${baseAssignment.id}_week_${week}`, // Unique ID for each week

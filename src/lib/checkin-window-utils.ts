@@ -45,13 +45,16 @@ function parseTime(timeString: string): { hours: number; minutes: number } {
 
 /**
  * Get the Monday that starts a week for a given date
- * If the date is already a Monday, return it. Otherwise, find the Monday of that week.
+ * For check-ins: Each week starts on Monday, so we find the Monday of that week.
+ * If the date is already a Monday, return it. 
+ * If the date is before Monday in the week, return that week's Monday.
+ * If the date is after Monday in the week, return the same week's Monday.
  */
 function getWeekStart(date: Date): Date {
   const d = new Date(date);
   const dayOfWeek = d.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
   
-  // Calculate days to subtract to get to Monday
+  // Calculate days to subtract to get to Monday of the week containing this date
   // If it's Sunday (0), go back 6 days. If it's Monday (1), go back 0 days. etc.
   const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
   
@@ -91,8 +94,8 @@ export function isWithinCheckInWindow(
     windowEnd.setDate(weekStart.getDate() + 1); // Tuesday
     
     // Set times
-    const [startHours, startMinutes] = parseTime(window.startTime);
-    const [endHours, endMinutes] = parseTime(window.endTime);
+    const { hours: startHours, minutes: startMinutes } = parseTime(window.startTime);
+    const { hours: endHours, minutes: endMinutes } = parseTime(window.endTime);
     
     windowStart.setHours(startHours, startMinutes, 0, 0);
     windowEnd.setHours(endHours, endMinutes, 0, 0);

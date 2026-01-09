@@ -122,17 +122,51 @@ export default function CoachNavigation() {
     const fetchUnreadCount = async () => {
       if (!userProfile?.uid) return;
       
+      // Skip fetching in preview mode (when viewing client portal as coach)
+      if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('preview')) {
+          // Don't fetch unread count when previewing - this is not the coach's own portal
+          return;
+        }
+      }
+      
       try {
-        const response = await fetch(`/api/messages/conversations?coachId=${userProfile.uid}`);
+        // Add timeout to prevent hanging
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+        
+        const response = await fetch(`/api/messages/conversations?coachId=${userProfile.uid}`, {
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
         if (response.ok) {
           const data = await response.json();
           if (data.success && data.conversations) {
             const totalUnread = data.conversations.reduce((sum: number, conv: any) => sum + (conv.unreadCount || 0), 0);
             setUnreadMessageCount(totalUnread);
           }
+        } else {
+          // Only log if it's not a network error (4xx/5xx responses)
+          if (response.status >= 400) {
+            console.warn('Failed to fetch unread message count:', response.status, response.statusText);
+          }
         }
-      } catch (error) {
-        console.error('Error fetching unread message count:', error);
+      } catch (error: any) {
+        // Only log if it's not an abort/timeout error or generic network error
+        if (error.name === 'AbortError') {
+          // Timeout - silently ignore
+          return;
+        }
+        // Check if it's a network error (common in preview mode or when API is unavailable)
+        if (error.message && (error.message.includes('fetch') || error.message.includes('network'))) {
+          // Silently handle network errors - they're often transient, especially in preview mode
+          return;
+        }
+        // Only log actual errors
+        console.warn('Error fetching unread message count:', error.message || error);
       }
     };
 

@@ -73,44 +73,90 @@ interface ProgressImage {
 }
 
 // Progress Images Preview Component
-function ProgressImagesPreview({ clientEmail }: { clientEmail: string }) {
+function ProgressImagesPreview({ clientEmail, clientId: providedClientId }: { clientEmail?: string; clientId?: string | null }) {
   const [images, setImages] = useState<ProgressImage[]>([]);
   const [loading, setLoading] = useState(true);
-  const [clientId, setClientId] = useState<string | null>(null);
+  const [clientId, setClientId] = useState<string | null>(providedClientId || null);
 
   useEffect(() => {
-    if (clientEmail) {
-      // First fetch client ID
-      fetch(`/api/client-portal?clientEmail=${encodeURIComponent(clientEmail)}`)
-        .then(res => res.json())
-        .then(data => {
-          if (data.success && data.data.client) {
-            setClientId(data.data.client.id);
-          } else {
-            setLoading(false);
-          }
-        })
-        .catch(err => {
-          console.error('Error fetching client ID:', err);
-          setLoading(false);
-        });
-    } else {
+    // If clientId is provided directly, use it and skip email fetch
+    if (providedClientId) {
+      setClientId(providedClientId);
+      return;
+    }
+
+    // Otherwise, fetch client ID from email (only if clientEmail is provided)
+    if (!clientEmail) {
       setLoading(false);
+      return;
     }
-  }, [clientEmail]);
+
+    setLoading(true);
+    // First fetch client ID
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+    
+    fetch(`/api/client-portal?clientEmail=${encodeURIComponent(clientEmail)}`, {
+      signal: controller.signal
+    })
+      .then(res => {
+        clearTimeout(timeoutId);
+        if (!res.ok) {
+          throw new Error(`Failed to fetch: ${res.status} ${res.statusText}`);
+        }
+        return res.json();
+      })
+      .then(data => {
+        if (data.success && data.data.client) {
+          setClientId(data.data.client.id);
+        } else {
+          setLoading(false);
+        }
+      })
+      .catch(err => {
+        clearTimeout(timeoutId);
+        // Silently handle errors - this is a preview component, not critical
+        // Only log network/abort errors in development
+        if (process.env.NODE_ENV === 'development' && err.name !== 'AbortError' && err.message !== 'Failed to fetch') {
+          console.debug('Error fetching client ID for progress images:', err);
+        }
+        setLoading(false);
+      });
+  }, [clientEmail, providedClientId]);
 
   useEffect(() => {
-    if (clientId) {
-      fetch(`/api/progress-images?clientId=${clientId}&limit=4`)
-        .then(res => res.json())
-        .then(data => {
-          if (data.success) {
-            setImages(data.data || []);
-          }
-        })
-        .catch(err => console.error('Error fetching progress images:', err))
-        .finally(() => setLoading(false));
+    if (!clientId) {
+      return;
     }
+
+    setLoading(true);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+    
+    fetch(`/api/progress-images?clientId=${clientId}&limit=4`, {
+      signal: controller.signal
+    })
+      .then(res => {
+        clearTimeout(timeoutId);
+        if (!res.ok) {
+          throw new Error(`Failed to fetch: ${res.status} ${res.statusText}`);
+        }
+        return res.json();
+      })
+      .then(data => {
+        if (data.success) {
+          setImages(data.data || []);
+        }
+      })
+      .catch(err => {
+        clearTimeout(timeoutId);
+        // Silently handle errors - this is a preview component, not critical
+        // Only log network/abort errors in development
+        if (process.env.NODE_ENV === 'development' && err.name !== 'AbortError' && err.message !== 'Failed to fetch') {
+          console.debug('Error fetching progress images:', err);
+        }
+      })
+      .finally(() => setLoading(false));
   }, [clientId]);
 
   if (loading) {
@@ -232,7 +278,16 @@ interface DashboardAnalytics {
 }
 
 export default function ClientPortalPage() {
-  const { userProfile } = useAuth();
+  const { userProfile, loading: authLoading } = useAuth();
+  const [previewClientId, setPreviewClientId] = useState<string | null>(null);
+  
+  // Get preview client ID from URL on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      setPreviewClientId(params.get('preview'));
+    }
+  }, []);
   const [stats, setStats] = useState<ClientStats>({
     overallProgress: 0,
     completedCheckins: 0,
@@ -246,6 +301,7 @@ export default function ClientPortalPage() {
   const [thresholds, setThresholds] = useState<ScoringThresholds>(getDefaultThresholds('moderate'));
   const [averageTrafficLight, setAverageTrafficLight] = useState<TrafficLightStatus>('orange');
   const [clientId, setClientId] = useState<string | null>(null);
+  const [error, setError] = useState<string>('');
   const [showScoringInfo, setShowScoringInfo] = useState(false);
   const [onboardingTodos, setOnboardingTodos] = useState({
     hasWeight: false,
@@ -263,17 +319,45 @@ export default function ClientPortalPage() {
   const [analytics, setAnalytics] = useState<DashboardAnalytics | null>(null);
   const [loadingAnalytics, setLoadingAnalytics] = useState(true);
 
+  // Get preview client ID from URL on mount
   useEffect(() => {
-    if (userProfile?.email) {
-      fetchClientData();
-      fetchAnalytics();
-    } else if (userProfile === null) {
-      // User profile is loaded but no email - this is an error state
-      setLoading(false);
-      setLoadingAnalytics(false);
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      setPreviewClientId(params.get('preview'));
     }
-    // If userProfile is undefined, it's still loading, so we wait
-  }, [userProfile?.email]);
+  }, []);
+
+  useEffect(() => {
+    // Wait for auth to finish loading first
+    if (authLoading) {
+      return;
+    }
+
+    // In preview mode, we need to wait for userProfile to load to verify coach status
+    if (previewClientId) {
+      // Preview mode: wait for userProfile to be loaded so we can verify coach status
+      if (userProfile === null) {
+        // Auth finished loading but no user - error state
+        setError('You must be logged in as a coach to preview client portals');
+        setLoading(false);
+        return;
+      }
+      // If userProfile exists, proceed (coach verification happens in fetchClientData)
+      if (userProfile) {
+        fetchClientData();
+      }
+    } else {
+      // Normal mode: client viewing their own portal
+      if (userProfile?.email) {
+        fetchClientData();
+        fetchAnalytics();
+      } else if (userProfile === null) {
+        // User profile is loaded but no email - this is an error state
+        setLoading(false);
+        setLoadingAnalytics(false);
+      }
+    }
+  }, [authLoading, userProfile, previewClientId]);
 
   const fetchAnalytics = async () => {
     try {
@@ -337,22 +421,54 @@ export default function ClientPortalPage() {
 
   const fetchClientData = async () => {
     try {
-      // Fetch client-specific data using email (more reliable than UID)
-      const clientEmail = userProfile?.email;
+      // In preview mode, use the clientId from URL parameter
+      let apiUrl = '';
       
-      if (!clientEmail) {
-        console.warn('No client email available - user profile may still be loading');
-        setLoading(false);
-        return;
+      if (previewClientId) {
+        // Preview mode: coach viewing client portal
+        // At this point, auth should be loaded, but double-check
+        if (!userProfile || !userProfile.uid) {
+          console.error('Preview mode requires coach authentication');
+          setError('You must be logged in as a coach to preview client portals');
+          setLoading(false);
+          return;
+        }
+        
+        // Verify user is a coach by checking their role from userProfile (set by AuthContext)
+        // AuthContext loads from users collection first (for coaches/admins), then clients collection
+        const isCoach = userProfile.role === 'coach' || 
+                       (userProfile.roles && userProfile.roles.includes('coach')) ||
+                       userProfile.role === 'admin'; // Admins can also preview
+        
+        if (!isCoach) {
+          console.error('User is not a coach. Role:', userProfile.role, 'Roles:', userProfile.roles);
+          setError('You must be logged in as a coach to preview client portals');
+          setLoading(false);
+          return;
+        }
+        
+        // Fetch client data by ID in preview mode
+        apiUrl = `/api/client-portal?clientId=${encodeURIComponent(previewClientId)}&preview=true&coachId=${encodeURIComponent(userProfile.uid)}`;
+      } else {
+        // Normal mode: client viewing their own portal
+        const clientEmail = userProfile?.email;
+        
+        if (!clientEmail) {
+          console.warn('No client email available - user profile may still be loading');
+          setLoading(false);
+          return;
+        }
+        
+        // Fetch real data from API using email with timeout
+        apiUrl = `/api/client-portal?clientEmail=${encodeURIComponent(clientEmail)}${userProfile?.uid ? `&userUid=${encodeURIComponent(userProfile.uid)}` : ''}`;
       }
       
-      // Fetch real data from API using email with timeout
-      // Try fetching by email first, but also pass user UID as fallback
+      // Fetch real data from API with timeout
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
       
       try {
-        const response = await fetch(`/api/client-portal?clientEmail=${encodeURIComponent(clientEmail)}${userProfile?.uid ? `&userUid=${encodeURIComponent(userProfile.uid)}` : ''}`, {
+        const response = await fetch(apiUrl, {
           signal: controller.signal
         });
         clearTimeout(timeoutId);
@@ -721,9 +837,41 @@ export default function ClientPortalPage() {
     }
   };
 
+  // In preview mode, allow coaches; otherwise require client role
+  const allowedRoles = previewClientId ? ['client', 'coach'] : ['client'];
+
+  if (error) {
+    return (
+      <RoleProtected allowedRoles={allowedRoles}>
+        <div className="min-h-screen bg-white flex flex-col lg:flex-row">
+          <ClientNavigation />
+          <div className="flex-1 px-4 py-4 sm:px-6 lg:px-8 lg:py-6 pt-20 lg:pt-6 overflow-x-hidden w-full bg-white">
+            <div className="max-w-7xl mx-auto w-full">
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 my-8">
+                <div className="flex">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="ml-3">
+                    <h3 className="text-sm font-medium text-red-800">Preview Error</h3>
+                    <div className="mt-2 text-sm text-red-700">
+                      <p>{error}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </RoleProtected>
+    );
+  }
+
   if (loading) {
     return (
-      <RoleProtected requiredRole="client">
+      <RoleProtected allowedRoles={allowedRoles}>
         <div className="min-h-screen bg-white flex flex-col lg:flex-row">
           <ClientNavigation />
           
@@ -798,7 +946,7 @@ export default function ClientPortalPage() {
   };
 
   return (
-    <RoleProtected requiredRole="client">
+    <RoleProtected allowedRoles={allowedRoles}>
       <div className="min-h-screen bg-white flex flex-col lg:flex-row relative">
         <ClientNavigation />
         
@@ -853,65 +1001,6 @@ export default function ClientPortalPage() {
               <QuickStatsBar stats={analytics?.quickStats || null} loading={loadingAnalytics} />
             </div>
 
-            {/* Next Check-in Section - Prominent banner at top - Visible on all devices */}
-            {(() => {
-              // Find next scheduled check-in (not overdue, includes today and future dates)
-              const now = new Date();
-              now.setHours(0, 0, 0, 0);
-              
-              const nextScheduled = assignedCheckins
-                .filter(checkIn => {
-                  const dueDate = new Date(checkIn.dueDate);
-                  dueDate.setHours(0, 0, 0, 0);
-                  const daysDiff = Math.floor((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-                  
-                  // Include pending check-ins that are due today or in the future (not overdue)
-                  return checkIn.status === 'pending' && daysDiff >= 0;
-                })
-                .sort((a, b) => {
-                  const dateA = new Date(a.dueDate).getTime();
-                  const dateB = new Date(b.dueDate).getTime();
-                  return dateA - dateB; // Earliest first
-                })[0]; // Get the first one (next upcoming)
-
-              if (!nextScheduled) return null;
-
-              const dueDate = new Date(nextScheduled.dueDate);
-              const daysDiff = Math.floor((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-              
-              return (
-                <div className="mb-6">
-                  <div className="bg-[#fef9e7] border-2 border-[#daa450] rounded-2xl lg:rounded-3xl p-4 sm:p-6 shadow-sm">
-                    <div className="flex items-center gap-3 sm:gap-4">
-                      <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#daa450' }}>
-                        <svg className="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h2 className="text-base sm:text-lg font-bold text-gray-900 mb-1">Next Check-in</h2>
-                        <p className="text-sm sm:text-base font-medium text-gray-900 truncate">{nextScheduled.title}</p>
-                        <p className="text-xs sm:text-sm text-gray-600 mt-1">
-                          Due: {dueDate.toLocaleDateString('en-US', { 
-                            weekday: 'long', 
-                            month: 'long', 
-                            day: 'numeric' 
-                          })}
-                          {daysDiff === 0 ? ' (Today)' : daysDiff === 1 ? ' (Tomorrow)' : daysDiff > 1 ? ` (in ${daysDiff} days)` : ''}
-                        </p>
-                      </div>
-                      <Link
-                        href="/client-portal/check-ins"
-                        className="flex-shrink-0 px-4 py-2 text-sm font-semibold text-white rounded-xl hover:opacity-90 transition-opacity shadow-sm"
-                        style={{ backgroundColor: '#daa450' }}
-                      >
-                        View
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-              );
-            })()}
 
             {/* Coach Feedback Available Banner - Show prominently when coach has provided feedback */}
             {(() => {
@@ -1175,33 +1264,49 @@ export default function ClientPortalPage() {
                       <div className="text-gray-600 text-sm font-medium">Needs Action</div>
                       <div className="text-2xl font-bold text-gray-900">
                         {(() => {
-                          // Filter actionable check-ins
+                          // Filter actionable check-ins - match check-ins page logic exactly
+                          const now = new Date();
+                          const today = new Date(now);
+                          today.setHours(0, 0, 0, 0);
+                          
+                          // Helper function to check if check-in window is open (Friday 10am to Tuesday 12pm)
+                          const isCheckInOpenForWeek = (due: Date): boolean => {
+                            const d = new Date(due);
+                            const dayOfWeek = d.getDay();
+                            const daysToMonday = dayOfWeek === 0 ? 1 : (dayOfWeek === 1 ? 0 : (8 - dayOfWeek));
+                            const weekMonday = new Date(d);
+                            weekMonday.setDate(d.getDate() - daysToMonday);
+                            weekMonday.setHours(0, 0, 0, 0);
+                            
+                            const windowOpen = new Date(weekMonday);
+                            windowOpen.setDate(weekMonday.getDate() - 3); // Friday before Monday
+                            windowOpen.setHours(10, 0, 0, 0);
+                            
+                            const windowClose = new Date(weekMonday);
+                            windowClose.setDate(weekMonday.getDate() + 1); // Tuesday after Monday
+                            windowClose.setHours(12, 0, 0, 0);
+                            
+                            return now >= windowOpen && now <= windowClose;
+                          };
+                          
                           const filtered = assignedCheckins.filter(checkIn => {
                             // Exclude completed check-ins
                             if (checkIn.status === 'completed') return false;
 
                             const dueDate = new Date(checkIn.dueDate);
-                            const now = new Date();
-                            
-                            // Normalize dates for comparison (set to start of day) - matches check-ins page logic exactly
                             const normalizedDueDate = new Date(dueDate);
                             normalizedDueDate.setHours(0, 0, 0, 0);
-                            const normalizedNow = new Date(now);
-                            normalizedNow.setHours(0, 0, 0, 0);
                             
-                            // Include if overdue (past due date - always need attention)
-                            if (normalizedDueDate < normalizedNow) return true;
+                            // Always include overdue check-ins (past due date) - highest priority
+                            if (normalizedDueDate < today) return true;
                             
-                            // Include if due date has arrived AND window is open (available now) - matches getToDoCheckins logic
-                            if (normalizedDueDate <= normalizedNow) {
-                              const checkInWindow = checkIn.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
-                              // Calculate window relative to this check-in's week (Monday start)
-                              const windowStatus = isWithinCheckInWindow(checkInWindow, checkIn.dueDate);
-                              const isFirstCheckIn = checkIn.recurringWeek === 1;
-                              if (windowStatus.isOpen || isFirstCheckIn) return true;
-                            }
+                            // Include check-ins due today
+                            if (normalizedDueDate.getTime() === today.getTime()) return true;
                             
-                            // Don't include future check-ins - they belong in "Scheduled", not "Requiring Attention"
+                            // Include if window is open (Friday 10am to Tuesday 12pm) - available now
+                            if (isCheckInOpenForWeek(dueDate)) return true;
+                            
+                            // Don't include future check-ins whose window isn't open yet
                             return false;
                           });
 
@@ -1232,34 +1337,49 @@ export default function ClientPortalPage() {
                 </div>
               <div className="p-4 lg:p-8">
                 {(() => {
-                  // Filter actionable check-ins
+                  // Filter actionable check-ins - match check-ins page logic exactly
+                  const now = new Date();
+                  const today = new Date(now);
+                  today.setHours(0, 0, 0, 0);
+                  
+                  // Helper function to check if check-in window is open (Friday 10am to Tuesday 12pm)
+                  const isCheckInOpenForWeek = (due: Date): boolean => {
+                    const d = new Date(due);
+                    const dayOfWeek = d.getDay();
+                    const daysToMonday = dayOfWeek === 0 ? 1 : (dayOfWeek === 1 ? 0 : (8 - dayOfWeek));
+                    const weekMonday = new Date(d);
+                    weekMonday.setDate(d.getDate() - daysToMonday);
+                    weekMonday.setHours(0, 0, 0, 0);
+                    
+                    const windowOpen = new Date(weekMonday);
+                    windowOpen.setDate(weekMonday.getDate() - 3); // Friday before Monday
+                    windowOpen.setHours(10, 0, 0, 0);
+                    
+                    const windowClose = new Date(weekMonday);
+                    windowClose.setDate(weekMonday.getDate() + 1); // Tuesday after Monday
+                    windowClose.setHours(12, 0, 0, 0);
+                    
+                    return now >= windowOpen && now <= windowClose;
+                  };
+                  
                   const filteredCheckins = assignedCheckins.filter(checkIn => {
                     // Exclude completed check-ins
                     if (checkIn.status === 'completed') return false;
 
                     const dueDate = new Date(checkIn.dueDate);
-                    const now = new Date();
-                    
-                    // Normalize dates for comparison (set to start of day) - matches getToDoCheckins logic exactly
                     const normalizedDueDate = new Date(dueDate);
                     normalizedDueDate.setHours(0, 0, 0, 0);
-                    const normalizedNow = new Date(now);
-                    normalizedNow.setHours(0, 0, 0, 0);
                     
-                    // Include if overdue (past due date - always need attention)
-                    if (normalizedDueDate < normalizedNow) return true;
+                    // Always include overdue check-ins (past due date) - highest priority
+                    if (normalizedDueDate < today) return true;
                     
-                    // Include if due date has arrived AND window is open (available now)
-                    // Special case: Week 1 check-ins are accessible immediately once due date arrives
-                    if (normalizedDueDate <= normalizedNow) {
-                      const checkInWindow = checkIn.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
-                      // Calculate window relative to this check-in's week (Monday start)
-                      const windowStatus = isWithinCheckInWindow(checkInWindow, checkIn.dueDate);
-                      const isFirstCheckIn = checkIn.recurringWeek === 1;
-                      if (windowStatus.isOpen || isFirstCheckIn) return true;
-                    }
+                    // Include check-ins due today
+                    if (normalizedDueDate.getTime() === today.getTime()) return true;
                     
-                    // Don't include future check-ins - they belong in "Scheduled", not "Requiring Attention"
+                    // Include if window is open (Friday 10am to Tuesday 12pm) - available now
+                    if (isCheckInOpenForWeek(dueDate)) return true;
+                    
+                    // Don't include future check-ins whose window isn't open yet
                     return false;
                   });
 
@@ -1687,7 +1807,7 @@ export default function ClientPortalPage() {
                   </Link>
                 </div>
               </div>
-              <ProgressImagesPreview clientEmail={userProfile?.email || ''} />
+              <ProgressImagesPreview clientEmail={previewClientId ? undefined : userProfile?.email} clientId={clientId} />
             </div>
 
             {/* Scoring Formula & Traffic Light Info - At bottom of main content */}
@@ -1945,62 +2065,6 @@ export default function ClientPortalPage() {
                 <QuickStatsBar stats={analytics?.quickStats || null} loading={loadingAnalytics} />
               </div>
 
-              {/* Next Check-in Section */}
-              {(() => {
-                const now = new Date();
-                now.setHours(0, 0, 0, 0);
-                
-                const nextScheduled = assignedCheckins
-                  .filter(checkIn => {
-                    const dueDate = new Date(checkIn.dueDate);
-                    dueDate.setHours(0, 0, 0, 0);
-                    const daysDiff = Math.floor((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-                    return checkIn.status === 'pending' && daysDiff >= 0;
-                  })
-                  .sort((a, b) => {
-                    const dateA = new Date(a.dueDate).getTime();
-                    const dateB = new Date(b.dueDate).getTime();
-                    return dateA - dateB;
-                  })[0];
-
-                if (!nextScheduled) return null;
-
-                const dueDate = new Date(nextScheduled.dueDate);
-                const daysDiff = Math.floor((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-                
-                return (
-                  <div className="mb-6">
-                    <div className="bg-[#fef9e7] border-2 border-[#daa450] rounded-2xl p-4 shadow-sm">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#daa450' }}>
-                          <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                          </svg>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <h2 className="text-base font-bold text-gray-900 mb-1">Next Check-in</h2>
-                          <p className="text-sm font-medium text-gray-900 truncate">{nextScheduled.title}</p>
-                          <p className="text-xs text-gray-600 mt-1">
-                            Due: {dueDate.toLocaleDateString('en-US', { 
-                              weekday: 'long', 
-                              month: 'long', 
-                              day: 'numeric' 
-                            })}
-                            {daysDiff === 0 ? ' (Today)' : daysDiff === 1 ? ' (Tomorrow)' : daysDiff > 1 ? ` (in ${daysDiff} days)` : ''}
-                          </p>
-                        </div>
-                        <Link
-                          href="/client-portal/check-ins"
-                          className="flex-shrink-0 px-4 py-2 text-sm font-semibold text-white rounded-xl hover:opacity-90 transition-opacity shadow-sm"
-                          style={{ backgroundColor: '#daa450' }}
-                        >
-                          View
-                        </Link>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
 
               {/* Onboarding Questionnaire Banner */}
               {onboardingStatus !== 'completed' && onboardingStatus !== 'submitted' && onboardingStatus !== 'skipped' && (
@@ -2198,21 +2262,48 @@ export default function ClientPortalPage() {
                         <div className="text-gray-600 text-sm font-medium">Needs Action</div>
                         <div className="text-2xl font-bold text-gray-900">
                           {(() => {
+                            // Filter actionable check-ins - match check-ins page logic exactly
+                            const now = new Date();
+                            const today = new Date(now);
+                            today.setHours(0, 0, 0, 0);
+                            
+                            // Helper function to check if check-in window is open (Friday 10am to Tuesday 12pm)
+                            const isCheckInOpenForWeek = (due: Date): boolean => {
+                              const d = new Date(due);
+                              const dayOfWeek = d.getDay();
+                              const daysToMonday = dayOfWeek === 0 ? 1 : (dayOfWeek === 1 ? 0 : (8 - dayOfWeek));
+                              const weekMonday = new Date(d);
+                              weekMonday.setDate(d.getDate() - daysToMonday);
+                              weekMonday.setHours(0, 0, 0, 0);
+                              
+                              const windowOpen = new Date(weekMonday);
+                              windowOpen.setDate(weekMonday.getDate() - 3); // Friday before Monday
+                              windowOpen.setHours(10, 0, 0, 0);
+                              
+                              const windowClose = new Date(weekMonday);
+                              windowClose.setDate(weekMonday.getDate() + 1); // Tuesday after Monday
+                              windowClose.setHours(12, 0, 0, 0);
+                              
+                              return now >= windowOpen && now <= windowClose;
+                            };
+                            
                             const filtered = assignedCheckins.filter(checkIn => {
                               if (checkIn.status === 'completed') return false;
                               const dueDate = new Date(checkIn.dueDate);
-                              const now = new Date();
                               const normalizedDueDate = new Date(dueDate);
                               normalizedDueDate.setHours(0, 0, 0, 0);
-                              const normalizedNow = new Date(now);
-                              normalizedNow.setHours(0, 0, 0, 0);
-                              if (normalizedDueDate < normalizedNow) return true;
-                              if (normalizedDueDate <= normalizedNow) {
-                                const checkInWindow = checkIn.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
-                                const windowStatus = isWithinCheckInWindow(checkInWindow);
-                                const isFirstCheckIn = checkIn.recurringWeek === 1;
-                                if (windowStatus.isOpen || isFirstCheckIn) return true;
-                              }
+                              
+                              // Always include overdue check-ins (past due date) - highest priority
+                              if (normalizedDueDate < today) return true;
+                              
+                              // Include check-ins due today
+                              if (normalizedDueDate.getTime() === today.getTime()) return true;
+                              
+                              // Include if window is open (Friday 10am to Tuesday 12pm) - available now
+                              // Use the original dueDate, not normalized, to preserve the time component
+                              if (isCheckInOpenForWeek(dueDate)) return true;
+                              
+                              // Don't include future check-ins whose window isn't open yet
                               return false;
                             });
                             const deduplicatedMap = new Map<string, CheckIn>();
@@ -2232,21 +2323,48 @@ export default function ClientPortalPage() {
                   </div>
                   <div className="p-4">
                     {(() => {
+                      // Filter actionable check-ins - match check-ins page logic exactly
+                      const now = new Date();
+                      const today = new Date(now);
+                      today.setHours(0, 0, 0, 0);
+                      
+                      // Helper function to check if check-in window is open (Friday 10am to Tuesday 12pm)
+                      const isCheckInOpenForWeek = (due: Date): boolean => {
+                        const d = new Date(due);
+                        const dayOfWeek = d.getDay();
+                        const daysToMonday = dayOfWeek === 0 ? 1 : (dayOfWeek === 1 ? 0 : (8 - dayOfWeek));
+                        const weekMonday = new Date(d);
+                        weekMonday.setDate(d.getDate() - daysToMonday);
+                        weekMonday.setHours(0, 0, 0, 0);
+                        
+                        const windowOpen = new Date(weekMonday);
+                        windowOpen.setDate(weekMonday.getDate() - 3); // Friday before Monday
+                        windowOpen.setHours(10, 0, 0, 0);
+                        
+                        const windowClose = new Date(weekMonday);
+                        windowClose.setDate(weekMonday.getDate() + 1); // Tuesday after Monday
+                        windowClose.setHours(12, 0, 0, 0);
+                        
+                        return now >= windowOpen && now <= windowClose;
+                      };
+                      
                       const filteredCheckins = assignedCheckins.filter(checkIn => {
                         if (checkIn.status === 'completed') return false;
                         const dueDate = new Date(checkIn.dueDate);
-                        const now = new Date();
                         const normalizedDueDate = new Date(dueDate);
                         normalizedDueDate.setHours(0, 0, 0, 0);
-                        const normalizedNow = new Date(now);
-                        normalizedNow.setHours(0, 0, 0, 0);
-                        if (normalizedDueDate < normalizedNow) return true;
-                        if (normalizedDueDate <= normalizedNow) {
-                          const checkInWindow = checkIn.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
-                          const windowStatus = isWithinCheckInWindow(checkInWindow);
-                          const isFirstCheckIn = checkIn.recurringWeek === 1;
-                          if (windowStatus.isOpen || isFirstCheckIn) return true;
-                        }
+                        
+                        // Always include overdue check-ins (past due date) - highest priority
+                        if (normalizedDueDate < today) return true;
+                        
+                        // Include check-ins due today
+                        if (normalizedDueDate.getTime() === today.getTime()) return true;
+                        
+                        // Include if window is open (Friday 10am to Tuesday 12pm) - available now
+                        // Use the original dueDate, not normalized, to preserve the time component
+                        if (isCheckInOpenForWeek(dueDate)) return true;
+                        
+                        // Don't include future check-ins whose window isn't open yet
                         return false;
                       });
                       const deduplicatedMap = new Map<string, CheckIn>();
@@ -2459,7 +2577,7 @@ export default function ClientPortalPage() {
                     </Link>
                   </div>
                 </div>
-                <ProgressImagesPreview clientEmail={userProfile?.email || ''} />
+                <ProgressImagesPreview clientEmail={previewClientId ? undefined : userProfile?.email} clientId={clientId} />
               </div>
 
               {/* Progress Summary */}

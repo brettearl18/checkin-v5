@@ -365,7 +365,7 @@ export default function CheckInSuccessPage() {
   if (loading) {
     return (
       <RoleProtected requiredRole="client">
-        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/50 flex">
+        <div className="min-h-screen bg-white flex">
           <ClientNavigation />
           <div className="flex-1 ml-4 p-5">
             <div className="max-w-4xl">
@@ -383,14 +383,14 @@ export default function CheckInSuccessPage() {
 
   return (
     <RoleProtected requiredRole="client">
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/50 flex">
+      <div className="min-h-screen bg-white flex">
         <ClientNavigation />
         
         <div className="flex-1 ml-4 p-4 sm:p-5 lg:p-6">
           <div className="max-w-4xl">
             {/* Success Header */}
             <div className="text-center mb-6 lg:mb-8">
-              <div className="mx-auto w-20 h-20 lg:w-24 lg:h-24 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center mb-4 lg:mb-6 shadow-lg">
+              <div className="mx-auto w-20 h-20 lg:w-24 lg:h-24 rounded-full flex items-center justify-center mb-4 lg:mb-6 shadow-lg" style={{ backgroundColor: '#daa450' }}>
                 <svg className="w-10 h-10 lg:w-12 lg:h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                 </svg>
@@ -398,12 +398,12 @@ export default function CheckInSuccessPage() {
               <h1 className="text-2xl lg:text-3xl font-bold text-gray-900 mb-2 lg:mb-3">
                 Check-in Completed!
               </h1>
-              <p className="text-gray-900 text-sm lg:text-base font-medium">
+              <p className="text-gray-600 text-sm lg:text-base font-medium">
                 Thank you for completing your check-in
               </p>
             </div>
 
-            {/* Score Card */}
+            {/* Score Card - Matching Project Design */}
             <div className={`bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 p-4 sm:p-6 lg:p-8 mb-6 lg:mb-8 ${getScoreBgColor()}`}>
               <div className="text-center">
                 <div className="flex items-center justify-center gap-2 mb-4 lg:mb-5">
@@ -466,7 +466,7 @@ export default function CheckInSuccessPage() {
                 className="w-full flex items-center justify-between text-left"
               >
                 <div className="flex items-center gap-3 lg:gap-4">
-                  <div className="w-12 h-12 lg:w-14 lg:h-14 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl lg:rounded-2xl flex items-center justify-center flex-shrink-0">
+                  <div className="w-12 h-12 lg:w-14 lg:h-14 rounded-xl lg:rounded-2xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#daa450' }}>
                     <svg className="w-6 h-6 lg:w-7 lg:h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
                     </svg>
@@ -642,40 +642,40 @@ export default function CheckInSuccessPage() {
             )}
 
             {/* Next Steps */}
-            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-blue-200 p-4 sm:p-6 lg:p-8 mb-6 lg:mb-8">
+            <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 p-4 sm:p-6 lg:p-8 mb-6 lg:mb-8">
               <h3 className="text-lg lg:text-xl font-bold text-gray-900 mb-4 lg:mb-6">What's Next?</h3>
               <div className="space-y-4 lg:space-y-5">
                 <div className="flex items-start gap-3 lg:gap-4">
-                  <div className="w-10 h-10 lg:w-12 lg:h-12 bg-blue-100 rounded-xl lg:rounded-2xl flex items-center justify-center flex-shrink-0">
-                    <svg className="w-5 h-5 lg:w-6 lg:h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="w-10 h-10 lg:w-12 lg:h-12 rounded-xl lg:rounded-2xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#daa450' }}>
+                    <svg className="w-5 h-5 lg:w-6 lg:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                     </svg>
                   </div>
                   <div className="flex-1">
                     <p className="text-gray-900 font-bold text-base lg:text-lg mb-1.5 lg:mb-2">Your coach will review your responses</p>
-                    <p className="text-gray-900 text-sm lg:text-base">They'll analyze your answers and provide personalized feedback</p>
+                    <p className="text-gray-600 text-sm lg:text-base">They'll analyze your answers and provide personalized feedback</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3 lg:gap-4">
-                  <div className="w-10 h-10 lg:w-12 lg:h-12 bg-indigo-100 rounded-xl lg:rounded-2xl flex items-center justify-center flex-shrink-0">
-                    <svg className="w-5 h-5 lg:w-6 lg:h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="w-10 h-10 lg:w-12 lg:h-12 rounded-xl lg:rounded-2xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#daa450' }}>
+                    <svg className="w-5 h-5 lg:w-6 lg:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
                     </svg>
                   </div>
                   <div className="flex-1">
                     <p className="text-gray-900 font-bold text-base lg:text-lg mb-1.5 lg:mb-2">Track your progress over time</p>
-                    <p className="text-gray-900 text-sm lg:text-base">Monitor your improvements and trends in your wellness journey</p>
+                    <p className="text-gray-600 text-sm lg:text-base">Monitor your improvements and trends in your wellness journey</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3 lg:gap-4">
-                  <div className="w-10 h-10 lg:w-12 lg:h-12 bg-purple-100 rounded-xl lg:rounded-2xl flex items-center justify-center flex-shrink-0">
-                    <svg className="w-5 h-5 lg:w-6 lg:h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="w-10 h-10 lg:w-12 lg:h-12 rounded-xl lg:rounded-2xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#daa450' }}>
+                    <svg className="w-5 h-5 lg:w-6 lg:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                   </div>
                   <div className="flex-1">
                     <p className="text-gray-900 font-bold text-base lg:text-lg mb-1.5 lg:mb-2">Look out for your next check-in</p>
-                    <p className="text-gray-900 text-sm lg:text-base">Complete regular check-ins to maintain momentum</p>
+                    <p className="text-gray-600 text-sm lg:text-base">Complete regular check-ins to maintain momentum</p>
                   </div>
                 </div>
               </div>
@@ -816,13 +816,19 @@ export default function CheckInSuccessPage() {
               </Link>
               <Link
                 href="/client-portal"
-                className="px-6 py-3 lg:px-8 lg:py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl lg:rounded-2xl transition-all duration-200 shadow-md hover:shadow-lg text-sm lg:text-base font-semibold text-center min-h-[44px] lg:min-h-[48px] flex items-center justify-center"
+                className="px-6 py-3 lg:px-8 lg:py-3.5 text-white rounded-xl lg:rounded-2xl transition-all duration-200 shadow-md hover:shadow-lg text-sm lg:text-base font-semibold text-center min-h-[44px] lg:min-h-[48px] flex items-center justify-center"
+                style={{ backgroundColor: '#daa450' }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#c89540'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#daa450'}
               >
                 Go to Dashboard
               </Link>
               <Link
                 href="/client-portal/progress"
-                className="px-6 py-3 lg:px-8 lg:py-3.5 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-xl lg:rounded-2xl transition-all duration-200 shadow-md hover:shadow-lg text-sm lg:text-base font-semibold text-center min-h-[44px] lg:min-h-[48px] flex items-center justify-center"
+                className="px-6 py-3 lg:px-8 lg:py-3.5 text-white rounded-xl lg:rounded-2xl transition-all duration-200 shadow-md hover:shadow-lg text-sm lg:text-base font-semibold text-center min-h-[44px] lg:min-h-[48px] flex items-center justify-center"
+                style={{ backgroundColor: '#daa450' }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#c89540'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#daa450'}
               >
                 View Progress
               </Link>

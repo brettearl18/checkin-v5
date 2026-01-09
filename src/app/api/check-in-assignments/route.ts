@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase-server';
 import { notificationService } from '@/lib/notification-service';
-import { DEFAULT_CHECK_IN_WINDOW } from '@/lib/checkin-window-utils';
+// Window system removed - check-ins use fixed schedule: Friday 10am to Tuesday 12pm
 
 // POST - Create a new check-in assignment
 export async function POST(request: NextRequest) {
@@ -36,20 +36,47 @@ export async function POST(request: NextRequest) {
     // Generate unique assignment ID
     const assignmentId = `assignment-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     
-    // Use firstCheckInDate for calculating dueDate (first check-in is the week after start date)
-    // If firstCheckInDate is not provided, default to startDate + 7 days
+    // Ensure due date is always a Monday
     const startDateValue = startDate || new Date().toISOString().split('T')[0];
     let firstCheckInDateValue = firstCheckInDate;
-    if (!firstCheckInDateValue && startDateValue) {
+    
+    // Helper to get next Monday from a date
+    const getNextMonday = (date: Date): Date => {
+      const d = new Date(date);
+      const dayOfWeek = d.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+      const daysUntilMonday = (1 - dayOfWeek + 7) % 7;
+      if (daysUntilMonday === 0) {
+        // If it's already Monday, use next Monday
+        d.setDate(d.getDate() + 7);
+      } else {
+        d.setDate(d.getDate() + daysUntilMonday);
+      }
+      return d;
+    };
+    
+    // If firstCheckInDate is provided, ensure it's a Monday
+    if (firstCheckInDateValue) {
+      const checkDate = new Date(firstCheckInDateValue);
+      if (checkDate.getDay() !== 1) {
+        const mondayDate = getNextMonday(checkDate);
+        firstCheckInDateValue = mondayDate.toISOString().split('T')[0];
+      }
+    } else if (startDateValue) {
+      // Calculate next Monday from start date
       const start = new Date(startDateValue);
-      start.setDate(start.getDate() + 7); // Add 7 days
-      firstCheckInDateValue = start.toISOString().split('T')[0];
+      const mondayDate = getNextMonday(start);
+      firstCheckInDateValue = mondayDate.toISOString().split('T')[0];
+    } else {
+      // Calculate next Monday from today
+      const today = new Date();
+      const mondayDate = getNextMonday(today);
+      firstCheckInDateValue = mondayDate.toISOString().split('T')[0];
     }
     
-    // Calculate dueDate from firstCheckInDate and dueTime
+    // Calculate dueDate - always Monday at 9:00 AM (or specified time)
     const dueTimeValue = dueTime || '09:00';
     const [hours, minutes] = dueTimeValue.split(':').map(Number);
-    const dueDate = new Date(firstCheckInDateValue || startDateValue);
+    const dueDate = new Date(firstCheckInDateValue);
     dueDate.setHours(hours, minutes, 0, 0);
     
     // Create assignment object
@@ -65,7 +92,7 @@ export async function POST(request: NextRequest) {
       firstCheckInDate: firstCheckInDateValue || startDateValue, // First check-in date (week after start)
       dueDate: dueDate, // Add calculated dueDate based on first check-in
       dueTime: dueTimeValue,
-      checkInWindow: checkInWindow || DEFAULT_CHECK_IN_WINDOW,
+      checkInWindow: null, // Window system removed - using fixed Friday 10am to Tuesday 12pm schedule
       status: status || 'active', // Default to 'active' - use 'inactive' to pause notifications
       assignedAt: new Date(),
       completedAt: null,

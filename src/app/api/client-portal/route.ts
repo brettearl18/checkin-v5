@@ -5,6 +5,18 @@ import { ONBOARDING_QUESTIONS } from '@/lib/onboarding-questions';
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * Get the Monday that starts a week for a given date
+ */
+function getWeekStart(date: Date): Date {
+  const d = new Date(date);
+  const dayOfWeek = d.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+  const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  d.setDate(d.getDate() - daysToMonday);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
 // Use shared cache utility (Phase 1: Shared cache for cross-route invalidation)
 import { getCached, setCache, deleteCache } from '@/lib/dashboard-cache';
 
@@ -17,6 +29,43 @@ export async function GET(request: NextRequest) {
     const clientId = searchParams.get('clientId');
     const clientEmail = searchParams.get('clientEmail');
     const userUid = searchParams.get('userUid'); // Allow passing user UID directly
+    const isPreview = searchParams.get('preview') === 'true';
+    const coachId = searchParams.get('coachId');
+
+    // If in preview mode, verify coach/admin has access to this client
+    if (isPreview && clientId && coachId) {
+      try {
+        // Check if user is an admin (admins can access any client)
+        const userDoc = await db.collection('users').doc(coachId).get();
+        const isAdmin = userDoc.exists && (userDoc.data()?.role === 'admin' || userDoc.data()?.roles?.includes('admin'));
+        
+        if (!isAdmin) {
+          // For non-admins (coaches), verify they're assigned to this client
+          const clientDoc = await db.collection('clients').doc(clientId).get();
+          if (clientDoc.exists) {
+            const clientData = clientDoc.data();
+            // Verify this coach is assigned to this client
+            if (clientData?.coachId !== coachId) {
+              return NextResponse.json({
+                success: false,
+                message: 'You do not have permission to preview this client\'s portal'
+              }, { status: 403 });
+            }
+          } else {
+            return NextResponse.json({
+              success: false,
+              message: 'Client not found'
+            }, { status: 404 });
+          }
+        }
+        // Admins can access any client, so no further checks needed
+      } catch (error) {
+        return NextResponse.json({
+          success: false,
+          message: 'Error verifying preview access'
+        }, { status: 500 });
+      }
+    }
 
     if (!clientId && !clientEmail && !userUid) {
       return NextResponse.json({
@@ -111,11 +160,39 @@ export async function GET(request: NextRequest) {
     // Fetch check-in assignments for this client
     let checkInAssignments = [];
     try {
+      // Helper function to convert date fields
+      const convertDate = (dateField: any) => {
+        if (!dateField) return new Date().toISOString();
+        
+        // Handle Firestore Timestamp
+        if (dateField.toDate && typeof dateField.toDate === 'function') {
+          return dateField.toDate().toISOString();
+        }
+        
+        // Handle Firebase Timestamp object with _seconds
+        if (dateField._seconds) {
+          return new Date(dateField._seconds * 1000).toISOString();
+        }
+        
+        // Handle Date object
+        if (dateField instanceof Date) {
+          return dateField.toISOString();
+        }
+        
+        // Handle ISO string
+        if (typeof dateField === 'string') {
+          return new Date(dateField).toISOString();
+        }
+        
+        // Fallback
+        return new Date().toISOString();
+      };
+
       const assignmentsSnapshot = await db.collection('check_in_assignments')
         .where('clientId', '==', clientIdToUse)
         .get();
 
-      checkInAssignments = assignmentsSnapshot.docs.map(doc => {
+      let allAssignments = assignmentsSnapshot.docs.map(doc => {
         const data = doc.data();
         
         // Calculate dueDate if missing (for backward compatibility)
@@ -128,11 +205,126 @@ export async function GET(request: NextRequest) {
           dueDate.setHours(hours, minutes, 0, 0);
         }
         
+        const dueDateObj = dueDate ? (typeof dueDate === 'string' ? new Date(dueDate) : (dueDate.toDate ? dueDate.toDate() : dueDate)) : new Date();
+        const now = new Date();
+        
+        // Determine display status
+        let displayStatus: 'pending' | 'completed' | 'overdue' = 'pending';
+        if (data.status === 'completed' || data.completedAt) {
+          displayStatus = 'completed';
+        } else if (dueDateObj < now) {
+          displayStatus = 'overdue';
+        }
+        
         return {
           id: doc.id,
           ...data,
-          dueDate: dueDate || data.dueDate || new Date() // Ensure dueDate exists
+          dueDate: convertDate(dueDate || data.dueDate || new Date()),
+          status: displayStatus,
+          recurringWeek: data.recurringWeek || 1,
+          totalWeeks: data.totalWeeks || 1,
+          isRecurring: data.isRecurring || false,
+          clientId: clientIdToUse
         };
+      });
+
+      // Expand recurring check-ins into individual weekly assignments (same logic as check-ins endpoint)
+      const recurringSeriesMap = new Map<string, any[]>();
+      const nonRecurringAssignments: any[] = [];
+      
+      allAssignments.forEach(assignment => {
+        if (assignment.isRecurring && assignment.totalWeeks > 1) {
+          const seriesKey = `${assignment.formId}_${assignment.clientId}`;
+          if (!recurringSeriesMap.has(seriesKey)) {
+            recurringSeriesMap.set(seriesKey, []);
+          }
+          recurringSeriesMap.get(seriesKey)!.push(assignment);
+        } else {
+          nonRecurringAssignments.push(assignment);
+        }
+      });
+      
+      const expandedAssignments: any[] = [...nonRecurringAssignments];
+      const now = new Date();
+      
+      // Process each recurring series and expand missing weeks
+      recurringSeriesMap.forEach((seriesAssignments) => {
+        // Group by recurringWeek and keep only one per week
+        const weekMap = new Map<number, any>();
+        seriesAssignments.forEach(assignment => {
+          const week = assignment.recurringWeek || 1;
+          if (!weekMap.has(week)) {
+            weekMap.set(week, assignment);
+          } else {
+            const existing = weekMap.get(week)!;
+            if (assignment.status === 'completed' && existing.status !== 'completed') {
+              weekMap.set(week, assignment);
+            } else if (assignment.status === existing.status) {
+              const existingDate = existing.assignedAt ? new Date(existing.assignedAt).getTime() : 0;
+              const currentDate = assignment.assignedAt ? new Date(assignment.assignedAt).getTime() : 0;
+              if (currentDate > existingDate) {
+                weekMap.set(week, assignment);
+              }
+            }
+          }
+        });
+        
+        const deduplicatedSeries = Array.from(weekMap.values()).sort((a, b) => {
+          const weekA = a.recurringWeek || 1;
+          const weekB = b.recurringWeek || 1;
+          return weekA - weekB;
+        });
+        
+        const baseAssignment = deduplicatedSeries.find(a => a.recurringWeek === 1) || deduplicatedSeries[0];
+        
+        if (!baseAssignment) {
+          // If no base assignment found, skip this series
+          return;
+        }
+        
+        // Add all existing assignments from the series
+        deduplicatedSeries.forEach(assignment => {
+          expandedAssignments.push(assignment);
+        });
+        
+        // Generate future weeks if needed
+        if (baseAssignment.totalWeeks && baseAssignment.totalWeeks > 1) {
+          const firstDueDate = new Date(baseAssignment.dueDate);
+          const firstWeekStart = getWeekStart(firstDueDate);
+          const maxExistingWeek = Math.max(...deduplicatedSeries.map(a => a.recurringWeek || 1));
+          
+          // Calculate 3 weeks ago Monday to include recent past weeks
+          const threeWeeksAgoMonday = new Date(now);
+          threeWeeksAgoMonday.setDate(now.getDate() - 21);
+          threeWeeksAgoMonday.setHours(0, 0, 0, 0);
+          const threeWeeksAgoMondayStart = getWeekStart(threeWeeksAgoMonday);
+          
+          for (let week = maxExistingWeek + 1; week <= baseAssignment.totalWeeks; week++) {
+            const weekMonday = new Date(firstWeekStart);
+            weekMonday.setDate(firstWeekStart.getDate() + (7 * (week - 1)));
+            weekMonday.setHours(9, 0, 0, 0);
+            
+            // Include future weeks AND recent past weeks (within 3 weeks) that weren't created
+            if (weekMonday >= threeWeeksAgoMondayStart) {
+              expandedAssignments.push({
+                ...baseAssignment,
+                id: `${baseAssignment.id}_week_${week}`,
+                recurringWeek: week,
+                dueDate: weekMonday.toISOString(),
+                status: weekMonday < now ? 'overdue' : 'pending',
+                checkInWindow: null,
+                responseId: undefined,
+                coachResponded: false,
+                completedAt: undefined,
+                score: undefined
+              });
+            }
+          }
+        }
+      });
+      
+      checkInAssignments = expandedAssignments.sort((a, b) => {
+        return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
       });
     } catch (error) {
       console.log('No check_in_assignments found for client, using empty array');

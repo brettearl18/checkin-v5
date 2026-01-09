@@ -110,7 +110,17 @@ export default function CheckInCompletionPage() {
 
       // Use API endpoint (handles both doc.id and id field, uses Admin SDK so bypasses client permissions)
       try {
-        const response = await fetch(`/api/check-in-assignments/${assignmentId}`);
+        if (!assignmentId) {
+          console.error('Assignment ID is missing');
+          setError('Check-in assignment ID is missing. Please check the URL.');
+          setLoading(false);
+          return;
+        }
+        
+        // URL encode the assignment ID to handle special characters (like underscores in week IDs)
+        const encodedAssignmentId = encodeURIComponent(assignmentId);
+        const response = await fetch(`/api/check-in-assignments/${encodedAssignmentId}`);
+        
         if (response.ok) {
           const data = await response.json();
           if (data.success && data.assignment) {
@@ -735,8 +745,10 @@ export default function CheckInCompletionPage() {
         // Don't fail submission if clearing localStorage fails
       }
 
-      // Redirect to success page
-      router.push(`/client-portal/check-in/${assignmentId}/success?score=${score}`);
+      // Redirect to success page using responseId (more reliable than assignmentId for dynamic weeks)
+      // If responseId is available, use it; otherwise fall back to assignmentId
+      const successId = submitResult.responseId || assignmentId;
+      router.push(`/client-portal/check-in/${successId}/success?score=${score}`);
 
     } catch (error) {
       console.error('Error submitting check-in:', error);
@@ -1044,6 +1056,26 @@ export default function CheckInCompletionPage() {
                       Week {assignment.recurringWeek} of {assignment.totalWeeks}
                     </span>
                   )}
+                  {assignment.dueDate && assignment.recurringWeek && (() => {
+                    // Calculate the reference week (the week this check-in is ABOUT)
+                    // Check-ins are retrospective - they're about the PREVIOUS week
+                    const due = new Date(assignment.dueDate);
+                    const referenceWeekStart = new Date(due);
+                    referenceWeekStart.setDate(due.getDate() - 7); // Go back 7 days to get previous Monday
+                    referenceWeekStart.setHours(0, 0, 0, 0);
+                    const referenceWeekEnd = new Date(referenceWeekStart);
+                    referenceWeekEnd.setDate(referenceWeekStart.getDate() + 6); // Sunday of that week
+                    
+                    const formatDateShort = (date: Date) => {
+                      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                    };
+                    
+                    return (
+                      <span className="text-xs sm:text-sm text-gray-600 bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-200">
+                        About: Week ending {formatDateShort(referenceWeekEnd)}
+                      </span>
+                    );
+                  })()}
                   <span className="text-xs sm:text-sm lg:text-base text-gray-600 font-medium">
                     {(() => {
                       let dueDate: Date;

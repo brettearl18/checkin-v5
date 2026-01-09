@@ -245,6 +245,7 @@ export async function POST(request: NextRequest) {
       lastName,
       email,
       phone: phone || '',
+      timezone: 'Australia/Perth', // Default timezone (clients can change this in their profile settings)
       wellnessGoals: goals || [],
       preferredCommunication: communicationPreference || 'email',
       checkInFrequency: checkInFrequency || 'weekly',

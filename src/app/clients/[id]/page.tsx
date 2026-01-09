@@ -2370,6 +2370,19 @@ export default function ClientProfilePage() {
                   </Link>
                 )}
                 <Link
+                  href={`/client-portal?preview=${clientId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-1.5 text-sm text-gray-700 hover:text-gray-900 hover:bg-white rounded-lg border border-gray-200 transition-colors"
+                  title="Preview Client Portal"
+                >
+                  <svg className="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  </svg>
+                  Preview Portal
+                </Link>
+                <Link
                   href={`/clients/${clientId}/edit`}
                   className="px-4 py-1.5 text-sm bg-orange-500 hover:bg-orange-600 text-white rounded-2xl font-medium transition-all duration-200 shadow-sm"
                 >
@@ -4166,6 +4179,184 @@ export default function ClientProfilePage() {
                     </div>
                   ) : (
                     <div id="check-ins-section" className="space-y-8">
+                      {/* Current Check-in Status Card */}
+                      {(() => {
+                        // Find the current check-in (next pending/active, or most recent if all completed)
+                        const now = new Date();
+                        const currentCheckIn = allocatedCheckIns
+                          .filter(c => c.status === 'pending' || c.status === 'active' || c.status === 'overdue')
+                          .sort((a, b) => {
+                            const dateA = a.dueDate ? new Date(a.dueDate).getTime() : 0;
+                            const dateB = b.dueDate ? new Date(b.dueDate).getTime() : 0;
+                            return dateA - dateB; // Earliest first
+                          })[0] || allocatedCheckIns
+                          .filter(c => c.status === 'completed')
+                          .sort((a, b) => {
+                            const dateA = a.completedAt ? new Date(a.completedAt).getTime() : 0;
+                            const dateB = b.completedAt ? new Date(b.completedAt).getTime() : 0;
+                            return dateB - dateA; // Most recent first
+                          })[0];
+
+                        if (!currentCheckIn) return null;
+
+                        // Calculate window status (Friday 10am to Tuesday 12pm)
+                        const isCheckInOpen = (dueDate: Date | string): boolean => {
+                          const due = typeof dueDate === 'string' ? new Date(dueDate) : dueDate;
+                          const dayOfWeek = due.getDay();
+                          const daysToMonday = dayOfWeek === 0 ? 1 : (dayOfWeek === 1 ? 0 : (8 - dayOfWeek));
+                          const weekMonday = new Date(due);
+                          weekMonday.setDate(due.getDate() - daysToMonday);
+                          weekMonday.setHours(0, 0, 0, 0);
+                          
+                          const windowOpen = new Date(weekMonday);
+                          windowOpen.setDate(weekMonday.getDate() - 3); // Friday
+                          windowOpen.setHours(10, 0, 0, 0);
+                          
+                          const windowClose = new Date(weekMonday);
+                          windowClose.setDate(weekMonday.getDate() + 1); // Tuesday
+                          windowClose.setHours(12, 0, 0, 0);
+                          
+                          return now >= windowOpen && now <= windowClose;
+                        };
+
+                        const dueDate = currentCheckIn.dueDate ? new Date(currentCheckIn.dueDate) : null;
+                        const dueDateNormalized = dueDate ? new Date(dueDate) : null;
+                        if (dueDateNormalized) {
+                          dueDateNormalized.setHours(0, 0, 0, 0);
+                        }
+                        const today = new Date(now);
+                        today.setHours(0, 0, 0, 0);
+
+                        const isOverdue = dueDateNormalized && dueDateNormalized < today && currentCheckIn.status !== 'completed';
+                        const isAvailable = dueDate && isCheckInOpen(dueDate) && currentCheckIn.status !== 'completed';
+                        const windowClosed = dueDateNormalized && dueDateNormalized <= today && !isAvailable && currentCheckIn.status !== 'completed';
+                        const notYetAvailable = dueDateNormalized && dueDateNormalized > today;
+
+                        const weekInfo = currentCheckIn.isRecurring && currentCheckIn.recurringWeek
+                          ? `Week ${currentCheckIn.recurringWeek}${currentCheckIn.totalWeeks ? ` of ${currentCheckIn.totalWeeks}` : ''}`
+                          : '';
+
+                        return (
+                          <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border-2 border-orange-200 overflow-hidden">
+                            <div className="p-6">
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1">
+                                  <div className="flex items-center space-x-3 mb-3">
+                                    <div className="w-12 h-12 bg-orange-500 rounded-2xl flex items-center justify-center flex-shrink-0">
+                                      <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                      </svg>
+                                    </div>
+                                    <div>
+                                      <h3 className="text-lg font-bold text-gray-900">Current Check-in</h3>
+                                      <p className="text-sm text-gray-600">{currentCheckIn.formTitle || 'Check-in Assignment'}</p>
+                                    </div>
+                                  </div>
+
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                                    {/* Week Info */}
+                                    {weekInfo && (
+                                      <div className="bg-white/60 rounded-xl p-4 border border-orange-200">
+                                        <div className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1">Week</div>
+                                        <div className="text-lg font-bold text-gray-900">{weekInfo}</div>
+                                      </div>
+                                    )}
+
+                                    {/* Status */}
+                                    <div className="bg-white/60 rounded-xl p-4 border border-orange-200">
+                                      <div className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1">Status</div>
+                                      <div className="flex items-center space-x-2">
+                                        {currentCheckIn.status === 'completed' ? (
+                                          <span className="px-3 py-1 bg-green-100 text-green-800 text-sm font-semibold rounded-full border border-green-200">
+                                            ✓ Completed
+                                          </span>
+                                        ) : isAvailable ? (
+                                          <span className="px-3 py-1 bg-green-100 text-green-800 text-sm font-semibold rounded-full border border-green-200">
+                                            ✓ Available Now
+                                          </span>
+                                        ) : isOverdue ? (
+                                          <span className="px-3 py-1 bg-red-100 text-red-800 text-sm font-semibold rounded-full border border-red-200">
+                                            ⚠ Overdue
+                                          </span>
+                                        ) : windowClosed ? (
+                                          <span className="px-3 py-1 bg-yellow-100 text-yellow-800 text-sm font-semibold rounded-full border border-yellow-200">
+                                            ⏰ Window Closed
+                                          </span>
+                                        ) : notYetAvailable ? (
+                                          <span className="px-3 py-1 bg-blue-100 text-blue-800 text-sm font-semibold rounded-full border border-blue-200">
+                                            📅 Not Yet Available
+                                          </span>
+                                        ) : (
+                                          <span className="px-3 py-1 bg-gray-100 text-gray-800 text-sm font-semibold rounded-full border border-gray-200">
+                                            {currentCheckIn.status || 'Pending'}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {/* Due Date */}
+                                    {dueDate && (
+                                      <div className="bg-white/60 rounded-xl p-4 border border-orange-200">
+                                        <div className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1">Due Date</div>
+                                        <div className="text-lg font-bold text-gray-900">{formatDate(dueDate.toISOString())}</div>
+                                        {dueDateNormalized && (
+                                          <div className="text-xs text-gray-500 mt-1">
+                                            {dueDateNormalized < today 
+                                              ? `${Math.floor((today.getTime() - dueDateNormalized.getTime()) / (1000 * 60 * 60 * 24))} days ago`
+                                              : dueDateNormalized.getTime() === today.getTime()
+                                              ? 'Today'
+                                              : `In ${Math.floor((dueDateNormalized.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))} days`
+                                            }
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+
+                                    {/* Window Status */}
+                                    {currentCheckIn.status !== 'completed' && dueDate && (
+                                      <div className="bg-white/60 rounded-xl p-4 border border-orange-200">
+                                        <div className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1">Check-in Window</div>
+                                        <div className="text-sm font-medium text-gray-900">
+                                          {isAvailable ? (
+                                            <span className="text-green-700">✓ Open Now</span>
+                                          ) : windowClosed ? (
+                                            <span className="text-yellow-700">⏰ Window Closed</span>
+                                          ) : notYetAvailable ? (
+                                            <span className="text-blue-700">📅 Opens Friday 10:00 AM</span>
+                                          ) : (
+                                            <span className="text-gray-700">Opens Friday 10:00 AM, closes Tuesday 12:00 PM</span>
+                                          )}
+                                        </div>
+                                        <div className="text-xs text-gray-500 mt-1">
+                                          Opens Friday 10:00 AM, closes Tuesday 12:00 PM
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Score (if completed) */}
+                                  {currentCheckIn.status === 'completed' && currentCheckIn.score !== undefined && (
+                                    <div className="mt-4 bg-white/60 rounded-xl p-4 border border-orange-200">
+                                      <div className="flex items-center justify-between">
+                                        <div>
+                                          <div className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1">Score</div>
+                                          <div className="text-2xl font-bold text-gray-900">{currentCheckIn.score}%</div>
+                                        </div>
+                                        {currentCheckIn.coachResponded && (
+                                          <span className="px-3 py-1 bg-blue-100 text-blue-800 text-xs font-semibold rounded-full border border-blue-200">
+                                            ✓ Coach Responded
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
+
                       {/* Tab Navigation */}
                       <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
                         <div className="bg-orange-50 px-6 py-4 border-b-2 border-orange-200">

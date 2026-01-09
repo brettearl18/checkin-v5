@@ -113,6 +113,12 @@ export default function ClientNavigation() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [clientId, setClientId] = useState<string | null>(null);
+  const [previewClientData, setPreviewClientData] = useState<{
+    firstName?: string;
+    lastName?: string;
+    avatar?: string;
+    email?: string;
+  } | null>(null);
   const [uploading, setUploading] = useState(false);
   const [personalization, setPersonalization] = useState<{
     quote: string | null;
@@ -132,8 +138,39 @@ export default function ClientNavigation() {
     return pathname.startsWith(href);
   };
 
-  // Fetch client ID
+  // Check if we're in preview mode
+  const [isPreviewMode, setIsPreviewMode] = useState(false);
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const previewClientId = params.get('preview');
+      setIsPreviewMode(!!previewClientId);
+      
+      // If in preview mode, fetch client data for display
+      if (previewClientId) {
+        fetch(`/api/client-portal?clientId=${encodeURIComponent(previewClientId)}&preview=true&coachId=${userProfile?.uid || ''}`)
+          .then(res => res.json())
+          .then(data => {
+            if (data.success && data.data?.client) {
+              const client = data.data.client;
+              setPreviewClientData({
+                firstName: client.firstName,
+                lastName: client.lastName,
+                avatar: client.avatar || client.profile?.avatar,
+                email: client.email
+              });
+              setClientId(previewClientId);
+            }
+          })
+          .catch(err => console.error('Error fetching preview client data:', err));
+      }
+    }
+  }, [userProfile?.uid]);
+
+  // Fetch client ID (only if not in preview mode)
+  useEffect(() => {
+    if (isPreviewMode) return; // Skip if in preview mode
+    
     const fetchClientId = async () => {
       if (userProfile?.email) {
         try {
@@ -156,7 +193,7 @@ export default function ClientNavigation() {
       }
     };
     fetchClientId();
-  }, [userProfile?.email]);
+  }, [userProfile?.email, isPreviewMode]);
 
   // Fetch profile personalization
   useEffect(() => {
@@ -351,8 +388,11 @@ export default function ClientNavigation() {
     }
   };
 
-  const clientName = userProfile ? `${userProfile.firstName || ''} ${userProfile.lastName || ''}`.trim() : 'Client Portal';
-  const initials = userProfile ? `${userProfile.firstName?.charAt(0) || ''}${userProfile.lastName?.charAt(0) || ''}`.toUpperCase() : 'CP';
+  // In preview mode, use preview client data if available, otherwise fall back to userProfile
+  const displayProfile = (isPreviewMode && previewClientData) ? previewClientData : userProfile;
+  const clientName = displayProfile ? `${displayProfile.firstName || ''} ${displayProfile.lastName || ''}`.trim() : 'Client Portal';
+  const initials = displayProfile ? `${displayProfile.firstName?.charAt(0) || ''}${displayProfile.lastName?.charAt(0) || ''}`.toUpperCase() : 'CP';
+  const displayAvatar = displayProfile?.avatar;
   
   // Get personalization values or defaults
   const colorTheme = personalization?.colorTheme || '#daa450';
@@ -396,8 +436,8 @@ export default function ClientNavigation() {
                     disabled={uploading || !clientId}
                     className="w-10 h-10 bg-white bg-opacity-20 rounded-full flex items-center justify-center overflow-hidden hover:bg-opacity-30 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
                   >
-                    {userProfile?.avatar ? (
-                      <img src={userProfile.avatar} alt={clientName} className="w-full h-full object-cover rounded-full" />
+                    {displayAvatar ? (
+                      <img src={displayAvatar} alt={clientName} className="w-full h-full object-cover rounded-full" />
                     ) : (
                       <span className="text-white text-sm font-medium">{initials.substring(0, 2)}</span>
                     )}
@@ -497,18 +537,18 @@ export default function ClientNavigation() {
                   onClick={() => fileInputRef.current?.click()}
                   disabled={uploading || !clientId}
                   className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-medium shadow-sm overflow-hidden hover:opacity-90 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
-                  style={{ backgroundColor: userProfile?.avatar ? 'transparent' : '#daa450' }}
+                  style={{ backgroundColor: displayAvatar ? 'transparent' : '#daa450' }}
                   title="Click to upload profile image"
                 >
-                  {userProfile?.avatar ? (
-                    <img src={userProfile.avatar} alt={clientName} className="w-full h-full object-cover" />
+                  {displayAvatar ? (
+                    <img src={displayAvatar} alt={clientName} className="w-full h-full object-cover" />
                   ) : (
                     <span>{initials.substring(0, 2)}</span>
                   )}
                 </button>
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium text-gray-900 truncate">
-                    {userProfile?.firstName} {userProfile?.lastName}
+                    {displayProfile?.firstName} {displayProfile?.lastName}
                   </div>
                   <div className="text-xs text-gray-700">Client</div>
                 </div>
@@ -541,8 +581,8 @@ export default function ClientNavigation() {
             className="w-12 h-12 bg-white bg-opacity-20 rounded-full flex items-center justify-center overflow-hidden hover:bg-opacity-30 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
             title={isCollapsed ? "Click to upload profile image" : undefined}
           >
-            {userProfile?.avatar ? (
-              <img src={userProfile.avatar} alt={clientName} className="w-full h-full object-cover rounded-full" />
+            {displayAvatar ? (
+              <img src={displayAvatar} alt={clientName} className="w-full h-full object-cover rounded-full" />
             ) : (
               <span className="text-white text-base font-medium">{initials.substring(0, 2)}</span>
             )}
@@ -646,11 +686,11 @@ export default function ClientNavigation() {
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploading || !clientId}
                 className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-medium flex-shrink-0 shadow-sm overflow-hidden hover:opacity-90 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                style={{ backgroundColor: userProfile?.avatar ? 'transparent' : '#daa450' }}
+                style={{ backgroundColor: displayAvatar ? 'transparent' : '#daa450' }}
                 title="Click to upload profile image"
               >
-                {userProfile?.avatar ? (
-                  <img src={userProfile.avatar} alt={clientName} className="w-full h-full object-cover" />
+                {displayAvatar ? (
+                  <img src={displayAvatar} alt={clientName} className="w-full h-full object-cover" />
                 ) : (
                   <span>{initials.substring(0, 2)}</span>
                 )}
@@ -668,11 +708,11 @@ export default function ClientNavigation() {
               onClick={() => fileInputRef.current?.click()}
               disabled={uploading || !clientId}
               className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-medium mx-auto shadow-sm overflow-hidden hover:opacity-90 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{ backgroundColor: userProfile?.avatar ? 'transparent' : '#daa450' }}
+              style={{ backgroundColor: displayAvatar ? 'transparent' : '#daa450' }}
               title="Click to upload profile image"
             >
-              {userProfile?.avatar ? (
-                <img src={userProfile.avatar} alt={clientName} className="w-full h-full object-cover" />
+              {displayAvatar ? (
+                <img src={displayAvatar} alt={clientName} className="w-full h-full object-cover" />
               ) : (
                 <span>{initials.substring(0, 2)}</span>
               )}
@@ -703,7 +743,7 @@ export default function ClientNavigation() {
         onClose={() => setIsPersonalizationModalOpen(false)}
         onSave={handlePersonalizationSave}
         currentPersonalization={personalization || undefined}
-        currentAvatar={userProfile?.avatar || null}
+        currentAvatar={displayAvatar || null}
         clientId={clientId}
       />
     </>

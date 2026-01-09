@@ -482,6 +482,7 @@ export async function POST(request: NextRequest) {
         lastName,
         email,
         phone: '',
+        timezone: 'Australia/Perth', // Default timezone (clients can change this in their profile settings)
         status: 'pending', // Set to pending if no coach assigned
         onboardingStatus: 'not_started', // Initialize onboarding status
         canStartCheckIns: false, // Cannot start check-ins until onboarding is complete

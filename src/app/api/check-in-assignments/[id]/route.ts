@@ -10,29 +10,81 @@ export async function GET(
     const { id } = await params;
     const db = getDb();
 
-    // First, try to fetch by Firestore document ID
-    let assignmentDoc = await db.collection('check_in_assignments').doc(id).get();
+    // Check if this is a dynamically generated week ID (e.g., "assignment-123_week_2")
+    // These IDs are generated for Week 2+ check-ins that don't exist as separate documents
+    const weekMatch = id.match(/^(.+)_week_(\d+)$/);
+    let assignmentDoc: any = null;
+    let isDynamicWeek = false;
+    let dynamicWeekNumber = 1;
     
-    // If not found, try querying by the 'id' field (for backward compatibility)
-    if (!assignmentDoc.exists) {
-      const assignmentsQuery = await db.collection('check_in_assignments')
-        .where('id', '==', id)
-        .limit(1)
-        .get();
+    if (weekMatch) {
+      // This is a dynamically generated week check-in
+      isDynamicWeek = true;
+      const baseAssignmentId = weekMatch[1];
+      dynamicWeekNumber = parseInt(weekMatch[2], 10);
       
-      if (!assignmentsQuery.empty) {
-        assignmentDoc = assignmentsQuery.docs[0];
+      // Try to find the base assignment (Week 1 or the original assignment)
+      assignmentDoc = await db.collection('check_in_assignments').doc(baseAssignmentId).get();
+      
+      // If not found by document ID, try querying by the 'id' field
+      if (!assignmentDoc.exists) {
+        const assignmentsQuery = await db.collection('check_in_assignments')
+          .where('id', '==', baseAssignmentId)
+          .limit(1)
+          .get();
+        
+        if (!assignmentsQuery.empty) {
+          assignmentDoc = assignmentsQuery.docs[0];
+        }
+      }
+    } else {
+      // Regular assignment ID - try to fetch by Firestore document ID
+      assignmentDoc = await db.collection('check_in_assignments').doc(id).get();
+      
+      // If not found, try querying by the 'id' field (for backward compatibility)
+      if (!assignmentDoc.exists) {
+        const assignmentsQuery = await db.collection('check_in_assignments')
+          .where('id', '==', id)
+          .limit(1)
+          .get();
+        
+        if (!assignmentsQuery.empty) {
+          assignmentDoc = assignmentsQuery.docs[0];
+        }
       }
     }
     
-    if (!assignmentDoc.exists) {
+    if (!assignmentDoc || !assignmentDoc.exists) {
       return NextResponse.json({
         success: false,
         message: 'Check-in assignment not found'
       }, { status: 404 });
     }
 
-    const assignmentData = assignmentDoc.data();
+    let assignmentData = assignmentDoc.data();
+    
+    // If this is a dynamically generated week, modify the assignment data
+    if (isDynamicWeek && assignmentData) {
+      // Calculate the due date for this specific week
+      const firstDueDate = assignmentData.dueDate?.toDate?.() || new Date(assignmentData.dueDate);
+      const weekMonday = new Date(firstDueDate);
+      weekMonday.setDate(firstDueDate.getDate() + (7 * (dynamicWeekNumber - 1)));
+      weekMonday.setHours(9, 0, 0, 0); // Default due time
+      
+      // Update assignment data for this specific week
+      assignmentData = {
+        ...assignmentData,
+        id: id, // Use the dynamic ID
+        recurringWeek: dynamicWeekNumber,
+        dueDate: weekMonday,
+        status: weekMonday < new Date() ? 'overdue' : 'pending',
+        // Clear completed fields since this is a future week (unless it was actually completed)
+        completedAt: undefined,
+        score: undefined,
+        responseId: undefined,
+        coachResponded: false
+      };
+    }
     
     // Fetch form data if formId exists
     let formData = null;
@@ -81,13 +133,15 @@ export async function GET(
     return NextResponse.json({
       success: true,
       assignment: {
-        id: assignmentDoc.id,
+        id: isDynamicWeek ? id : assignmentDoc.id, // Use dynamic ID if this is a generated week
         ...assignmentData,
         assignedAt: assignmentData?.assignedAt?.toDate?.() || assignmentData?.assignedAt,
         completedAt: assignmentData?.completedAt?.toDate?.() || assignmentData?.completedAt,
-        dueDate: assignmentData?.dueDate?.toDate?.() || assignmentData?.dueDate
+        dueDate: assignmentData?.dueDate instanceof Date 
+          ? assignmentData.dueDate.toISOString() 
+          : (assignmentData?.dueDate?.toDate?.()?.toISOString() || assignmentData?.dueDate)
       },
-      documentId: assignmentDoc.id, // Return the actual Firestore document ID
+      documentId: assignmentDoc.id, // Return the actual Firestore document ID (base assignment)
       form: formData, // Include form data
       questions: questions // Include questions data
     });

@@ -54,21 +54,27 @@ export async function getDefaultFormId(): Promise<string> {
 }
 
 /**
- * Calculate the next Friday from a given date
+ * Calculate the next Monday from a given date (or the Monday of the current week if today is Monday)
+ * Each week starts on Monday, so check-ins are due on Mondays
  */
-function getNextFriday(fromDate: Date = new Date()): Date {
+function getNextMonday(fromDate: Date = new Date()): Date {
   const date = new Date(fromDate);
-  const dayOfWeek = date.getDay(); // 0 = Sunday, 5 = Friday
+  const dayOfWeek = date.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
   
-  // Calculate days until next Friday
-  // If it's Friday, return next Friday (7 days later)
-  // Otherwise calculate days to next Friday
-  if (dayOfWeek === 5) {
-    date.setDate(date.getDate() + 7);
+  // Calculate days until next Monday
+  // If it's Monday, return today (or next Monday if we want to skip current week)
+  // Otherwise calculate days to next Monday
+  if (dayOfWeek === 1) {
+    // If it's Monday, use today (Week 1 can start today)
+    // For subsequent weeks, we'd add 7 days, but for first check-in, today's Monday is valid
+    return date;
   } else {
-    const daysUntilFriday = (5 - dayOfWeek + 7) % 7;
-    date.setDate(date.getDate() + daysUntilFriday);
+    // Calculate days to next Monday
+    // Monday is day 1, so: if today is Sunday (0), add 1. If today is Tuesday (2), add 6, etc.
+    const daysUntilMonday = dayOfWeek === 0 ? 1 : (8 - dayOfWeek);
+    date.setDate(date.getDate() + daysUntilMonday);
   }
+  date.setHours(0, 0, 0, 0); // Reset to start of day
   return date;
 }
 
@@ -127,23 +133,19 @@ export async function autoAllocateCheckIn(
     let firstCheckInDateString: string;
     let firstCheckInDate: Date;
     
-    // Check if signup is between Jan 3-5, 2026 (inclusive)
+    // Each week starts on Monday, so first check-in due date should be a Monday
     if (todayDateString >= signupStartDateString && todayDateString <= signupEndDateString) {
       // Special case: Week 1 starts on Jan 5, 2026 (Monday)
       // Use the date string directly to avoid timezone conversion issues
-      firstCheckInDateString = week1StartDateString; // '2026-01-05'
+      firstCheckInDateString = week1StartDateString; // '2026-01-05' (already a Monday)
       firstCheckInDate = new Date(week1StartDateString + 'T09:00:00'); // 9:00 AM local time
-    } else if (today.getDay() === 5) {
-      // Today is Friday - use today so it's immediately available
-      firstCheckInDate = new Date(today);
-      firstCheckInDateString = firstCheckInDate.toISOString().split('T')[0];
     } else {
-      // Use next Friday
-      firstCheckInDate = getNextFriday(today);
+      // Calculate next Monday (each week starts on Monday)
+      firstCheckInDate = getNextMonday(today);
       firstCheckInDateString = firstCheckInDate.toISOString().split('T')[0];
     }
     
-    // Set due date to the first check-in date at 9:00 AM (so it's immediately available)
+    // Set due date to the first check-in date (Monday) at 9:00 AM
     const dueDate = new Date(firstCheckInDateString + 'T09:00:00');
     
     // Generate unique assignment ID
@@ -162,7 +164,7 @@ export async function autoAllocateCheckIn(
       firstCheckInDate: firstCheckInDateString,
       dueDate: dueDate,
       dueTime: '09:00',
-      checkInWindow: DEFAULT_CHECK_IN_WINDOW,
+      checkInWindow: null, // Window system removed - using fixed Friday 10am to Tuesday 12pm schedule
       status: 'active',
       assignedAt: new Date(),
       completedAt: null,
