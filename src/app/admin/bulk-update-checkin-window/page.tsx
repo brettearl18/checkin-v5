@@ -319,6 +319,13 @@ export default function BulkUpdateCheckInWindowPage() {
                       </div>
                     </div>
                   </div>
+                  <div className="mt-4 p-3 bg-white rounded-lg border border-amber-200">
+                    <div className="text-sm text-gray-700">
+                      <strong>Note:</strong> The "window open" email flag will be cleared for all assignments. 
+                      This means clients will receive the "window open" email on the next window opening (Friday 9am), 
+                      not immediately. This prevents duplicate emails if they already received one today.
+                    </div>
+                  </div>
                 </div>
               )}
 

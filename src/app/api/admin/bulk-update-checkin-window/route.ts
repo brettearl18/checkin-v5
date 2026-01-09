@@ -209,7 +209,10 @@ export async function POST(request: NextRequest) {
       batchDocs.forEach(doc => {
         batch.update(doc.ref, {
           checkInWindow: checkInWindow,
-          updatedAt: new Date()
+          updatedAt: new Date(),
+          // Clear windowOpenEmailSentDate to allow email to send on next window open
+          windowOpenEmailSentDate: null,
+          windowOpenEmailSentAt: null
         });
       });
 
