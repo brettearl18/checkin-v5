@@ -91,39 +91,75 @@ export function isWithinCheckInWindow(
       message = `Check-in window opens Friday at ${formatTime(window.startTime)}`;
     }
   }
-  // Case 2: We're on Saturday or Sunday (always open)
+  // Case 2: We're on Saturday or Sunday (always open if window spans these days)
   else if (currentDay === 6 || currentDay === 0) { // Saturday or Sunday
-    isOpen = true;
-    message = 'Check-in window is open';
+    // Check if window actually spans these days (startDay is Friday and endDay is after Sunday)
+    const startDayNum = getDayOfWeek(window.startDay);
+    const endDayNum = getDayOfWeek(window.endDay);
+    // If start is Friday (5) and end is Tuesday (2), then Saturday and Sunday are in the window
+    // If start is Friday (5) and end is Monday (1), then Saturday and Sunday are in the window
+    if (startDayNum < endDayNum || (startDayNum === 5 && endDayNum <= 2)) {
+      isOpen = true;
+      message = 'Check-in window is open';
+    } else {
+      isOpen = false;
+      // Calculate days until start day
+      const daysUntilStart = (startDayNum - currentDay + 7) % 7 || 7;
+      const nextOpen = new Date(now);
+      nextOpen.setDate(now.getDate() + daysUntilStart);
+      nextOpen.setHours(startHours, startMinutes, 0, 0);
+      nextOpenTime = nextOpen;
+      const startDayName = window.startDay.charAt(0).toUpperCase() + window.startDay.slice(1);
+      message = `Check-in window closed. Opens again ${startDayName} at ${formatTime(window.startTime)}`;
+    }
   }
-  // Case 3: We're on Monday, check if time is before end time
+  // Case 3: We're on the end day, check if time is before end time
   else if (currentDay === endDay) {
     if (currentTimeInMinutes <= endTimeInMinutes) {
       isOpen = true;
       message = 'Check-in window is open';
     } else {
       isOpen = false;
-      // Next open time is next Friday
-      const daysUntilFriday = (5 - currentDay + 7) % 7 || 7; // Friday is day 5
+      // Next open time is next start day
+      const daysUntilStart = (startDay - currentDay + 7) % 7 || 7;
       const nextOpen = new Date(now);
-      nextOpen.setDate(now.getDate() + daysUntilFriday);
+      nextOpen.setDate(now.getDate() + daysUntilStart);
       nextOpen.setHours(startHours, startMinutes, 0, 0);
       nextOpenTime = nextOpen;
-      message = `Check-in window closed. Opens again Friday at ${formatTime(window.startTime)}`;
+      const startDayName = window.startDay.charAt(0).toUpperCase() + window.startDay.slice(1);
+      message = `Check-in window closed. Opens again ${startDayName} at ${formatTime(window.startTime)}`;
     }
   }
-  // Case 4: We're on Tuesday, Wednesday, or Thursday (closed)
+  // Case 4: Days between start and end (shouldn't happen for Friday->Tuesday, but handle for other configs)
+  // For Friday->Tuesday: This would catch Monday (which is between Friday and Tuesday)
   else {
-    isOpen = false;
-    // Calculate days until Friday
-    const daysUntilFriday = (5 - currentDay + 7) % 7 || 7;
-    const nextOpen = new Date(now);
-    nextOpen.setDate(now.getDate() + daysUntilFriday);
-    nextOpen.setHours(startHours, startMinutes, 0, 0);
-    nextOpenTime = nextOpen;
+    const startDayNum = getDayOfWeek(window.startDay);
+    const endDayNum = getDayOfWeek(window.endDay);
     
-    const dayName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][nextOpen.getDay()];
-    message = `Check-in window closed. Opens again ${dayName} at ${formatTime(window.startTime)}`;
+    // Check if current day is between start and end
+    let isBetweenStartAndEnd = false;
+    if (startDayNum < endDayNum) {
+      // Normal case: start < end (e.g., Monday to Friday)
+      isBetweenStartAndEnd = currentDay > startDayNum && currentDay < endDayNum;
+    } else {
+      // Wrapped case: start > end (e.g., Friday to Tuesday)
+      isBetweenStartAndEnd = currentDay > startDayNum || currentDay < endDayNum;
+    }
+    
+    if (isBetweenStartAndEnd) {
+      isOpen = true;
+      message = 'Check-in window is open';
+    } else {
+      isOpen = false;
+      // Calculate days until start day
+      const daysUntilStart = (startDayNum - currentDay + 7) % 7 || 7;
+      const nextOpen = new Date(now);
+      nextOpen.setDate(now.getDate() + daysUntilStart);
+      nextOpen.setHours(startHours, startMinutes, 0, 0);
+      nextOpenTime = nextOpen;
+      const startDayName = window.startDay.charAt(0).toUpperCase() + window.startDay.slice(1);
+      message = `Check-in window closed. Opens again ${startDayName} at ${formatTime(window.startTime)}`;
+    }
   }
 
   return { isOpen, message, nextOpenTime };
