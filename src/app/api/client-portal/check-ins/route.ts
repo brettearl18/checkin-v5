@@ -451,7 +451,49 @@ export async function GET(request: NextRequest) {
       });
       
       // Merge all assignments (from initial query + newly found Week X assignments)
-      const allExistingAssignments = [...deduplicatedSeries, ...allWeeksFromDB];
+      // IMPORTANT: Deduplicate by recurringWeek, preferring completed assignments
+      const allExistingAssignmentsMap = new Map<number, any>();
+      
+      // First, add assignments from deduplicatedSeries (these are from initial query)
+      deduplicatedSeries.forEach(assignment => {
+        const week = assignment.recurringWeek || 1;
+        if (!allExistingAssignmentsMap.has(week)) {
+          allExistingAssignmentsMap.set(week, assignment);
+        } else {
+          // Prefer completed assignments
+          const existing = allExistingAssignmentsMap.get(week)!;
+          const existingIsCompleted = existing.status === 'completed' && existing.responseId;
+          const currentIsCompleted = assignment.status === 'completed' && assignment.responseId;
+          if (currentIsCompleted && !existingIsCompleted) {
+            allExistingAssignmentsMap.set(week, assignment);
+          }
+        }
+      });
+      
+      // Then, add assignments from allWeeksFromDB (these are from query for all recurring weeks)
+      // These should override non-completed ones since they're the most up-to-date
+      allWeeksFromDB.forEach(assignment => {
+        const week = assignment.recurringWeek || 1;
+        if (!allExistingAssignmentsMap.has(week)) {
+          allExistingAssignmentsMap.set(week, assignment);
+        } else {
+          // Prefer completed assignments and real documents
+          const existing = allExistingAssignmentsMap.get(week)!;
+          const existingIsCompleted = existing.status === 'completed' && existing.responseId;
+          const currentIsCompleted = assignment.status === 'completed' && assignment.responseId;
+          
+          if (currentIsCompleted && !existingIsCompleted) {
+            allExistingAssignmentsMap.set(week, assignment);
+          } else if (existingIsCompleted && !currentIsCompleted) {
+            // Keep existing completed one
+          } else {
+            // Both same completion status, prefer the one from allWeeksFromDB (more recent query)
+            allExistingAssignmentsMap.set(week, assignment);
+          }
+        }
+      });
+      
+      const allExistingAssignments = Array.from(allExistingAssignmentsMap.values());
       const existingWeeks = new Set(allExistingAssignments.map(a => a.recurringWeek || 1));
       
       // Add all existing assignments from the series (these are real documents from DB)
