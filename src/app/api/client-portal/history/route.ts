@@ -18,10 +18,20 @@ export async function GET(request: NextRequest) {
     // Fetch client's form responses
     let responses: any[] = [];
     try {
-      const responsesSnapshot = await db.collection('formResponses')
-        .where('clientId', '==', clientId)
-        .orderBy('submittedAt', 'desc')
-        .get();
+      // Fetch responses - try with orderBy first, fallback if index doesn't exist
+      let responsesSnapshot;
+      try {
+        responsesSnapshot = await db.collection('formResponses')
+          .where('clientId', '==', clientId)
+          .orderBy('submittedAt', 'desc')
+          .get();
+      } catch (error: any) {
+        // If orderBy fails (no index), fetch without ordering and sort in memory
+        console.log('orderBy failed, fetching without orderBy:', error.message);
+        responsesSnapshot = await db.collection('formResponses')
+          .where('clientId', '==', clientId)
+          .get();
+      }
 
       responses = responsesSnapshot.docs.map(doc => {
         const data = doc.data();
@@ -37,12 +47,28 @@ export async function GET(request: NextRequest) {
           answeredQuestions: data.answeredQuestions,
           status: data.status,
           responses: data.responses || [],
+          assignmentId: data.assignmentId, // Critical: This links to Week X assignments created on submission
+          recurringWeek: data.recurringWeek, // Week number stored in response
           createdAt: data.createdAt,
           updatedAt: data.updatedAt,
           coachResponded: data.coachResponded || false,
           coachRespondedAt: data.coachRespondedAt || null
         };
       });
+
+      // Sort by submittedAt descending if we didn't use orderBy (fallback case)
+      if (responsesSnapshot && !responsesSnapshot.query?.orderBy) {
+        responses.sort((a, b) => {
+          const getTimestamp = (submittedAt: any): number => {
+            if (submittedAt?.toDate) return submittedAt.toDate().getTime();
+            if (submittedAt?._seconds) return submittedAt._seconds * 1000;
+            return new Date(submittedAt || 0).getTime();
+          };
+          const dateA = getTimestamp(a.submittedAt);
+          const dateB = getTimestamp(b.submittedAt);
+          return dateB - dateA; // Descending order (newest first)
+        });
+      }
     } catch (error) {
       console.log('No formResponses found for client, using empty array');
       responses = [];
@@ -82,8 +108,40 @@ export async function GET(request: NextRequest) {
 
     // Process responses to include check-in titles and coach response status
     const history = await Promise.all(responses.map(async (response) => {
-      // Find the assignment by formId (since that's what we save in formResponses)
-      const assignment = Array.from(assignmentMap.values()).find(a => a.formId === response.formId);
+      // Find the assignment - try by assignmentId first (most accurate for dynamic weeks), then by formId + recurringWeek
+      let assignment = null;
+      if (response.assignmentId) {
+        // Try to find by assignment document ID (for Week X assignments created on submission)
+        assignment = assignmentMap.get(response.assignmentId);
+        
+        // If not found by document ID, try by the 'id' field (for dynamic week assignments with stored id field)
+        if (!assignment && response.assignmentId.includes('_week_')) {
+          // Dynamic week ID format: extract base ID and find matching assignment
+          const baseIdMatch = response.assignmentId.match(/^(.+)_week_(\d+)$/);
+          if (baseIdMatch) {
+            const baseId = baseIdMatch[1];
+            const weekNum = parseInt(baseIdMatch[2], 10);
+            // Try to find assignment by matching base ID and week number
+            assignment = Array.from(assignmentMap.values()).find(a => 
+              (a.id === baseId || (a.id && a.id.includes(baseId))) && 
+              (a.recurringWeek === weekNum || a.recurringWeek === parseInt(weekNum))
+            );
+          }
+        }
+      }
+      
+      // Fallback: Try to find by formId + recurringWeek (most accurate fallback for Week X check-ins)
+      if (!assignment && response.recurringWeek) {
+        assignment = Array.from(assignmentMap.values()).find(a => 
+          a.formId === response.formId && 
+          (a.recurringWeek === response.recurringWeek || a.recurringWeek === parseInt(String(response.recurringWeek)))
+        );
+      }
+      
+      // Final fallback: find by formId only (will match first assignment with that form, may not be correct week)
+      if (!assignment) {
+        assignment = Array.from(assignmentMap.values()).find(a => a.formId === response.formId);
+      }
       
       // Convert Firebase Timestamp to proper date
       let submittedDate = new Date();
@@ -212,9 +270,28 @@ export async function GET(request: NextRequest) {
         return serialized;
       });
 
+      // Get assignment dueDate for this week
+      let assignmentDueDate: string | null = null;
+      if (assignment?.dueDate) {
+        const dueDate = assignment.dueDate?.toDate ? assignment.dueDate.toDate() : new Date(assignment.dueDate);
+        assignmentDueDate = dueDate.toISOString();
+      }
+
+      // Use recurringWeek from response if available (most accurate - stored during submission)
+      // Fall back to assignment's recurringWeek if response doesn't have it
+      const recurringWeek = response.recurringWeek !== undefined && response.recurringWeek !== null 
+        ? response.recurringWeek 
+        : (assignment?.recurringWeek ?? null);
+      
+      // Build check-in title with week number if it's a recurring check-in
+      let checkInTitle = assignment?.formTitle || response.formTitle || 'Unknown Check-in';
+      if (recurringWeek && recurringWeek > 1 && assignment?.totalWeeks && assignment.totalWeeks > 1) {
+        checkInTitle = `${checkInTitle} Week ${recurringWeek}`;
+      }
+      
       return {
         id: response.id,
-        checkInTitle: assignment?.formTitle || response.formTitle || 'Unknown Check-in',
+        checkInTitle: checkInTitle,
         formTitle: response.formTitle || 'Unknown Form',
         submittedAt: submittedDate.toISOString(),
         completedAt: completedDate ? completedDate.toISOString() : null,
@@ -224,8 +301,9 @@ export async function GET(request: NextRequest) {
         status: response.status || 'completed',
         responses: serializedResponses,
         assignmentId: assignment?.id || null,
-        recurringWeek: assignment?.recurringWeek ?? null,
+        recurringWeek: recurringWeek,
         totalWeeks: assignment?.totalWeeks ?? null,
+        assignmentDueDate: assignmentDueDate, // Add assignment due date for progress page
         coachResponded: coachResponded,
         coachRespondedAt: coachRespondedAt,
         clientApproved: clientApproved,

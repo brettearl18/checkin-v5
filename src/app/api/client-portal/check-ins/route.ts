@@ -333,7 +333,8 @@ export async function GET(request: NextRequest) {
     const now = new Date();
     
     // Process each recurring series and expand missing weeks
-    recurringSeriesMap.forEach((seriesAssignments) => {
+    // Use for...of instead of forEach to support await
+    for (const [seriesKey, seriesAssignments] of recurringSeriesMap.entries()) {
       // If multiple assignments exist for the same form+client (multiple allocations), merge them
       // Group by recurringWeek and keep only one per week (prefer completed, then most recent)
       const weekMap = new Map<number, any>();
@@ -366,25 +367,117 @@ export async function GET(request: NextRequest) {
       
       // Get the base assignment (prefer one with recurringWeek: 1, otherwise the first one)
       const baseAssignment = deduplicatedSeries.find(a => a.recurringWeek === 1) || deduplicatedSeries[0];
-      const existingWeeks = new Set(deduplicatedSeries.map(a => a.recurringWeek || 1));
+      
+      // Skip if no base assignment found (shouldn't happen, but safety check)
+      if (!baseAssignment || !baseAssignment.clientId || !baseAssignment.formId) {
+        // Just add existing assignments and continue to next series
+        deduplicatedSeries.forEach(assignment => {
+          expandedAssignments.push(assignment);
+        });
+        continue;
+      }
+      
+      // CRITICAL: Query for ALL assignments (including completed Week X) for this client+form
+      // This ensures we catch completed Week 2+ assignments that were created on submission
+      const clientId = baseAssignment.clientId;
+      const formId = baseAssignment.formId;
+      const allWeeksQuery = await db.collection('check_in_assignments')
+        .where('clientId', '==', clientId)
+        .where('formId', '==', formId)
+        .where('isRecurring', '==', true)
+        .get();
+      
+      // Process all assignments from database (including completed Week X assignments)
+      const allWeeksFromDB: any[] = [];
+      allWeeksQuery.docs.forEach(doc => {
+        const data = doc.data();
+        const convertDate = (dateField: any) => {
+          if (!dateField) return new Date().toISOString();
+          if (dateField.toDate && typeof dateField.toDate === 'function') {
+            return dateField.toDate().toISOString();
+          }
+          if (dateField._seconds) {
+            return new Date(dateField._seconds * 1000).toISOString();
+          }
+          if (dateField instanceof Date) {
+            return dateField.toISOString();
+          }
+          if (typeof dateField === 'string') {
+            return new Date(dateField).toISOString();
+          }
+          return new Date().toISOString();
+        };
+        
+        const dueDate = convertDate(data.dueDate);
+        const dueDateObj = new Date(dueDate);
+        
+        // Determine display status
+        let displayStatus: 'pending' | 'completed' | 'overdue';
+        if (data.status === 'completed' || data.completedAt) {
+          displayStatus = 'completed';
+        } else if (dueDateObj < now) {
+          displayStatus = 'overdue';
+        } else {
+          displayStatus = 'pending';
+        }
+        
+        // Only add if not already in deduplicatedSeries (avoid duplicates)
+        const week = data.recurringWeek || 1;
+        const isDuplicate = deduplicatedSeries.some(a => 
+          (a.recurringWeek || 1) === week && a.documentId === doc.id
+        );
+        
+        if (!isDuplicate) {
+          allWeeksFromDB.push({
+            id: data.id || doc.id,
+            documentId: doc.id,
+            title: data.formTitle || 'Check-in Assignment',
+            description: data.description || 'Complete your assigned check-in',
+            dueDate: dueDate,
+            status: displayStatus,
+            formId: data.formId || '',
+            assignedBy: data.assignedBy || 'Coach',
+            assignedAt: convertDate(data.assignedAt),
+            completedAt: data.completedAt ? convertDate(data.completedAt) : undefined,
+            score: data.score || undefined,
+            isRecurring: data.isRecurring || false,
+            recurringWeek: data.recurringWeek || 1,
+            totalWeeks: data.totalWeeks || 1,
+            checkInWindow: data.checkInWindow || null,
+            responseId: data.responseId,
+            coachResponded: false
+          });
+        }
+      });
+      
+      // Merge all assignments (from initial query + newly found Week X assignments)
+      const allExistingAssignments = [...deduplicatedSeries, ...allWeeksFromDB];
+      const existingWeeks = new Set(allExistingAssignments.map(a => a.recurringWeek || 1));
       
       // Add all existing assignments from the series (these are real documents from DB)
-      deduplicatedSeries.forEach(assignment => {
+      allExistingAssignments.forEach(assignment => {
         expandedAssignments.push(assignment);
       });
       
       // Expand future weeks if there are more weeks to generate
       // Check if we need to generate future weeks beyond the existing ones
-      if (baseAssignment.totalWeeks > 1) {
+      if (baseAssignment && baseAssignment.totalWeeks > 1) {
         const firstDueDate = new Date(baseAssignment.dueDate);
         const checkInWindow = baseAssignment.checkInWindow || null; // Window system removed
-        const maxExistingWeek = Math.max(...deduplicatedSeries.map(a => a.recurringWeek || 1));
+        // Safely calculate max existing week (handle empty array)
+        const weekNumbers = allExistingAssignments.map(a => a.recurringWeek || 1);
+        const maxExistingWeek = weekNumbers.length > 0 ? Math.max(...weekNumbers) : 0;
         
         // Generate assignments for weeks beyond the existing ones
+        // IMPORTANT: Only generate weeks that don't already exist as real assignment documents
         // Each week starts on Monday, so calculate Monday dates
         const firstWeekStart = getWeekStart(firstDueDate); // Get Monday of first week
         
         for (let week = maxExistingWeek + 1; week <= baseAssignment.totalWeeks; week++) {
+          // Skip if this week already exists as a real assignment document (including completed ones)
+          if (existingWeeks.has(week)) {
+            continue;
+          }
           // Calculate Monday for this week (7 days * (week - 1) from first Monday)
           const weekMonday = new Date(firstWeekStart);
           weekMonday.setDate(firstWeekStart.getDate() + (7 * (week - 1)));
@@ -414,7 +507,7 @@ export async function GET(request: NextRequest) {
           }
         }
       }
-    });
+    }
     
     // Deduplicate check-ins: Remove duplicates based on recurringWeek + dueDate combination
     // If multiple check-ins have the same week number and same/similar due date, keep only one
@@ -432,17 +525,51 @@ export async function GET(request: NextRequest) {
           seen.set(key, assignment);
           deduplicatedAssignments.push(assignment);
         } else {
-          // If duplicate found, keep the one with the most recent assignedAt date (most recent assignment)
+          // If duplicate found, prefer in this order:
+          // 1. Completed assignments (has responseId and status === 'completed')
+          // 2. Real assignment documents (has documentId and not a dynamic ID)
+          // 3. Most recent assignedAt date
           const existing = seen.get(key)!;
-          const existingDate = existing.assignedAt ? new Date(existing.assignedAt).getTime() : 0;
-          const currentDate = assignment.assignedAt ? new Date(assignment.assignedAt).getTime() : 0;
+          const existingIsCompleted = existing.status === 'completed' && existing.responseId;
+          const currentIsCompleted = assignment.status === 'completed' && assignment.responseId;
           
-          if (currentDate > existingDate) {
-            // Replace with newer assignment
+          // Prefer completed assignments
+          if (currentIsCompleted && !existingIsCompleted) {
             const index = deduplicatedAssignments.indexOf(existing);
             if (index > -1) {
               deduplicatedAssignments[index] = assignment;
               seen.set(key, assignment);
+            }
+          } else if (!currentIsCompleted && existingIsCompleted) {
+            // Keep existing completed assignment
+            return; // Skip current assignment
+          } else {
+            // Both same completion status, check if one is a real document vs dynamic
+            const existingIsReal = existing.documentId && !existing.id?.includes('_week_');
+            const currentIsReal = assignment.documentId && !assignment.id?.includes('_week_');
+            
+            if (currentIsReal && !existingIsReal) {
+              // Prefer real document over dynamic
+              const index = deduplicatedAssignments.indexOf(existing);
+              if (index > -1) {
+                deduplicatedAssignments[index] = assignment;
+                seen.set(key, assignment);
+              }
+            } else if (!currentIsReal && existingIsReal) {
+              // Keep existing real document
+              return; // Skip current assignment
+            } else {
+              // Both same type, prefer most recent assignedAt date
+              const existingDate = existing.assignedAt ? new Date(existing.assignedAt).getTime() : 0;
+              const currentDate = assignment.assignedAt ? new Date(assignment.assignedAt).getTime() : 0;
+              
+              if (currentDate > existingDate) {
+                const index = deduplicatedAssignments.indexOf(existing);
+                if (index > -1) {
+                  deduplicatedAssignments[index] = assignment;
+                  seen.set(key, assignment);
+                }
+              }
             }
           }
         }
@@ -534,10 +661,13 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error('Error fetching client check-ins:', error);
+    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+    console.error('Error details:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
     return NextResponse.json({
       success: false,
       message: 'Failed to fetch check-ins',
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: process.env.NODE_ENV === 'development' ? (error instanceof Error ? error.stack : undefined) : undefined
     }, { status: 500 });
   }
 }

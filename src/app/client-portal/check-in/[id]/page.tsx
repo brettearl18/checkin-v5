@@ -544,14 +544,23 @@ export default function CheckInCompletionPage() {
       let answeredCount = 0;
       
       // Process responses and add score/weight to each response
-      const processedResponses = responses.map((response, index) => {
-        const question = questions[index];
+      // IMPORTANT: Match questions by questionId, not by array index (order may differ)
+      const processedResponses = responses.map((response) => {
+        // Find the question that matches this response by questionId
+        const question = questions.find(q => q.id === response.questionId);
+        
         if (!question || !response || response.answer === '' || response.answer === null || response.answer === undefined) {
           return { ...response, score: 0, weight: 0 }; // Return with zero score/weight for unanswered
         }
         
-        // Get question weight (default to 5 if not set)
-        const questionWeight = question.questionWeight || question.weight || 5;
+        // Get question weight (default to 5 if not set, but if explicitly 0, it's unscored)
+        const questionWeight = question.questionWeight !== undefined ? question.questionWeight : (question.weight !== undefined ? question.weight : 5);
+        
+        // Number, text, and textarea questions are NEVER scored (they're data collection, not scored assessments)
+        // Also, if question weight is 0, question is NOT scored (should show grey in progress)
+        if (questionWeight === 0 || question.type === 'number' || question.type === 'text' || question.type === 'textarea') {
+          return { ...response, score: 0, weight: 0, questionText: question.text || question.question || '', questionId: question.id || response.questionId || '' };
+        }
         
         let questionScore = 0; // Score out of 10
         
@@ -562,20 +571,6 @@ export default function CheckInCompletionPage() {
             const scaleValue = Number(response.answer);
             if (!isNaN(scaleValue) && scaleValue >= 1 && scaleValue <= 10) {
               questionScore = scaleValue; // 1-10 scale
-            }
-            break;
-            
-          case 'number':
-            // For number questions, normalize to 1-10 scale
-            const numValue = Number(response.answer);
-            if (!isNaN(numValue)) {
-              // Normalize: if it's a percentage (0-100), convert to 1-10
-              if (numValue >= 0 && numValue <= 100) {
-                questionScore = 1 + (numValue / 100) * 9; // Map 0-100 to 1-10
-              } else {
-                // For other numbers, clamp to 1-10 range
-                questionScore = Math.min(10, Math.max(1, numValue / 10));
-              }
             }
             break;
             
@@ -633,18 +628,6 @@ export default function CheckInCompletionPage() {
               questionScore = isYes ? 3 : 8;
             }
             break;
-            
-          case 'text':
-            // Text questions are NOT scored - they are not measurable
-            // Return early with 0 weight so they don't count in totals
-            return { ...response, score: 0, weight: 0, questionText: question.text || question.question || '', questionId: question.id || response.questionId || '' };
-            
-          case 'textarea':
-            // All textarea questions are free-form text responses and are NOT scored
-            // They should have questionWeight: 0 and are for context/reference only
-            questionScore = 0;
-            // Don't count in scoring - return early with 0 weight
-            return { ...response, score: 0, weight: 0, questionText: question.text || question.question || '', questionId: question.id || response.questionId || '' };
             
           default:
             // Default: give partial credit for answering

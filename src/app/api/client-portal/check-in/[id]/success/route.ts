@@ -313,10 +313,9 @@ export async function GET(
                 }));
             }
             
-            // Filter to only "Vana Check In" category if needed
-            questions = questions.filter((q: any) => 
-              !q.category || q.category === 'Vana Check In'
-            );
+            // DO NOT filter questions by category - show ALL questions from the form
+            // Filtering was causing responses to not match questions correctly
+            // All questions should be visible regardless of category
           }
         }
       } catch (error) {

@@ -463,6 +463,16 @@ export async function POST(
       // Don't fail the check-in if email fails
     }
 
+    // Invalidate dashboard cache so alerts and progress update immediately
+    try {
+      const { deleteCache } = await import('@/lib/dashboard-cache');
+      deleteCache(`dashboard:${finalAssignmentData.clientId}`);
+      logInfo(`[Check-in API] Invalidated dashboard cache for client ${finalAssignmentData.clientId}`);
+    } catch (error) {
+      logSafeError('Error invalidating dashboard cache', error);
+      // Don't fail the check-in if cache invalidation fails
+    }
+
     // Track goal progress after check-in completion (async, don't wait)
     if (assignmentData.clientId) {
       fetch('/api/goals/track-progress', {

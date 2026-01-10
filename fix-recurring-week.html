@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fix RecurringWeek - Admin Tool</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #333;
+        }
+        input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        button {
+            background: #0070f3;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        button:hover {
+            background: #0051cc;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+            display: none;
+        }
+        .result.success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .result.error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .result.info {
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+        }
+        pre {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 12px;
+        }
+        .loading {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #0070f3;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Fix RecurringWeek</h1>
+        <p class="subtitle">Admin tool to backfill missing recurringWeek in formResponses</p>
+        
+        <div class="form-group">
+            <label for="responseId">Response ID:</label>
+            <input type="text" id="responseId" value="8vMCTRsb7oLMeOfpA7NP" placeholder="Enter response ID">
+        </div>
+        
+        <div class="form-group">
+            <button id="checkBtn" onclick="checkResponse()">Check Status</button>
+            <button id="fixBtn" onclick="fixResponse()">Fix Response</button>
+        </div>
+        
+        <div id="result" class="result"></div>
+    </div>
+
+    <script>
+        // Use relative paths to avoid CORS issues
+        const API_BASE = '';
+
+        async function checkResponse() {
+            const responseId = document.getElementById('responseId').value.trim();
+            if (!responseId) {
+                showResult('error', 'Please enter a response ID');
+                return;
+            }
+
+            const checkBtn = document.getElementById('checkBtn');
+            const originalText = checkBtn.textContent;
+            checkBtn.disabled = true;
+            checkBtn.innerHTML = '<span class="loading"></span>Checking...';
+
+            try {
+                const response = await fetch(`/api/admin/fix-recurring-week?responseId=${encodeURIComponent(responseId)}`, {
+                    credentials: 'include' // Include cookies for authentication
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    if (data.needsFix) {
+                        showResult('info', `Response needs fixing:\n\n` +
+                            `- Has recurringWeek: ${data.hasRecurringWeek ? 'Yes' : 'No'}\n` +
+                            `- Current value: ${data.recurringWeek ?? 'null'}\n` +
+                            `- Needs fix: ${data.needsFix ? 'Yes' : 'No'}\n\n` +
+                            `Click "Fix Response" to update it.`, data);
+                    } else {
+                        showResult('success', `✅ Response is already correct:\n\n` +
+                            `- Has recurringWeek: Yes\n` +
+                            `- Value: ${data.recurringWeek}\n` +
+                            `- No fix needed`, data);
+                    }
+                } else {
+                    showResult('error', `Error: ${data.message}`, data);
+                }
+            } catch (error) {
+                showResult('error', `Failed to check: ${error.message}`);
+            } finally {
+                checkBtn.disabled = false;
+                checkBtn.textContent = originalText;
+            }
+        }
+
+        async function fixResponse() {
+            const responseId = document.getElementById('responseId').value.trim();
+            if (!responseId) {
+                showResult('error', 'Please enter a response ID');
+                return;
+            }
+
+            if (!confirm(`Are you sure you want to fix response ${responseId}?`)) {
+                return;
+            }
+
+            const fixBtn = document.getElementById('fixBtn');
+            const originalText = fixBtn.textContent;
+            fixBtn.disabled = true;
+            fixBtn.innerHTML = '<span class="loading"></span>Fixing...';
+
+            try {
+                const response = await fetch('/api/admin/fix-recurring-week', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include', // Include cookies for authentication
+                    body: JSON.stringify({ responseId })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    if (data.result?.updated) {
+                        showResult('success', `✅ Successfully fixed response!\n\n` +
+                            `- Response ID: ${data.result.responseId}\n` +
+                            `- recurringWeek: ${data.result.recurringWeek}\n` +
+                            `- Updated: Yes\n` +
+                            `- From Assignment: ${data.result.fromAssignment ? 'Yes' : 'No'}`, data);
+                    } else if (data.result?.skipped) {
+                        showResult('info', `ℹ️ Response already has recurringWeek set:\n\n` +
+                            `- recurringWeek: ${data.result.recurringWeek}\n` +
+                            `- No update needed`, data);
+                    } else {
+                        showResult('info', `Response processed`, data);
+                    }
+                } else {
+                    showResult('error', `Error: ${data.message}`, data);
+                }
+            } catch (error) {
+                showResult('error', `Failed to fix: ${error.message}`);
+            } finally {
+                fixBtn.disabled = false;
+                fixBtn.textContent = originalText;
+            }
+        }
+
+        function showResult(type, message, data = null) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.className = `result ${type}`;
+            resultDiv.style.display = 'block';
+            
+            let content = message;
+            if (data) {
+                content += '\n\n' + JSON.stringify(data, null, 2);
+            }
+            
+            resultDiv.innerHTML = `<pre>${content}</pre>`;
+        }
+    </script>
+</body>
+</html>
+

@@ -65,13 +65,36 @@ export default function CheckInSuccessPage() {
   const params = useParams();
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { userProfile } = useAuth();
+  const { userProfile, authLoading } = useAuth();
   const [assignment, setAssignment] = useState<CheckInAssignment | null>(null);
   const [formResponse, setFormResponse] = useState<FormResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [score, setScore] = useState(0);
+  // Initialize score from URL parameter if available (set immediately on mount)
+  const [score, setScore] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const urlScore = params.get('score');
+      if (urlScore) {
+        const parsedScore = parseInt(urlScore, 10);
+        if (!isNaN(parsedScore)) {
+          return parsedScore;
+        }
+      }
+    }
+    return 0;
+  });
   const [thresholds, setThresholds] = useState<ScoringThresholds>(getDefaultThresholds('moderate'));
-  const [trafficLightStatus, setTrafficLightStatus] = useState<TrafficLightStatus>('orange');
+  // Initialize traffic light status based on initial score and thresholds
+  const [trafficLightStatus, setTrafficLightStatus] = useState<TrafficLightStatus>(() => {
+    const initialScore = (typeof window !== 'undefined') ? 
+      (() => {
+        const params = new URLSearchParams(window.location.search);
+        const urlScore = params.get('score');
+        return urlScore ? parseInt(urlScore, 10) : 0;
+      })() : 0;
+    const defaultThresholds = getDefaultThresholds('moderate');
+    return getTrafficLightStatus(initialScore, defaultThresholds);
+  });
   const [showScoringInfo, setShowScoringInfo] = useState(false);
   const [questions, setQuestions] = useState<any[]>([]);
   const [questionScores, setQuestionScores] = useState<Array<{
@@ -88,26 +111,62 @@ export default function CheckInSuccessPage() {
   const scoreParam = searchParams.get('score');
 
   useEffect(() => {
-    if (scoreParam) {
-      setScore(parseInt(scoreParam));
+    // Wait for auth to load before fetching
+    if (authLoading) {
+      return;
     }
-    fetchData();
-  }, [id, scoreParam]);
+    
+    // Set score from URL parameter immediately (most accurate, calculated at submission time)
+    // This ensures score is displayed even if API call fails
+    if (scoreParam) {
+      const urlScore = parseInt(scoreParam, 10);
+      if (!isNaN(urlScore)) {
+        setScore(urlScore);
+      }
+    }
+    
+    // Only fetch if user is authenticated, otherwise score from URL will still display
+    if (userProfile?.uid) {
+      fetchData();
+    } else {
+      // User not authenticated yet, but we can still show the score from URL
+      console.warn('User not authenticated yet, showing score from URL parameter');
+      setLoading(false);
+    }
+  }, [id, scoreParam, userProfile?.uid, authLoading]);
 
   const fetchData = async () => {
     try {
       if (!userProfile?.uid) {
-        console.error('User not authenticated');
+        console.warn('User not authenticated - cannot fetch full data, but score from URL will display');
         setLoading(false);
         return;
       }
 
       // Fetch data via API route (uses admin SDK, bypasses permissions)
+      console.log('[Success Page] Fetching check-in data for responseId:', id, 'clientId:', userProfile.uid);
       const response = await fetch(`/api/client-portal/check-in/${id}/success?clientId=${userProfile.uid}`);
       
       if (!response.ok) {
-        const errorData = await response.json();
-        console.error('Error fetching check-in data:', errorData.message);
+        // Check if response is JSON before parsing
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          const errorData = await response.json();
+          console.error('Error fetching check-in data:', errorData.message);
+        } else {
+          // Response is HTML (error page), log but don't try to parse JSON
+          const text = await response.text();
+          console.error('Error fetching check-in data: API returned HTML instead of JSON. Status:', response.status, 'URL:', response.url);
+          console.error('Response preview:', text.substring(0, 200));
+        }
+        setLoading(false);
+        return;
+      }
+      
+      // Verify response is JSON before parsing
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        console.error('Error: API returned non-JSON response. Content-Type:', contentType);
         setLoading(false);
         return;
       }
@@ -121,6 +180,26 @@ export default function CheckInSuccessPage() {
       }
 
       const { assignment, response: responseData, form, questions: questionsData, scoringConfig, formThresholds } = result.data;
+      
+      // Debug logging
+      console.log('[Success Page] API Response:', {
+        responseId: responseData?.id,
+        formTitle: responseData?.formTitle,
+        responseCount: responseData?.responses?.length,
+        questionCount: questionsData?.length,
+        responses: responseData?.responses?.map((r: any) => ({
+          questionId: r.questionId,
+          question: r.question?.substring(0, 40) + '...',
+          answer: r.answer,
+          type: r.type
+        })),
+        questions: questionsData?.map((q: any, idx: number) => ({
+          index: idx + 1,
+          id: q.id,
+          text: q.text?.substring(0, 40) + '...',
+          type: q.type
+        }))
+      });
 
       // Set assignment if available
       if (assignment) {
@@ -130,8 +209,22 @@ export default function CheckInSuccessPage() {
       // Set form response
       if (responseData) {
         setFormResponse(responseData as FormResponse);
-        const responseScore = responseData.score || 0;
-        setScore(responseScore);
+        // Prioritize score from URL query parameter (most recent/accurate from submission), fallback to API response
+        // The URL score is the most accurate as it's calculated at submission time
+        // Only update if URL score is not available - preserve URL score if it exists
+        if (scoreParam && !isNaN(parseInt(scoreParam, 10))) {
+          // Keep URL score - it's the most accurate
+          const urlScore = parseInt(scoreParam, 10);
+          setScore(urlScore);
+          console.log('[Success Page] Using score from URL parameter:', urlScore);
+        } else if (responseData.score !== undefined && responseData.score !== null) {
+          // Fallback to API score if URL score not available
+          setScore(responseData.score);
+          console.log('[Success Page] Using score from API response:', responseData.score);
+        } else {
+          // No score available - this shouldn't happen
+          console.warn('[Success Page] No score available from URL or API response');
+        }
 
         // Set questions
         if (questionsData && questionsData.length > 0) {
@@ -174,14 +267,50 @@ export default function CheckInSuccessPage() {
         }
 
         setThresholds(finalThresholds);
-        setTrafficLightStatus(getTrafficLightStatus(responseScore, finalThresholds));
+        
+        // Determine traffic light status based on current score (preserves URL score)
+        const currentScore = scoreParam && !isNaN(parseInt(scoreParam, 10)) 
+          ? parseInt(scoreParam, 10) 
+          : (responseData.score || score || 0);
+        setTrafficLightStatus(getTrafficLightStatus(currentScore, finalThresholds));
       }
     } catch (error) {
-      console.error('Error fetching data:', error);
+      console.error('Error fetching check-in data:', error);
+      // Even if API fails, we still have the score from URL - update traffic light status
+      if (scoreParam && !isNaN(parseInt(scoreParam, 10))) {
+        const urlScore = parseInt(scoreParam, 10);
+        const defaultThresholds = getDefaultThresholds('moderate');
+        const status = getTrafficLightStatus(urlScore, defaultThresholds);
+        setTrafficLightStatus(status);
+        setThresholds(defaultThresholds);
+        console.log('[Success Page] API failed, but using score from URL:', urlScore);
+      }
     } finally {
       setLoading(false);
     }
   };
+
+  // Update traffic light status when score or thresholds change
+  useEffect(() => {
+    // Only update if we have valid thresholds and a score
+    if (thresholds && thresholds.redMax !== undefined && thresholds.orangeMax !== undefined) {
+      // Use score from URL param if available (most accurate), otherwise use state
+      const currentScore = scoreParam && !isNaN(parseInt(scoreParam, 10)) 
+        ? parseInt(scoreParam, 10) 
+        : score;
+      
+      if (currentScore >= 0 && currentScore <= 100) {
+        const status = getTrafficLightStatus(currentScore, thresholds);
+        console.log('[Success Page] Updating traffic light status:', {
+          score: currentScore,
+          thresholds,
+          status,
+          calculation: `score ${currentScore} <= redMax ${thresholds.redMax}? ${currentScore <= thresholds.redMax}, <= orangeMax ${thresholds.orangeMax}? ${currentScore <= thresholds.orangeMax}`
+        });
+        setTrafficLightStatus(status);
+      }
+    }
+  }, [score, scoreParam, thresholds]);
 
   // Calculate individual question scores
   const calculateQuestionScores = (questionsData: any[], responses: FormResponse['responses']) => {
@@ -197,12 +326,30 @@ export default function CheckInSuccessPage() {
     
     responses.forEach((response) => {
       const question = questionsData.find(q => q.id === response.questionId);
-      if (!question) return;
+      if (!question) {
+        console.warn(`Question not found for response with questionId: ${response.questionId}`);
+        return;
+      }
       
-      // Get question weight (default to 5 if not set)
-      const questionWeight = question.questionWeight || question.weight || 5;
+      // Get question weight (default to 5 if not set, but if explicitly 0, it's unscored)
+      const questionWeight = question.questionWeight !== undefined ? question.questionWeight : (question.weight !== undefined ? question.weight : 5);
       
       let questionScore = 0; // Score out of 10
+      
+      // If question weight is 0, question is NOT scored (should show grey in progress)
+      // Skip scoring logic but still add to scores array for display
+      if (questionWeight === 0) {
+        scores.push({
+          questionId: question.id,
+          question: response.question,
+          answer: response.answer,
+          questionScore: 0,
+          questionWeight: 0,
+          weightedScore: 0,
+          type: question.type
+        });
+        return; // Skip scoring logic
+      }
       
       switch (question.type) {
         case 'scale':
@@ -214,14 +361,9 @@ export default function CheckInSuccessPage() {
           break;
           
         case 'number':
-          const numValue = Number(response.answer);
-          if (!isNaN(numValue)) {
-            if (numValue >= 0 && numValue <= 100) {
-              questionScore = 1 + (numValue / 100) * 9;
-            } else {
-              questionScore = Math.min(10, Math.max(1, numValue / 10));
-            }
-          }
+          // Number questions are NOT scored - they are for data collection only
+          // They should have questionWeight: 0 and are for context/reference only
+          questionScore = 0;
           break;
           
         case 'multiple_choice':
@@ -263,14 +405,12 @@ export default function CheckInSuccessPage() {
           break;
           
         case 'text':
-          // Text questions are NOT scored - skip them entirely
-          // They are not measurable and should not appear in score breakdown
-          return; // Skip this question - don't add to scores array
-          
         case 'textarea':
-          // Textarea questions are not scored - skip them entirely
-          // They are for free-form text responses only
-          return; // Skip this question - don't add to scores array
+          // Text and textarea questions are NOT scored if questionWeight is 0
+          // But they should still appear in the score breakdown with 0 weight
+          // (already handled by questionWeight === 0 check above)
+          questionScore = 0;
+          break;
           
         default:
           questionScore = 5;
@@ -772,12 +912,63 @@ export default function CheckInSuccessPage() {
                   )}
                 </div>
                 <div className="space-y-4">
-                  {formResponse.responses.map((response, index) => (
+                  {(() => {
+                    // Sort responses to match question order from the form
+                    // This ensures Q1, Q2, etc. match the actual question numbers
+                    // Use the 'questions' state which contains the form's question order
+                    if (!questions || questions.length === 0) {
+                      // Fallback: show responses in their original order if questions not loaded
+                      return formResponse.responses.map((response, index) => (
+                        <div key={response.questionId} className="border-b border-gray-200/60 pb-4 last:border-b-0 last:pb-0">
+                          <div className="mb-2">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-xs font-semibold text-gray-900 bg-gray-100 px-2 py-0.5 rounded">
+                                Q{index + 1}
+                              </span>
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                                {response.type}
+                              </span>
+                            </div>
+                            <p className="text-sm font-medium text-gray-900">{response.question}</p>
+                          </div>
+                          
+                          <div className="bg-gray-50/80 rounded-lg p-3">
+                            <p className="text-xs text-gray-900 mb-1 font-medium">Your Answer</p>
+                            <p className="text-sm text-gray-900 font-semibold">
+                              {typeof response.answer === 'boolean' 
+                                ? (response.answer ? 'Yes' : 'No')
+                                : response.answer.toString()}
+                            </p>
+                            {response.comment && (
+                              <div className="mt-2 pt-2 border-t border-gray-200">
+                                <p className="text-xs text-gray-900 mb-1 font-medium">Comment</p>
+                                <p className="text-xs text-gray-900">{response.comment}</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ));
+                    }
+                    
+                    const sortedResponses = [...formResponse.responses].sort((a, b) => {
+                      const indexA = questions.findIndex(q => q.id === a.questionId);
+                      const indexB = questions.findIndex(q => q.id === b.questionId);
+                      // If question not found, put at end
+                      if (indexA === -1) return 1;
+                      if (indexB === -1) return -1;
+                      return indexA - indexB;
+                    });
+                    
+                    return sortedResponses.map((response, displayIndex) => {
+                      const questionIndex = questions.findIndex(q => q.id === response.questionId);
+                      const questionNumber = questionIndex !== -1 ? questionIndex + 1 : displayIndex + 1;
+                      
+                      return (
                     <div key={response.questionId} className="border-b border-gray-200/60 pb-4 last:border-b-0 last:pb-0">
                       <div className="mb-2">
                         <div className="flex items-center gap-2 mb-1">
                           <span className="text-xs font-semibold text-gray-900 bg-gray-100 px-2 py-0.5 rounded">
-                            Q{index + 1}
+                            Q{questionNumber}
                           </span>
                           <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
                             {response.type}
@@ -801,7 +992,9 @@ export default function CheckInSuccessPage() {
                         )}
                       </div>
                     </div>
-                  ))}
+                      );
+                    });
+                  })()}
                 </div>
               </div>
             )}
@@ -810,12 +1003,28 @@ export default function CheckInSuccessPage() {
             <div className="flex flex-col sm:flex-row gap-3 lg:gap-4 justify-center">
               <Link
                 href="/client-portal/check-ins"
+                onClick={() => {
+                  // Force refresh when navigating back to check-ins page
+                  if (typeof window !== 'undefined') {
+                    setTimeout(() => {
+                      window.location.reload();
+                    }, 100);
+                  }
+                }}
                 className="px-6 py-3 lg:px-8 lg:py-3.5 bg-white text-gray-900 rounded-xl lg:rounded-2xl hover:bg-gray-50 border border-gray-200 shadow-[0_1px_3px_rgba(0,0,0,0.1)] hover:shadow-md transition-all duration-200 text-sm lg:text-base font-semibold text-center min-h-[44px] lg:min-h-[48px] flex items-center justify-center"
               >
                 Back to Check-ins
               </Link>
               <Link
                 href="/client-portal"
+                onClick={() => {
+                  // Force refresh dashboard when navigating back to show updated check-in status
+                  if (typeof window !== 'undefined') {
+                    setTimeout(() => {
+                      window.location.reload();
+                    }, 100);
+                  }
+                }}
                 className="px-6 py-3 lg:px-8 lg:py-3.5 text-white rounded-xl lg:rounded-2xl transition-all duration-200 shadow-md hover:shadow-lg text-sm lg:text-base font-semibold text-center min-h-[44px] lg:min-h-[48px] flex items-center justify-center"
                 style={{ backgroundColor: '#daa450' }}
                 onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#c89540'}

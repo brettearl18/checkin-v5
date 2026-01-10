@@ -1436,7 +1436,14 @@ export default function ClientPortalPage() {
                       // Show next scheduled check-in with window information
                       const dueDate = new Date(nextScheduledCheckIn.dueDate);
                       const now = new Date();
-                      const daysDiff = Math.floor((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                      
+                      // Normalize both dates to start of day in local timezone for accurate day calculation
+                      const dueDateStart = new Date(dueDate);
+                      dueDateStart.setHours(0, 0, 0, 0);
+                      const nowStart = new Date(now);
+                      nowStart.setHours(0, 0, 0, 0);
+                      
+                      const daysDiff = Math.floor((dueDateStart.getTime() - nowStart.getTime()) / (1000 * 60 * 60 * 24));
                       const isToday = daysDiff === 0;
                       const isTomorrow = daysDiff === 1;
                       
@@ -1507,10 +1514,11 @@ export default function ClientPortalPage() {
                                     </span>
                                   </div>
                                   <span className="text-gray-700">
-                                    {dueDate.toLocaleDateString('en-US', { 
+                                    {dueDate.toLocaleDateString('en-AU', { 
                                       weekday: 'short', 
                                       month: 'short', 
-                                      day: 'numeric' 
+                                      day: 'numeric',
+                                      timeZone: 'Australia/Perth'
                                     })}
                                   </span>
                                 </div>
@@ -1585,7 +1593,14 @@ export default function ClientPortalPage() {
                       {upcomingCheckins.map((checkIn) => {
                         const dueDate = new Date(checkIn.dueDate);
                         const now = new Date();
-                        const daysDiff = Math.floor((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                        
+                        // Normalize both dates to start of day in local timezone for accurate day calculation
+                        const dueDateStart = new Date(dueDate);
+                        dueDateStart.setHours(0, 0, 0, 0);
+                        const nowStart = new Date(now);
+                        nowStart.setHours(0, 0, 0, 0);
+                        
+                        const daysDiff = Math.floor((dueDateStart.getTime() - nowStart.getTime()) / (1000 * 60 * 60 * 24));
                         const isToday = daysDiff === 0;
                         const isTomorrow = daysDiff === 1;
                         const isOverdue = daysDiff < 0;
@@ -1647,10 +1662,11 @@ export default function ClientPortalPage() {
                                     </span>
                                   </div>
                                   <span className="text-gray-700">
-                                    {dueDate.toLocaleDateString('en-US', { 
+                                    {dueDate.toLocaleDateString('en-AU', { 
                                       weekday: 'short', 
                                       month: 'short', 
-                                      day: 'numeric' 
+                                      day: 'numeric',
+                                      timeZone: 'Australia/Perth'
                                     })}
                                   </span>
                                 </div>
@@ -2405,7 +2421,14 @@ export default function ClientPortalPage() {
                           {upcomingCheckins.slice(0, 3).map((checkIn) => {
                             const dueDate = new Date(checkIn.dueDate);
                             const now = new Date();
-                            const daysDiff = Math.floor((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                            
+                            // Normalize both dates to start of day in local timezone for accurate day calculation
+                            const dueDateStart = new Date(dueDate);
+                            dueDateStart.setHours(0, 0, 0, 0);
+                            const nowStart = new Date(now);
+                            nowStart.setHours(0, 0, 0, 0);
+                            
+                            const daysDiff = Math.floor((dueDateStart.getTime() - nowStart.getTime()) / (1000 * 60 * 60 * 24));
                             const isOverdue = daysDiff < 0;
                             const colorStatus = getCheckInColorStatus(checkIn);
                             const borderColor = colorStatus === 'red' ? 'border-red-300 bg-red-50' :

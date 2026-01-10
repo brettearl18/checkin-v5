@@ -82,6 +82,37 @@ export default function ClientCheckInsPage() {
     }
   }, [clientId, filter]);
 
+  // Refresh check-ins when page becomes visible or gains focus (e.g., returning from check-in submission)
+  useEffect(() => {
+    if (!clientId) return;
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        // Refetch check-ins when page becomes visible (user returned from another page)
+        fetchCheckIns();
+        if (filter === 'completed') {
+          fetchCompletedResponses();
+        }
+      }
+    };
+
+    const handleFocus = () => {
+      // Also refresh when window gains focus (user switched back to tab)
+      fetchCheckIns();
+      if (filter === 'completed') {
+        fetchCompletedResponses();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [clientId, filter]);
+
   useEffect(() => {
     fetchCoachTimezone();
   }, [userProfile?.uid]);
@@ -392,14 +423,42 @@ export default function ClientCheckInsPage() {
     const startOfToday = new Date(now);
     startOfToday.setHours(0, 0, 0, 0);
 
+    // Helper to check if check-in window is currently open
+    const isCheckInOpenForWeek = (due: Date): boolean => {
+      const d = new Date(due);
+      const dayOfWeek = d.getDay();
+      const daysToMonday = dayOfWeek === 0 ? 1 : (dayOfWeek === 1 ? 0 : (8 - dayOfWeek));
+      const weekMonday = new Date(d);
+      weekMonday.setDate(d.getDate() - daysToMonday);
+      weekMonday.setHours(0, 0, 0, 0);
+      
+      const windowOpen = new Date(weekMonday);
+      windowOpen.setDate(weekMonday.getDate() - 3); // Friday
+      windowOpen.setHours(10, 0, 0, 0);
+      
+      const windowClose = new Date(weekMonday);
+      windowClose.setDate(weekMonday.getDate() + 1); // Tuesday
+      windowClose.setHours(12, 0, 0, 0);
+      
+      return now >= windowOpen && now <= windowClose;
+    };
+
     const futureCheckins = checkins
       .filter(checkin => {
-        // Exclude completed check-ins from "Scheduled"
+        // Exclude completed check-ins from "Scheduled" (they go to "Completed" tab)
         if (checkin.status === 'completed') return false;
+        
         const dueDate = new Date(checkin.dueDate);
         // Normalize due date to start of day for accurate comparison
         dueDate.setHours(0, 0, 0, 0);
-        // Only include future check-ins (due date is today or later)
+        
+        // Exclude overdue check-ins (they should be in "To Do")
+        if (dueDate < startOfToday) return false;
+        
+        // Exclude check-ins with window currently open (they should be in "To Do")
+        if (isCheckInOpenForWeek(dueDate)) return false;
+        
+        // Include future check-ins whose window is NOT currently open
         return dueDate >= startOfToday;
       })
       .sort((a, b) => {
@@ -980,11 +1039,16 @@ export default function ClientCheckInsPage() {
                             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
                               <div className="flex-1 min-w-0">
                                 <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 mb-2">
-                                  <h3 className="text-base lg:text-base font-semibold text-gray-900 break-words">
-                                    {item.recurringWeek 
-                                      ? `Week ${item.recurringWeek}: ${item.checkInTitle || item.formTitle || 'Check-in'}`
-                                      : (item.checkInTitle || item.formTitle || 'Check-in')}
-                                  </h3>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <h3 className="text-base lg:text-base font-semibold text-gray-900 break-words">
+                                      {item.checkInTitle || item.formTitle || 'Check-in'}
+                                    </h3>
+                                    {item.recurringWeek && (
+                                      <span className="px-2 py-0.5 rounded-md text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
+                                        Week {item.recurringWeek}
+                                      </span>
+                                    )}
+                                  </div>
                                   <span className={`px-3 py-1 rounded-full text-sm lg:text-xs font-semibold ${getScoreBadge(item.score)} self-start sm:self-auto`}>
                                     {item.score}%
                                   </span>

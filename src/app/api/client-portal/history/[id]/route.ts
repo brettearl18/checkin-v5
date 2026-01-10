@@ -117,6 +117,12 @@ export async function GET(
       coachResponded = responseData?.coachResponded || false;
     }
 
+    // Use recurringWeek from response if available (most accurate - stored during submission)
+    // Fall back to assignment's recurringWeek if response doesn't have it
+    const recurringWeek = responseData?.recurringWeek !== undefined && responseData?.recurringWeek !== null 
+      ? responseData.recurringWeek 
+      : (assignment?.recurringWeek ?? null);
+    
     const response = {
       id: responseDoc.id,
       checkInTitle: assignment?.formTitle || responseData?.formTitle || 'Unknown Check-in',
@@ -129,8 +135,8 @@ export async function GET(
       status: responseData?.status || 'completed',
       responses: responseData?.responses || [],
       assignmentId: responseData?.assignmentId || null,
-      recurringWeek: assignment?.recurringWeek || null,
-      totalWeeks: assignment?.totalWeeks || null,
+      recurringWeek: recurringWeek,
+      totalWeeks: assignment?.totalWeeks ?? null,
       coachResponded: coachResponded,
       coachRespondedAt: coachRespondedAt
     };

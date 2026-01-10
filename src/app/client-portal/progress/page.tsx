@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { useAuth } from '@/contexts/AuthContext';
 import { AuthenticatedOnly } from '@/components/ProtectedRoute';
@@ -69,6 +69,10 @@ interface FormResponse {
   answeredQuestions: number;
   status: string;
   responses?: QuestionResponse[];
+  recurringWeek?: number | null;
+  totalWeeks?: number | null;
+  assignmentDueDate?: string | null;
+  assignmentId?: string | null;
 }
 
 interface QuestionProgress {
@@ -115,12 +119,6 @@ export default function ClientProgressPage() {
     consistency: 0,
     currentStreak: 0
   });
-
-  useEffect(() => {
-    if (userProfile) {
-      fetchProgressData();
-    }
-  }, [userProfile, timeRange]);
 
   const fetchProgressData = async () => {
     try {
@@ -290,6 +288,37 @@ export default function ClientProgressPage() {
     }
   };
 
+  useEffect(() => {
+    if (userProfile) {
+      fetchProgressData();
+    }
+  }, [userProfile, timeRange]);
+
+  // Refresh data when page becomes visible (e.g., returning from check-in submission)
+  // Use a ref to track last refresh time to avoid excessive refreshes
+  const lastRefreshRef = useRef<number>(0);
+  
+  useEffect(() => {
+    if (!userProfile) return;
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        // Only refresh if it's been more than 5 seconds since last refresh (avoid excessive calls)
+        const now = Date.now();
+        if (now - lastRefreshRef.current > 5000) {
+          lastRefreshRef.current = now;
+          fetchProgressData();
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [userProfile]);
+
   const filterResponsesByTimeRange = (responses: FormResponse[]) => {
     const now = new Date();
     const daysAgo = timeRange === '7d' ? 7 : timeRange === '30d' ? 30 : timeRange === '90d' ? 90 : 365;
@@ -335,9 +364,32 @@ export default function ClientProgressPage() {
 
   const processQuestionProgress = (responses: FormResponse[]) => {
     // Group responses by week
+    // Sort by recurringWeek first (most accurate), then by assignmentDueDate, then by submittedAt
     const sortedResponses = [...responses]
       .filter(r => r.responses && Array.isArray(r.responses) && r.responses.length > 0)
       .sort((a, b) => {
+        // First, sort by recurringWeek if both have it
+        if (a.recurringWeek !== null && a.recurringWeek !== undefined && 
+            b.recurringWeek !== null && b.recurringWeek !== undefined) {
+          return a.recurringWeek - b.recurringWeek;
+        }
+        
+        // If one has recurringWeek and the other doesn't, prioritize the one with it
+        if (a.recurringWeek !== null && a.recurringWeek !== undefined) {
+          return -1;
+        }
+        if (b.recurringWeek !== null && b.recurringWeek !== undefined) {
+          return 1;
+        }
+        
+        // Next, sort by assignmentDueDate if available
+        if (a.assignmentDueDate && b.assignmentDueDate) {
+          const dateA = new Date(a.assignmentDueDate);
+          const dateB = new Date(b.assignmentDueDate);
+          return dateA.getTime() - dateB.getTime();
+        }
+        
+        // Fall back to submittedAt
         const dateA = new Date(a.submittedAt);
         const dateB = new Date(b.submittedAt);
         return dateA.getTime() - dateB.getTime();
@@ -438,10 +490,16 @@ export default function ClientProgressPage() {
             status = 'red';
           }
 
-          const responseDate = new Date(response.submittedAt);
+          // Use assignment dueDate if available (more accurate), otherwise use submittedAt
+          const responseDate = response.assignmentDueDate 
+            ? new Date(response.assignmentDueDate)
+            : new Date(response.submittedAt);
+          
+          // Use actual recurringWeek from response if available, otherwise fall back to index + 1
+          const weekNumber = response.recurringWeek ?? (index + 1);
           
           return {
-            week: index + 1,
+            week: weekNumber,
             date: responseDate.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
             score: score,
             status: status,
