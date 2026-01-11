@@ -571,7 +571,7 @@ export default function AdminDashboard() {
           {/* Quick Actions */}
           <div className="bg-white shadow rounded-lg p-6 px-4 sm:px-0 mb-8">
             <h3 className="text-lg font-medium text-gray-900 mb-4">Quick Actions</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
               <Link
                 href="/admin/users"
                 className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
