@@ -112,31 +112,36 @@ export async function GET(
       }
 
       // For dynamic week IDs, try to find the Week X assignment that was created on submission
-      // or find via the base assignment and responseId
+      // The Week X assignment document was created when the check-in was submitted
       if (isDynamicWeek && !assignmentDoc.exists && baseAssignmentId) {
-        // Try to find by base assignment ID first
+        // Try to find base assignment by document ID or 'id' field to get clientId and formId
+        let baseData: any = null;
         const baseAssignmentDoc = await db.collection('check_in_assignments').doc(baseAssignmentId).get();
-        if (!baseAssignmentDoc.exists) {
+        if (baseAssignmentDoc.exists) {
+          baseData = baseAssignmentDoc.data();
+        } else {
           const baseQuery = await db.collection('check_in_assignments')
             .where('id', '==', baseAssignmentId)
             .limit(1)
             .get();
           if (!baseQuery.empty) {
-            const baseDoc = baseQuery.docs[0];
-            const baseData = baseDoc.data();
-            // Look for the Week X assignment that was created for this dynamic week
-            const weekNumber = parseInt(weekMatch[2], 10);
-            const weekAssignmentQuery = await db.collection('check_in_assignments')
-              .where('clientId', '==', baseData.clientId)
-              .where('formId', '==', baseData.formId)
-              .where('recurringWeek', '==', weekNumber)
-              .limit(1)
-              .get();
-            
-            if (!weekAssignmentQuery.empty) {
-              assignmentDoc = weekAssignmentQuery.docs[0];
-              assignmentDocId = assignmentDoc.id;
-            }
+            baseData = baseQuery.docs[0].data();
+          }
+        }
+        
+        // If we found the base assignment, look for the Week X assignment that was created
+        if (baseData) {
+          const weekNumber = parseInt(weekMatch[2], 10);
+          const weekAssignmentQuery = await db.collection('check_in_assignments')
+            .where('clientId', '==', baseData.clientId)
+            .where('formId', '==', baseData.formId)
+            .where('recurringWeek', '==', weekNumber)
+            .limit(1)
+            .get();
+          
+          if (!weekAssignmentQuery.empty) {
+            assignmentDoc = weekAssignmentQuery.docs[0];
+            assignmentDocId = assignmentDoc.id;
           }
         }
       }
@@ -369,8 +374,12 @@ export async function GET(
     };
 
     // Clean up assignment data
+    // Prioritize response's recurringWeek over assignment's recurringWeek for Week 2+ check-ins
+    // The response's recurringWeek is set during submission and is the most accurate
     const cleanAssignment = assignmentData ? {
       ...assignmentData,
+      recurringWeek: responseData.recurringWeek ?? assignmentData.recurringWeek,
+      isRecurring: assignmentData.isRecurring ?? (assignmentData.totalWeeks > 1),
       assignedAt: convertTimestamp(assignmentData.assignedAt),
       dueDate: convertTimestamp(assignmentData.dueDate),
       sentAt: convertTimestamp(assignmentData.sentAt),

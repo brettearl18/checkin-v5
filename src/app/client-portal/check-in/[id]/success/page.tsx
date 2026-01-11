@@ -457,45 +457,49 @@ export default function CheckInSuccessPage() {
     
     // Handle Firestore Timestamp
     if (dateField.toDate && typeof dateField.toDate === 'function') {
-      return dateField.toDate().toLocaleDateString('en-US', {
+      return dateField.toDate().toLocaleDateString('en-AU', {
         year: 'numeric',
         month: 'long',
         day: 'numeric',
         hour: '2-digit',
-        minute: '2-digit'
+        minute: '2-digit',
+        timeZone: 'Australia/Perth'
       });
     }
     
     // Handle Firebase Timestamp object with _seconds
     if (dateField._seconds) {
-      return new Date(dateField._seconds * 1000).toLocaleDateString('en-US', {
+      return new Date(dateField._seconds * 1000).toLocaleDateString('en-AU', {
         year: 'numeric',
         month: 'long',
         day: 'numeric',
         hour: '2-digit',
-        minute: '2-digit'
+        minute: '2-digit',
+        timeZone: 'Australia/Perth'
       });
     }
     
     // Handle Date object
     if (dateField instanceof Date) {
-      return dateField.toLocaleDateString('en-US', {
+      return dateField.toLocaleDateString('en-AU', {
         year: 'numeric',
         month: 'long',
         day: 'numeric',
         hour: '2-digit',
-        minute: '2-digit'
+        minute: '2-digit',
+        timeZone: 'Australia/Perth'
       });
     }
     
     // Handle ISO string
     if (typeof dateField === 'string') {
-      return new Date(dateField).toLocaleDateString('en-US', {
+      return new Date(dateField).toLocaleDateString('en-AU', {
         year: 'numeric',
         month: 'long',
         day: 'numeric',
         hour: '2-digit',
-        minute: '2-digit'
+        minute: '2-digit',
+        timeZone: 'Australia/Perth'
       });
     }
     

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase-server';
 import { getDefaultThresholds, convertLegacyThresholds } from '@/lib/scoring-utils';
 import { ONBOARDING_QUESTIONS } from '@/lib/onboarding-questions';
+import { FEATURE_FLAGS } from '@/lib/feature-flags';
 
 export const dynamic = 'force-dynamic';
 
@@ -160,37 +161,63 @@ export async function GET(request: NextRequest) {
     // Fetch check-in assignments for this client
     let checkInAssignments = [];
     try {
-      // Helper function to convert date fields
-      const convertDate = (dateField: any) => {
-        if (!dateField) return new Date().toISOString();
-        
-        // Handle Firestore Timestamp
-        if (dateField.toDate && typeof dateField.toDate === 'function') {
-          return dateField.toDate().toISOString();
+      // Feature flag: Use pre-created assignments endpoint if enabled
+      if (FEATURE_FLAGS.USE_PRE_CREATED_ASSIGNMENTS) {
+        // Call the pre-created assignments endpoint directly
+        try {
+          const baseUrl = new URL(request.url);
+          const preCreatedUrl = new URL('/api/client-portal/check-ins-precreated', baseUrl.origin);
+          preCreatedUrl.searchParams.set('clientId', clientIdToUse);
+          const preCreatedRequest = new NextRequest(preCreatedUrl.toString());
+          
+          const preCreatedModule = await import('./check-ins-precreated/route');
+          const preCreatedResponse = await preCreatedModule.GET(preCreatedRequest);
+          
+          if (preCreatedResponse.ok) {
+            const preCreatedData = await preCreatedResponse.json();
+            if (preCreatedData.success && preCreatedData.data?.checkins) {
+              checkInAssignments = preCreatedData.data.checkins;
+            }
+          } else {
+            console.error('Pre-created assignments API returned non-OK status:', preCreatedResponse.status);
+          }
+        } catch (error) {
+          console.error('Error calling pre-created assignments endpoint internally:', error);
+          // Fall through to empty array - don't break the dashboard
         }
-        
-        // Handle Firebase Timestamp object with _seconds
-        if (dateField._seconds) {
-          return new Date(dateField._seconds * 1000).toISOString();
-        }
-        
-        // Handle Date object
-        if (dateField instanceof Date) {
-          return dateField.toISOString();
-        }
-        
-        // Handle ISO string
-        if (typeof dateField === 'string') {
-          return new Date(dateField).toISOString();
-        }
-        
-        // Fallback
-        return new Date().toISOString();
-      };
+      } else {
+        // Legacy: Use inline logic for dynamic generation
+        // Helper function to convert date fields
+        const convertDate = (dateField: any) => {
+          if (!dateField) return new Date().toISOString();
+          
+          // Handle Firestore Timestamp
+          if (dateField.toDate && typeof dateField.toDate === 'function') {
+            return dateField.toDate().toISOString();
+          }
+          
+          // Handle Firebase Timestamp object with _seconds
+          if (dateField._seconds) {
+            return new Date(dateField._seconds * 1000).toISOString();
+          }
+          
+          // Handle Date object
+          if (dateField instanceof Date) {
+            return dateField.toISOString();
+          }
+          
+          // Handle ISO string
+          if (typeof dateField === 'string') {
+            return new Date(dateField).toISOString();
+          }
+          
+          // Fallback
+          return new Date().toISOString();
+        };
 
-      const assignmentsSnapshot = await db.collection('check_in_assignments')
-        .where('clientId', '==', clientIdToUse)
-        .get();
+        const assignmentsSnapshot = await db.collection('check_in_assignments')
+          .where('clientId', '==', clientIdToUse)
+          .get();
 
       let allAssignments = assignmentsSnapshot.docs.map(doc => {
         const data = doc.data();
@@ -323,9 +350,10 @@ export async function GET(request: NextRequest) {
         }
       });
       
-      checkInAssignments = expandedAssignments.sort((a, b) => {
-        return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
-      });
+        checkInAssignments = expandedAssignments.sort((a, b) => {
+          return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+        });
+      }
     } catch (error) {
       console.log('No check_in_assignments found for client, using empty array');
     }

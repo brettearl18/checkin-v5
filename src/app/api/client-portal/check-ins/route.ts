@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase-server';
 import { notificationService } from '@/lib/notification-service';
+import { FEATURE_FLAGS } from '@/lib/feature-flags';
 // Window system removed - using fixed Friday 10am to Tuesday 12pm schedule
 
 export const dynamic = 'force-dynamic';
@@ -21,6 +22,14 @@ function getWeekStart(date: Date): Date {
 
 export async function GET(request: NextRequest) {
   try {
+    // Feature flag: Use pre-created assignments if enabled
+    if (FEATURE_FLAGS.USE_PRE_CREATED_ASSIGNMENTS) {
+      // Import and call the new simplified endpoint
+      const preCreatedModule = await import('../check-ins-precreated/route');
+      return preCreatedModule.GET(request);
+    }
+    
+    // Legacy: Dynamic generation (existing code below)
     const db = getDb();
     const { searchParams } = new URL(request.url);
     const clientId = searchParams.get('clientId');
@@ -135,8 +144,9 @@ export async function GET(request: NextRequest) {
         const now = new Date();
         
         // Determine display status: 'pending', 'completed', or 'overdue'
+        // A check-in is completed if: status is 'completed', OR has completedAt, OR has responseId (definitive proof of completion)
         let displayStatus: 'pending' | 'completed' | 'overdue';
-        if (assignmentStatus === 'completed' || data.completedAt) {
+        if (assignmentStatus === 'completed' || data.completedAt || data.responseId) {
           displayStatus = 'completed';
         } else {
           // Check if overdue
@@ -239,8 +249,9 @@ export async function GET(request: NextRequest) {
         const now = new Date();
         
         // Determine display status: 'pending', 'completed', or 'overdue'
+        // A check-in is completed if: status is 'completed', OR has completedAt, OR has responseId (definitive proof of completion)
         let displayStatus: 'pending' | 'completed' | 'overdue';
-        if (assignmentStatus === 'completed' || data.completedAt) {
+        if (assignmentStatus === 'completed' || data.completedAt || data.responseId) {
           displayStatus = 'completed';
         } else {
           // Check if overdue
@@ -412,8 +423,9 @@ export async function GET(request: NextRequest) {
         const dueDateObj = new Date(dueDate);
         
         // Determine display status
+        // A check-in is completed if: status is 'completed', OR has completedAt, OR has responseId (definitive proof of completion)
         let displayStatus: 'pending' | 'completed' | 'overdue';
-        if (data.status === 'completed' || data.completedAt) {
+        if (data.status === 'completed' || data.completedAt || data.responseId) {
           displayStatus = 'completed';
         } else if (dueDateObj < now) {
           displayStatus = 'overdue';
@@ -462,8 +474,9 @@ export async function GET(request: NextRequest) {
         } else {
           // Prefer completed assignments
           const existing = allExistingAssignmentsMap.get(week)!;
-          const existingIsCompleted = existing.status === 'completed' && existing.responseId;
-          const currentIsCompleted = assignment.status === 'completed' && assignment.responseId;
+          // An assignment is completed if it has a responseId (definitive proof of completion)
+          const existingIsCompleted = !!existing.responseId;
+          const currentIsCompleted = !!assignment.responseId;
           if (currentIsCompleted && !existingIsCompleted) {
             allExistingAssignmentsMap.set(week, assignment);
           }
@@ -479,8 +492,9 @@ export async function GET(request: NextRequest) {
         } else {
           // Prefer completed assignments and real documents
           const existing = allExistingAssignmentsMap.get(week)!;
-          const existingIsCompleted = existing.status === 'completed' && existing.responseId;
-          const currentIsCompleted = assignment.status === 'completed' && assignment.responseId;
+          // An assignment is completed if it has a responseId (definitive proof of completion)
+          const existingIsCompleted = !!existing.responseId;
+          const currentIsCompleted = !!assignment.responseId;
           
           if (currentIsCompleted && !existingIsCompleted) {
             allExistingAssignmentsMap.set(week, assignment);
@@ -572,8 +586,9 @@ export async function GET(request: NextRequest) {
           // 2. Real assignment documents (has documentId and not a dynamic ID)
           // 3. Most recent assignedAt date
           const existing = seen.get(key)!;
-          const existingIsCompleted = existing.status === 'completed' && existing.responseId;
-          const currentIsCompleted = assignment.status === 'completed' && assignment.responseId;
+          // An assignment is completed if it has a responseId (definitive proof of completion)
+          const existingIsCompleted = !!existing.responseId;
+          const currentIsCompleted = !!assignment.responseId;
           
           // Prefer completed assignments
           if (currentIsCompleted && !existingIsCompleted) {
