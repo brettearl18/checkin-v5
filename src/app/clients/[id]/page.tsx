@@ -169,6 +169,8 @@ export default function ClientProfilePage() {
   const [showCheckInManagementModal, setShowCheckInManagementModal] = useState(false);
   const [selectedCheckIn, setSelectedCheckIn] = useState<any>(null);
   const [deletingCheckIn, setDeletingCheckIn] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [checkInToDelete, setCheckInToDelete] = useState<string | null>(null);
   const [updatingCheckIn, setUpdatingCheckIn] = useState(false);
   const [deletingSeries, setDeletingSeries] = useState(false);
   const [showPauseModal, setShowPauseModal] = useState(false);
@@ -233,23 +235,40 @@ export default function ClientProfilePage() {
           if (response.ok) {
             const data = await response.json();
             if (data.success && data.response?.responses && data.questions) {
-              // Map responses to questions for display
-              const responsesWithQuestions = data.response.responses.map((resp: any) => {
-                const question = data.questions.find((q: any) => q.id === resp.questionId);
-                return {
-                  ...resp,
-                  question: question?.text || question?.question || resp.question || 'Unknown question',
-                  questionText: question?.text || question?.question || resp.question || 'Unknown question'
-                };
+              // Create a map of responses by questionId for quick lookup
+              const responsesMap = new Map<string, any>();
+              data.response.responses.forEach((resp: any) => {
+                responsesMap.set(resp.questionId, resp);
               });
+              
+              // Sort responses to match the question order from the form
+              // This ensures the Quick Review matches the progress page order
+              const responsesWithQuestions = data.questions
+                .map((question: any) => {
+                  const resp = responsesMap.get(question.id);
+                  if (!resp) return null; // Skip if no response for this question
+                  
+                  return {
+                    ...resp,
+                    question: question?.text || question?.question || resp.question || 'Unknown question',
+                    questionText: question?.text || question?.question || resp.question || 'Unknown question',
+                    type: resp.type || question?.type || 'text',
+                    weight: resp.weight !== undefined ? resp.weight : (question?.weight !== undefined ? question.weight : 5)
+                  };
+                })
+                .filter((r: any) => r !== null); // Remove null entries
+              
               setLatestCheckInResponses(responsesWithQuestions);
               // Set reactions if available
               if (data.response?.reactions) {
                 setLatestCheckInReactions(data.response.reactions);
               }
             } else if (data.success && data.response?.responses) {
-              // Fallback if questions not available
-              setLatestCheckInResponses(data.response.responses);
+              // Fallback if questions not available - sort by questionId to maintain consistency
+              const sortedResponses = [...data.response.responses].sort((a: any, b: any) => {
+                return (a.questionId || '').localeCompare(b.questionId || '');
+              });
+              setLatestCheckInResponses(sortedResponses);
               if (data.response?.reactions) {
                 setLatestCheckInReactions(data.response.reactions);
               }
@@ -452,23 +471,40 @@ export default function ClientProfilePage() {
           if (response.ok) {
             const data = await response.json();
             if (data.success && data.response?.responses && data.questions) {
-              // Map responses to questions for display
-              const responsesWithQuestions = data.response.responses.map((resp: any) => {
-                const question = data.questions.find((q: any) => q.id === resp.questionId);
-                return {
-                  ...resp,
-                  question: question?.text || question?.question || resp.question || 'Unknown question',
-                  questionText: question?.text || question?.question || resp.question || 'Unknown question'
-                };
+              // Create a map of responses by questionId for quick lookup
+              const responsesMap = new Map<string, any>();
+              data.response.responses.forEach((resp: any) => {
+                responsesMap.set(resp.questionId, resp);
               });
+              
+              // Sort responses to match the question order from the form
+              // This ensures the Quick Review matches the progress page order
+              const responsesWithQuestions = data.questions
+                .map((question: any) => {
+                  const resp = responsesMap.get(question.id);
+                  if (!resp) return null; // Skip if no response for this question
+                  
+                  return {
+                    ...resp,
+                    question: question?.text || question?.question || resp.question || 'Unknown question',
+                    questionText: question?.text || question?.question || resp.question || 'Unknown question',
+                    type: resp.type || question?.type || 'text',
+                    weight: resp.weight !== undefined ? resp.weight : (question?.weight !== undefined ? question.weight : 5)
+                  };
+                })
+                .filter((r: any) => r !== null); // Remove null entries
+              
               setLatestCheckInResponses(responsesWithQuestions);
               // Set reactions if available
               if (data.response?.reactions) {
                 setLatestCheckInReactions(data.response.reactions);
               }
             } else if (data.success && data.response?.responses) {
-              // Fallback if questions not available
-              setLatestCheckInResponses(data.response.responses);
+              // Fallback if questions not available - sort by questionId to maintain consistency
+              const sortedResponses = [...data.response.responses].sort((a: any, b: any) => {
+                return (a.questionId || '').localeCompare(b.questionId || '');
+              });
+              setLatestCheckInResponses(sortedResponses);
               if (data.response?.reactions) {
                 setLatestCheckInReactions(data.response.reactions);
               }
@@ -964,11 +1000,19 @@ export default function ClientProfilePage() {
   };
 
   // Helper functions for Check-in Quick Review
-  const getCheckInStatus = (score?: number, weight?: number) => {
-    // Unweighted questions (weight is 0, null, or undefined) should be grey
-    if (weight === 0 || weight === null || weight === undefined) return 'grey';
+  // This matches the logic from the progress page exactly
+  const getCheckInStatus = (score?: number, weight?: number, type?: string) => {
+    // Determine if question is unscored (should show grey)
+    // Unscored if: weight === 0, or type is text/textarea
+    const isUnscored = weight === 0 || weight === null || weight === undefined || 
+                       type === 'text' || type === 'textarea';
+    
+    if (isUnscored) return 'grey';
+    
     // If score is undefined or null, show grey
     if (score === undefined || score === null) return 'grey';
+    
+    // Score thresholds (matching progress page)
     if (score >= 7) return 'green';
     if (score >= 4) return 'orange';
     return 'red';
@@ -1479,12 +1523,14 @@ export default function ClientProfilePage() {
   };
 
   // Check-in management functions
-  const handleDeleteCheckIn = async (checkInId: string) => {
-    if (!confirm('Are you sure you want to delete this check-in? This action cannot be undone.')) {
-      return;
-    }
+  const handleDeleteCheckInClick = (checkInId: string) => {
+    setCheckInToDelete(checkInId);
+    setShowDeleteModal(true);
+  };
 
+  const handleDeleteCheckIn = async (checkInId: string, clearData: boolean = false) => {
     setDeletingCheckIn(true);
+    setShowDeleteModal(false);
     try {
       if (!userProfile?.uid) {
         alert('You must be logged in as a coach to delete check-ins.');
@@ -1492,24 +1538,29 @@ export default function ClientProfilePage() {
         return;
       }
       
-      const response = await fetch(`/api/check-in-assignments/${checkInId}?coachId=${userProfile.uid}`, {
+      const url = `/api/check-in-assignments/${checkInId}?coachId=${userProfile.uid}${clearData ? '&clearData=true' : ''}`;
+      const response = await fetch(url, {
         method: 'DELETE',
       });
 
       if (response.ok) {
-        alert('Check-in deleted successfully!');
+        const message = clearData 
+          ? 'Check-in data cleared successfully! The check-in remains in the sequence.'
+          : 'Check-in deleted successfully!';
+        alert(message);
         // Refresh check-ins
         setHasLoadedCheckIns(false);
         fetchAllocatedCheckIns();
       } else {
         const errorData = await response.json();
-        alert(`Failed to delete check-in: ${errorData.message}`);
+        alert(`Failed to ${clearData ? 'clear' : 'delete'} check-in: ${errorData.message}`);
       }
     } catch (error) {
       console.error('Error deleting check-in:', error);
-      alert('Error deleting check-in. Please try again.');
+      alert(`Error ${clearData ? 'clearing' : 'deleting'} check-in. Please try again.`);
     } finally {
       setDeletingCheckIn(false);
+      setCheckInToDelete(null);
     }
   };
 
@@ -2791,13 +2842,15 @@ export default function ClientProfilePage() {
                                     latestCheckInResponses.map((response: any, index: number) => {
                                       const questionScore = response.score;
                                       const questionWeight = response.weight;
-                                      const status = getCheckInStatus(questionScore, questionWeight);
-                                      const isUnweighted = questionWeight === 0 || questionWeight === null || questionWeight === undefined;
+                                      const questionType = response.type || 'text';
+                                      const status = getCheckInStatus(questionScore, questionWeight, questionType);
+                                      const isUnscored = questionWeight === 0 || questionWeight === null || questionWeight === undefined || 
+                                                        questionType === 'text' || questionType === 'textarea';
                                       return (
                                         <div
                                           key={response.questionId || index}
                                           className={`w-3 h-3 rounded-full ${getCheckInStatusColor(status)}`}
-                                          title={`${response.question || response.questionText || 'Question'}: ${isUnweighted ? 'Unweighted' : questionScore !== undefined && questionScore !== null ? `${questionScore}/10` : 'Not scored'}`}
+                                          title={`${response.question || response.questionText || 'Question'}: ${isUnscored ? 'Unscored' : questionScore !== undefined && questionScore !== null ? `${questionScore}/10` : 'Not scored'}`}
                                         />
                                       );
                                     })
@@ -2832,15 +2885,17 @@ export default function ClientProfilePage() {
                                       {latestCheckInResponses.map((response: any, index: number) => {
                                         const questionScore = response.score;
                                         const questionWeight = response.weight;
-                                        const status = getCheckInStatus(questionScore, questionWeight);
-                                        const isUnweighted = questionWeight === 0 || questionWeight === null || questionWeight === undefined;
+                                        const questionType = response.type || 'text';
+                                        const status = getCheckInStatus(questionScore, questionWeight, questionType);
+                                        const isUnscored = questionWeight === 0 || questionWeight === null || questionWeight === undefined || 
+                                                          questionType === 'text' || questionType === 'textarea';
                                         const questionId = response.questionId;
                                         const questionReactions = latestCheckInReactions[questionId] || {};
                                         
                                         return (
                                           <div key={response.questionId || index} className="flex items-start gap-3">
                                             <div className={`w-8 h-8 rounded-full ${getCheckInStatusColor(status)} ${getCheckInStatusBorder(status)} border-2 flex items-center justify-center flex-shrink-0`}>
-                                              {isUnweighted ? (
+                                              {isUnscored ? (
                                                 <span className="text-white text-xs">-</span>
                                               ) : questionScore !== undefined && questionScore !== null ? (
                                                 <span className="text-white text-xs font-bold">{questionScore}</span>
@@ -4490,7 +4545,7 @@ export default function ClientProfilePage() {
                                           </button>
                                         )}
                                         <button
-                                          onClick={() => handleDeleteCheckIn(checkIn.id)}
+                                          onClick={() => handleDeleteCheckInClick(checkIn.id)}
                                           disabled={deletingCheckIn}
                                           className="text-red-600 hover:text-red-800 font-medium disabled:opacity-50"
                                         >
@@ -4673,7 +4728,7 @@ export default function ClientProfilePage() {
                                     Edit
                                   </button>
                                   <button
-                                    onClick={() => handleDeleteCheckIn(checkIn.id)}
+                                    onClick={() => handleDeleteCheckInClick(checkIn.id)}
                                     disabled={deletingCheckIn}
                                     className="text-xs text-red-600 hover:text-red-800 font-medium transition-colors disabled:opacity-50"
                                   >
@@ -6651,7 +6706,7 @@ export default function ClientProfilePage() {
 
               <div className="flex space-x-3 pt-4">
                 <button
-                  onClick={() => handleDeleteCheckIn(selectedCheckIn.id)}
+                  onClick={() => handleDeleteCheckInClick(selectedCheckIn.id)}
                   disabled={deletingCheckIn}
                   className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
                 >
@@ -6954,6 +7009,68 @@ export default function ClientProfilePage() {
                       Generate Analytics
                     </>
                   )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Check-in Confirmation Modal */}
+      {showDeleteModal && checkInToDelete && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full">
+            <div className="px-6 py-4 bg-red-50 border-b-2 border-red-200 rounded-t-2xl">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Delete Check-in
+                </h3>
+                <button
+                  onClick={() => {
+                    setShowDeleteModal(false);
+                    setCheckInToDelete(null);
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            
+            <div className="px-6 py-4 space-y-4">
+              <p className="text-gray-700">
+                How would you like to delete this check-in?
+              </p>
+              
+              <div className="space-y-3">
+                <button
+                  onClick={() => handleDeleteCheckIn(checkInToDelete, false)}
+                  disabled={deletingCheckIn}
+                  className="w-full px-4 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-between"
+                >
+                  <div className="text-left">
+                    <div className="font-semibold">Full Delete</div>
+                    <div className="text-sm text-red-100">Completely remove the check-in from the sequence</div>
+                  </div>
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
+                
+                <button
+                  onClick={() => handleDeleteCheckIn(checkInToDelete, true)}
+                  disabled={deletingCheckIn}
+                  className="w-full px-4 py-3 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-between"
+                >
+                  <div className="text-left">
+                    <div className="font-semibold">Clear Data</div>
+                    <div className="text-sm text-orange-100">Reset the check-in but keep it in the sequence</div>
+                  </div>
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
                 </button>
               </div>
             </div>

@@ -157,6 +157,9 @@ export async function GET(
 }
 
 // DELETE - Delete a check-in assignment
+// Options:
+//   - clearData=false (default): Full delete - completely remove the assignment
+//   - clearData=true: Clear data - reset assignment but keep it in the sequence
 // SECURITY: Only coaches can delete check-ins. Clients cannot delete their own check-ins.
 export async function DELETE(
   request: NextRequest,
@@ -166,6 +169,7 @@ export async function DELETE(
     const { id } = await params;
     const { searchParams } = new URL(request.url);
     const coachId = searchParams.get('coachId');
+    const clearData = searchParams.get('clearData') === 'true';
     
     if (!coachId) {
       return NextResponse.json({
@@ -197,24 +201,42 @@ export async function DELETE(
       }, { status: 403 });
     }
 
-    // Check if the assignment is completed - if so, we should also delete the response
-    if (assignmentData?.status === 'completed' && assignmentData?.responseId) {
+    // Delete the associated response if it exists (for both full delete and clear data)
+    if (assignmentData?.responseId) {
       try {
-        // Delete the associated response
         await db.collection('formResponses').doc(assignmentData.responseId).delete();
       } catch (error) {
         console.error('Error deleting associated response:', error);
-        // Continue with assignment deletion even if response deletion fails
+        // Continue even if response deletion fails
       }
     }
 
-    // Delete the assignment
-    await db.collection('check_in_assignments').doc(id).delete();
+    if (clearData) {
+      // Clear data mode: Reset assignment but keep it in the sequence
+      const updateData: any = {
+        status: 'pending',
+        responseId: null,
+        completedAt: null,
+        score: null,
+        coachResponded: false,
+        updatedAt: new Date()
+      };
 
-    return NextResponse.json({
-      success: true,
-      message: 'Check-in assignment deleted successfully'
-    });
+      await db.collection('check_in_assignments').doc(id).update(updateData);
+
+      return NextResponse.json({
+        success: true,
+        message: 'Check-in data cleared successfully. The check-in remains in the sequence.'
+      });
+    } else {
+      // Full delete mode: Completely remove the assignment
+      await db.collection('check_in_assignments').doc(id).delete();
+
+      return NextResponse.json({
+        success: true,
+        message: 'Check-in assignment deleted successfully'
+      });
+    }
 
   } catch (error) {
     console.error('Error deleting check-in assignment:', error);
