@@ -228,6 +228,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Logout function
   const logout = async () => {
     try {
+      // Log logout event to audit log (before signing out, so we have the token)
+      if (auth?.currentUser) {
+        try {
+          const idToken = await auth.currentUser.getIdToken();
+          fetch('/api/audit/logout', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${idToken}`,
+              'Content-Type': 'application/json',
+            },
+          }).catch(error => {
+            console.error('Error logging logout event:', error);
+            // Don't fail logout if audit logging fails
+          });
+        } catch (error) {
+          console.error('Error getting ID token for audit log:', error);
+        }
+      }
+
       await signOut(auth);
       setUserProfile(null);
     } catch (error) {

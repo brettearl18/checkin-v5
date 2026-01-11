@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase-server';
 import { Timestamp } from 'firebase-admin/firestore';
+import { logMeasurementSubmitted, logMeasurementUpdated } from '@/lib/audit-log';
 
 export const dynamic = 'force-dynamic';
 /**
@@ -182,6 +183,44 @@ export async function POST(request: NextRequest) {
           
           await db.collection('client_measurements').doc(existingDoc.id).update(updateData);
           
+          // Get client information for audit logging
+          let baselineClientName = 'Client';
+          let baselineClientEmail = '';
+          try {
+            const baselineClientDoc = await db.collection('clients').doc(clientId).get();
+            if (baselineClientDoc.exists) {
+              const baselineClientData = baselineClientDoc.data();
+              baselineClientName = `${baselineClientData?.firstName || ''} ${baselineClientData?.lastName || ''}`.trim() || 'Client';
+              baselineClientEmail = baselineClientData?.email || '';
+            } else {
+              const userDoc = await db.collection('users').doc(clientId).get();
+              if (userDoc.exists) {
+                const userData = userDoc.data();
+                baselineClientName = `${userData?.firstName || ''} ${userData?.lastName || ''}`.trim() || 
+                            `${userData?.profile?.firstName || ''} ${userData?.profile?.lastName || ''}`.trim() || 
+                            'Client';
+                baselineClientEmail = userData?.email || '';
+              }
+            }
+          } catch (error) {
+            console.error('Error fetching client info for audit log:', error);
+          }
+
+          // Log audit event
+          try {
+            await logMeasurementUpdated(
+              clientId,
+              baselineClientEmail,
+              baselineClientName,
+              'client',
+              existingDoc.id,
+              clientId,
+              { bodyWeight, isBaseline: true }
+            );
+          } catch (error) {
+            console.error('Error logging audit event:', error);
+          }
+          
           return NextResponse.json({
             success: true,
             message: 'Baseline updated successfully',
@@ -319,6 +358,21 @@ export async function POST(request: NextRequest) {
         createdAt: timestampToISO(measurementData.createdAt),
         updatedAt: timestampToISO(measurementData.updatedAt)
       };
+
+      // Log audit event
+      try {
+        await logMeasurementSubmitted(
+          clientId,
+          clientEmail,
+          clientName,
+          'client',
+          docRef.id,
+          clientId,
+          { bodyWeight, isBaseline }
+        );
+      } catch (error) {
+        console.error('Error logging audit event:', error);
+      }
 
       return NextResponse.json({
         success: true,

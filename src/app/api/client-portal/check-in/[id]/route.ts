@@ -3,6 +3,7 @@ import { getDb } from '@/lib/firebase-server';
 import { notificationService } from '@/lib/notification-service';
 import { logInfo, logSafeError } from '@/lib/logger';
 import { Timestamp } from 'firebase-admin/firestore';
+import { logCheckInSubmitted } from '@/lib/audit-log';
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic';
@@ -483,6 +484,23 @@ export async function POST(
         logSafeError('Error tracking goal progress after check-in', error);
         // Don't fail the check-in if goal tracking fails
       });
+    }
+
+    // Log audit event
+    try {
+      await logCheckInSubmitted(
+        finalAssignmentData.clientId,
+        clientData.email || '',
+        clientName,
+        'client',
+        finalAssignmentId,
+        finalAssignmentData.formId,
+        finalScore,
+        { responseId: docRef.id, recurringWeek: isDynamicWeek ? dynamicWeekNumber : finalAssignmentData.recurringWeek }
+      );
+    } catch (error) {
+      logSafeError('Error logging audit event', error);
+      // Don't fail the check-in if audit logging fails
     }
 
     return NextResponse.json({

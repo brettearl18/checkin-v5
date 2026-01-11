@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase-server';
+import { logCheckInDeleted } from '@/lib/audit-log';
 
 // GET - Fetch a specific check-in assignment with form and questions
 export async function GET(
@@ -211,6 +212,31 @@ export async function DELETE(
       }
     }
 
+    // Get coach/user information for audit logging
+    let coachUserDoc = null;
+    let coachName = 'Coach';
+    let coachEmail = '';
+    try {
+      coachUserDoc = await db.collection('users').doc(coachId).get();
+      if (coachUserDoc.exists) {
+        const coachUserData = coachUserDoc.data();
+        coachName = `${coachUserData?.firstName || ''} ${coachUserData?.lastName || ''}`.trim() || 
+                    `${coachUserData?.profile?.firstName || ''} ${coachUserData?.profile?.lastName || ''}`.trim() || 
+                    'Coach';
+        coachEmail = coachUserData?.email || '';
+      } else {
+        // Try coaches collection as fallback
+        const coachDoc = await db.collection('coaches').doc(coachId).get();
+        if (coachDoc.exists) {
+          const coachData = coachDoc.data();
+          coachName = `${coachData?.firstName || ''} ${coachData?.lastName || ''}`.trim() || 'Coach';
+          coachEmail = coachData?.email || '';
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching coach info for audit log:', error);
+    }
+
     if (clearData) {
       // Clear data mode: Reset assignment but keep it in the sequence
       const updateData: any = {
@@ -224,6 +250,21 @@ export async function DELETE(
 
       await db.collection('check_in_assignments').doc(id).update(updateData);
 
+      // Log audit event
+      try {
+        await logCheckInDeleted(
+          coachId,
+          coachEmail,
+          coachName,
+          'coach',
+          id,
+          true,
+          { clientId: assignmentData?.clientId, formId: assignmentData?.formId }
+        );
+      } catch (error) {
+        console.error('Error logging audit event:', error);
+      }
+
       return NextResponse.json({
         success: true,
         message: 'Check-in data cleared successfully. The check-in remains in the sequence.'
@@ -231,6 +272,21 @@ export async function DELETE(
     } else {
       // Full delete mode: Completely remove the assignment
       await db.collection('check_in_assignments').doc(id).delete();
+
+      // Log audit event
+      try {
+        await logCheckInDeleted(
+          coachId,
+          coachEmail,
+          coachName,
+          'coach',
+          id,
+          false,
+          { clientId: assignmentData?.clientId, formId: assignmentData?.formId }
+        );
+      } catch (error) {
+        console.error('Error logging audit event:', error);
+      }
 
       return NextResponse.json({
         success: true,
