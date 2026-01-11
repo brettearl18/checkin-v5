@@ -861,16 +861,11 @@ export default function ClientCheckInsPage() {
                           <p className="text-gray-600 text-sm mb-2 leading-relaxed">
                             Due: {new Date(nextScheduled.dueDate).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
                           </p>
-                          {(() => {
-                            if (nextWindowStatus.nextOpenTime) {
-                              return (
-                                <p className="text-gray-600 text-sm mt-1 leading-relaxed">
-                                  {isNextAvailable ? '✓ Window is open now' : `Window opens: ${nextWindowStatus.nextOpenTime.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })} at ${nextWindowStatus.nextOpenTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`}
-                                </p>
-                              );
-                            }
-                            return null;
-                          })()}
+                          {isNextAvailable && (
+                            <p className="text-gray-600 text-sm mt-1 leading-relaxed">
+                              ✓ Window is open now
+                            </p>
+                          )}
                           {isNextAvailable && (
                             <Link
                               href={`/client-portal/check-in/${nextScheduled.id}`}
