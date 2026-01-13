@@ -64,6 +64,11 @@ export default function ClientCheckInsPage() {
   const [completedFilter, setCompletedFilter] = useState('all'); // all, recent, high-score, low-score
   const [coachTimezone, setCoachTimezone] = useState<string>(Intl.DateTimeFormat().resolvedOptions().timeZone);
   const [thresholds, setThresholds] = useState<ScoringThresholds>(getDefaultThresholds('lifestyle'));
+  const [showMarkMissedModal, setShowMarkMissedModal] = useState(false);
+  const [selectedCheckInForMissed, setSelectedCheckInForMissed] = useState<CheckIn | null>(null);
+  const [missedReason, setMissedReason] = useState<string>('');
+  const [missedComment, setMissedComment] = useState<string>('');
+  const [markingAsMissed, setMarkingAsMissed] = useState(false);
 
   useEffect(() => {
     // Wait for auth to finish loading before fetching client ID
@@ -270,6 +275,58 @@ export default function ClientCheckInsPage() {
       setCheckins([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleMarkAsMissed = async () => {
+    if (!selectedCheckInForMissed || !clientId) return;
+    
+    if (!missedReason) {
+      alert('Please select a reason');
+      return;
+    }
+
+    if (missedReason === 'other' && !missedComment.trim()) {
+      alert('Please provide a comment when selecting "Other"');
+      return;
+    }
+
+    setMarkingAsMissed(true);
+    try {
+      const response = await fetch(`/api/check-in-assignments/${selectedCheckInForMissed.id}/mark-missed`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          reason: missedReason,
+          comment: missedComment || null,
+          clientId: clientId
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          // Refresh check-ins
+          await fetchCheckIns();
+          // Close modal and reset
+          setShowMarkMissedModal(false);
+          setSelectedCheckInForMissed(null);
+          setMissedReason('');
+          setMissedComment('');
+        } else {
+          alert(`Failed to mark check-in as missed: ${data.message || 'Unknown error'}`);
+        }
+      } else {
+        const errorData = await response.json();
+        alert(`Failed to mark check-in as missed: ${errorData.message || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Error marking check-in as missed:', error);
+      alert('Failed to mark check-in as missed. Please try again.');
+    } finally {
+      setMarkingAsMissed(false);
     }
   };
 
@@ -1176,6 +1233,9 @@ export default function ClientCheckInsPage() {
                       const isAvailable = isCheckInOpenForWeek(dueDate) && checkin.status !== 'completed';
                       const isOverdue = checkin.status === 'overdue';
                       const isCompleted = checkin.status === 'completed';
+                      // Check if 3+ days overdue (to show "Mark as Missed" button)
+                      const daysPastDue = Math.floor((today.getTime() - dueDateNormalized.getTime()) / (1000 * 60 * 60 * 24));
+                      const canMarkAsMissed = isOverdue && daysPastDue >= 3 && !isCompleted;
                       
                       // For completed check-ins, don't make the entire card a link since there are action buttons inside
                       // Instead, just use a div wrapper
@@ -1347,15 +1407,29 @@ export default function ClientCheckInsPage() {
                                 </div>
 
                                 {/* Right: Action Button */}
-                                <div className="flex-shrink-0 w-full sm:w-auto" onClick={(e) => completedLink && e.stopPropagation()}>
+                                <div className="flex-shrink-0 w-full sm:w-auto flex flex-col gap-2" onClick={(e) => completedLink && e.stopPropagation()}>
                                   {isOverdue && (
-                                    <Link
-                                      href={`/client-portal/check-in/${checkin.id}`}
-                                      className="w-full sm:w-auto inline-block px-5 py-3.5 lg:px-4 lg:py-2 text-white rounded-xl lg:rounded-lg text-base lg:text-sm font-semibold transition-all duration-200 shadow-sm hover:shadow-md text-center min-h-[48px] lg:min-h-[36px] flex items-center justify-center"
-                                      style={{ backgroundColor: '#daa450' }}
-                                    >
-                                      Complete Now
-                                    </Link>
+                                    <>
+                                      <Link
+                                        href={`/client-portal/check-in/${checkin.id}`}
+                                        className="w-full sm:w-auto inline-block px-5 py-3.5 lg:px-4 lg:py-2 text-white rounded-xl lg:rounded-lg text-base lg:text-sm font-semibold transition-all duration-200 shadow-sm hover:shadow-md text-center min-h-[48px] lg:min-h-[36px] flex items-center justify-center"
+                                        style={{ backgroundColor: '#daa450' }}
+                                      >
+                                        Complete Now
+                                      </Link>
+                                      {canMarkAsMissed && (
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setSelectedCheckInForMissed(checkin);
+                                            setShowMarkMissedModal(true);
+                                          }}
+                                          className="w-full sm:w-auto px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                                        >
+                                          Mark as Missed
+                                        </button>
+                                      )}
+                                    </>
                                   )}
                                   {isAvailable && !isOverdue && (
                                     <Link
@@ -1468,6 +1542,108 @@ export default function ClientCheckInsPage() {
           </div>
         </div>
       </div>
+
+      {/* Mark as Missed Modal */}
+      {showMarkMissedModal && selectedCheckInForMissed && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Mark Check-in as Missed</h2>
+            <p className="text-gray-600 mb-6">
+              Please let your coach know why you missed this check-in. This will help them understand your situation.
+            </p>
+
+            <div className="space-y-4 mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Reason for missing check-in:
+              </label>
+              <div className="space-y-2">
+                <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
+                  <input
+                    type="radio"
+                    name="missedReason"
+                    value="sick"
+                    checked={missedReason === 'sick'}
+                    onChange={(e) => setMissedReason(e.target.value)}
+                    className="mr-3"
+                  />
+                  <span className="text-sm text-gray-900">Sick / Unwell</span>
+                </label>
+                <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
+                  <input
+                    type="radio"
+                    name="missedReason"
+                    value="traveling"
+                    checked={missedReason === 'traveling'}
+                    onChange={(e) => setMissedReason(e.target.value)}
+                    className="mr-3"
+                  />
+                  <span className="text-sm text-gray-900">Traveling</span>
+                </label>
+                <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
+                  <input
+                    type="radio"
+                    name="missedReason"
+                    value="personal_emergency"
+                    checked={missedReason === 'personal_emergency'}
+                    onChange={(e) => setMissedReason(e.target.value)}
+                    className="mr-3"
+                  />
+                  <span className="text-sm text-gray-900">Personal Emergency</span>
+                </label>
+                <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
+                  <input
+                    type="radio"
+                    name="missedReason"
+                    value="other"
+                    checked={missedReason === 'other'}
+                    onChange={(e) => setMissedReason(e.target.value)}
+                    className="mr-3"
+                  />
+                  <span className="text-sm text-gray-900">Other</span>
+                </label>
+              </div>
+
+              {missedReason === 'other' && (
+                <div className="mt-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Please provide details:
+                  </label>
+                  <textarea
+                    value={missedComment}
+                    onChange={(e) => setMissedComment(e.target.value)}
+                    placeholder="Tell your coach why you missed this check-in..."
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 resize-none"
+                    rows={4}
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowMarkMissedModal(false);
+                  setSelectedCheckInForMissed(null);
+                  setMissedReason('');
+                  setMissedComment('');
+                }}
+                disabled={markingAsMissed}
+                className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleMarkAsMissed}
+                disabled={markingAsMissed || !missedReason || (missedReason === 'other' && !missedComment.trim())}
+                className="flex-1 px-4 py-2 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{ backgroundColor: markingAsMissed ? '#999' : '#daa450' }}
+              >
+                {markingAsMissed ? 'Marking...' : 'Mark as Missed'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </RoleProtected>
   );
 } 

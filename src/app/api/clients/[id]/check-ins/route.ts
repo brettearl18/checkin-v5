@@ -236,6 +236,22 @@ export async function GET(
         }
       }
 
+      // Auto-update status to 'overdue' if 3+ days past due date
+      if (status !== 'completed' && status !== 'missed' && data.dueDate) {
+        const dueDate = data.dueDate?.toDate ? data.dueDate.toDate() : new Date(data.dueDate);
+        const now = new Date();
+        const daysPastDue = Math.floor((now.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
+        
+        if (daysPastDue >= 3 && status !== 'overdue') {
+          // Update status to overdue in background
+          db.collection('check_in_assignments').doc(doc.id).update({
+            status: 'overdue',
+            updatedAt: new Date()
+          }).catch(err => console.error('Error updating assignment status to overdue:', err));
+          status = 'overdue';
+        }
+      }
+
       // Check if coach has responded (has feedback)
       let coachResponded = false;
       const responseId = data.responseId;

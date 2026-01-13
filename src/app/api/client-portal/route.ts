@@ -239,8 +239,23 @@ export async function GET(request: NextRequest) {
         let displayStatus: 'pending' | 'completed' | 'overdue' = 'pending';
         if (data.status === 'completed' || data.completedAt) {
           displayStatus = 'completed';
-        } else if (dueDateObj < now) {
-          displayStatus = 'overdue';
+        } else {
+          // Check if overdue (3+ days past due date)
+          const daysPastDue = Math.floor((now.getTime() - dueDateObj.getTime()) / (1000 * 60 * 60 * 24));
+          if (daysPastDue >= 3) {
+            displayStatus = 'overdue';
+            // Auto-update database status to 'overdue' if it's not already set
+            const currentStatus = data.status || 'pending';
+            if (currentStatus !== 'overdue' && currentStatus !== 'completed' && currentStatus !== 'missed') {
+              // Update in background (don't wait for it)
+              db.collection('check_in_assignments').doc(doc.id).update({
+                status: 'overdue',
+                updatedAt: new Date()
+              }).catch(err => console.error('Error updating assignment status to overdue:', err));
+            }
+          } else {
+            displayStatus = 'pending';
+          }
         }
         
         return {

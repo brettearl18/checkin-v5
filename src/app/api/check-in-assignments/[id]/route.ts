@@ -78,7 +78,11 @@ export async function GET(
         id: id, // Use the dynamic ID
         recurringWeek: dynamicWeekNumber,
         dueDate: weekMonday,
-        status: weekMonday < new Date() ? 'overdue' : 'pending',
+        status: (() => {
+          const now = new Date();
+          const daysPastDue = Math.floor((now.getTime() - weekMonday.getTime()) / (1000 * 60 * 60 * 24));
+          return daysPastDue >= 3 ? 'overdue' : 'pending';
+        })(),
         // Clear completed fields since this is a future week (unless it was actually completed)
         completedAt: undefined,
         score: undefined,

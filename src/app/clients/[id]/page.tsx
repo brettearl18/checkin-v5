@@ -172,6 +172,7 @@ export default function ClientProfilePage() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [checkInToDelete, setCheckInToDelete] = useState<string | null>(null);
   const [updatingCheckIn, setUpdatingCheckIn] = useState(false);
+  const [markingAsMissed, setMarkingAsMissed] = useState<string | null>(null);
   const [deletingSeries, setDeletingSeries] = useState(false);
   const [showPauseModal, setShowPauseModal] = useState(false);
   const [selectedSeriesForPause, setSelectedSeriesForPause] = useState<{formId: string, formTitle: string} | null>(null);
@@ -1594,6 +1595,44 @@ export default function ClientProfilePage() {
     }
   };
 
+  const handleMarkAsMissed = async (checkInId: string) => {
+    if (!confirm('Mark this check-in as missed? It will no longer show as overdue.')) {
+      return;
+    }
+
+    setMarkingAsMissed(checkInId);
+    try {
+      const response = await fetch(`/api/check-in-assignments/${checkInId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status: 'missed'
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          // Refresh check-ins list
+          setHasLoadedCheckIns(false);
+          await fetchAllocatedCheckIns();
+        } else {
+          alert(`Failed to mark check-in as missed: ${data.message || 'Unknown error'}`);
+        }
+      } else {
+        const errorData = await response.json();
+        alert(`Failed to mark check-in as missed: ${errorData.message || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Error marking check-in as missed:', error);
+      alert('Failed to mark check-in as missed. Please try again.');
+    } finally {
+      setMarkingAsMissed(null);
+    }
+  };
+
   const openCheckInManagementModal = (checkIn: any) => {
     setSelectedCheckIn(checkIn);
     setShowCheckInManagementModal(true);
@@ -2590,8 +2629,8 @@ export default function ClientProfilePage() {
                         ci.status === 'completed' && !ci.coachResponded
                       );
                       const overdueCheckIns = allocatedCheckIns.filter(ci => {
-                        // Exclude completed check-ins
-                        if (ci.status === 'completed') return false;
+                        // Exclude completed and missed check-ins
+                        if (ci.status === 'completed' || ci.status === 'missed') return false;
                         if (!ci.dueDate) return false;
                         const dueDate = ci.dueDate?.toDate ? ci.dueDate.toDate() : new Date(ci.dueDate);
                         return dueDate < new Date();
@@ -4239,7 +4278,7 @@ export default function ClientProfilePage() {
                         // Find the current check-in (next pending/active, or most recent if all completed)
                         const now = new Date();
                         const currentCheckIn = allocatedCheckIns
-                          .filter(c => c.status === 'pending' || c.status === 'active' || c.status === 'overdue')
+                          .filter(c => c.status === 'pending' || c.status === 'active' || c.status === 'overdue' || c.status === 'missed')
                           .sort((a, b) => {
                             const dateA = a.dueDate ? new Date(a.dueDate).getTime() : 0;
                             const dateB = b.dueDate ? new Date(b.dueDate).getTime() : 0;
@@ -4507,9 +4546,10 @@ export default function ClientProfilePage() {
                                         checkIn.status === 'completed' ? 'bg-[#34C759]/10 text-[#34C759] border-[#34C759]/20' :
                                         checkIn.status === 'pending' ? 'bg-orange-100 text-orange-700 border-orange-200' :
                                         checkIn.status === 'overdue' ? 'bg-[#FF3B30]/10 text-[#FF3B30] border-[#FF3B30]/20' :
+                                        checkIn.status === 'missed' ? 'bg-gray-100 text-gray-600 border-gray-300' :
                                         'bg-gray-100 text-gray-700 border-gray-200'
                                       }`}>
-                                        {checkIn.status}
+                                        {checkIn.status === 'missed' ? 'Missed' : checkIn.status}
                                       </span>
                                     </td>
                                     <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
@@ -4536,6 +4576,16 @@ export default function ClientProfilePage() {
                                     </td>
                                     <td className="px-4 py-3 whitespace-nowrap text-sm">
                                       <div className="flex space-x-2">
+                                        {checkIn.status === 'overdue' && (
+                                          <button
+                                            onClick={() => handleMarkAsMissed(checkIn.id)}
+                                            disabled={markingAsMissed === checkIn.id}
+                                            className="text-gray-600 hover:text-gray-800 font-medium disabled:opacity-50"
+                                            title="Mark as missed - removes overdue status"
+                                          >
+                                            {markingAsMissed === checkIn.id ? 'Marking...' : 'Mark as Missed'}
+                                          </button>
+                                        )}
                                         {checkIn.status === 'pending' && (
                                           <button
                                             onClick={() => openCheckInManagementModal(checkIn)}
