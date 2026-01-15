@@ -1447,15 +1447,23 @@ export default function ClientPortalPage() {
                       const isToday = daysDiff === 0;
                       const isTomorrow = daysDiff === 1;
                       
+                      // Use the check-in's specific window settings (from assignment)
+                      // This allows different forms to have different opening days/times
                       const checkInWindow = nextScheduledCheckIn.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
-                      // Calculate window relative to this check-in's week (Monday start)
+                      
+                      // Calculate window using the check-in's specific settings
                       const windowStatus = isWithinCheckInWindow(checkInWindow, nextScheduledCheckIn.dueDate);
                       
-                      // Helper function to calculate window start date
-                      const calculateWindowStartDate = (dueDate: string, window: CheckInWindow): Date => {
-                        const due = new Date(dueDate);
-                        if (!window.enabled) return due;
+                      // Calculate window start date based on the check-in's window settings
+                      const calculateWindowStartDate = (dueDateStr: string, window: CheckInWindow): Date => {
+                        const due = new Date(dueDateStr);
+                        const weekStart = new Date(due);
+                        const dayOfWeek = due.getDay();
+                        const daysToMonday = dayOfWeek === 0 ? 1 : (dayOfWeek === 1 ? 0 : (8 - dayOfWeek));
+                        weekStart.setDate(due.getDate() - daysToMonday);
+                        weekStart.setHours(0, 0, 0, 0);
                         
+                        // Get the start day number
                         const getDayOfWeek = (dayName: string): number => {
                           const days: { [key: string]: number } = {
                             'sunday': 0, 'monday': 1, 'tuesday': 2, 'wednesday': 3,
@@ -1465,25 +1473,31 @@ export default function ClientPortalPage() {
                         };
                         
                         const startDayNum = getDayOfWeek(window.startDay);
-                        const dueDayOfWeek = due.getDay();
-                        let daysToAdd = (startDayNum - dueDayOfWeek + 7) % 7;
+                        const mondayDayNum = 1; // Monday
                         
-                        const windowStartDate = new Date(due);
-                        windowStartDate.setDate(due.getDate() + daysToAdd);
-                        windowStartDate.setHours(0, 0, 0, 0);
-                        
-                        // Add start time
-                        if (window.startTime) {
-                          const [hours, minutes] = window.startTime.split(':').map(Number);
-                          windowStartDate.setHours(hours, minutes, 0, 0);
+                        // Calculate days from Monday to start day
+                        // If start day is Friday (5), we go back 3 days from Monday
+                        // If start day is Thursday (4), we go back 4 days from Monday
+                        let daysFromMonday = startDayNum - mondayDayNum;
+                        if (daysFromMonday > 0) {
+                          // Start day is after Monday, go to previous week
+                          daysFromMonday = daysFromMonday - 7;
                         }
                         
-                        return windowStartDate;
+                        const windowStart = new Date(weekStart);
+                        windowStart.setDate(weekStart.getDate() + daysFromMonday);
+                        const [hours, minutes] = window.startTime.split(':').map(Number);
+                        windowStart.setHours(hours || 10, minutes || 0, 0, 0);
+                        
+                        return windowStart;
                       };
                       
-                      const windowStartDate = calculateWindowStartDate(nextScheduledCheckIn.dueDate, checkInWindow);
-                      const windowHasOpened = windowStartDate <= now;
-                      const isAvailable = windowHasOpened && windowStatus.isOpen;
+                      const windowStartDate = checkInWindow?.enabled 
+                        ? calculateWindowStartDate(nextScheduledCheckIn.dueDate, checkInWindow)
+                        : null;
+                      
+                      const windowHasOpened = windowStartDate ? windowStartDate <= now : false;
+                      const isAvailable = windowStatus.isOpen;
                       
                       return (
                         <div className="space-y-4">
@@ -1523,24 +1537,22 @@ export default function ClientPortalPage() {
                                   </span>
                                 </div>
                                 {/* Window information */}
-                                {checkInWindow?.enabled && checkInWindow?.startDay && checkInWindow?.startTime && (
+                                {checkInWindow?.enabled && windowStartDate && (
                                   <div className="mt-2 ml-9 lg:ml-11">
                                     <div className="inline-flex items-center gap-1.5 px-3 py-1.5 lg:py-1 rounded-lg text-xs lg:text-xs font-medium bg-blue-50 text-blue-800">
                                       <span className="text-base">{isAvailable ? '✅' : '📅'}</span>
                                       <span>
                                         {isAvailable 
                                           ? '✓ Check-in window is open now'
-                                          : windowHasOpened
-                                          ? windowStatus.nextOpenTime
-                                            ? `Window opens: ${windowStatus.nextOpenTime.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })} at ${windowStatus.nextOpenTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`
-                                            : `Window opens ${checkInWindow.startDay.charAt(0).toUpperCase() + checkInWindow.startDay.slice(1)} at ${checkInWindow.startTime}`
                                           : (() => {
-                                              const startDayName = checkInWindow.startDay.charAt(0).toUpperCase() + checkInWindow.startDay.slice(1);
+                                              // Format time from window settings
                                               const [hours, minutes] = checkInWindow.startTime.split(':').map(Number);
                                               const period = hours >= 12 ? 'PM' : 'AM';
                                               const displayHours = hours > 12 ? hours - 12 : hours === 0 ? 12 : hours;
                                               const displayMinutes = minutes.toString().padStart(2, '0');
-                                              return `Window opens ${startDayName} ${windowStartDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} at ${displayHours}:${displayMinutes} ${period}`;
+                                              const timeStr = `${displayHours}:${displayMinutes} ${period}`;
+                                              
+                                              return `Window opens ${windowStartDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} at ${timeStr}`;
                                             })()
                                         }
                                       </span>
