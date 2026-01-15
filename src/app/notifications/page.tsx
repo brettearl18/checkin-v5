@@ -372,3 +372,5 @@ const NotificationsPage: React.FC = () => {
     </AuthenticatedOnly>
   );
 };
+
+export default NotificationsPage;
