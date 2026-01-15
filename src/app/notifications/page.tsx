@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNotifications } from '@/contexts/NotificationContext';
 import { AuthenticatedOnly } from '@/components/ProtectedRoute';
 import Link from 'next/link';
@@ -8,10 +8,14 @@ import Link from 'next/link';
 const NotificationsPage: React.FC = () => {
   const { notifications, unreadCount, markAsRead, markAllAsRead, deleteNotification, loading } = useNotifications();
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
+  
+  // Ensure notifications is always an array to prevent rendering errors
+  const safeNotifications = Array.isArray(notifications) ? notifications : [];
+  const safeUnreadCount = typeof unreadCount === 'number' ? unreadCount : 0;
 
   const filteredNotifications = filter === 'unread' 
-    ? notifications.filter(n => !n.isRead)
-    : notifications;
+    ? safeNotifications.filter(n => !n.isRead)
+    : safeNotifications;
 
   const getNotificationIcon = (type: string) => {
     // Use SVG icons instead of emojis for better consistency
@@ -211,7 +215,7 @@ const NotificationsPage: React.FC = () => {
                 <div>
                   <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Notifications</h1>
                   <p className="text-gray-600 mt-1 sm:mt-2 text-sm sm:text-base">
-                    {unreadCount > 0 ? `${unreadCount} unread notification${unreadCount !== 1 ? 's' : ''}` : 'All caught up!'}
+                    {safeUnreadCount > 0 ? `${safeUnreadCount} unread notification${safeUnreadCount !== 1 ? 's' : ''}` : 'All caught up!'}
                   </p>
                 </div>
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
@@ -226,7 +230,7 @@ const NotificationsPage: React.FC = () => {
                       }`}
                       style={filter === 'all' ? { backgroundColor: '#daa450' } : {}}
                     >
-                      All ({notifications.length})
+                      All ({safeNotifications.length})
                     </button>
                     <button
                       onClick={() => setFilter('unread')}
@@ -237,12 +241,12 @@ const NotificationsPage: React.FC = () => {
                       }`}
                       style={filter === 'unread' ? { backgroundColor: '#daa450' } : {}}
                     >
-                      Unread ({unreadCount})
+                      Unread ({safeUnreadCount})
                     </button>
                   </div>
 
                   {/* Actions */}
-                  {unreadCount > 0 && (
+                  {safeUnreadCount > 0 && (
                     <button
                       onClick={markAllAsRead}
                       className="px-4 sm:px-6 py-2 text-sm sm:text-base font-medium rounded-xl text-white transition-all duration-200 shadow-sm hover:shadow-md"
