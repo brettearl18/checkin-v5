@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { RoleProtected } from '@/components/ProtectedRoute';
@@ -130,6 +130,10 @@ export default function CreateClientPage() {
             password: data.credentials.password
           });
           setShowCredentialsModal(true);
+          // Auto-close modal after 10 seconds (emails are sent automatically)
+          modalTimeoutRef.current = setTimeout(() => {
+            setShowCredentialsModal(false);
+          }, 10000);
         } else {
           setSuccess('Client created successfully! Redirecting...');
           setTimeout(() => {
@@ -676,6 +680,9 @@ export default function CreateClientPage() {
                 </div>
                 <button
                   onClick={() => {
+                    if (modalTimeoutRef.current) {
+                      clearTimeout(modalTimeoutRef.current);
+                    }
                     setShowCredentialsModal(false);
                     router.push('/clients');
                   }}
@@ -810,6 +817,9 @@ Your Coach`;
               <div className="flex space-x-3 pt-4 border-t border-gray-200">
                 <button
                   onClick={() => {
+                    if (modalTimeoutRef.current) {
+                      clearTimeout(modalTimeoutRef.current);
+                    }
                     setShowCredentialsModal(false);
                     router.push('/clients');
                   }}
@@ -819,6 +829,9 @@ Your Coach`;
                 </button>
                 <button
                   onClick={() => {
+                    if (modalTimeoutRef.current) {
+                      clearTimeout(modalTimeoutRef.current);
+                    }
                     setShowCredentialsModal(false);
                     // Reset form
                     setFormData({
