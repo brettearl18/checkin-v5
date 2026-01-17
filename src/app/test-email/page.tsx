@@ -18,15 +18,39 @@ export default function TestEmailPage() {
     setResult(null);
 
     try {
+      // Get Firebase ID token for authentication
+      let idToken: string | null = null;
+      if (typeof window !== 'undefined' && userProfile?.uid) {
+        try {
+          const { auth } = await import('@/lib/firebase-client');
+          if (auth?.currentUser) {
+            idToken = await auth.currentUser.getIdToken();
+          }
+        } catch (authError) {
+          console.warn('Could not get auth token:', authError);
+        }
+      }
+
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      };
+
+      if (idToken) {
+        headers['Authorization'] = `Bearer ${idToken}`;
+      }
+
       const response = await fetch('/api/test-email', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({
           to: 'brett.earl@gmail.com',
         }),
       });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
+        throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
+      }
 
       const data = await response.json();
       setResult(data);
@@ -34,7 +58,7 @@ export default function TestEmailPage() {
       console.error('Error sending test email:', error);
       setResult({
         success: false,
-        message: 'Failed to send test email. Please check the console for details.',
+        message: error instanceof Error ? error.message : 'Failed to send test email. Please check the console for details.',
       });
     } finally {
       setSending(false);
