@@ -490,12 +490,19 @@ export function getCheckInWindowOpenEmailTemplate(
           border-radius: 8px 8px 0 0;
         }
         .header {
+          background-color: #10b981;
           background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-          color: white;
+          color: #ffffff !important;
           padding: 30px;
           border-radius: 0;
           text-align: center;
           margin: 0 -30px 30px -30px;
+        }
+        .header h1 {
+          color: #ffffff !important;
+          margin: 0;
+          font-size: 24px;
+          font-weight: 700;
         }
         .info-box {
           background-color: #d1fae5;
@@ -532,8 +539,8 @@ export function getCheckInWindowOpenEmailTemplate(
         <div class="brand-header">
           Vana Health Check In
         </div>
-        <div class="header">
-          <h1>Your Check-in Window is Now Open</h1>
+        <div class="header" style="background-color: #10b981; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #ffffff;">
+          <h1 style="color: #ffffff !important; margin: 0; font-size: 24px; font-weight: 700;">Your Check-in Window is Now Open</h1>
         </div>
         <p>Hi ${clientName},</p>
         <p>Your check-in window is now open! You can complete your check-in anytime during the window.</p>

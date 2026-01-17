@@ -41,6 +41,460 @@ const timezones = [
   { value: 'Pacific/Auckland', label: 'New Zealand Standard Time (NZST)' }
 ];
 
+// Email Management Component
+function EmailManagementSection() {
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [missedEmails, setMissedEmails] = useState<any[]>([]);
+  const [upcomingEmails, setUpcomingEmails] = useState<any[]>([]);
+  const [sendingEmail, setSendingEmail] = useState<string | null>(null);
+  const [message, setMessage] = useState('');
+  const [selectedMissedEmails, setSelectedMissedEmails] = useState<Set<string>>(new Set());
+  const [selectedUpcomingEmails, setSelectedUpcomingEmails] = useState<Set<string>>(new Set());
+  const [bulkSending, setBulkSending] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState({ sent: 0, total: 0, errors: 0 });
+
+  useEffect(() => {
+    loadEmailData();
+  }, []);
+
+  const loadEmailData = async () => {
+    try {
+      setLoading(true);
+      let idToken: string | null = null;
+      
+      if (typeof window !== 'undefined' && user?.uid) {
+        try {
+          const { auth } = await import('@/lib/firebase-client');
+          if (auth?.currentUser) {
+            idToken = await auth.currentUser.getIdToken();
+          }
+        } catch (authError) {
+          console.warn('Could not get auth token:', authError);
+        }
+      }
+
+      const headers: HeadersInit = {};
+      if (idToken) {
+        headers['Authorization'] = `Bearer ${idToken}`;
+      }
+
+      const response = await fetch('/api/coach/missed-emails', {
+        headers
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setMissedEmails(data.data.missedEmails || []);
+          setUpcomingEmails(data.data.upcomingEmails || []);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading email data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSendEmail = async (type: string, assignmentId: string, emailInfo?: any, skipConfirm?: boolean) => {
+    if (!skipConfirm && !confirm(`Send ${type === 'check-in-window-open' ? 'Window Open' : 'Due Reminder'} email to ${emailInfo?.clientName || 'client'}?`)) {
+      return false;
+    }
+
+    let data: any = null;
+
+    try {
+      setSendingEmail(assignmentId);
+      setMessage('');
+
+      let idToken: string | null = null;
+      if (typeof window !== 'undefined' && user?.uid) {
+        try {
+          const { auth } = await import('@/lib/firebase-client');
+          if (auth?.currentUser) {
+            idToken = await auth.currentUser.getIdToken();
+          }
+        } catch (authError) {
+          console.warn('Could not get auth token:', authError);
+        }
+      }
+
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      };
+      if (idToken) {
+        headers['Authorization'] = `Bearer ${idToken}`;
+      }
+
+      const response = await fetch('/api/coach/send-email', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ type, assignmentId })
+      });
+
+      data = await response.json();
+
+      if (data.success) {
+        setMessage(`Email sent successfully to ${data.recipient || emailInfo?.clientName || 'client'}`);
+        setTimeout(() => setMessage(''), 5000);
+        // Reload email data to update the list
+        loadEmailData();
+      } else {
+        setMessage(`Failed to send email: ${data.message || 'Unknown error'}`);
+        setTimeout(() => setMessage(''), 5000);
+      }
+    } catch (error) {
+      console.error('Error sending email:', error);
+      setMessage('Failed to send email. Please try again.');
+      setTimeout(() => setMessage(''), 5000);
+    } finally {
+      setSendingEmail(null);
+    }
+    
+    return data?.success || false;
+  };
+
+  const handleSelectMissedEmail = (emailId: string) => {
+    setSelectedMissedEmails(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(emailId)) {
+        newSet.delete(emailId);
+      } else {
+        newSet.add(emailId);
+      }
+      return newSet;
+    });
+  };
+
+  const handleSelectUpcomingEmail = (key: string) => {
+    setSelectedUpcomingEmails(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(key)) {
+        newSet.delete(key);
+      } else {
+        newSet.add(key);
+      }
+      return newSet;
+    });
+  };
+
+  const handleSelectAllMissed = () => {
+    const sendableEmails = missedEmails.filter(e => e.clientId && e.metadata?.assignmentId);
+    if (selectedMissedEmails.size === sendableEmails.length) {
+      setSelectedMissedEmails(new Set());
+    } else {
+      setSelectedMissedEmails(new Set(sendableEmails.map(e => e.id)));
+    }
+  };
+
+  const handleSelectAllUpcoming = () => {
+    if (selectedUpcomingEmails.size === upcomingEmails.length) {
+      setSelectedUpcomingEmails(new Set());
+    } else {
+      setSelectedUpcomingEmails(new Set(upcomingEmails.map((e, idx) => `${e.type}-${e.assignmentId}-${idx}`)));
+    }
+  };
+
+  const handleBulkSend = async () => {
+    const missedToSend = missedEmails.filter(e => 
+      selectedMissedEmails.has(e.id) && e.clientId && e.metadata?.assignmentId
+    );
+    const upcomingToSend = upcomingEmails.filter((e, idx) => 
+      selectedUpcomingEmails.has(`${e.type}-${e.assignmentId}-${idx}`)
+    );
+
+    const total = missedToSend.length + upcomingToSend.length;
+    if (total === 0) {
+      setMessage('Please select at least one email to send.');
+      setTimeout(() => setMessage(''), 3000);
+      return;
+    }
+
+    if (!confirm(`Send ${total} email${total > 1 ? 's' : ''}? This may take a few moments.`)) {
+      return;
+    }
+
+    setBulkSending(true);
+    setBulkProgress({ sent: 0, total, errors: 0 });
+    setMessage('');
+
+    let successCount = 0;
+    let errorCount = 0;
+
+    // Send missed emails
+    for (const email of missedToSend) {
+      const success = await handleSendEmail(
+        email.emailType,
+        email.metadata.assignmentId,
+        email,
+        true // skip confirm
+      );
+      if (success) {
+        successCount++;
+        setSelectedMissedEmails(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(email.id);
+          return newSet;
+        });
+      } else {
+        errorCount++;
+      }
+      setBulkProgress({ sent: successCount, total, errors: errorCount });
+      // Small delay to avoid overwhelming the API
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    // Send upcoming emails
+    for (const email of upcomingToSend) {
+      const success = await handleSendEmail(
+        email.type,
+        email.assignmentId,
+        email,
+        true // skip confirm
+      );
+      if (success) {
+        successCount++;
+        setSelectedUpcomingEmails(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(`${email.type}-${email.assignmentId}-${upcomingEmails.indexOf(email)}`);
+          return newSet;
+        });
+      } else {
+        errorCount++;
+      }
+      setBulkProgress({ sent: successCount, total, errors: errorCount });
+      // Small delay to avoid overwhelming the API
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    setBulkSending(false);
+    setMessage(`Bulk send complete: ${successCount} sent successfully${errorCount > 0 ? `, ${errorCount} failed` : ''}`);
+    setTimeout(() => setMessage(''), 5000);
+    
+    // Reload email data
+    loadEmailData();
+  };
+
+  const getEmailTypeLabel = (type: string) => {
+    const labels: Record<string, string> = {
+      'check-in-window-open': 'Window Open',
+      'check-in-due-reminder': 'Due Reminder',
+      'check-in-assigned': 'Check-in Assigned',
+      'check-in-completed': 'Check-in Completed',
+      'check-in-overdue': 'Overdue Reminder',
+      'unknown': 'Unknown'
+    };
+    return labels[type] || type;
+  };
+
+  const formatDate = (dateString: string) => {
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric', 
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit'
+      });
+    } catch {
+      return dateString;
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-6">
+      <h2 className="text-2xl font-bold text-gray-900 mb-4">Email Management</h2>
+      <p className="text-gray-600 mb-6">
+        View and manually send emails that haven't been delivered to your clients, or send upcoming emails early.
+      </p>
+
+      {message && (
+        <div className={`mb-4 p-4 rounded-lg ${
+          message.includes('successfully') 
+            ? 'bg-green-100 text-green-800 border border-green-200' 
+            : 'bg-red-100 text-red-800 border border-red-200'
+        }`}>
+          {message}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="animate-pulse space-y-4">
+          <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+          <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+        </div>
+      ) : (
+        <>
+          {/* Bulk Actions */}
+          {(missedEmails.length > 0 || upcomingEmails.length > 0) && (
+            <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <span className="text-sm font-semibold text-gray-700">
+                    Selected: {selectedMissedEmails.size + selectedUpcomingEmails.size} email{(selectedMissedEmails.size + selectedUpcomingEmails.size) !== 1 ? 's' : ''}
+                  </span>
+                  {bulkSending && (
+                    <span className="text-sm text-blue-600">
+                      Sending: {bulkProgress.sent}/{bulkProgress.total} {bulkProgress.errors > 0 && `(${bulkProgress.errors} errors)`}
+                    </span>
+                  )}
+                </div>
+                <button
+                  onClick={handleBulkSend}
+                  disabled={bulkSending || (selectedMissedEmails.size === 0 && selectedUpcomingEmails.size === 0)}
+                  className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {bulkSending ? `Sending... (${bulkProgress.sent}/${bulkProgress.total})` : 'Send Selected'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Missed Emails */}
+          {missedEmails.length > 0 && (
+            <div className="mb-6">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                  <span className="w-2 h-2 bg-red-500 rounded-full mr-2"></span>
+                  Missed Emails ({missedEmails.length})
+                </h3>
+                {missedEmails.filter(e => e.clientId && e.metadata?.assignmentId).length > 0 && (
+                  <button
+                    onClick={handleSelectAllMissed}
+                    className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                  >
+                    {selectedMissedEmails.size === missedEmails.filter(e => e.clientId && e.metadata?.assignmentId).length
+                      ? 'Deselect All' : 'Select All'}
+                  </button>
+                )}
+              </div>
+              <div className="space-y-3 max-h-96 overflow-y-auto">
+                {missedEmails.map((email) => {
+                  const canSend = email.clientId && email.metadata?.assignmentId;
+                  const isSelected = selectedMissedEmails.has(email.id);
+                  return (
+                  <div key={email.id} className={`border rounded-lg p-4 ${isSelected ? 'border-blue-400 bg-blue-100' : 'border-red-200 bg-red-50'}`}>
+                    <div className="flex items-start gap-3">
+                      {canSend && (
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => handleSelectMissedEmail(email.id)}
+                          className="mt-1 w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                          disabled={bulkSending}
+                        />
+                      )}
+                      <div className="flex-1 flex items-start justify-between">
+                        <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="font-semibold text-gray-900">{email.clientName}</span>
+                          <span className="text-xs bg-red-200 text-red-800 px-2 py-1 rounded">
+                            {getEmailTypeLabel(email.emailType)}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-700 mb-1">{email.subject}</p>
+                        <p className="text-xs text-gray-600">
+                          Recipient: {email.recipient} • Sent: {formatDate(email.sentAt)}
+                        </p>
+                        <p className="text-xs text-red-600 mt-1">
+                          {email.mailgunSent === false ? 'Not sent via Mailgun' : 
+                           email.delivered ? 'Delivered' :
+                           email.failed ? 'Failed' : 'Delivery status unknown'}
+                        </p>
+                      </div>
+                        {canSend && (
+                          <button
+                            onClick={() => handleSendEmail(email.emailType, email.metadata.assignmentId, email)}
+                            disabled={sendingEmail === email.metadata.assignmentId || bulkSending}
+                            className="ml-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {sendingEmail === email.metadata.assignmentId ? 'Sending...' : 'Resend'}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Upcoming Emails */}
+          {upcomingEmails.length > 0 && (
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                  <span className="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
+                  Upcoming Emails ({upcomingEmails.length})
+                </h3>
+                <button
+                  onClick={handleSelectAllUpcoming}
+                  className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                >
+                  {selectedUpcomingEmails.size === upcomingEmails.length ? 'Deselect All' : 'Select All'}
+                </button>
+              </div>
+              <p className="text-sm text-gray-600 mb-3">
+                These emails are scheduled to be sent automatically. You can send them now if needed.
+              </p>
+              <div className="space-y-3 max-h-96 overflow-y-auto">
+                {upcomingEmails.map((email, idx) => {
+                  const emailKey = `${email.type}-${email.assignmentId}-${idx}`;
+                  const isSelected = selectedUpcomingEmails.has(emailKey);
+                  return (
+                  <div key={emailKey} className={`border rounded-lg p-4 ${isSelected ? 'border-green-400 bg-green-100' : 'border-blue-200 bg-blue-50'}`}>
+                    <div className="flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => handleSelectUpcomingEmail(emailKey)}
+                        className="mt-1 w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                        disabled={bulkSending}
+                      />
+                      <div className="flex-1 flex items-start justify-between">
+                        <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="font-semibold text-gray-900">{email.clientName}</span>
+                          <span className="text-xs bg-blue-200 text-blue-800 px-2 py-1 rounded">
+                            {getEmailTypeLabel(email.type)}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-700 mb-1">{email.formTitle}</p>
+                        <p className="text-xs text-gray-600">
+                          Scheduled: {formatDate(email.shouldSendAt)} • Due: {formatDate(email.dueDate)}
+                        </p>
+                      </div>
+                        <button
+                          onClick={() => handleSendEmail(email.type, email.assignmentId, email)}
+                          disabled={sendingEmail === email.assignmentId || bulkSending}
+                          className="ml-4 px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {sendingEmail === email.assignmentId ? 'Sending...' : 'Send Now'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+                })}
+              </div>
+            </div>
+          )}
+
+          {missedEmails.length === 0 && upcomingEmails.length === 0 && (
+            <div className="text-center py-8 text-gray-500">
+              <p className="text-lg mb-2">All emails are up to date! ✅</p>
+              <p className="text-sm">No missed or upcoming emails found.</p>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const { userProfile, user } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -451,6 +905,9 @@ export default function SettingsPage() {
                   </div>
                 </div>
               </div>
+
+              {/* Email Management Section */}
+              <EmailManagementSection />
 
               {/* Save Button */}
               <div className="flex justify-end">
