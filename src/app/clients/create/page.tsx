@@ -670,8 +670,9 @@ export default function CreateClientPage() {
             <div className="bg-[#34C759]/10 px-8 py-6 border-b-2 border-[#34C759]/20 rounded-t-3xl">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-xl font-bold text-gray-900">Client Account Created Successfully!</h3>
-                  <p className="text-gray-600 mt-1">Copy these credentials to send to the client</p>
+                  <h3 className="text-xl font-bold text-gray-900">Client Account Created Successfully! ✉️</h3>
+                  <p className="text-gray-600 mt-1">Welcome email with credentials has been automatically sent to the client.</p>
+                  <p className="text-sm text-gray-500 mt-1">Credentials below are for your reference only.</p>
                 </div>
                 <button
                   onClick={() => {
@@ -690,7 +691,7 @@ export default function CreateClientPage() {
             <div className="p-6 space-y-6">
               {/* Email Template */}
               <div className="bg-orange-50 border border-orange-200 rounded-2xl p-6">
-                <h4 className="text-lg font-semibold text-gray-900 mb-4">Email Template</h4>
+                <h4 className="text-lg font-semibold text-gray-900 mb-4">Email Sent to Client (for reference)</h4>
                 <div className="bg-white rounded-lg p-4 border border-blue-200">
                   <div className="space-y-3 text-sm text-gray-700">
                     <p><strong>Subject:</strong> Welcome to Your Wellness Journey - Account Credentials</p>
