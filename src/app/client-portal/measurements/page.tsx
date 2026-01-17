@@ -166,10 +166,10 @@ export default function MeasurementsPage() {
       
       const hasBeforePhotos = imagesData.success && imagesData.data?.some((img: any) => img.imageType === 'before');
       
-      // If no baseline measurement OR no before photos, show onboarding flow
-      // BUT: If user already has measurements, allow them to see the normal view
-      if (!hasBaselineMeasurement && !hasBeforePhotos) {
-        // Only show baseline setup if BOTH are missing
+      // Show baseline setup if baseline measurement OR before photos are missing
+      // Baseline is only complete when BOTH measurement data AND photos exist
+      if (!hasBaselineMeasurement || !hasBeforePhotos) {
+        // Show baseline setup if EITHER is missing (until both are complete)
         setIsBaselineSetup(true);
         // Pre-populate baseline form with existing data if any
         if (measurementsData.success && measurementsData.data?.length > 0) {
@@ -188,7 +188,7 @@ export default function MeasurementsPage() {
           }
         }
       } else {
-        // User has either measurements or photos (or both), show normal view
+        // User has BOTH baseline measurements AND before photos, show normal view
         setIsBaselineSetup(false);
       }
     } catch (error) {
