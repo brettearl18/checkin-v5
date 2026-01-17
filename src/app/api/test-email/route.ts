@@ -1,18 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sendEmail } from '@/lib/email-service';
+import { requireAuth } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
 /**
  * Test email endpoint
- * DISABLED IN PRODUCTION - For development/testing only
+ * Enabled for authenticated admin/coach users
  */
 export async function POST(request: NextRequest) {
-  // Disable in production
-  if (process.env.NODE_ENV === 'production') {
+  // Require authentication (admin or coach only)
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) {
+    return authResult; // Not authenticated
+  }
+  
+  const { user } = authResult;
+  
+  // Only allow admin or coach
+  if (user.role !== 'admin' && user.role !== 'coach') {
     return NextResponse.json(
-      { success: false, message: 'Not Found' },
-      { status: 404 }
+      { success: false, message: 'Unauthorized - Admin or Coach access required' },
+      { status: 403 }
     );
   }
 
