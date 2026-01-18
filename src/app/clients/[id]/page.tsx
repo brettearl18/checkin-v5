@@ -4507,8 +4507,22 @@ export default function ClientProfilePage() {
                                   const weekA = a.recurringWeek || 0;
                                   const weekB = b.recurringWeek || 0;
                                   return weekA - weekB;
-                                }).map((checkIn, index) => (
-                                  <tr key={checkIn.id || `checkin-${index}`} className="hover:bg-gray-50 transition-colors">
+                                }).map((checkIn, index) => {
+                                  const isCompleted = checkIn.status === 'completed' && checkIn.responseId;
+                                  return (
+                                  <tr 
+                                    key={checkIn.id || `checkin-${index}`} 
+                                    className={`transition-colors ${
+                                      isCompleted 
+                                        ? 'hover:bg-blue-50 cursor-pointer' 
+                                        : 'hover:bg-gray-50'
+                                    }`}
+                                    onClick={() => {
+                                      if (isCompleted) {
+                                        window.location.href = `/responses/${checkIn.responseId}`;
+                                      }
+                                    }}
+                                  >
                                     <td className="px-4 py-3 whitespace-nowrap">
                                       <div className="text-sm font-medium text-gray-900">{checkIn.formTitle || 'Unknown Form'}</div>
                                       {checkIn.category && (
@@ -4549,7 +4563,7 @@ export default function ClientProfilePage() {
                                       )}
                                     </td>
                                     <td className="px-4 py-3 whitespace-nowrap text-sm">
-                                      <div className="flex space-x-2">
+                                      <div className="flex space-x-2" onClick={(e) => e.stopPropagation()}>
                                         {checkIn.status === 'overdue' && (
                                           <button
                                             onClick={() => handleMarkAsMissed(checkIn.id)}
@@ -4578,7 +4592,8 @@ export default function ClientProfilePage() {
                                       </div>
                                     </td>
                                   </tr>
-                                ))}
+                                  );
+                                })}
                               </tbody>
                             </table>
                           </div>
