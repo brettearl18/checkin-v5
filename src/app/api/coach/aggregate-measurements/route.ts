@@ -106,26 +106,44 @@ export async function GET(request: NextRequest) {
     // Process each client
     const clientPromises = allClients.map(async (client) => {
       try {
-        // Get baseline measurement
-        const baselineQuery = await db.collection('client_measurements')
+        // Get baseline measurement - try explicit baseline first
+        let baselineQuery = await db.collection('client_measurements')
           .where('clientId', '==', client.id)
           .where('isBaseline', '==', true)
           .orderBy('date', 'asc')
           .limit(1)
           .get();
 
+        let baselineDoc;
+        let baselineData;
+        
         if (baselineQuery.empty) {
-          // No baseline - skip this client
-          return null;
+          // No explicit baseline - use earliest measurement as baseline
+          const earliestQuery = await db.collection('client_measurements')
+            .where('clientId', '==', client.id)
+            .orderBy('date', 'asc')
+            .limit(1)
+            .get();
+            
+          if (earliestQuery.empty) {
+            // No measurements at all - skip this client
+            return null;
+          }
+          
+          baselineDoc = earliestQuery.docs[0];
+          baselineData = baselineDoc.data();
+          logInfo(`Client ${client.id} has no baseline, using earliest measurement as baseline`);
+        } else {
+          baselineDoc = baselineQuery.docs[0];
+          baselineData = baselineDoc.data();
         }
-
-        const baselineDoc = baselineQuery.docs[0];
-        const baselineData = baselineDoc.data();
+        
         const baselineDate = baselineData.date?.toDate?.() || new Date(baselineData.date);
 
-        // Get latest measurement within date range
+        // Get latest measurement - prefer within date range, but fallback to any after baseline
         let latestQuery;
         try {
+          // First try: latest measurement within date range
           latestQuery = await db.collection('client_measurements')
             .where('clientId', '==', client.id)
             .where('date', '>=', startTimestamp)
@@ -150,19 +168,62 @@ export async function GET(request: NextRequest) {
             .slice(0, 1);
 
           if (measurementsInRange.length === 0) {
-            // No measurement in date range - skip this client
-            return null;
+            // No measurement in date range - try latest measurement after baseline
+            const measurementsAfterBaseline = allMeasurementsQuery.docs
+              .filter(doc => {
+                const data = doc.data();
+                const measurementDate = data.date?.toDate?.() || new Date(data.date);
+                return measurementDate > baselineDate;
+              })
+              .slice(0, 1);
+              
+            if (measurementsAfterBaseline.length === 0) {
+              // No measurement after baseline - skip this client
+              return null;
+            }
+            
+            latestQuery = {
+              docs: measurementsAfterBaseline,
+              empty: false
+            } as any;
+          } else {
+            latestQuery = {
+              docs: measurementsInRange,
+              empty: false
+            } as any;
           }
-
-          latestQuery = {
-            docs: measurementsInRange,
-            empty: measurementsInRange.length === 0
-          } as any;
         }
 
         if (latestQuery.empty) {
-          // No measurement in date range - skip this client
-          return null;
+          // No measurement in date range - try latest measurement after baseline
+          try {
+            const allMeasurementsQuery = await db.collection('client_measurements')
+              .where('clientId', '==', client.id)
+              .orderBy('date', 'desc')
+              .get();
+
+            const measurementsAfterBaseline = allMeasurementsQuery.docs
+              .filter(doc => {
+                const data = doc.data();
+                const measurementDate = data.date?.toDate?.() || new Date(data.date);
+                return measurementDate > baselineDate;
+              })
+              .slice(0, 1);
+              
+            if (measurementsAfterBaseline.length === 0) {
+              // No measurement after baseline - skip this client
+              return null;
+            }
+            
+            latestQuery = {
+              docs: measurementsAfterBaseline,
+              empty: false
+            } as any;
+            logInfo(`Client ${client.id}: No measurement in date range, using latest after baseline`);
+          } catch (error: any) {
+            logSafeError('Failed to get fallback latest measurement', error);
+            return null;
+          }
         }
 
         const latestDoc = latestQuery.docs[0];

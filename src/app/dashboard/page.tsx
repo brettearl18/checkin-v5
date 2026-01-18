@@ -1182,19 +1182,19 @@ export default function DashboardPage() {
               </div>
 
               {/* Desktop summary – keep rich cards */}
-              <div className="hidden md:grid mb-8 grid-cols-4 gap-6">
+              <div className="hidden md:grid mb-8 grid-cols-4 gap-4">
                 {/* Priority Actions */}
-                <div className="bg-orange-50 border border-orange-200 rounded-3xl p-8">
+                <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-orange-600 text-sm font-medium">Needs Response</p>
-                      <p className="text-2xl font-bold text-orange-900">
+                      <p className="text-orange-600 text-xs font-medium">Needs Response</p>
+                      <p className="text-xl font-bold text-orange-900">
                         {checkInsToReview.filter(ci => !ci.coachResponded).length}
                       </p>
-                      <p className="text-xs text-orange-700 mt-1">Awaiting your feedback</p>
+                      <p className="text-xs text-orange-700 mt-0.5">Awaiting your feedback</p>
                     </div>
-                    <div className="w-12 h-12 bg-orange-100 rounded-2xl flex items-center justify-center">
-                      <svg className="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center">
+                      <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                     </div>
@@ -1202,15 +1202,15 @@ export default function DashboardPage() {
                 </div>
                 
                 {/* Client Engagement */}
-                <div className="bg-white border border-gray-200 rounded-3xl p-8">
+                <div className="bg-white border border-gray-200 rounded-2xl p-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-gray-600 text-sm font-medium">Client Engagement</p>
-                      <p className="text-2xl font-bold text-gray-900">{stats.activeClients}</p>
-                      <p className="text-xs text-gray-500 mt-1">Active clients</p>
+                      <p className="text-gray-600 text-xs font-medium">Client Engagement</p>
+                      <p className="text-xl font-bold text-gray-900">{stats.activeClients}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">Active clients</p>
                     </div>
-                    <div className="w-12 h-12 bg-gray-100 rounded-2xl flex items-center justify-center">
-                      <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center">
+                      <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
                       </svg>
                     </div>
@@ -1218,15 +1218,15 @@ export default function DashboardPage() {
                 </div>
                 
                 {/* Platform Resources */}
-                <div className="bg-white border border-gray-200 rounded-3xl p-8">
+                <div className="bg-white border border-gray-200 rounded-2xl p-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-gray-600 text-sm font-medium">Platform Resources</p>
-                      <p className="text-2xl font-bold text-gray-900">{stats.totalForms}</p>
-                      <p className="text-xs text-gray-500 mt-1">Available forms</p>
+                      <p className="text-gray-600 text-xs font-medium">Platform Resources</p>
+                      <p className="text-xl font-bold text-gray-900">{stats.totalForms}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">Available forms</p>
                     </div>
-                    <div className="w-12 h-12 bg-gray-100 rounded-2xl flex items-center justify-center">
-                      <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center">
+                      <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                       </svg>
                     </div>
@@ -1234,15 +1234,15 @@ export default function DashboardPage() {
                 </div>
                 
                 {/* Recent Activity */}
-                <div className="bg-[#34C759]/10 border border-[#34C759]/20 rounded-3xl p-8">
+                <div className="bg-[#34C759]/10 border border-[#34C759]/20 rounded-2xl p-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-[#34C759] text-sm font-medium">Recent Activity</p>
-                      <p className="text-2xl font-bold text-gray-900">{completedCheckIns.length}</p>
-                      <p className="text-xs text-gray-500 mt-1">Completed this week</p>
+                      <p className="text-[#34C759] text-xs font-medium">Recent Activity</p>
+                      <p className="text-xl font-bold text-gray-900">{completedCheckIns.length}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">Completed this week</p>
                     </div>
-                    <div className="w-12 h-12 bg-[#34C759]/20 rounded-2xl flex items-center justify-center">
-                      <svg className="w-6 h-6 text-[#34C759]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="w-10 h-10 bg-[#34C759]/20 rounded-xl flex items-center justify-center">
+                      <svg className="w-5 h-5 text-[#34C759]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                     </div>
