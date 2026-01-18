@@ -128,9 +128,15 @@ export async function GET(request: NextRequest) {
 
           clientAssignmentsSnapshot.docs.forEach(doc => {
             const assignmentData = doc.data();
-            // Only add if we don't already have it from formResponses query
-            if (!assignmentMap.has(doc.id)) {
-              assignmentMap.set(doc.id, {
+            // Use responseId as key if available (same as formResponses query), otherwise use assignment ID
+            const key = assignmentData.responseId || doc.id;
+            // Check if we already have this by either key
+            const alreadyExists = assignmentData.responseId 
+              ? assignmentMap.has(assignmentData.responseId)
+              : assignmentMap.has(doc.id);
+            
+            if (!alreadyExists) {
+              assignmentMap.set(key, {
                 id: doc.id,
                 ...assignmentData
               });
@@ -149,8 +155,15 @@ export async function GET(request: NextRequest) {
             
             // If assignment has responseId or completedAt but status isn't 'completed', include it
             if ((hasResponse || hasCompletedAt) && data.status !== 'completed') {
-              if (!assignmentMap.has(doc.id)) {
-                assignmentMap.set(doc.id, {
+              // Use responseId as key if available (same as formResponses query), otherwise use assignment ID
+              const key = data.responseId || doc.id;
+              // Check if we already have this by either key
+              const alreadyExists = data.responseId 
+                ? assignmentMap.has(data.responseId)
+                : assignmentMap.has(doc.id);
+              
+              if (!alreadyExists) {
+                assignmentMap.set(key, {
                   id: doc.id,
                   ...data,
                   status: 'completed'
