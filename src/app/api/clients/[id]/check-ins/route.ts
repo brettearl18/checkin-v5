@@ -132,6 +132,68 @@ export async function GET(
       // Continue with empty array - better to return empty than fail
     }
     
+    // Also fetch form responses for this client to ensure we find all completed check-ins
+    // This helps catch cases where assignments might not be properly linked
+    try {
+      const responsesSnapshot = await db.collection('formResponses')
+        .where('clientId', 'in', possibleClientIds)
+        .get();
+      
+      // Create a map of responseId -> assignmentId for quick lookup
+      const responseToAssignmentMap = new Map<string, string>();
+      responsesSnapshot.docs.forEach(doc => {
+        const responseData = doc.data();
+        if (responseData.assignmentId) {
+          responseToAssignmentMap.set(doc.id, responseData.assignmentId);
+        }
+      });
+      
+      // Find responses that don't have corresponding assignments in our list
+      const orphanedResponses: any[] = [];
+      responsesSnapshot.docs.forEach(doc => {
+        const responseData = doc.data();
+        const assignmentId = responseData.assignmentId;
+        
+        // Check if this assignment is already in our list
+        const hasAssignment = allAssignments.some(a => a.id === assignmentId);
+        
+        if (assignmentId && !hasAssignment) {
+          // Try to fetch the assignment directly by ID
+          // This handles cases where assignment exists but wasn't found by clientId query
+          orphanedResponses.push({
+            responseId: doc.id,
+            assignmentId: assignmentId,
+            responseData: responseData
+          });
+        }
+      });
+      
+      // Fetch orphaned assignments by their IDs
+      if (orphanedResponses.length > 0) {
+        const orphanedAssignmentIds = [...new Set(orphanedResponses.map(r => r.assignmentId))];
+        for (const assignmentId of orphanedAssignmentIds) {
+          try {
+            const assignmentDoc = await db.collection('check_in_assignments').doc(assignmentId).get();
+            if (assignmentDoc.exists) {
+              const assignmentData = assignmentDoc.data();
+              // Only add if it's for this client (double-check clientId matches)
+              if (assignmentData?.clientId && possibleClientIds.includes(assignmentData.clientId)) {
+                // Avoid duplicates
+                if (!allAssignments.some(a => a.id === assignmentDoc.id)) {
+                  allAssignments.push(assignmentDoc);
+                }
+              }
+            }
+          } catch (error) {
+            console.log(`Error fetching orphaned assignment ${assignmentId}:`, error);
+          }
+        }
+      }
+    } catch (error) {
+      console.log('Error fetching form responses for completeness check:', error);
+      // Continue even if this fails - assignments should still be found
+    }
+    
     // Create a proper snapshot-like object that matches Firestore QuerySnapshot interface
     const assignmentsSnapshot = {
       docs: allAssignments,

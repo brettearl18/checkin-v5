@@ -102,6 +102,12 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
+      // Skip if client status is not 'active' (only active clients should receive emails)
+      if (clientData?.status !== 'active') {
+        results.skipped++;
+        continue;
+      }
+
       // Skip if client has disabled email notifications (default to true if not set)
       const emailNotificationsEnabled = clientData?.emailNotifications ?? true;
       if (!emailNotificationsEnabled && !testEmail) {

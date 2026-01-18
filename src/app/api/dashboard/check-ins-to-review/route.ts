@@ -37,25 +37,134 @@ export async function GET(request: NextRequest) {
       console.log('Found clients for coach:', clients.length, '(excluding', allClients.length - clients.length, 'archived)');
       console.log('Client IDs:', clients.map(c => c.id));
 
-      // Get all completed assignments for these clients (non-archived)
+      // PRIMARY METHOD: Query formResponses directly by coachId to find ALL completed check-ins
+      // This is more reliable because formResponses always exist when a check-in is completed
+      // and they have the coachId field for efficient querying
+      const clientIdsSet = new Set(clients.map(c => c.id));
       let allAssignments: any[] = [];
+      const assignmentMap = new Map<string, any>();
+      
+      try {
+        // Query formResponses by coachId - this finds ALL completed check-ins for this coach
+        const formResponsesSnapshot = await db.collection('formResponses')
+          .where('coachId', '==', coachId)
+          .where('status', '==', 'completed')
+          .get();
+        
+        console.log(`Found ${formResponsesSnapshot.size} completed form responses for coach`);
+        
+        // For each response, get its assignment
+        const assignmentPromises = formResponsesSnapshot.docs.map(async (responseDoc) => {
+          const responseData = responseDoc.data();
+          const responseClientId = responseData.clientId;
+          
+          // Only include responses for clients that belong to this coach (safety check)
+          if (!clientIdsSet.has(responseClientId)) {
+            return null;
+          }
+          
+          const assignmentId = responseData.assignmentId;
+          if (!assignmentId) {
+            console.log(`Response ${responseDoc.id} has no assignmentId`);
+            return null;
+          }
+          
+          try {
+            // Get the assignment document
+            const assignmentDoc = await db.collection('check_in_assignments').doc(assignmentId).get();
+            if (assignmentDoc.exists) {
+              const assignmentData = assignmentDoc.data();
+              
+              // Verify this assignment belongs to one of our clients (double-check)
+              if (clientIdsSet.has(assignmentData?.clientId)) {
+                // Merge response data into assignment for completeness
+                return {
+                  id: assignmentDoc.id,
+                  ...assignmentData,
+                  responseId: responseDoc.id, // Ensure responseId is set
+                  completedAt: assignmentData?.completedAt || responseData.completedAt || responseData.submittedAt,
+                  status: 'completed', // Force status to completed
+                  score: assignmentData?.score || responseData.score || 0,
+                  totalQuestions: assignmentData?.totalQuestions || responseData.totalQuestions || 0,
+                  answeredQuestions: assignmentData?.answeredQuestions || responseData.answeredQuestions || 0
+                };
+              }
+            } else {
+              console.log(`Assignment ${assignmentId} not found for response ${responseDoc.id}`);
+            }
+          } catch (error) {
+            console.log(`Error fetching assignment ${assignmentId} for response ${responseDoc.id}:`, error);
+          }
+          
+          return null;
+        });
+        
+        const assignmentResults = await Promise.all(assignmentPromises);
+        assignmentResults.forEach(assignment => {
+          if (assignment) {
+            // Use responseId as key if available (prevents duplicates from same response)
+            // Otherwise use assignment ID
+            const key = assignment.responseId || assignment.id;
+            if (!assignmentMap.has(key)) {
+              assignmentMap.set(key, assignment);
+            }
+          }
+        });
+        
+        console.log(`Found ${assignmentMap.size} assignments from formResponses`);
+      } catch (error) {
+        console.log('Error querying formResponses directly, falling back to assignment query:', error);
+      }
+      
+      // FALLBACK: Also query assignments directly (in case formResponses query missed something)
+      // This ensures we catch all completed check-ins
       for (const client of clients) {
         try {
+          // Get assignments explicitly marked as completed
           const clientAssignmentsSnapshot = await db.collection('check_in_assignments')
             .where('clientId', '==', client.id)
             .where('status', '==', 'completed')
             .get();
 
-          const clientAssignments = clientAssignmentsSnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-          }));
-
-          allAssignments.push(...clientAssignments);
+          clientAssignmentsSnapshot.docs.forEach(doc => {
+            const assignmentData = doc.data();
+            // Only add if we don't already have it from formResponses query
+            if (!assignmentMap.has(doc.id)) {
+              assignmentMap.set(doc.id, {
+                id: doc.id,
+                ...assignmentData
+              });
+            }
+          });
+          
+          // Also check for assignments with responseId or completedAt that might not have status='completed'
+          const allClientAssignmentsSnapshot = await db.collection('check_in_assignments')
+            .where('clientId', '==', client.id)
+            .get();
+          
+          allClientAssignmentsSnapshot.docs.forEach(doc => {
+            const data = doc.data();
+            const hasResponse = !!data.responseId;
+            const hasCompletedAt = !!data.completedAt;
+            
+            // If assignment has responseId or completedAt but status isn't 'completed', include it
+            if ((hasResponse || hasCompletedAt) && data.status !== 'completed') {
+              if (!assignmentMap.has(doc.id)) {
+                assignmentMap.set(doc.id, {
+                  id: doc.id,
+                  ...data,
+                  status: 'completed'
+                });
+              }
+            }
+          });
         } catch (error) {
           console.log(`Error fetching assignments for client ${client.id}:`, error);
         }
       }
+      
+      // Convert map to array
+      allAssignments = Array.from(assignmentMap.values());
 
       console.log('Found completed assignments:', allAssignments.length);
       console.log('Assignments:', allAssignments);
@@ -165,7 +274,7 @@ export async function GET(request: NextRequest) {
         }
 
         return {
-          id: assignment.responseId || assignment.id, // Use responseId if available, fallback to assignment ID
+          id: assignment.responseId || `assignment-${assignment.id}`, // Use responseId if available, or create unique ID from assignment ID
           clientId: assignment.clientId,
           clientName: client ? `${client.firstName} ${client.lastName}` : 'Unknown Client',
           formTitle: assignment.formTitle || assignment.title || 'Check-in Form',
