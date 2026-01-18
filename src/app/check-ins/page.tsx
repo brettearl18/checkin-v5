@@ -39,6 +39,10 @@ interface CheckInToReview {
   formId: string;
   assignmentId: string;
   coachResponded?: boolean;
+  recurringWeek?: number | null;
+  totalWeeks?: number | null;
+  dueDate?: string | null;
+  isRecurring?: boolean;
 }
 
 interface Client {
@@ -194,6 +198,28 @@ export default function CheckInsPage() {
     return clientMatch && formMatch && dateMatch;
   });
 
+  // Apply same filters to checkInsToReview
+  const filteredCheckInsToReview = checkInsToReview.filter(checkIn => {
+    const clientMatch = selectedClient === 'all' || checkIn.clientId === selectedClient;
+    // Form filter uses formTitle (since dropdown shows form titles)
+    const formMatch = selectedForm === 'all' || checkIn.formTitle === selectedForm;
+    
+    let dateMatch = true;
+    if (dateRange !== 'all') {
+      const checkInDate = checkIn.submittedAt ? new Date(checkIn.submittedAt) : null;
+      if (checkInDate) {
+        const now = new Date();
+        const daysDiff = Math.floor((now.getTime() - checkInDate.getTime()) / (1000 * 60 * 60 * 24));
+        
+        if (dateRange === 'today' && daysDiff > 0) dateMatch = false;
+        if (dateRange === 'week' && daysDiff > 7) dateMatch = false;
+        if (dateRange === 'month' && daysDiff > 30) dateMatch = false;
+      }
+    }
+    
+    return clientMatch && formMatch && dateMatch;
+  });
+
   const getScoreColor = (score: number) => {
     if (score >= 80) return 'text-[#34C759] bg-[#34C759]/10 border border-[#34C759]/20';
     if (score >= 60) return 'text-orange-600 bg-orange-100 border border-orange-200';
@@ -228,6 +254,24 @@ export default function CheckInsPage() {
     return `${diffInMonths}mo ago`;
   };
 
+  const formatDateOnly = (timestamp: string | any) => {
+    if (!timestamp) return null;
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    return date.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric', 
+      year: 'numeric' 
+    });
+  };
+
+  const getFormTitleWithWeek = (checkIn: any) => {
+    let title = checkIn.formTitle || 'Check-in Form';
+    if (checkIn.isRecurring && checkIn.recurringWeek && checkIn.totalWeeks) {
+      title = `${title} • Week ${checkIn.recurringWeek}${checkIn.totalWeeks > 1 ? ` of ${checkIn.totalWeeks}` : ''}`;
+    }
+    return title;
+  };
+
   const getClientName = (clientId: string) => {
     const client = clients[clientId];
     if (client) {
@@ -239,6 +283,10 @@ export default function CheckInsPage() {
   const getUniqueForms = () => {
     const forms = new Set<string>();
     checkIns.forEach(checkIn => forms.add(checkIn.formTitle));
+    // Also include forms from checkInsToReview
+    checkInsToReview.forEach(checkIn => {
+      if (checkIn.formTitle) forms.add(checkIn.formTitle);
+    });
     return Array.from(forms);
   };
 
@@ -471,7 +519,7 @@ export default function CheckInsPage() {
                       }`}
                       style={activeTab === 'review' ? { backgroundColor: '#daa450' } : {}}
                     >
-                      To Review ({checkInsToReview.filter(ci => !ci.coachResponded).length})
+                      To Review ({filteredCheckInsToReview.filter(ci => !ci.coachResponded).length})
                     </button>
                     <button
                       onClick={() => setActiveTab('replied')}
@@ -481,7 +529,7 @@ export default function CheckInsPage() {
                           : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                       }`}
                     >
-                      Replied ({checkInsToReview.filter(ci => ci.coachResponded).length})
+                      Replied ({filteredCheckInsToReview.filter(ci => ci.coachResponded).length})
                     </button>
                     <button
                       onClick={() => setActiveTab('all')}
@@ -502,7 +550,7 @@ export default function CheckInsPage() {
                 {/* To Review Tab */}
                 {activeTab === 'review' && (
                   <>
-                    {checkInsToReview.filter(ci => !ci.coachResponded).length === 0 ? (
+                    {filteredCheckInsToReview.filter(ci => !ci.coachResponded).length === 0 ? (
                       <div className="text-center py-12">
                         <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
                           <svg className="w-8 h-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -514,7 +562,7 @@ export default function CheckInsPage() {
                       </div>
                     ) : (
                       <div className="space-y-3 sm:space-y-2">
-                        {checkInsToReview.filter(ci => !ci.coachResponded).map((checkIn) => {
+                        {filteredCheckInsToReview.filter(ci => !ci.coachResponded).map((checkIn) => {
                           const needsResponse = !checkIn.coachResponded;
                           const submittedAtDate = checkIn.submittedAt ? new Date(checkIn.submittedAt) : null;
                           const hoursSince = submittedAtDate ? Math.floor((Date.now() - submittedAtDate.getTime()) / (1000 * 60 * 60)) : 0;
@@ -562,10 +610,15 @@ export default function CheckInsPage() {
                                       </h3>
                                     </div>
                                     <p className="text-gray-600 text-xs sm:text-sm mt-1 truncate">
-                                      {checkIn.formTitle}
+                                      {getFormTitleWithWeek(checkIn)}
                                     </p>
                                     <p className="text-[10px] sm:text-xs text-gray-700 mt-0.5">
                                       {formatTimeAgo(checkIn.submittedAt)}
+                                      {checkIn.submittedAt && (
+                                        <span className="ml-2 text-gray-500">
+                                          • {formatDateOnly(checkIn.submittedAt)}
+                                        </span>
+                                      )}
                                       {isOverdue && <span className="ml-2 text-[#FF3B30] font-semibold">(Overdue)</span>}
                                     </p>
                                   </div>
@@ -642,8 +695,8 @@ export default function CheckInsPage() {
                     </div>
 
                     {(() => {
-                      // Filter replied check-ins by time period
-                      let repliedCheckIns = checkInsToReview.filter(ci => ci.coachResponded);
+                      // Start with filtered check-ins to review (applies client/form/date filters), then filter for replied
+                      let repliedCheckIns = filteredCheckInsToReview.filter(ci => ci.coachResponded);
                       
                       const now = new Date();
                       if (repliedTimeFilter === 'week') {

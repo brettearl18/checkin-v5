@@ -44,6 +44,9 @@ export async function GET(request: NextRequest) {
       let allAssignments: any[] = [];
       const assignmentMap = new Map<string, any>();
       
+      // Cache for formResponse data to avoid duplicate reads
+      const formResponseCache = new Map<string, any>();
+      
       try {
         // Query formResponses by coachId - this finds ALL completed check-ins for this coach
         const formResponsesSnapshot = await db.collection('formResponses')
@@ -53,60 +56,86 @@ export async function GET(request: NextRequest) {
         
         console.log(`Found ${formResponsesSnapshot.size} completed form responses for coach`);
         
-        // For each response, get its assignment
-        const assignmentPromises = formResponsesSnapshot.docs.map(async (responseDoc) => {
+        // Cache all formResponse data to avoid re-reading later
+        formResponsesSnapshot.docs.forEach(responseDoc => {
+          const responseData = responseDoc.data();
+          formResponseCache.set(responseDoc.id, responseData);
+        });
+        
+        // Collect unique assignment IDs for batch reading
+        const assignmentIdsToFetch = new Set<string>();
+        const responseToAssignmentMap = new Map<string, string>(); // responseId -> assignmentId
+        
+        formResponsesSnapshot.docs.forEach(responseDoc => {
           const responseData = responseDoc.data();
           const responseClientId = responseData.clientId;
           
           // Only include responses for clients that belong to this coach (safety check)
           if (!clientIdsSet.has(responseClientId)) {
-            return null;
+            return;
           }
           
           const assignmentId = responseData.assignmentId;
-          if (!assignmentId) {
-            console.log(`Response ${responseDoc.id} has no assignmentId`);
-            return null;
+          if (assignmentId) {
+            assignmentIdsToFetch.add(assignmentId);
+            responseToAssignmentMap.set(responseDoc.id, assignmentId);
           }
-          
-          try {
-            // Get the assignment document
-            const assignmentDoc = await db.collection('check_in_assignments').doc(assignmentId).get();
-            if (assignmentDoc.exists) {
-              const assignmentData = assignmentDoc.data();
-              
-              // Verify this assignment belongs to one of our clients (double-check)
-              if (clientIdsSet.has(assignmentData?.clientId)) {
-                // Merge response data into assignment for completeness
-                return {
-                  id: assignmentDoc.id,
-                  ...assignmentData,
-                  responseId: responseDoc.id, // Ensure responseId is set
-                  completedAt: assignmentData?.completedAt || responseData.completedAt || responseData.submittedAt,
-                  status: 'completed', // Force status to completed
-                  score: assignmentData?.score || responseData.score || 0,
-                  totalQuestions: assignmentData?.totalQuestions || responseData.totalQuestions || 0,
-                  answeredQuestions: assignmentData?.answeredQuestions || responseData.answeredQuestions || 0
-                };
-              }
-            } else {
-              console.log(`Assignment ${assignmentId} not found for response ${responseDoc.id}`);
-            }
-          } catch (error) {
-            console.log(`Error fetching assignment ${assignmentId} for response ${responseDoc.id}:`, error);
-          }
-          
-          return null;
         });
         
-        const assignmentResults = await Promise.all(assignmentPromises);
-        assignmentResults.forEach(assignment => {
-          if (assignment) {
+        // Batch fetch all assignments at once (more efficient than individual reads)
+        const assignmentDocsMap = new Map<string, any>();
+        if (assignmentIdsToFetch.size > 0) {
+          // Firestore batch get (up to 10 at a time due to getAll() limit)
+          const assignmentIdsArray = Array.from(assignmentIdsToFetch);
+          const batchSize = 10;
+          
+          for (let i = 0; i < assignmentIdsArray.length; i += batchSize) {
+            const batch = assignmentIdsArray.slice(i, i + batchSize);
+            const assignmentRefs = batch.map(id => db.collection('check_in_assignments').doc(id));
+            const batchDocs = await db.getAll(...assignmentRefs);
+            
+            batchDocs.forEach(doc => {
+              if (doc.exists) {
+                assignmentDocsMap.set(doc.id, doc.data());
+              }
+            });
+          }
+        }
+        
+        // Build assignments from cached data
+        formResponsesSnapshot.docs.forEach(responseDoc => {
+          const responseData = formResponseCache.get(responseDoc.id);
+          if (!responseData) return;
+          
+          const responseClientId = responseData.clientId;
+          if (!clientIdsSet.has(responseClientId)) return;
+          
+          const assignmentId = responseToAssignmentMap.get(responseDoc.id);
+          if (!assignmentId) return;
+          
+          const assignmentData = assignmentDocsMap.get(assignmentId);
+          if (!assignmentData) return;
+          
+          // Verify this assignment belongs to one of our clients (double-check)
+          if (clientIdsSet.has(assignmentData?.clientId)) {
+            // Merge response data into assignment for completeness
+            const mergedAssignment = {
+              id: assignmentId,
+              ...assignmentData,
+              responseId: responseDoc.id, // Ensure responseId is set
+              completedAt: assignmentData?.completedAt || responseData.completedAt || responseData.submittedAt,
+              status: 'completed', // Force status to completed
+              score: assignmentData?.score || responseData.score || 0,
+              totalQuestions: assignmentData?.totalQuestions || responseData.totalQuestions || 0,
+              answeredQuestions: assignmentData?.answeredQuestions || responseData.answeredQuestions || 0,
+              // Store response data for later use (to avoid re-reading)
+              _cachedResponseData: responseData
+            };
+            
             // Use responseId as key if available (prevents duplicates from same response)
-            // Otherwise use assignment ID
-            const key = assignment.responseId || assignment.id;
+            const key = mergedAssignment.responseId || mergedAssignment.id;
             if (!assignmentMap.has(key)) {
-              assignmentMap.set(key, assignment);
+              assignmentMap.set(key, mergedAssignment);
             }
           }
         });
@@ -180,7 +209,6 @@ export async function GET(request: NextRequest) {
       allAssignments = Array.from(assignmentMap.values());
 
       console.log('Found completed assignments:', allAssignments.length);
-      console.log('Assignments:', allAssignments);
 
       // Helper to convert Firestore Timestamp to ISO string
       const convertDate = (dateField: any) => {
@@ -200,92 +228,88 @@ export async function GET(request: NextRequest) {
         return null;
       };
 
-      // Build check-ins to review with client data and fetch scores from responses if needed
-      const checkInsWithStatus = await Promise.all(allAssignments.map(async (assignment) => {
+      // OPTIMIZATION: Batch fetch all coachFeedback at once (much cheaper than individual queries)
+      const responseIds = allAssignments
+        .map(a => a.responseId)
+        .filter((id): id is string => !!id);
+      
+      const feedbackMap = new Map<string, boolean>(); // responseId -> hasFeedback
+      if (responseIds.length > 0) {
+        try {
+          // Query all feedback for these responses in one query
+          // Note: Firestore 'in' queries are limited to 10 items, so we batch them
+          const batchSize = 10;
+          for (let i = 0; i < responseIds.length; i += batchSize) {
+            const batch = responseIds.slice(i, i + batchSize);
+            const feedbackSnapshot = await db.collection('coachFeedback')
+              .where('responseId', 'in', batch)
+              .where('coachId', '==', coachId)
+              .get();
+            
+            feedbackSnapshot.docs.forEach(doc => {
+              const feedbackData = doc.data();
+              if (feedbackData.responseId) {
+                feedbackMap.set(feedbackData.responseId, true);
+              }
+            });
+          }
+        } catch (error) {
+          console.log('Error batch fetching feedback:', error);
+        }
+      }
+
+      // Build check-ins to review with client data - using cached data where possible
+      const checkInsWithStatus = allAssignments.map((assignment) => {
         const client = clients.find(c => c.id === assignment.clientId);
         
-        // Get score from assignment, or fetch from response if missing
+        // Get score from assignment, or use cached response data if available
         let score = assignment.score || 0;
         let totalQuestions = assignment.totalQuestions || 0;
         let answeredQuestions = assignment.answeredQuestions || 0;
-        
-        // If score is missing or 0, try to get it from the form response
-        if ((!assignment.score || assignment.score === 0) && assignment.responseId) {
-          try {
-            const responseDoc = await db.collection('formResponses').doc(assignment.responseId).get();
-            if (responseDoc.exists()) {
-              const responseData = responseDoc.data();
-              score = responseData?.score || responseData?.percentageScore || score;
-              totalQuestions = responseData?.totalQuestions || totalQuestions;
-              answeredQuestions = responseData?.answeredQuestions || answeredQuestions;
-              
-              // Update the assignment with the score for future queries
-              if (score > 0) {
-                try {
-                  await db.collection('check_in_assignments').doc(assignment.id).update({
-                    score: score,
-                    totalQuestions: totalQuestions,
-                    answeredQuestions: answeredQuestions
-                  });
-                } catch (updateError) {
-                  console.log('Error updating assignment score:', updateError);
-                  // Don't fail if update doesn't work
-                }
-              }
-            }
-          } catch (error) {
-            console.log(`Error fetching response for assignment ${assignment.id}:`, error);
-          }
-        }
-        
-        // Check if coach has responded (has feedback) or marked as reviewed
-        let coachResponded = false;
+        let recurringWeek = assignment.recurringWeek;
+        let totalWeeks = assignment.totalWeeks || assignment.duration;
+        let dueDate = assignment.dueDate;
         let reviewedByCoach = false;
-        let workflowStatus = 'completed';
-        if (assignment.responseId) {
-          try {
-            // Check for coach feedback
-            const feedbackSnapshot = await db.collection('coachFeedback')
-              .where('responseId', '==', assignment.responseId)
-              .where('coachId', '==', coachId)
-              .limit(1)
-              .get();
-            
-            coachResponded = !feedbackSnapshot.empty;
-            
-            // Check if response is marked as reviewed
-            const responseDoc = await db.collection('formResponses').doc(assignment.responseId).get();
-            if (responseDoc.exists) {
-              const responseData = responseDoc.data();
-              reviewedByCoach = responseData?.reviewedByCoach || false;
-            }
-            
-            // Also check assignment for reviewed status
-            if (!reviewedByCoach) {
-              reviewedByCoach = assignment.reviewedByCoach || false;
-            }
-            
-            if (coachResponded) {
-              workflowStatus = 'responded';
-            } else if (reviewedByCoach) {
-              workflowStatus = 'reviewed';
-            }
-          } catch (error) {
-            console.log('Error checking feedback:', error);
+        
+        // Use cached response data if available (from initial query) - NO ADDITIONAL READ
+        const responseData = assignment._cachedResponseData || null;
+        if (responseData) {
+          score = responseData?.score || responseData?.percentageScore || score;
+          totalQuestions = responseData?.totalQuestions || totalQuestions;
+          answeredQuestions = responseData?.answeredQuestions || answeredQuestions;
+          
+          // Get recurringWeek from response if not in assignment (response is more accurate)
+          if (responseData?.recurringWeek !== undefined && responseData?.recurringWeek !== null) {
+            recurringWeek = responseData.recurringWeek;
           }
-        } else {
-          // Check assignment directly if no responseId
-          reviewedByCoach = assignment.reviewedByCoach || false;
-          if (reviewedByCoach) {
-            workflowStatus = 'reviewed';
-          }
+          
+          // Check if response is marked as reviewed (using cached data - NO READ)
+          reviewedByCoach = responseData?.reviewedByCoach || false;
         }
+        
+        // Check if coach has responded using pre-fetched feedback map (NO READ)
+        const coachResponded = assignment.responseId ? feedbackMap.has(assignment.responseId) : false;
+        
+        let workflowStatus = 'completed';
+        if (coachResponded) {
+          workflowStatus = 'responded';
+        } else if (reviewedByCoach) {
+          workflowStatus = 'reviewed';
+        }
+        
+        // Clean up cached data (don't send it in response)
+        delete assignment._cachedResponseData;
+        // If no responseId, assume not reviewed (no way to verify)
         
         // Skip check-ins that have been reviewed (they should not appear in "To Review")
-        if (reviewedByCoach || workflowStatus === 'reviewed') {
+        // Only skip if there's actual feedback OR response explicitly says reviewed
+        if (coachResponded || reviewedByCoach) {
           return null; // Filter this out
         }
 
+        // Format dueDate if available
+        const formattedDueDate = dueDate ? convertDate(dueDate) : null;
+        
         return {
           id: assignment.responseId || `assignment-${assignment.id}`, // Use responseId if available, or create unique ID from assignment ID
           clientId: assignment.clientId,
@@ -300,9 +324,14 @@ export async function GET(request: NextRequest) {
           assignmentId: assignment.id,
           responseId: assignment.responseId, // Include responseId for reference
           coachResponded: coachResponded || assignment.coachResponded || false,
-          workflowStatus: workflowStatus || assignment.workflowStatus || 'completed'
+          workflowStatus: workflowStatus || assignment.workflowStatus || 'completed',
+          // Week and date information
+          recurringWeek: recurringWeek || null,
+          totalWeeks: totalWeeks || null,
+          dueDate: formattedDueDate,
+          isRecurring: assignment.isRecurring || false
         };
-      }));
+      });
 
       // Filter out null values (reviewed check-ins) and sort the results
       checkInsToReview = checkInsWithStatus.filter((ci): ci is NonNullable<typeof ci> => ci !== null);
@@ -327,8 +356,7 @@ export async function GET(request: NextRequest) {
         return sortOrder === 'desc' ? -comparison : comparison;
       });
 
-      // Limit to top 20 for performance
-      checkInsToReview = checkInsToReview.slice(0, 20);
+      // No limit - show all check-ins that need review
 
     } catch (error) {
       console.error('Error fetching check-ins to review:', error);
