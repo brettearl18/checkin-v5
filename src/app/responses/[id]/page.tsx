@@ -654,47 +654,23 @@ export default function ResponseDetailPage() {
             <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-4 sm:px-6 lg:px-8 py-4 sm:py-5 lg:py-6 border-b border-gray-100">
               <div className="flex items-center justify-between">
                 <h2 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900">Response Summary</h2>
-                {(() => {
-                  // Try multiple ways to get clientId
-                  let clientId = response.clientId || assignmentClientId;
-                  
-                  // If not in response, try from checkInsList
-                  if (!clientId && checkInsList.length > 0) {
-                    // Try current index first
-                    if (currentIndex >= 0 && checkInsList[currentIndex]?.clientId) {
-                      clientId = checkInsList[currentIndex].clientId;
-                    } else {
-                      // Try to find by matching id or responseId
-                      const matchingCheckIn = checkInsList.find(ci => 
-                        ci.id === responseId || 
-                        ci.responseId === responseId ||
-                        ci.id === response.id ||
-                        ci.responseId === response.id
-                      );
-                      if (matchingCheckIn?.clientId) {
-                        clientId = matchingCheckIn.clientId;
-                      }
-                    }
-                  }
-                  
-                  return clientId ? (
-                    <Link
-                      href={`/clients/${clientId}/progress`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
-                    >
-                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                      </svg>
-                      <span className="hidden sm:inline">View Client Profile</span>
-                      <span className="sm:hidden">Profile</span>
-                      <svg className="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                      </svg>
-                    </Link>
-                  ) : null;
-                })()}
+                {response?.clientId ? (
+                  <Link
+                    href={`/clients/${response.clientId}/progress`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
+                  >
+                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                    <span className="hidden sm:inline">View Client Profile</span>
+                    <span className="sm:hidden">Profile</span>
+                    <svg className="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
+                  </Link>
+                ) : null}
               </div>
             </div>
             <div className="p-4 sm:p-6 lg:p-8">
