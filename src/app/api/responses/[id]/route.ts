@@ -31,6 +31,7 @@ export async function GET(
     // First, try to find the response directly
     let responseDoc = await db.collection('formResponses').doc(id).get();
     let responseData = null;
+    let assignmentClientId = null;
 
     if (responseDoc.exists) {
       responseData = responseDoc.data();
@@ -57,6 +58,7 @@ export async function GET(
           
           if (assignmentDoc.exists) {
             const assignmentData = assignmentDoc.data();
+            assignmentClientId = assignmentData?.clientId;
             
             // First, try using responseId from assignment if it exists
             if (assignmentData?.responseId) {
@@ -88,6 +90,19 @@ export async function GET(
         } catch (error) {
           console.log('Error fetching assignment:', error);
         }
+      }
+    }
+    
+    // Always try to get clientId from assignment as fallback if not in response
+    if (!responseData?.clientId && !assignmentClientId) {
+      try {
+        const assignmentDoc = await db.collection('check_in_assignments').doc(id).get();
+        if (assignmentDoc.exists) {
+          const assignmentData = assignmentDoc.data();
+          assignmentClientId = assignmentData?.clientId;
+        }
+      } catch (error) {
+        console.log('Error fetching assignment for clientId fallback:', error);
       }
     }
 
@@ -259,7 +274,7 @@ export async function GET(
     // Format the response
     const formattedResponse = {
       id: responseDoc.id,
-      clientId: responseData?.clientId || '',
+      clientId: responseData?.clientId || assignmentClientId || '',
       clientName: responseData?.clientName || clientName,
       formId: responseData?.formId || '',
       formTitle: responseData?.formTitle || formTitle,

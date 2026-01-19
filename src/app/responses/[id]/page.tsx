@@ -68,6 +68,7 @@ export default function ResponseDetailPage() {
   const [expandedQuestions, setExpandedQuestions] = useState<Set<string>>(new Set()); // Track expanded questions
   const [sortBy, setSortBy] = useState<'default' | 'score'>('default'); // Sort order for Answer Summary
   const [reactions, setReactions] = useState<{ [questionId: string]: { [coachId: string]: { emoji: string; coachName: string; createdAt: string } } }>({});
+  const [assignmentClientId, setAssignmentClientId] = useState<string | null>(null);
 
   useEffect(() => {
     // Wait for auth to finish loading before fetching data
@@ -124,6 +125,25 @@ export default function ResponseDetailPage() {
         setWorkflowStatus(responseData.response?.workflowStatus || 'completed');
         setFeedbackCount(responseData.response?.feedbackCount || 0);
         setReactions(responseData.response?.reactions || {});
+        
+        // If clientId is missing from response, try to fetch from assignment
+        // First try using assignmentId from response, then try responseId as fallback
+        if (!responseData.response?.clientId) {
+          const assignmentIdToTry = responseData.response?.assignmentId || responseId;
+          if (assignmentIdToTry) {
+            try {
+              const assignmentRes = await fetch(`/api/check-in-assignments/${assignmentIdToTry}`);
+              if (assignmentRes.ok) {
+                const assignmentData = await assignmentRes.json();
+                if (assignmentData.success && assignmentData.assignment?.clientId) {
+                  setAssignmentClientId(assignmentData.assignment.clientId);
+                }
+              }
+            } catch (error) {
+              console.log('Error fetching assignment for clientId:', error);
+            }
+          }
+        }
         
         // Find current check-in index after we have both the list and the response
         if (checkIns.length > 0 && responseData.response) {
@@ -634,23 +654,47 @@ export default function ResponseDetailPage() {
             <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-4 sm:px-6 lg:px-8 py-4 sm:py-5 lg:py-6 border-b border-gray-100">
               <div className="flex items-center justify-between">
                 <h2 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900">Response Summary</h2>
-                {response.clientId && (
-                  <Link
-                    href={`/clients/${response.clientId}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
-                  >
-                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                    </svg>
-                    <span className="hidden sm:inline">View Client Profile</span>
-                    <span className="sm:hidden">Profile</span>
-                    <svg className="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                    </svg>
-                  </Link>
-                )}
+                {(() => {
+                  // Try multiple ways to get clientId
+                  let clientId = response.clientId || assignmentClientId;
+                  
+                  // If not in response, try from checkInsList
+                  if (!clientId && checkInsList.length > 0) {
+                    // Try current index first
+                    if (currentIndex >= 0 && checkInsList[currentIndex]?.clientId) {
+                      clientId = checkInsList[currentIndex].clientId;
+                    } else {
+                      // Try to find by matching id or responseId
+                      const matchingCheckIn = checkInsList.find(ci => 
+                        ci.id === responseId || 
+                        ci.responseId === responseId ||
+                        ci.id === response.id ||
+                        ci.responseId === response.id
+                      );
+                      if (matchingCheckIn?.clientId) {
+                        clientId = matchingCheckIn.clientId;
+                      }
+                    }
+                  }
+                  
+                  return clientId ? (
+                    <Link
+                      href={`/clients/${clientId}/progress`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
+                    >
+                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                      <span className="hidden sm:inline">View Client Profile</span>
+                      <span className="sm:hidden">Profile</span>
+                      <svg className="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                    </Link>
+                  ) : null;
+                })()}
               </div>
             </div>
             <div className="p-4 sm:p-6 lg:p-8">
