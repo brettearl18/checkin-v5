@@ -3,7 +3,51 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
+import dynamic from 'next/dynamic';
+import { useAuth } from '@/contexts/AuthContext';
 import CoachNavigation from '@/components/CoachNavigation';
+
+// Lazy load recharts components to reduce initial bundle size
+const ResponsiveContainer = dynamic(
+  () => import('recharts').then((mod) => mod.ResponsiveContainer),
+  { ssr: false, loading: () => <div className="h-64 w-full flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-300"></div></div> }
+);
+
+const LineChart = dynamic(
+  () => import('recharts').then((mod) => mod.LineChart),
+  { ssr: false }
+);
+
+const Line = dynamic(
+  () => import('recharts').then((mod) => mod.Line),
+  { ssr: false }
+);
+
+const XAxis = dynamic(
+  () => import('recharts').then((mod) => mod.XAxis),
+  { ssr: false }
+);
+
+const YAxis = dynamic(
+  () => import('recharts').then((mod) => mod.YAxis),
+  { ssr: false }
+);
+
+const CartesianGrid = dynamic(
+  () => import('recharts').then((mod) => mod.CartesianGrid),
+  { ssr: false }
+);
+
+const Tooltip = dynamic(
+  () => import('recharts').then((mod) => mod.Tooltip),
+  { ssr: false }
+);
+
+const Legend = dynamic(
+  () => import('recharts').then((mod) => mod.Legend),
+  { ssr: false }
+);
 
 interface QuestionResponse {
   questionId: string;
@@ -48,6 +92,7 @@ interface QuestionProgress {
 export default function ClientProgressPage() {
   const params = useParams();
   const router = useRouter();
+  const { userProfile } = useAuth();
   const clientId = params.id as string;
   const [client, setClient] = useState<any>(null);
   const [responses, setResponses] = useState<FormResponse[]>([]);
@@ -65,14 +110,26 @@ export default function ClientProgressPage() {
   const [measurementHistory, setMeasurementHistory] = useState<any[]>([]);
   const [allMeasurementsData, setAllMeasurementsData] = useState<any[]>([]);
   const [loadingMeasurements, setLoadingMeasurements] = useState(false);
+  const [selectedMeasurements, setSelectedMeasurements] = useState<Set<string>>(new Set(['bodyWeight']));
+  const [progressImages, setProgressImages] = useState<any[]>([]);
+  const [loadingImages, setLoadingImages] = useState(false);
+  const [unrespondedCheckIns, setUnrespondedCheckIns] = useState<any[]>([]);
+  const [loadingCheckIns, setLoadingCheckIns] = useState(false);
 
   useEffect(() => {
     if (clientId) {
       fetchClientData();
       fetchQuestionProgress();
       fetchMeasurementHistory();
+      fetchProgressImages();
     }
   }, [clientId]);
+
+  useEffect(() => {
+    if (clientId && userProfile?.uid) {
+      fetchUnrespondedCheckIns();
+    }
+  }, [clientId, userProfile?.uid]);
 
   const fetchClientData = async () => {
     try {
@@ -150,6 +207,42 @@ export default function ClientProgressPage() {
       setAllMeasurementsData([]);
     } finally {
       setLoadingMeasurements(false);
+    }
+  };
+
+  const fetchProgressImages = async () => {
+    if (!clientId) return;
+
+    setLoadingImages(true);
+    try {
+      const response = await fetch(`/api/progress-images?clientId=${clientId}&limit=12`);
+      const data = await response.json();
+      if (data.success) {
+        setProgressImages(data.data || []);
+      }
+    } catch (error) {
+      console.error('Error fetching progress images:', error);
+    } finally {
+      setLoadingImages(false);
+    }
+  };
+
+  const fetchUnrespondedCheckIns = async () => {
+    if (!clientId || !userProfile?.uid) return;
+
+    setLoadingCheckIns(true);
+    try {
+      const response = await fetch(`/api/dashboard/check-ins-to-review?coachId=${userProfile.uid}&sortBy=submittedAt&sortOrder=desc`);
+      const data = await response.json();
+      if (data.success && data.data?.checkIns) {
+        // Filter to only show check-ins for this specific client
+        const clientCheckIns = data.data.checkIns.filter((checkIn: any) => checkIn.clientId === clientId);
+        setUnrespondedCheckIns(clientCheckIns.slice(0, 10)); // Show latest 10
+      }
+    } catch (error) {
+      console.error('Error fetching unresponded check-ins:', error);
+    } finally {
+      setLoadingCheckIns(false);
     }
   };
 
@@ -416,6 +509,64 @@ export default function ClientProgressPage() {
     }
   };
 
+  // Helper functions for measurements
+  const getAvailableMeasurements = () => {
+    const available = new Set<string>();
+    
+    allMeasurementsData.forEach(m => {
+      if (m.bodyWeight !== null && m.bodyWeight !== undefined && m.bodyWeight > 0) {
+        available.add('bodyWeight');
+      }
+      if (m.measurements) {
+        Object.keys(m.measurements).forEach(key => {
+          if (m.measurements[key] !== null && m.measurements[key] !== undefined && m.measurements[key] > 0) {
+            available.add(key);
+          }
+        });
+      }
+    });
+    
+    return Array.from(available);
+  };
+
+  const toggleMeasurement = (measurement: string) => {
+    const newSet = new Set(selectedMeasurements);
+    if (newSet.has(measurement)) {
+      newSet.delete(measurement);
+    } else {
+      newSet.add(measurement);
+    }
+    setSelectedMeasurements(newSet);
+  };
+
+  const getMeasurementColor = (index: number) => {
+    const colors = [
+      'bg-blue-500',
+      'bg-green-500',
+      'bg-purple-500',
+      'bg-orange-500',
+      'bg-pink-500',
+      'bg-indigo-500',
+      'bg-red-500',
+      'bg-yellow-500'
+    ];
+    return colors[index % colors.length];
+  };
+
+  const getMeasurementLabel = (key: string) => {
+    const labels: { [key: string]: string } = {
+      bodyWeight: 'Body Weight (kg)',
+      waist: 'Waist (cm)',
+      chest: 'Chest (cm)',
+      hips: 'Hips (cm)',
+      leftThigh: 'Left Thigh (cm)',
+      rightThigh: 'Right Thigh (cm)',
+      leftArm: 'Left Arm (cm)',
+      rightArm: 'Right Arm (cm)'
+    };
+    return labels[key] || key;
+  };
+
   if (loading && !questionProgress.length) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex">
@@ -577,6 +728,335 @@ export default function ClientProgressPage() {
                 <div className="text-center py-4 text-gray-500 text-sm">No goals set</div>
               )}
             </div>
+          </div>
+        </div>
+
+        {/* Measurements Graph and Progress Photos - Side by Side */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+          {/* Body Measurements Graph - Left Side */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="bg-purple-50 px-6 py-4 border-b border-gray-100">
+              <h2 className="text-lg font-bold text-gray-900">Measurement Trends</h2>
+              <p className="text-sm text-gray-600 mt-1">Track weight and body measurements over time</p>
+            </div>
+            
+            <div className="p-6">
+              {/* Measurement Toggles */}
+              {getAvailableMeasurements().length > 0 ? (
+                <>
+                  <div className="mb-4 flex flex-wrap gap-2">
+                    {getAvailableMeasurements().map((measurement, index) => (
+                      <button
+                        key={measurement}
+                        onClick={() => toggleMeasurement(measurement)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                          selectedMeasurements.has(measurement)
+                            ? `${getMeasurementColor(index)} text-white`
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                      >
+                        {getMeasurementLabel(measurement)}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Graph */}
+                  {selectedMeasurements.size > 0 ? (
+                    <div className="h-96 w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart
+                          data={allMeasurementsData.map(m => {
+                            const date = m.date instanceof Date ? m.date : new Date(m.date);
+                            const dataPoint: any = {
+                              date: date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' }),
+                              fullDate: date.toISOString(),
+                              isBaseline: m.isBaseline
+                            };
+                            
+                            // Add selected measurements to data point
+                            selectedMeasurements.forEach(key => {
+                              const value = key === 'bodyWeight' 
+                                ? (m.bodyWeight || null)
+                                : (m.measurements?.[key] || null);
+                              if (value !== null && value !== undefined && value > 0) {
+                                dataPoint[getMeasurementLabel(key)] = Number(value.toFixed(1));
+                              }
+                            });
+                            
+                            return dataPoint;
+                          })}
+                          margin={{ top: 10, right: 30, left: 20, bottom: 60 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                          <XAxis 
+                            dataKey="date" 
+                            stroke="#6b7280"
+                            fontSize={11}
+                            tick={{ fill: '#6b7280' }}
+                            angle={-45}
+                            textAnchor="end"
+                            height={60}
+                          />
+                          <YAxis
+                            stroke="#6b7280"
+                            fontSize={11}
+                            tick={{ fill: '#6b7280' }}
+                            label={{ 
+                              value: Array.from(selectedMeasurements).some(k => k === 'bodyWeight') 
+                                ? 'kg / cm' 
+                                : 'cm', 
+                              angle: -90, 
+                              position: 'insideLeft', 
+                              fill: '#6b7280', 
+                              fontSize: 11 
+                            }}
+                          />
+                          <Tooltip 
+                            contentStyle={{ 
+                              backgroundColor: 'white', 
+                              border: '1px solid #e5e7eb',
+                              borderRadius: '8px',
+                              fontSize: '12px'
+                            }}
+                            formatter={(value: any, name: string) => {
+                              const unit = name.includes('Body Weight') ? ' kg' : ' cm';
+                              return [`${value}${unit}`, name];
+                            }}
+                            labelFormatter={(label) => `Date: ${label}`}
+                          />
+                          <Legend 
+                            wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }}
+                            iconType="line"
+                          />
+                          {Array.from(selectedMeasurements).map((key, index) => {
+                            const colorMap = [
+                              '#3b82f6', // blue
+                              '#10b981', // green
+                              '#8b5cf6', // purple
+                              '#f97316', // orange
+                              '#ec4899', // pink
+                              '#6366f1', // indigo
+                              '#ef4444', // red
+                              '#eab308'  // yellow
+                            ];
+                            const color = colorMap[index % colorMap.length];
+                            const label = getMeasurementLabel(key);
+                            
+                            // Check if this measurement has any data
+                            const hasData = allMeasurementsData.some(m => {
+                              const value = key === 'bodyWeight' 
+                                ? (m.bodyWeight || 0)
+                                : (m.measurements?.[key] || 0);
+                              return value > 0;
+                            });
+                            
+                            if (!hasData) return null;
+                            
+                            return (
+                              <Line 
+                                key={key}
+                                type="monotone" 
+                                dataKey={label}
+                                stroke={color}
+                                strokeWidth={2}
+                                dot={{ fill: color, r: 4 }}
+                                activeDot={{ r: 6 }}
+                              />
+                            );
+                          })}
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-gray-500">
+                      <p className="text-sm">Select measurements to view on the graph</p>
+                    </div>
+                  )}
+                </>
+              ) : allMeasurementsData.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <p className="text-sm">No measurement data available</p>
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          {/* Progress Photos - Right Side */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="bg-pink-50 px-6 py-4 border-b border-gray-100">
+              <h2 className="text-lg font-bold text-gray-900">Progress Photos</h2>
+              <p className="text-sm text-gray-600 mt-1">Visual progress tracking over time</p>
+            </div>
+            <div className="p-6">
+              {loadingImages ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-pink-500 mx-auto mb-3"></div>
+                  <p className="text-gray-500 text-sm">Loading images...</p>
+                </div>
+              ) : progressImages.length === 0 ? (
+                <div className="text-center py-8">
+                  <div className="w-12 h-12 bg-pink-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <svg className="w-6 h-6 text-pink-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                  <p className="text-gray-500 text-sm mb-1">No progress images yet</p>
+                  <p className="text-gray-400 text-xs">Client photos will appear here as they're uploaded</p>
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    {progressImages.slice(0, 6).map((image) => (
+                      <div key={image.id} className="flex flex-col">
+                        <div className="group relative aspect-square rounded-xl overflow-hidden border border-gray-200 hover:border-pink-300 transition-all duration-300 hover:shadow-lg bg-white">
+                          <Image
+                            src={image.imageUrl}
+                            alt={image.caption || image.imageType}
+                            width={400}
+                            height={400}
+                            className="w-full h-full object-cover"
+                            loading="lazy"
+                            unoptimized={image.imageUrl?.includes('firebase') ? false : undefined}
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = `data:image/svg+xml,${encodeURIComponent(`
+                                <svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
+                                  <rect width="200" height="200" fill="#f3f4f6"/>
+                                  <text x="50%" y="50%" font-family="Arial" font-size="14" fill="#9ca3af" text-anchor="middle" dy=".3em">Image</text>
+                                </svg>
+                              `)}`;
+                            }}
+                          />
+                          <div className="absolute top-2 left-2 flex flex-col gap-1">
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                              image.imageType === 'profile' ? 'bg-blue-100 text-blue-800' :
+                              image.imageType === 'before' ? 'bg-orange-100 text-orange-800' :
+                              image.imageType === 'after' ? 'bg-green-100 text-green-800' :
+                              'bg-purple-100 text-purple-800'
+                            }`}>
+                              {image.imageType === 'profile' ? 'Profile' :
+                               image.imageType === 'before' ? 'Before' :
+                               image.imageType === 'after' ? 'After' :
+                               'Progress'}
+                            </span>
+                            {image.orientation && (
+                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                image.orientation === 'front' ? 'bg-pink-100 text-pink-800' :
+                                image.orientation === 'back' ? 'bg-indigo-100 text-indigo-800' :
+                                'bg-teal-100 text-teal-800'
+                              }`}>
+                                {image.orientation.charAt(0).toUpperCase() + image.orientation.slice(1)}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="mt-2 text-center">
+                          <p className="text-gray-700 text-xs font-semibold">
+                            {new Date(image.uploadedAt).toLocaleDateString('en-US', { 
+                              month: 'short', 
+                              day: 'numeric',
+                              year: 'numeric'
+                            })}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {progressImages.length > 6 && (
+                    <div className="mt-4 text-center">
+                      <Link
+                        href={`/clients/${clientId}`}
+                        className="text-sm text-pink-600 hover:text-pink-800 font-medium"
+                      >
+                        View All Photos →
+                      </Link>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Un-Responded Check-ins Table */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mb-6">
+          <div className="bg-orange-50 px-6 py-4 border-b border-gray-100">
+            <h2 className="text-lg font-bold text-gray-900">Check-ins Awaiting Response</h2>
+            <p className="text-sm text-gray-600 mt-1">Click on any check-in to view and respond</p>
+          </div>
+          <div className="overflow-x-auto">
+            {loadingCheckIns ? (
+              <div className="p-8 text-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500 mx-auto mb-3"></div>
+                <p className="text-gray-500 text-sm">Loading check-ins...</p>
+              </div>
+            ) : unrespondedCheckIns.length > 0 ? (
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Form</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Week</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Submitted</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Score</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {unrespondedCheckIns.map((checkIn) => (
+                    <tr
+                      key={checkIn.id}
+                      onClick={() => {
+                        if (checkIn.responseId) {
+                          router.push(`/responses/${checkIn.responseId}`);
+                        }
+                      }}
+                      className="hover:bg-blue-50 cursor-pointer transition-colors"
+                    >
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div className="text-sm font-medium text-gray-900">{checkIn.formTitle || 'Unknown Form'}</div>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
+                        {checkIn.isRecurring && checkIn.recurringWeek ? (
+                          <span className="px-2 py-1 text-xs font-medium rounded-full bg-purple-100 text-purple-800">
+                            Week {checkIn.recurringWeek}/{checkIn.totalWeeks || '?'}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400">-</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
+                        {checkIn.submittedAt ? new Date(checkIn.submittedAt).toLocaleDateString('en-GB', {
+                          day: '2-digit',
+                          month: '2-digit',
+                          year: 'numeric'
+                        }) : '-'}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {checkIn.score !== undefined && checkIn.score !== null ? (
+                          <span className={`text-sm font-medium ${
+                            checkIn.score >= 70 ? 'text-green-600' :
+                            checkIn.score >= 40 ? 'text-orange-600' :
+                            'text-red-600'
+                          }`}>
+                            {checkIn.score}%
+                          </span>
+                        ) : (
+                          <span className="text-sm text-gray-400">-</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <div className="p-8 text-center">
+                <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <svg className="w-6 h-6 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <p className="text-gray-500 text-sm mb-1">All caught up!</p>
+                <p className="text-gray-400 text-xs">No check-ins awaiting response for this client</p>
+              </div>
+            )}
           </div>
         </div>
 

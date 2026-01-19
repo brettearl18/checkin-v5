@@ -1238,7 +1238,7 @@ export default function ClientsPage() {
                             <td className="px-4 py-2.5 whitespace-nowrap">
                               <div className="flex items-center justify-center gap-2">
                                 <Link
-                                  href={`/clients/${client.id}`}
+                                  href={`/clients/${client.id}/progress`}
                                   className="text-orange-600 hover:text-orange-700 text-xs font-medium"
                                 >
                                   View →
