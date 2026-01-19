@@ -3,7 +3,7 @@
  * Handles push events and notification clicks
  */
 
-const CACHE_NAME = 'vana-checkin-v1';
+const CACHE_NAME = 'vana-checkin-v2';
 const urlsToCache = [
   '/',
   '/icon-192.png',
