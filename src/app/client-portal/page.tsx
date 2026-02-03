@@ -321,6 +321,7 @@ export default function ClientPortalPage() {
   const [loadingAnalytics, setLoadingAnalytics] = useState(true);
   const [recentInvoices, setRecentInvoices] = useState<RecentInvoice[]>([]);
   const [totalPaidCount, setTotalPaidCount] = useState(0);
+  const [totalPendingCount, setTotalPendingCount] = useState(0);
   const [totalFailedCount, setTotalFailedCount] = useState(0);
   const [loadingRecentPayments, setLoadingRecentPayments] = useState(false);
 
@@ -429,6 +430,7 @@ export default function ClientPortalPage() {
     if (!clientId) {
       setRecentInvoices([]);
       setTotalPaidCount(0);
+      setTotalPendingCount(0);
       setTotalFailedCount(0);
       return;
     }
@@ -446,15 +448,18 @@ export default function ClientPortalPage() {
           const invoices = data.invoices;
           setRecentInvoices(invoices.slice(0, 3));
           setTotalPaidCount(invoices.filter((inv: RecentInvoice) => inv.status === 'paid').length);
-          setTotalFailedCount(invoices.filter((inv: RecentInvoice) => inv.status !== 'paid').length);
+          setTotalPendingCount(invoices.filter((inv: RecentInvoice) => inv.status === 'open').length);
+          setTotalFailedCount(invoices.filter((inv: RecentInvoice) => inv.status !== 'paid' && inv.status !== 'open').length);
         } else {
           setRecentInvoices([]);
           setTotalPaidCount(0);
+          setTotalPendingCount(0);
           setTotalFailedCount(0);
         }
       } catch {
         setRecentInvoices([]);
         setTotalPaidCount(0);
+        setTotalPendingCount(0);
         setTotalFailedCount(0);
       } finally {
         setLoadingRecentPayments(false);
@@ -2095,10 +2100,11 @@ export default function ClientPortalPage() {
                       </Link>
                     </div>
                     <div className="p-4 sm:p-5">
-                      {/* Paid / Failed summary (full duration - all invoices, not just last 3 on screen) */}
+                      {/* Paid / Pending / Failed summary (full duration - from Stripe) */}
                       {!loadingRecentPayments && (
-                        <div className="flex items-center gap-4 mb-3 pb-3 border-b border-emerald-100">
+                        <div className="flex flex-wrap items-center gap-4 mb-3 pb-3 border-b border-emerald-100">
                           <span className="text-sm font-medium text-green-700">Paid: {totalPaidCount}</span>
+                          <span className="text-sm font-medium text-amber-700">Pending: {totalPendingCount}</span>
                           <span className="text-sm font-medium text-red-700">Failed: {totalFailedCount}</span>
                         </div>
                       )}
@@ -2117,9 +2123,9 @@ export default function ClientPortalPage() {
                               <span className="text-gray-700">{inv.date ? formatDate(inv.date) : '—'}</span>
                               <span className="text-gray-900 font-medium">{inv.currency} {(inv.amount ?? 0).toFixed(2)}</span>
                               <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                                inv.status === 'paid' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                inv.status === 'paid' ? 'bg-green-100 text-green-800' : inv.status === 'open' ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'
                               }`}>
-                                {inv.status === 'paid' ? 'Paid' : inv.status === 'open' || inv.status === 'draft' ? 'Failed' : inv.status}
+                                {inv.status === 'paid' ? 'Paid' : inv.status === 'open' ? 'Pending' : inv.status === 'draft' || inv.status === 'uncollectible' || inv.status === 'void' ? 'Failed' : inv.status}
                               </span>
                             </li>
                           ))}
@@ -2280,10 +2286,11 @@ export default function ClientPortalPage() {
                     </Link>
                   </div>
                   <div className="p-4">
-                    {/* Paid / Failed summary (full duration - all invoices) */}
+                    {/* Paid / Pending / Failed summary (full duration - from Stripe) */}
                     {!loadingRecentPayments && (
-                      <div className="flex items-center gap-4 mb-3 pb-3 border-b border-emerald-100">
+                      <div className="flex flex-wrap items-center gap-4 mb-3 pb-3 border-b border-emerald-100">
                         <span className="text-sm font-medium text-green-700">Paid: {totalPaidCount}</span>
+                        <span className="text-sm font-medium text-amber-700">Pending: {totalPendingCount}</span>
                         <span className="text-sm font-medium text-red-700">Failed: {totalFailedCount}</span>
                       </div>
                     )}
@@ -2301,8 +2308,8 @@ export default function ClientPortalPage() {
                           <li key={inv.id} className="flex items-center justify-between text-sm py-1.5 border-b border-emerald-50 last:border-0">
                             <span className="text-gray-700">{inv.date ? formatDate(inv.date) : '—'}</span>
                             <span className="text-gray-900 font-medium">{inv.currency} {(inv.amount ?? 0).toFixed(2)}</span>
-                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${inv.status === 'paid' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                              {inv.status === 'paid' ? 'Paid' : inv.status === 'open' || inv.status === 'draft' ? 'Failed' : inv.status}
+                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${inv.status === 'paid' ? 'bg-green-100 text-green-800' : inv.status === 'open' ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'}`}>
+                              {inv.status === 'paid' ? 'Paid' : inv.status === 'open' ? 'Pending' : inv.status === 'draft' || inv.status === 'uncollectible' || inv.status === 'void' ? 'Failed' : inv.status}
                             </span>
                           </li>
                         ))}

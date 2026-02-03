@@ -172,6 +172,9 @@ export default function ClientProfilePage() {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
   const [billingAction, setBillingAction] = useState<'pause' | 'resume' | 'cancel' | null>(null);
+  const [stripeLookupLoading, setStripeLookupLoading] = useState(false);
+  const [stripeLookupResult, setStripeLookupResult] = useState<{ name: string | null; email: string | null } | null>(null);
+  const [stripeLookupError, setStripeLookupError] = useState<string | null>(null);
   const [clientSettings, setClientSettings] = useState({
     programStartDate: '',
     programDuration: 12, // weeks
@@ -269,6 +272,7 @@ export default function ClientProfilePage() {
     invoices: Array<{ id: string; date: string; amount: number; currency: string; status: string; invoicePdf?: string; hostedInvoiceUrl?: string }>;
     appProgram: { programStartDate: string | null; programDuration: number | null; programDurationUnit: string | null };
   } | null>(null);
+  const [billingStripeError, setBillingStripeError] = useState<string | null>(null);
   const [loadingBillingHistory, setLoadingBillingHistory] = useState(false);
   const [aiAnalytics, setAiAnalytics] = useState<any>(null);
   const [loadingAiAnalytics, setLoadingAiAnalytics] = useState(false);
@@ -391,11 +395,14 @@ export default function ClientProfilePage() {
           invoices: data.invoices || [],
           appProgram: data.appProgram || { programStartDate: null, programDuration: null, programDurationUnit: null },
         });
+        setBillingStripeError(data.stripeErrorMessage ?? null);
       } else {
         setBillingHistory(null);
+        setBillingStripeError(null);
       }
     } catch {
       setBillingHistory(null);
+      setBillingStripeError(null);
     } finally {
       setLoadingBillingHistory(false);
     }
@@ -476,6 +483,10 @@ export default function ClientProfilePage() {
         alert('Settings saved successfully!');
         setShowSettingsModal(false);
         fetchClient(); // Refresh client data
+        // Refetch billing history if Payment tab is open so Stripe data appears without switching tabs
+        if (activeTab === 'payment') {
+          fetchBillingHistory();
+        }
       } else {
         alert('Failed to save settings: ' + (data.error || 'Unknown error'));
       }
@@ -523,6 +534,38 @@ export default function ClientProfilePage() {
       const data = await res.json();
       if (data.success) { alert(data.message); fetchClient(); } else { alert(data.message || 'Failed to cancel'); }
     } catch (e) { alert('Request failed'); } finally { setBillingAction(null); }
+  };
+
+  const handleStripeConnect = async () => {
+    const customerId = clientSettings.stripeCustomerId?.trim();
+    if (!customerId || !customerId.startsWith('cus_')) {
+      setStripeLookupError('Enter a Stripe Customer ID (cus_...) first.');
+      setStripeLookupResult(null);
+      return;
+    }
+    setStripeLookupLoading(true);
+    setStripeLookupError(null);
+    setStripeLookupResult(null);
+    try {
+      const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
+      const res = await fetch(`/api/stripe/customer-lookup?customerId=${encodeURIComponent(customerId)}`, { headers });
+      const data = await res.json();
+      if (data.success && data.customer) {
+        setStripeLookupResult({
+          name: data.customer.name ?? null,
+          email: data.customer.email ?? null,
+        });
+        setStripeLookupError(null);
+      } else {
+        setStripeLookupError(data.message ?? 'Customer not found');
+        setStripeLookupResult(null);
+      }
+    } catch {
+      setStripeLookupError('Failed to look up customer');
+      setStripeLookupResult(null);
+    } finally {
+      setStripeLookupLoading(false);
+    }
   };
 
   const handleMealPlanChange = (selectedName: string) => {
@@ -5796,10 +5839,10 @@ export default function ClientProfilePage() {
                                         <td className="px-4 py-3">
                                           <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
                                             inv.status === 'paid' ? 'bg-green-100 text-green-800' :
-                                            inv.status === 'open' || inv.status === 'draft' ? 'bg-red-100 text-red-800' :
+                                            inv.status === 'open' ? 'bg-amber-100 text-amber-800' :
                                             'bg-red-100 text-red-800'
                                           }`}>
-                                            {inv.status === 'paid' ? 'Paid' : inv.status === 'open' || inv.status === 'draft' ? 'Failed' : inv.status}
+                                            {inv.status === 'paid' ? 'Paid' : inv.status === 'open' ? 'Pending' : inv.status === 'draft' || inv.status === 'uncollectible' || inv.status === 'void' ? 'Failed' : inv.status}
                                           </span>
                                         </td>
                                         <td className="px-4 py-3 text-right">
@@ -5820,7 +5863,14 @@ export default function ClientProfilePage() {
                                 </table>
                               </div>
                             ) : (
-                              <p className="text-gray-500 py-4">No payment history. Link a Stripe Customer ID in Settings to see invoices.</p>
+                              <div className="py-4 space-y-2">
+                                {billingStripeError && (
+                                  <p className="text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm">
+                                    {billingStripeError}
+                                  </p>
+                                )}
+                                <p className="text-gray-500">No payment history. Link a Stripe Customer ID in Settings to see invoices.</p>
+                              </div>
                             )}
                           </div>
                         </>
@@ -7560,15 +7610,43 @@ export default function ClientProfilePage() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Stripe Customer ID
                 </label>
-                <input
-                  type="text"
-                  value={clientSettings.stripeCustomerId}
-                  onChange={(e) => setClientSettings({...clientSettings, stripeCustomerId: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
-                  placeholder="cus_xxxxxxxxxxxxx (from Stripe Dashboard)"
-                />
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={clientSettings.stripeCustomerId}
+                    onChange={(e) => {
+                      setClientSettings({...clientSettings, stripeCustomerId: e.target.value});
+                      setStripeLookupResult(null);
+                      setStripeLookupError(null);
+                    }}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+                    placeholder="cus_xxxxxxxxxxxxx (from Stripe Dashboard)"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleStripeConnect}
+                    disabled={stripeLookupLoading || !clientSettings.stripeCustomerId?.trim()}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg whitespace-nowrap transition-colors"
+                  >
+                    {stripeLookupLoading ? 'Checking…' : 'Connect'}
+                  </button>
+                </div>
+                {stripeLookupResult && (
+                  <p className="mt-2 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                    ✓ Account holder: <strong>{stripeLookupResult.name || '—'}</strong>
+                    {stripeLookupResult.email && (
+                      <> ({stripeLookupResult.email})</>
+                    )}
+                    {!stripeLookupResult.name && !stripeLookupResult.email && ' No name/email in Stripe'}
+                  </p>
+                )}
+                {stripeLookupError && (
+                  <p className="mt-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                    {stripeLookupError}
+                  </p>
+                )}
                 <p className="text-xs text-gray-500 mt-1">
-                  Link this client to a Stripe customer so payment status (paid up / failed) appears on their profile. Paste the Customer ID from Stripe. Once set, Stripe webhooks will keep status in sync.
+                  Link this client to a Stripe customer so payment status (paid up / failed) appears on their profile. Paste the Customer ID from Stripe, click Connect to verify the account holder, then Save. Once set, Stripe webhooks will keep status in sync.
                 </p>
                 {client?.paymentStatus && (
                   <p className="text-xs font-medium text-gray-700 mt-2">

@@ -99,6 +99,7 @@ export async function GET(
     }
 
     const invoices: BillingHistoryInvoice[] = [];
+    let stripeErrorMessage: string | null = null;
     try {
       const list = await stripe.invoices.list({
         customer: stripeCustomerId,
@@ -122,13 +123,18 @@ export async function GET(
       }
       invoices.sort((a, b) => (b.date > a.date ? 1 : -1));
     } catch (e) {
+      const err = e as { code?: string; message?: string };
       logSafeError('Billing history: invoices list failed', e as Error);
+      if (err?.code === 'resource_missing_invalid_parameter' || (typeof err?.message === 'string' && err.message.toLowerCase().includes('no such customer'))) {
+        stripeErrorMessage = 'Customer not found in Stripe. Check that the Customer ID is correct (e.g. 0 vs O) and that your app uses the same Stripe mode (Test vs Live) as the dashboard.';
+      }
     }
 
     return NextResponse.json({
       success: true,
       subscription,
       invoices,
+      stripeErrorMessage: stripeErrorMessage ?? undefined,
       appProgram: {
         programStartDate: clientData?.programStartDate ?? null,
         programDuration: clientData?.programDuration ?? null,

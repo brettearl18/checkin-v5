@@ -219,6 +219,7 @@ export default function ClientPortalPaymentsPage() {
 
                     <div>
                       <h3 className="text-lg font-semibold text-gray-900 mb-3">Payment history</h3>
+                      <p className="text-xs text-gray-500 mb-2">Status is from Stripe. Pending includes bank transfers that can take a few days.</p>
                       {billingHistory?.invoices && billingHistory.invoices.length > 0 ? (
                         <div className="overflow-x-auto rounded-xl border border-gray-200">
                           <table className="min-w-full divide-y divide-gray-200">
@@ -242,12 +243,12 @@ export default function ClientPortalPaymentsPage() {
                                       className={`text-xs font-medium px-2 py-0.5 rounded-full ${
                                         inv.status === 'paid'
                                           ? 'bg-green-100 text-green-800'
-                                          : inv.status === 'open' || inv.status === 'draft'
-                                            ? 'bg-red-100 text-red-800'
+                                          : inv.status === 'open'
+                                            ? 'bg-amber-100 text-amber-800'
                                             : 'bg-red-100 text-red-800'
                                       }`}
                                     >
-                                      {inv.status === 'paid' ? 'Paid' : inv.status === 'open' || inv.status === 'draft' ? 'Failed' : inv.status}
+                                      {inv.status === 'paid' ? 'Paid' : inv.status === 'open' ? 'Pending' : inv.status === 'draft' || inv.status === 'uncollectible' || inv.status === 'void' ? 'Failed' : inv.status}
                                     </span>
                                   </td>
                                   <td className="px-4 py-3 text-right">
