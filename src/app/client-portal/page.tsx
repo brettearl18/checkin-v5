@@ -72,6 +72,14 @@ interface ProgressImage {
   uploadedAt: string;
 }
 
+interface RecentInvoice {
+  id: string;
+  date: string;
+  amount: number;
+  currency: string;
+  status: string;
+}
+
 // Progress Images Preview Component
 function ProgressImagesPreview({ clientEmail, clientId: providedClientId }: { clientEmail?: string; clientId?: string | null }) {
   const [images, setImages] = useState<ProgressImage[]>([]);
@@ -311,6 +319,10 @@ export default function ClientPortalPage() {
   } | null>(null);
   const [analytics, setAnalytics] = useState<DashboardAnalytics | null>(null);
   const [loadingAnalytics, setLoadingAnalytics] = useState(true);
+  const [recentInvoices, setRecentInvoices] = useState<RecentInvoice[]>([]);
+  const [totalPaidCount, setTotalPaidCount] = useState(0);
+  const [totalFailedCount, setTotalFailedCount] = useState(0);
+  const [loadingRecentPayments, setLoadingRecentPayments] = useState(false);
 
   // Get preview client ID from URL on mount
   useEffect(() => {
@@ -411,6 +423,45 @@ export default function ClientPortalPage() {
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [userProfile?.email]);
+
+  // Fetch billing history for dashboard panel: last 3 for list, full duration for Paid/Failed summary
+  useEffect(() => {
+    if (!clientId) {
+      setRecentInvoices([]);
+      setTotalPaidCount(0);
+      setTotalFailedCount(0);
+      return;
+    }
+    const controller = new AbortController();
+    setLoadingRecentPayments(true);
+    (async () => {
+      try {
+        const headers = await import('@/lib/auth-headers').then((m) => m.getAuthHeaders());
+        const res = await fetch(`/api/clients/${clientId}/billing/history`, {
+          signal: controller.signal,
+          headers,
+        });
+        const data = await res.json();
+        if (data.success && Array.isArray(data.invoices)) {
+          const invoices = data.invoices;
+          setRecentInvoices(invoices.slice(0, 3));
+          setTotalPaidCount(invoices.filter((inv: RecentInvoice) => inv.status === 'paid').length);
+          setTotalFailedCount(invoices.filter((inv: RecentInvoice) => inv.status !== 'paid').length);
+        } else {
+          setRecentInvoices([]);
+          setTotalPaidCount(0);
+          setTotalFailedCount(0);
+        }
+      } catch {
+        setRecentInvoices([]);
+        setTotalPaidCount(0);
+        setTotalFailedCount(0);
+      } finally {
+        setLoadingRecentPayments(false);
+      }
+    })();
+    return () => controller.abort();
+  }, [clientId]);
 
   const fetchClientData = async () => {
     try {
@@ -1026,53 +1077,6 @@ export default function ClientPortalPage() {
             {/* Quick Stats Bar - New analytics section - Always visible on all devices */}
             <div className="mb-6 block">
               <QuickStatsBar stats={analytics?.quickStats || null} loading={loadingAnalytics} />
-            </div>
-
-            {/* Payment status card - status + link to payment list (like client settings) */}
-            <div className="mb-6 block">
-              <div className={`rounded-2xl lg:rounded-3xl border overflow-hidden ${
-                paymentStatus === 'paid'
-                  ? 'bg-emerald-50 border-emerald-200'
-                  : paymentStatus === 'failed' || paymentStatus === 'past_due'
-                    ? 'bg-red-50 border-red-200'
-                    : 'bg-white border-gray-100 shadow-[0_1px_3px_rgba(0,0,0,0.1)]'
-              }`}>
-                <div className="flex items-center justify-between p-4 sm:p-5">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                      paymentStatus === 'paid'
-                        ? 'bg-emerald-500'
-                        : paymentStatus === 'failed' || paymentStatus === 'past_due'
-                          ? 'bg-red-500'
-                          : 'bg-gray-400'
-                    }`}>
-                      {paymentStatus === 'paid' ? (
-                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                      ) : paymentStatus === 'failed' || paymentStatus === 'past_due' ? (
-                        <span className="text-white text-lg font-bold">!</span>
-                      ) : (
-                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                      )}
-                    </div>
-                    <div>
-                      <p className="font-semibold text-gray-900 text-sm">Payment</p>
-                      <p className="text-xs text-gray-600 mt-0.5">
-                        {paymentStatus === 'paid' ? 'Paid up' : paymentStatus === 'failed' ? 'Payment failed' : paymentStatus === 'past_due' ? 'Past due' : paymentStatus === 'canceled' ? 'Canceled' : 'View your payment status and history'}
-                      </p>
-                    </div>
-                  </div>
-                  <Link
-                    href="/client-portal/payments"
-                    className="text-sm font-medium text-emerald-600 hover:text-emerald-700 whitespace-nowrap"
-                  >
-                    View payment history →
-                  </Link>
-                </div>
-              </div>
             </div>
 
             {/* Coach Feedback Available Banner - Show prominently when coach has provided feedback */}
@@ -2056,6 +2060,80 @@ export default function ClientPortalPage() {
               {/* Desktop Sidebar - Hidden on mobile (mobile sidebar appears earlier) */}
               <div className="hidden lg:block lg:col-span-1">
                 <div className="space-y-6">
+                  {/* Payment panel - account status, Paid/Failed summary (full duration), last 3 payments (above Quick Actions) */}
+                  <div className="rounded-2xl lg:rounded-3xl border overflow-hidden bg-white border-emerald-200 shadow-[0_1px_3px_rgba(0,0,0,0.1)]">
+                    <div className="px-4 py-3 sm:px-5 sm:py-4 border-b border-emerald-200 flex items-center justify-between" style={{ backgroundColor: paymentStatus === 'paid' ? '#ecfdf5' : paymentStatus === 'failed' || paymentStatus === 'past_due' ? '#fef2f2' : '#f9fafb' }}>
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                          paymentStatus === 'paid'
+                            ? 'bg-emerald-500'
+                            : paymentStatus === 'failed' || paymentStatus === 'past_due'
+                              ? 'bg-red-500'
+                              : 'bg-gray-400'
+                        }`}>
+                          {paymentStatus === 'paid' ? (
+                            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          ) : paymentStatus === 'failed' || paymentStatus === 'past_due' ? (
+                            <span className="text-white text-lg font-bold">!</span>
+                          ) : (
+                            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                          )}
+                        </div>
+                        <div>
+                          <p className="font-semibold text-gray-900 text-sm">Payment</p>
+                          <p className="text-xs text-gray-600 mt-0.5">
+                            Account: {paymentStatus === 'paid' ? 'Paid up' : paymentStatus === 'failed' ? 'Payment failed' : paymentStatus === 'past_due' ? 'Past due' : paymentStatus === 'canceled' ? 'Canceled' : '—'}
+                          </p>
+                        </div>
+                      </div>
+                      <Link href="/client-portal/payments" className="text-sm font-medium text-emerald-600 hover:text-emerald-700 whitespace-nowrap">
+                        View all →
+                      </Link>
+                    </div>
+                    <div className="p-4 sm:p-5">
+                      {/* Paid / Failed summary (full duration - all invoices, not just last 3 on screen) */}
+                      {!loadingRecentPayments && (
+                        <div className="flex items-center gap-4 mb-3 pb-3 border-b border-emerald-100">
+                          <span className="text-sm font-medium text-green-700">Paid: {totalPaidCount}</span>
+                          <span className="text-sm font-medium text-red-700">Failed: {totalFailedCount}</span>
+                        </div>
+                      )}
+                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Last 3 payments</p>
+                      {loadingRecentPayments ? (
+                        <div className="flex items-center gap-2 py-4 text-gray-500 text-sm">
+                          <div className="animate-spin rounded-full h-4 w-4 border-2 border-gray-300 border-t-emerald-500" />
+                          Loading…
+                        </div>
+                      ) : recentInvoices.length === 0 ? (
+                        <p className="text-sm text-gray-500 py-2">No payments yet</p>
+                      ) : (
+                        <ul className="space-y-2">
+                          {recentInvoices.map((inv) => (
+                            <li key={inv.id} className="flex items-center justify-between text-sm py-1.5 border-b border-emerald-50 last:border-0">
+                              <span className="text-gray-700">{inv.date ? formatDate(inv.date) : '—'}</span>
+                              <span className="text-gray-900 font-medium">{inv.currency} {(inv.amount ?? 0).toFixed(2)}</span>
+                              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                                inv.status === 'paid' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                              }`}>
+                                {inv.status === 'paid' ? 'Paid' : inv.status === 'open' || inv.status === 'draft' ? 'Failed' : inv.status}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      <Link
+                        href="/client-portal/payments"
+                        className="inline-block text-sm font-medium text-emerald-600 hover:text-emerald-700 mt-4"
+                      >
+                        View payment history →
+                      </Link>
+                    </div>
+                  </div>
+
                   {/* Quick Actions */}
                   <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
                     <div className="px-4 py-3 sm:px-6 sm:py-4 border-b-2" style={{ backgroundColor: '#fef9e7', borderColor: '#daa450' }}>
@@ -2166,16 +2244,10 @@ export default function ClientPortalPage() {
                 <QuickStatsBar stats={analytics?.quickStats || null} loading={loadingAnalytics} />
               </div>
 
-              {/* Payment status card - mobile */}
+              {/* Payment panel - mobile: account status, full-duration summary + last 3 payments */}
               <div className="mb-6">
-                <div className={`rounded-2xl border overflow-hidden ${
-                  paymentStatus === 'paid'
-                    ? 'bg-emerald-50 border-emerald-200'
-                    : paymentStatus === 'failed' || paymentStatus === 'past_due'
-                      ? 'bg-red-50 border-red-200'
-                      : 'bg-white border-gray-100 shadow-[0_1px_3px_rgba(0,0,0,0.1)]'
-                }`}>
-                  <div className="flex items-center justify-between p-4">
+                <div className="rounded-2xl border overflow-hidden bg-white border-emerald-200 shadow-[0_1px_3px_rgba(0,0,0,0.1)]">
+                  <div className="px-4 py-3 border-b border-emerald-200 flex items-center justify-between" style={{ backgroundColor: paymentStatus === 'paid' ? '#ecfdf5' : paymentStatus === 'failed' || paymentStatus === 'past_due' ? '#fef2f2' : '#f9fafb' }}>
                     <div className="flex items-center gap-3">
                       <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
                         paymentStatus === 'paid'
@@ -2199,12 +2271,45 @@ export default function ClientPortalPage() {
                       <div>
                         <p className="font-semibold text-gray-900 text-sm">Payment</p>
                         <p className="text-xs text-gray-600 mt-0.5">
-                          {paymentStatus === 'paid' ? 'Paid up' : paymentStatus === 'failed' ? 'Payment failed' : paymentStatus === 'past_due' ? 'Past due' : paymentStatus === 'canceled' ? 'Canceled' : 'View status and history'}
+                          Account: {paymentStatus === 'paid' ? 'Paid up' : paymentStatus === 'failed' ? 'Failed' : paymentStatus === 'past_due' ? 'Past due' : paymentStatus === 'canceled' ? 'Canceled' : '—'}
                         </p>
                       </div>
                     </div>
                     <Link href="/client-portal/payments" className="text-sm font-medium text-emerald-600 hover:text-emerald-700 whitespace-nowrap">
-                      View →
+                      View all →
+                    </Link>
+                  </div>
+                  <div className="p-4">
+                    {/* Paid / Failed summary (full duration - all invoices) */}
+                    {!loadingRecentPayments && (
+                      <div className="flex items-center gap-4 mb-3 pb-3 border-b border-emerald-100">
+                        <span className="text-sm font-medium text-green-700">Paid: {totalPaidCount}</span>
+                        <span className="text-sm font-medium text-red-700">Failed: {totalFailedCount}</span>
+                      </div>
+                    )}
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Last 3 payments</p>
+                    {loadingRecentPayments ? (
+                      <div className="flex items-center gap-2 py-4 text-gray-500 text-sm">
+                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-gray-300 border-t-emerald-500" />
+                        Loading…
+                      </div>
+                    ) : recentInvoices.length === 0 ? (
+                      <p className="text-sm text-gray-500 py-2">No payments yet</p>
+                    ) : (
+                      <ul className="space-y-2">
+                        {recentInvoices.map((inv) => (
+                          <li key={inv.id} className="flex items-center justify-between text-sm py-1.5 border-b border-emerald-50 last:border-0">
+                            <span className="text-gray-700">{inv.date ? formatDate(inv.date) : '—'}</span>
+                            <span className="text-gray-900 font-medium">{inv.currency} {(inv.amount ?? 0).toFixed(2)}</span>
+                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${inv.status === 'paid' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                              {inv.status === 'paid' ? 'Paid' : inv.status === 'open' || inv.status === 'draft' ? 'Failed' : inv.status}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    <Link href="/client-portal/payments" className="inline-block text-sm font-medium text-emerald-600 hover:text-emerald-700 mt-4">
+                      View payment history →
                     </Link>
                   </div>
                 </div>

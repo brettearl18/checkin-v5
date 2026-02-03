@@ -152,9 +152,22 @@ export default function ClientPortalPaymentsPage() {
             <p className="text-gray-600 text-sm mb-6">View your subscription and payment history</p>
 
             <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
-              <div className="bg-gradient-to-r from-emerald-50 to-teal-50 px-6 py-5 border-b-2 border-emerald-200">
-                <h2 className="text-xl font-bold text-gray-900">Payment & Program</h2>
-                <p className="text-sm text-gray-600 mt-1">Subscription and payment history</p>
+              <div className="bg-gradient-to-r from-emerald-50 to-teal-50 px-6 py-5 border-b-2 border-emerald-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">Payment & Program</h2>
+                  <p className="text-sm text-gray-600 mt-1">Subscription and payment history</p>
+                </div>
+                <a
+                  href="https://go.vanahealth.com.au/myaccount"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-xl shadow-sm transition-colors whitespace-nowrap"
+                >
+                  View full account
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                </a>
               </div>
               <div className="p-6">
                 {loadingBilling ? (
