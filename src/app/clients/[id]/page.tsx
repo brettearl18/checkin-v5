@@ -87,6 +87,11 @@ interface Client {
     healthGoals?: string[];
     medicalHistory?: string[];
   };
+  /** Set by Stripe webhook when client has a linked Stripe customer/subscription */
+  stripeCustomerId?: string | null;
+  paymentStatus?: 'paid' | 'past_due' | 'failed' | 'canceled' | null;
+  lastPaymentAt?: string | null;
+  nextBillingAt?: string | null;
 }
 
 interface QuestionResponse {
@@ -166,6 +171,7 @@ export default function ClientProfilePage() {
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
+  const [billingAction, setBillingAction] = useState<'pause' | 'resume' | 'cancel' | null>(null);
   const [clientSettings, setClientSettings] = useState({
     programStartDate: '',
     programDuration: 12, // weeks
@@ -173,6 +179,7 @@ export default function ClientProfilePage() {
     coachNotes: '',
     checkInFrequency: 'weekly' as 'daily' | 'weekly' | 'bi-weekly' | 'monthly',
     communicationPreference: 'email' as 'email' | 'sms' | 'both',
+    stripeCustomerId: '' as string,
   });
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [newStatus, setNewStatus] = useState('');
@@ -224,9 +231,45 @@ export default function ClientProfilePage() {
   const [pausingSeries, setPausingSeries] = useState(false);
   const [unpausingSeries, setUnpausingSeries] = useState(false);
   const [scoringThresholds, setScoringThresholds] = useState<ScoringThresholds>(getDefaultThresholds('lifestyle'));
+  const [mealPlanName, setMealPlanName] = useState<string>('');
+  const [mealPlanUrl, setMealPlanUrl] = useState<string>('');
+  const [customMealPlanName, setCustomMealPlanName] = useState<string>('');
+  const [customMealPlanUrl, setCustomMealPlanUrl] = useState<string>('');
+  const [savingMealPlan, setSavingMealPlan] = useState(false);
+  const [savingCustomMealPlan, setSavingCustomMealPlan] = useState(false);
+  const [customMealPlans, setCustomMealPlans] = useState<Array<{ name: string; url: string }>>([]);
+  const [loadingCustomMealPlans, setLoadingCustomMealPlans] = useState(false);
+  const [sendMealPlanEmail, setSendMealPlanEmail] = useState<boolean>(true); // Default to checked
+  
+  // Predefined meal plans
+  const predefinedMealPlans = [
+    { name: '1300 Calories Meal Plan', url: 'https://www.hubvana.com.au/1300-Calories-Meal-Plan-1c71f8b78a3980b18995cdf1c1cce0b0?source=copy_link' },
+    { name: '1300 Meal Plan Vegetarian', url: 'https://www.hubvana.com.au/1300-Meal-Plan-Vegetarian-1ce1f8b78a3980e6a82ff109fa4a4c68?source=copy_link' },
+    { name: '1500 CALORIES', url: 'https://www.hubvana.com.au/1500-CALORIES-18e1f8b78a39806982d2d5e9251f95c2?source=copy_link' },
+    { name: '1500 calories-br', url: 'https://www.hubvana.com.au/1500-calories-br?source=copy_link' },
+    { name: '1700 CALORIES', url: 'https://www.hubvana.com.au/1700-CALORIES-18e1f8b78a3980ed928cef4c9edc7e52?source=copy_link' },
+    { name: '1800 CALORIES', url: 'https://www.hubvana.com.au/1800-CALORIES-1961f8b78a3980c9ae9af99557f64d02?source=copy_link' },
+    { name: '2000 Calorie Meal Plan', url: 'https://www.hubvana.com.au/2000-Calorie-Meal-Plan-1e01f8b78a39805793b4f2533a504d55?source=copy_link' },
+    { name: '2000 Calorie Meal Plan (2)', url: 'https://www.hubvana.com.au/2000-Calorie-Meal-Plan-2451f8b78a39806d8003d60d3e627421?source=copy_link' },
+    { name: '2200 Calorie Meal Plan', url: 'https://www.hubvana.com.au/2200-Calorie-Meal-Plan-2211f8b78a39809ebf7ef314936b6d8e?source=copy_link' },
+    { name: '2400 Calorie Plan', url: 'https://www.hubvana.com.au/2400-Calorie-Plan-1761f8b78a39804ebe25d4d0824018d0?source=copy_link' }
+  ];
+  
+  // Combined meal plans (predefined + custom)
+  const mealPlans = [
+    ...predefinedMealPlans,
+    ...customMealPlans,
+    { name: 'CUSTOM', url: '' }
+  ];
   const [progressTrafficLight, setProgressTrafficLight] = useState<TrafficLightStatus>('orange');
   const [checkInTab, setCheckInTab] = useState<'all' | 'completed' | 'coachResponses' | 'pendingReview'>('all');
-  const [activeTab, setActiveTab] = useState<'overview' | 'goals' | 'checkins' | 'history' | 'ai-analytics'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'goals' | 'checkins' | 'history' | 'payment' | 'ai-analytics'>('overview');
+  const [billingHistory, setBillingHistory] = useState<{
+    subscription: { productName: string; status: string; priceInterval: string; currentPeriodEnd: string | null; cancelAtPeriodEnd: boolean } | null;
+    invoices: Array<{ id: string; date: string; amount: number; currency: string; status: string; invoicePdf?: string; hostedInvoiceUrl?: string }>;
+    appProgram: { programStartDate: string | null; programDuration: number | null; programDurationUnit: string | null };
+  } | null>(null);
+  const [loadingBillingHistory, setLoadingBillingHistory] = useState(false);
   const [aiAnalytics, setAiAnalytics] = useState<any>(null);
   const [loadingAiAnalytics, setLoadingAiAnalytics] = useState(false);
   const [showGenerateAnalyticsModal, setShowGenerateAnalyticsModal] = useState(false);
@@ -335,9 +378,37 @@ export default function ClientProfilePage() {
 
   const clientId = params.id as string;
 
+  const fetchBillingHistory = async () => {
+    if (!clientId) return;
+    setLoadingBillingHistory(true);
+    try {
+      const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
+      const res = await fetch(`/api/clients/${clientId}/billing/history`, { headers });
+      const data = await res.json();
+      if (data.success) {
+        setBillingHistory({
+          subscription: data.subscription,
+          invoices: data.invoices || [],
+          appProgram: data.appProgram || { programStartDate: null, programDuration: null, programDurationUnit: null },
+        });
+      } else {
+        setBillingHistory(null);
+      }
+    } catch {
+      setBillingHistory(null);
+    } finally {
+      setLoadingBillingHistory(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'payment' && clientId) fetchBillingHistory();
+  }, [activeTab, clientId]);
+
   const fetchClient = async () => {
     try {
-      const response = await fetch(`/api/clients/${clientId}`);
+      const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
+      const response = await fetch(`/api/clients/${clientId}`, { headers });
       if (response.ok) {
         const data = await response.json();
         setClient(data.client);
@@ -351,7 +422,13 @@ export default function ClientProfilePage() {
             coachNotes: data.client.notes || data.client.coachNotes || '',
             checkInFrequency: data.client.profile?.preferences?.checkInFrequency || 'weekly',
             communicationPreference: data.client.profile?.preferences?.communication || 'email',
+            stripeCustomerId: data.client.stripeCustomerId || '',
           });
+          
+          // Load meal plan data
+          setMealPlanName(data.client.mealPlanName || '');
+          setMealPlanUrl(data.client.mealPlanUrl || '');
+          setCustomMealPlanUrl(data.client.mealPlanUrl || '');
         }
       } else {
         setError('Client not found');
@@ -369,10 +446,12 @@ export default function ClientProfilePage() {
     
     setSavingSettings(true);
     try {
+      const authHeaders = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
       const response = await fetch(`/api/clients/${clientId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
+          ...authHeaders,
         },
         body: JSON.stringify({
           programStartDate: clientSettings.programStartDate,
@@ -380,6 +459,7 @@ export default function ClientProfilePage() {
           programDurationUnit: clientSettings.programDurationUnit,
           notes: clientSettings.coachNotes,
           coachNotes: clientSettings.coachNotes,
+          stripeCustomerId: clientSettings.stripeCustomerId?.trim() || null,
           profile: {
             ...client?.profile,
             preferences: {
@@ -407,6 +487,177 @@ export default function ClientProfilePage() {
     }
   };
 
+  const handlePauseSubscription = async () => {
+    if (!clientId || !client?.stripeCustomerId) return;
+    setBillingAction('pause');
+    try {
+      const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
+      const res = await fetch(`/api/clients/${clientId}/billing/pause-subscription`, { method: 'POST', headers });
+      const data = await res.json();
+      if (data.success) { alert(data.message); fetchClient(); } else { alert(data.message || 'Failed to pause'); }
+    } catch (e) { alert('Request failed'); } finally { setBillingAction(null); }
+  };
+
+  const handleResumeSubscription = async () => {
+    if (!clientId || !client?.stripeCustomerId) return;
+    setBillingAction('resume');
+    try {
+      const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
+      const res = await fetch(`/api/clients/${clientId}/billing/resume-subscription`, { method: 'POST', headers });
+      const data = await res.json();
+      if (data.success) { alert(data.message); fetchClient(); } else { alert(data.message || 'Failed to resume'); }
+    } catch (e) { alert('Request failed'); } finally { setBillingAction(null); }
+  };
+
+  const handleCancelSubscription = async () => {
+    if (!clientId || !client?.stripeCustomerId) return;
+    const atEnd = window.confirm('Cancel at end of billing period? (Choose OK for at period end, Cancel for immediate cancel)');
+    setBillingAction('cancel');
+    try {
+      const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
+      const res = await fetch(`/api/clients/${clientId}/billing/cancel-subscription`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...headers },
+        body: JSON.stringify({ cancelAtPeriodEnd: atEnd }),
+      });
+      const data = await res.json();
+      if (data.success) { alert(data.message); fetchClient(); } else { alert(data.message || 'Failed to cancel'); }
+    } catch (e) { alert('Request failed'); } finally { setBillingAction(null); }
+  };
+
+  const handleMealPlanChange = (selectedName: string) => {
+    setMealPlanName(selectedName);
+    if (selectedName === 'CUSTOM') {
+      setMealPlanUrl('');
+      setCustomMealPlanUrl('');
+      setCustomMealPlanName('');
+    } else {
+      const selectedPlan = mealPlans.find(p => p.name === selectedName);
+      if (selectedPlan) {
+        setMealPlanUrl(selectedPlan.url);
+        setCustomMealPlanUrl('');
+        setCustomMealPlanName('');
+      }
+    }
+  };
+
+  const handleSaveCustomMealPlan = async () => {
+    if (!customMealPlanName.trim() || !customMealPlanUrl.trim()) {
+      alert('Please enter both a name and URL for the custom meal plan');
+      return;
+    }
+
+    // Validate URL format
+    try {
+      new URL(customMealPlanUrl);
+    } catch {
+      alert('Please enter a valid URL');
+      return;
+    }
+
+    // Check if name already exists
+    if (customMealPlans.some(p => p.name === customMealPlanName.trim())) {
+      alert('A meal plan with this name already exists');
+      return;
+    }
+
+    setSavingCustomMealPlan(true);
+    try {
+      const authHeaders = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
+      const response = await fetch(`/api/coaches/${userProfile?.uid}/custom-meal-plans`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders,
+        },
+        body: JSON.stringify({
+          name: customMealPlanName.trim(),
+          url: customMealPlanUrl.trim(),
+        }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        // Add to local state
+        const newCustomPlan = { name: customMealPlanName.trim(), url: customMealPlanUrl.trim() };
+        setCustomMealPlans([...customMealPlans, newCustomPlan]);
+        
+        // Select the newly saved meal plan
+        setMealPlanName(newCustomPlan.name);
+        setMealPlanUrl(newCustomPlan.url);
+        setCustomMealPlanName('');
+        setCustomMealPlanUrl('');
+        
+        alert('Custom meal plan saved successfully!');
+      } else {
+        alert('Failed to save custom meal plan: ' + (data.error || 'Unknown error'));
+      }
+    } catch (error) {
+      console.error('Error saving custom meal plan:', error);
+      alert('Failed to save custom meal plan. Please try again.');
+    } finally {
+      setSavingCustomMealPlan(false);
+    }
+  };
+
+  const handleSaveMealPlan = async () => {
+    if (!clientId) return;
+    
+    // Validate custom URL if CUSTOM is selected
+    if (mealPlanName === 'CUSTOM') {
+      if (!customMealPlanUrl.trim() || !customMealPlanName.trim()) {
+        alert('Please enter both a name and URL for the custom meal plan');
+        return;
+      }
+      
+      // Validate URL format
+      try {
+        new URL(customMealPlanUrl);
+      } catch {
+        alert('Please enter a valid URL');
+        return;
+      }
+    }
+    
+    setSavingMealPlan(true);
+    try {
+      const finalUrl = mealPlanName === 'CUSTOM' ? customMealPlanUrl : mealPlanUrl;
+      const finalName = mealPlanName === 'CUSTOM' ? customMealPlanName : mealPlanName;
+      
+      const authHeaders = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
+      const response = await fetch(`/api/clients/${clientId}/meal-plan`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders,
+        },
+        body: JSON.stringify({
+          mealPlanName: finalName,
+          mealPlanUrl: finalUrl,
+          sendEmail: sendMealPlanEmail,
+        }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        alert('Meal plan assigned to client successfully!');
+        fetchClient(); // Refresh client data
+        // Reset custom fields
+        setCustomMealPlanName('');
+        setCustomMealPlanUrl('');
+        setMealPlanName(finalName);
+        setMealPlanUrl(finalUrl);
+      } else {
+        alert('Failed to save meal plan: ' + (data.error || 'Unknown error'));
+      }
+    } catch (error) {
+      console.error('Error saving meal plan:', error);
+      alert('Failed to save meal plan. Please try again.');
+    } finally {
+      setSavingMealPlan(false);
+    }
+  };
+
   const fetchAllocatedCheckIns = async () => {
     if (!clientId || hasLoadedCheckIns) {
       return;
@@ -414,7 +665,8 @@ export default function ClientProfilePage() {
     
     setLoadingCheckIns(true);
     try {
-      const response = await fetch(`/api/clients/${clientId}/check-ins`);
+      const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
+      const response = await fetch(`/api/clients/${clientId}/check-ins`, { headers });
       if (response.ok) {
         const data = await response.json();
         let checkIns = data.checkIns || [];
@@ -478,13 +730,35 @@ export default function ClientProfilePage() {
     }
   };
 
+  // Fetch custom meal plans from coach's profile
+  const fetchCustomMealPlans = async () => {
+    if (!userProfile?.uid) return;
+    
+    setLoadingCustomMealPlans(true);
+    try {
+      const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
+      const response = await fetch(`/api/coaches/${userProfile.uid}`, { headers });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.data?.customMealPlans) {
+          setCustomMealPlans(data.data.customMealPlans || []);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching custom meal plans:', error);
+    } finally {
+      setLoadingCustomMealPlans(false);
+    }
+  };
+
   useEffect(() => {
     fetchClient();
+    fetchCustomMealPlans();
     // Reset check-ins state when clientId changes
     setAllocatedCheckIns([]);
     setLoadingCheckIns(false);
     setHasLoadedCheckIns(false);
-  }, [clientId]);
+  }, [clientId, userProfile?.uid]);
 
   useEffect(() => {
     if (client && !hasLoadedCheckIns) {
@@ -595,7 +869,8 @@ export default function ClientProfilePage() {
         console.log('Fetching onboarding AI summary for client:', clientId);
         setLoadingOnboardingAiSummary(true);
         try {
-          const response = await fetch(`/api/client-portal/onboarding/report?clientId=${clientId}`);
+          const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
+          const response = await fetch(`/api/client-portal/onboarding/report?clientId=${clientId}`, { headers });
           console.log('Onboarding report response status:', response.status);
           if (response.ok) {
             const data = await response.json();
@@ -631,7 +906,8 @@ export default function ClientProfilePage() {
       if (selectedHistoryId && clientId && activeTab === 'ai-analytics') {
         setLoadingAiAnalytics(true);
         try {
-          const response = await fetch(`/api/clients/${clientId}/ai-analytics?historyId=${selectedHistoryId}`);
+          const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
+          const response = await fetch(`/api/clients/${clientId}/ai-analytics?historyId=${selectedHistoryId}`, { headers });
           if (response.ok) {
             const data = await response.json();
             if (data.success) {
@@ -874,7 +1150,8 @@ export default function ClientProfilePage() {
 
       setLoadingImages(true);
       try {
-        const response = await fetch(`/api/progress-images?clientId=${clientId}&limit=12`);
+        const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
+        const response = await fetch(`/api/progress-images?clientId=${clientId}&limit=12`, { headers });
         const data = await response.json();
         if (data.success) {
           setProgressImages(data.data || []);
@@ -897,7 +1174,8 @@ export default function ClientProfilePage() {
 
       setLoadingOnboarding(true);
       try {
-        const response = await fetch(`/api/client-portal/onboarding/report?clientId=${clientId}`);
+        const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
+        const response = await fetch(`/api/client-portal/onboarding/report?clientId=${clientId}`, { headers });
         const data = await response.json();
         if (data.success) {
           setOnboardingData(data.data);
@@ -920,8 +1198,9 @@ export default function ClientProfilePage() {
 
       setLoadingMeasurements(true);
       try {
+        const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
         // Fetch from client_measurements collection
-        const response = await fetch(`/api/client-measurements?clientId=${clientId}`);
+        const response = await fetch(`/api/client-measurements?clientId=${clientId}`, { headers });
         const data = await response.json();
         if (data.success) {
           const measurements = data.data || [];
@@ -931,7 +1210,7 @@ export default function ClientProfilePage() {
           let allMeasurements: any[] = [];
           
           try {
-            const onboardingResponse = await fetch(`/api/client-portal/onboarding/report?clientId=${clientId}`);
+            const onboardingResponse = await fetch(`/api/client-portal/onboarding/report?clientId=${clientId}`, { headers });
             const onboardingData = await onboardingResponse.json();
             
             if (onboardingData.success && onboardingData.data) {
@@ -2472,6 +2751,16 @@ export default function ClientProfilePage() {
                     }`}>
                       {client.status}
                     </span>
+                    {(client.stripeCustomerId || client.paymentStatus) && (
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${
+                        client.paymentStatus === 'paid' ? 'bg-green-100 text-green-700 border-green-200' :
+                        client.paymentStatus === 'failed' || client.paymentStatus === 'past_due' ? 'bg-red-100 text-red-700 border-red-200' :
+                        client.paymentStatus === 'canceled' ? 'bg-gray-100 text-gray-600 border-gray-200' :
+                        'bg-gray-100 text-gray-500 border-gray-200'
+                      }`} title="Stripe payment status">
+                        Payment: {client.paymentStatus === 'paid' ? 'Paid up' : client.paymentStatus === 'failed' ? 'Failed' : client.paymentStatus === 'past_due' ? 'Past due' : client.paymentStatus === 'canceled' ? 'Canceled' : '—'}
+                      </span>
+                    )}
                     {client.email && (
                       <span className="text-xs text-gray-600">{client.email}</span>
                     )}
@@ -2566,6 +2855,16 @@ export default function ClientProfilePage() {
                 }`}
               >
                 History
+              </button>
+              <button
+                onClick={() => setActiveTab('payment')}
+                className={`flex-1 px-6 py-4 text-sm font-semibold transition-all ${
+                  activeTab === 'payment'
+                    ? 'text-orange-600 border-b-2 border-orange-600 bg-orange-50/50'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                }`}
+              >
+                Payment
               </button>
               <button
                 onClick={() => setActiveTab('ai-analytics')}
@@ -2876,6 +3175,236 @@ export default function ClientProfilePage() {
                         </div>
                       </div>
                     )}
+
+                    {/* Payment */}
+                    <div className={`flex items-start space-x-3 p-4 rounded-xl border ${
+                      client.stripeCustomerId
+                        ? client.paymentStatus === 'paid'
+                          ? 'bg-emerald-50 border-emerald-200'
+                          : client.paymentStatus === 'failed' || client.paymentStatus === 'past_due'
+                          ? 'bg-red-50 border-red-200'
+                          : 'bg-gray-50 border-gray-200'
+                        : 'bg-gray-50 border-gray-200'
+                    }`}>
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                        client.paymentStatus === 'paid'
+                          ? 'bg-emerald-500'
+                          : client.paymentStatus === 'failed' || client.paymentStatus === 'past_due'
+                          ? 'bg-red-500'
+                          : 'bg-gray-400'
+                      }`}>
+                        {client.paymentStatus === 'paid' ? (
+                          <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        ) : client.paymentStatus === 'failed' || client.paymentStatus === 'past_due' ? (
+                          <span className="text-white text-lg">!</span>
+                        ) : (
+                          <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-semibold text-gray-900 text-sm">Payment</p>
+                        <p className="text-xs text-gray-600 mt-1">
+                          {client.stripeCustomerId
+                            ? client.paymentStatus === 'paid'
+                              ? 'Paid up'
+                              : client.paymentStatus === 'failed'
+                              ? 'Payment failed'
+                              : client.paymentStatus === 'past_due'
+                              ? 'Past due'
+                              : client.paymentStatus === 'canceled'
+                              ? 'Canceled'
+                              : '—'
+                            : 'Not linked — add Stripe ID in Settings'}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setActiveTab('payment')}
+                          className="text-xs text-emerald-600 hover:text-emerald-700 font-medium mt-2"
+                        >
+                          {client.stripeCustomerId ? 'View payment history →' : 'Payment tab →'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Meal Plan Section */}
+                <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                  <div className="bg-gradient-to-r from-green-50 to-emerald-50 px-6 py-4 border-b-2 border-green-200">
+                    <h2 className="text-xl font-bold text-gray-900">Meal Plan</h2>
+                    <p className="text-sm text-gray-600 mt-1">Assign and manage client meal plan</p>
+                  </div>
+                  <div className="p-6">
+                    <div className="space-y-4">
+                      {/* Meal Plan Dropdown */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-900 mb-2">
+                          Select Meal Plan
+                        </label>
+                        <select
+                          value={mealPlanName}
+                          onChange={(e) => handleMealPlanChange(e.target.value)}
+                          className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 text-sm"
+                        >
+                          <option value="">-- Select a meal plan --</option>
+                          {predefinedMealPlans.length > 0 && (
+                            <optgroup label="Predefined Meal Plans">
+                              {predefinedMealPlans.map((plan) => (
+                                <option key={plan.name} value={plan.name}>
+                                  {plan.name}
+                                </option>
+                              ))}
+                            </optgroup>
+                          )}
+                          {customMealPlans.length > 0 && (
+                            <optgroup label="My Custom Meal Plans">
+                              {customMealPlans.map((plan) => (
+                                <option key={plan.name} value={plan.name}>
+                                  {plan.name}
+                                </option>
+                              ))}
+                            </optgroup>
+                          )}
+                          <option value="CUSTOM">➕ Create New Custom Meal Plan</option>
+                        </select>
+                      </div>
+
+                      {/* Custom Meal Plan Input (shown when CUSTOM is selected) */}
+                      {mealPlanName === 'CUSTOM' && (
+                        <div className="space-y-4 bg-blue-50 border border-blue-200 rounded-xl p-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-900 mb-2">
+                              Meal Plan Name *
+                            </label>
+                            <input
+                              type="text"
+                              value={customMealPlanName}
+                              onChange={(e) => setCustomMealPlanName(e.target.value)}
+                              placeholder="e.g., Keto Meal Plan, Vegan 1800 Calories"
+                              className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 text-sm"
+                            />
+                            <p className="text-xs text-gray-500 mt-1">Give this meal plan a name for easy identification</p>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-900 mb-2">
+                              Meal Plan URL *
+                            </label>
+                            <input
+                              type="url"
+                              value={customMealPlanUrl}
+                              onChange={(e) => setCustomMealPlanUrl(e.target.value)}
+                              placeholder="https://example.com/meal-plan"
+                              className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 text-sm"
+                            />
+                            <p className="text-xs text-gray-500 mt-1">Enter the full URL to the custom meal plan</p>
+                          </div>
+                          <div className="flex justify-end pt-2">
+                            <button
+                              onClick={handleSaveCustomMealPlan}
+                              disabled={savingCustomMealPlan || !customMealPlanName.trim() || !customMealPlanUrl.trim()}
+                              className="px-4 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-xl text-sm font-medium transition-colors flex items-center gap-2"
+                            >
+                              {savingCustomMealPlan ? (
+                                <>
+                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                                  Saving...
+                                </>
+                              ) : (
+                                <>
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                  </svg>
+                                  Save to List
+                                </>
+                              )}
+                            </button>
+                          </div>
+                          <div className="bg-blue-100 border border-blue-300 rounded-lg p-3">
+                            <p className="text-xs text-blue-800">
+                              <strong>Tip:</strong> Save this meal plan to your list so you can reuse it for other clients. After saving, it will appear in the dropdown above.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Current Meal Plan Display */}
+                      {mealPlanName && mealPlanUrl && (
+                        <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-sm font-medium text-gray-900">Current Meal Plan:</p>
+                              <p className="text-sm text-gray-700 mt-1">{mealPlanName}</p>
+                              {mealPlanUrl && (
+                                <a
+                                  href={mealPlanUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs text-green-600 hover:text-green-700 mt-1 inline-block break-all"
+                                >
+                                  {mealPlanUrl.length > 60 ? `${mealPlanUrl.substring(0, 60)}...` : mealPlanUrl}
+                                </a>
+                              )}
+                            </div>
+                            {mealPlanUrl && (
+                              <a
+                                href={mealPlanUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white rounded-lg text-xs font-medium transition-colors flex items-center gap-1"
+                              >
+                                Open
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                </svg>
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Email Notification Checkbox */}
+                      {mealPlanName && (mealPlanName !== 'CUSTOM' || (customMealPlanName.trim() && customMealPlanUrl.trim())) && (
+                        <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl border border-gray-200">
+                          <input
+                            type="checkbox"
+                            id="sendMealPlanEmail"
+                            checked={sendMealPlanEmail}
+                            onChange={(e) => setSendMealPlanEmail(e.target.checked)}
+                            className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500 focus:ring-2"
+                          />
+                          <label htmlFor="sendMealPlanEmail" className="text-sm text-gray-700 cursor-pointer">
+                            Send email notification to client
+                          </label>
+                        </div>
+                      )}
+
+                      {/* Save Button */}
+                      <div className="flex justify-end pt-2">
+                        <button
+                          onClick={handleSaveMealPlan}
+                          disabled={savingMealPlan || !mealPlanName || (mealPlanName === 'CUSTOM' && (!customMealPlanUrl.trim() || !customMealPlanName.trim()))}
+                          className="px-6 py-2.5 bg-green-500 hover:bg-green-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-xl text-sm font-medium transition-colors flex items-center gap-2"
+                        >
+                          {savingMealPlan ? (
+                            <>
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                              Saving...
+                            </>
+                          ) : (
+                            <>
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                              Assign Meal Plan to Client
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -5186,6 +5715,121 @@ export default function ClientProfilePage() {
                 </div>
               )}
 
+              {/* PAYMENT TAB */}
+              {activeTab === 'payment' && (
+                <div className="space-y-6">
+                  <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
+                    <div className="bg-gradient-to-r from-emerald-50 to-teal-50 px-8 py-6 border-b-2 border-emerald-200">
+                      <h2 className="text-2xl font-bold text-gray-900">Payment & Program</h2>
+                      <p className="text-sm text-gray-600 mt-1">Subscription and payment history from Stripe</p>
+                    </div>
+                    <div className="p-8">
+                      {loadingBillingHistory ? (
+                        <div className="flex items-center justify-center py-12">
+                          <div className="animate-spin rounded-full h-10 w-10 border-2 border-orange-500 border-t-transparent"></div>
+                        </div>
+                      ) : (
+                        <>
+                          {/* Program / Subscription */}
+                          <div className="mb-8">
+                            <h3 className="text-lg font-semibold text-gray-900 mb-3">Program & subscription</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              {billingHistory?.subscription && (
+                                <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-200">
+                                  <div className="text-xs font-medium text-emerald-700 mb-1">Stripe subscription</div>
+                                  <div className="font-semibold text-gray-900">{billingHistory.subscription.productName}</div>
+                                  <div className="text-sm text-gray-600 mt-1">
+                                    Billing: {billingHistory.subscription.priceInterval} · Status: {billingHistory.subscription.status}
+                                    {billingHistory.subscription.cancelAtPeriodEnd && (
+                                      <span className="ml-2 text-amber-600">(cancels at period end)</span>
+                                    )}
+                                  </div>
+                                  {billingHistory.subscription.currentPeriodEnd && (
+                                    <div className="text-xs text-gray-500 mt-2">
+                                      Current period ends: {formatDate(billingHistory.subscription.currentPeriodEnd)}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                              {(billingHistory?.appProgram?.programStartDate || billingHistory?.appProgram?.programDuration) && (
+                                <div className="p-4 bg-blue-50 rounded-xl border border-blue-200">
+                                  <div className="text-xs font-medium text-blue-700 mb-1">App program</div>
+                                  <div className="font-semibold text-gray-900">
+                                    {billingHistory?.appProgram?.programStartDate
+                                      ? formatDate(billingHistory.appProgram.programStartDate)
+                                      : '—'}
+                                    {billingHistory?.appProgram?.programDuration != null && (
+                                      <span className="text-gray-600 font-normal">
+                                        {' '}· {billingHistory.appProgram.programDuration} {billingHistory?.appProgram?.programDurationUnit || 'weeks'}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                              {!billingHistory?.subscription && !billingHistory?.appProgram?.programStartDate && (
+                                <p className="text-gray-500 col-span-2">No subscription or program dates. Link a Stripe Customer ID in Settings to see Stripe data.</p>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Payment history */}
+                          <div>
+                            <h3 className="text-lg font-semibold text-gray-900 mb-3">Payment history</h3>
+                            {billingHistory?.invoices && billingHistory.invoices.length > 0 ? (
+                              <div className="overflow-x-auto rounded-xl border border-gray-200">
+                                <table className="min-w-full divide-y divide-gray-200">
+                                  <thead className="bg-gray-50">
+                                    <tr>
+                                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase">Date</th>
+                                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase">Amount</th>
+                                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase">Status</th>
+                                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-600 uppercase">Invoice</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="bg-white divide-y divide-gray-200">
+                                    {billingHistory.invoices.map((inv) => (
+                                      <tr key={inv.id} className="hover:bg-gray-50">
+                                        <td className="px-4 py-3 text-sm text-gray-900">{inv.date ? formatDate(inv.date) : '—'}</td>
+                                        <td className="px-4 py-3 text-sm text-gray-900">
+                                          {inv.currency} {(inv.amount ?? 0).toFixed(2)}
+                                        </td>
+                                        <td className="px-4 py-3">
+                                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                                            inv.status === 'paid' ? 'bg-green-100 text-green-800' :
+                                            inv.status === 'open' || inv.status === 'draft' ? 'bg-red-100 text-red-800' :
+                                            'bg-red-100 text-red-800'
+                                          }`}>
+                                            {inv.status === 'paid' ? 'Paid' : inv.status === 'open' || inv.status === 'draft' ? 'Failed' : inv.status}
+                                          </span>
+                                        </td>
+                                        <td className="px-4 py-3 text-right">
+                                          {(inv.hostedInvoiceUrl || inv.invoicePdf) && (
+                                            <a
+                                              href={inv.hostedInvoiceUrl || inv.invoicePdf}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="text-orange-600 hover:text-orange-700 text-sm font-medium"
+                                            >
+                                              View
+                                            </a>
+                                          )}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            ) : (
+                              <p className="text-gray-500 py-4">No payment history. Link a Stripe Customer ID in Settings to see invoices.</p>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* AI ANALYTICS TAB */}
               {activeTab === 'ai-analytics' && (
                 <div className="space-y-6">
@@ -6908,6 +7552,57 @@ export default function ClientProfilePage() {
                     <option value="both">Both</option>
                   </select>
                 </div>
+              </div>
+
+              {/* Stripe Customer ID (payment status) */}
+              <div className="border-t border-gray-200 pt-4">
+                <h4 className="text-sm font-semibold text-gray-900 mb-2">Billing / Stripe</h4>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Stripe Customer ID
+                </label>
+                <input
+                  type="text"
+                  value={clientSettings.stripeCustomerId}
+                  onChange={(e) => setClientSettings({...clientSettings, stripeCustomerId: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+                  placeholder="cus_xxxxxxxxxxxxx (from Stripe Dashboard)"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Link this client to a Stripe customer so payment status (paid up / failed) appears on their profile. Paste the Customer ID from Stripe. Once set, Stripe webhooks will keep status in sync.
+                </p>
+                {client?.paymentStatus && (
+                  <p className="text-xs font-medium text-gray-700 mt-2">
+                    Current status: <span className={client.paymentStatus === 'paid' ? 'text-green-600' : client.paymentStatus === 'failed' || client.paymentStatus === 'past_due' ? 'text-red-600' : 'text-gray-600'}>{client.paymentStatus === 'paid' ? 'Paid up' : client.paymentStatus === 'failed' ? 'Payment failed' : client.paymentStatus === 'past_due' ? 'Past due' : client.paymentStatus}</span>
+                  </p>
+                )}
+                {client?.stripeCustomerId && (
+                  <div className="flex flex-wrap gap-2 mt-3">
+                    <button
+                      type="button"
+                      onClick={handlePauseSubscription}
+                      disabled={!!billingAction}
+                      className="px-3 py-1.5 text-sm font-medium text-amber-800 bg-amber-100 border border-amber-200 rounded-lg hover:bg-amber-200 disabled:opacity-50"
+                    >
+                      {billingAction === 'pause' ? 'Pausing...' : 'Pause subscription'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleResumeSubscription}
+                      disabled={!!billingAction}
+                      className="px-3 py-1.5 text-sm font-medium text-blue-800 bg-blue-100 border border-blue-200 rounded-lg hover:bg-blue-200 disabled:opacity-50"
+                    >
+                      {billingAction === 'resume' ? 'Resuming...' : 'Resume subscription'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCancelSubscription}
+                      disabled={!!billingAction}
+                      className="px-3 py-1.5 text-sm font-medium text-red-800 bg-red-100 border border-red-200 rounded-lg hover:bg-red-200 disabled:opacity-50"
+                    >
+                      {billingAction === 'cancel' ? 'Canceling...' : 'Cancel subscription'}
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Coach Notes */}

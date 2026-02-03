@@ -126,6 +126,14 @@ export default function ResponseDetailPage() {
         setFeedbackCount(responseData.response?.feedbackCount || 0);
         setReactions(responseData.response?.reactions || {});
         
+        // Debug: Log the API response to see what we're getting
+        console.log('🔍 API Response Debug:', {
+          hasResponse: !!responseData.response,
+          clientId: responseData.response?.clientId,
+          clientName: responseData.response?.clientName,
+          fullResponse: responseData.response
+        });
+        
         // If clientId is missing from response, try to fetch from assignment
         // First try using assignmentId from response, then try responseId as fallback
         if (!responseData.response?.clientId) {
@@ -654,7 +662,10 @@ export default function ResponseDetailPage() {
             <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-4 sm:px-6 lg:px-8 py-4 sm:py-5 lg:py-6 border-b border-gray-100">
               <div className="flex items-center justify-between">
                 <h2 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900">Response Summary</h2>
-                {response?.clientId ? (
+                {/* FORCE RENDER BUTTON - Always show something to debug */}
+                {!response ? (
+                  <div className="text-xs bg-red-200 px-3 py-2 rounded font-bold">⚠️ DEBUG: response is NULL</div>
+                ) : response.clientId ? (
                   <Link
                     href={`/clients/${response.clientId}/progress`}
                     target="_blank"
@@ -670,7 +681,11 @@ export default function ResponseDetailPage() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                     </svg>
                   </Link>
-                ) : null}
+                ) : (
+                  <div className="text-xs bg-yellow-200 px-3 py-2 rounded font-bold">
+                    ⚠️ No clientId (ID: {response.id})
+                  </div>
+                )}
               </div>
             </div>
             <div className="p-4 sm:p-6 lg:p-8">

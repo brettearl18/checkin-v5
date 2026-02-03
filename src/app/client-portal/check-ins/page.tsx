@@ -131,7 +131,8 @@ export default function ClientCheckInsPage() {
       }
 
       // Fetch client ID from clients collection using email
-      const response = await fetch(`/api/client-portal?clientEmail=${userProfile.email}`);
+      const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
+      const response = await fetch(`/api/client-portal?clientEmail=${userProfile.email}`, { headers });
       
       if (!response.ok) {
         // Silently handle non-OK responses - API might be starting up
@@ -182,7 +183,8 @@ export default function ClientCheckInsPage() {
       setCompletedLoading(true);
       if (!clientId) return;
 
-      const response = await fetch(`/api/client-portal/history?clientId=${clientId}`);
+      const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
+      const response = await fetch(`/api/client-portal/history?clientId=${clientId}`, { headers });
       
       if (response.ok) {
         const data = await response.json();
@@ -243,7 +245,8 @@ export default function ClientCheckInsPage() {
         return;
       }
 
-      const response = await fetch(`/api/client-portal/check-ins?clientId=${clientId}`);
+      const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
+      const response = await fetch(`/api/client-portal/check-ins?clientId=${clientId}`, { headers });
       const result = await response.json();
 
       if (result.success) {

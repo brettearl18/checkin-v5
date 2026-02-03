@@ -106,6 +106,40 @@ export async function POST(request: NextRequest) {
     // Save to Firestore using Admin SDK
     const docRef = await db.collection('check_in_assignments').add(assignment);
 
+    // Pre-create Week 2..totalWeeks for recurring series (so coach/client see full series when USE_PRE_CREATED_ASSIGNMENTS is true)
+    const totalWeeks = assignment.totalWeeks || 1;
+    if (assignment.isRecurring && totalWeeks > 1) {
+      const firstDueDate = new Date(assignment.dueDate);
+      for (let week = 2; week <= totalWeeks; week++) {
+        const weekMonday = new Date(firstDueDate);
+        weekMonday.setDate(firstDueDate.getDate() + 7 * (week - 1));
+        weekMonday.setHours(hours, minutes, 0, 0);
+        const weekAssignment = {
+          id: assignmentId,
+          formId: assignment.formId,
+          formTitle: assignment.formTitle,
+          clientId: assignment.clientId,
+          coachId: assignment.coachId,
+          frequency: assignment.frequency,
+          duration: assignment.duration,
+          startDate: assignment.startDate,
+          firstCheckInDate: assignment.firstCheckInDate,
+          dueDate: weekMonday,
+          dueTime: dueTimeValue,
+          checkInWindow: null,
+          status: assignment.status,
+          assignedAt: new Date(),
+          completedAt: null,
+          score: 0,
+          responseCount: 0,
+          isRecurring: true,
+          recurringWeek: week,
+          totalWeeks: assignment.totalWeeks
+        };
+        await db.collection('check_in_assignments').add(weekAssignment);
+      }
+    }
+
     // Create measurement schedule if provided
     if (measurementSchedule && measurementSchedule.enabled && measurementSchedule.firstFridayDate) {
       try {

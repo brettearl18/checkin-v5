@@ -59,7 +59,8 @@ export default function GoalsQuestionnairePage() {
 
   const fetchClientData = async () => {
     try {
-      const response = await fetch(`/api/client-portal?clientEmail=${encodeURIComponent(userProfile?.email || '')}`);
+      const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
+      const response = await fetch(`/api/client-portal?clientEmail=${encodeURIComponent(userProfile?.email || '')}`, { headers });
       const data = await response.json();
       
       if (data.success && data.data.client) {
@@ -75,7 +76,8 @@ export default function GoalsQuestionnairePage() {
 
   const fetchQuestionnaireData = async (preserveCurrentSection: boolean = false) => {
     try {
-      const response = await fetch(`/api/client-portal/goals-questionnaire?clientId=${clientId}`);
+      const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
+      const response = await fetch(`/api/client-portal/goals-questionnaire?clientId=${clientId}`, { headers });
       const data = await response.json();
       
       if (data.success && data.data) {
@@ -125,14 +127,16 @@ export default function GoalsQuestionnairePage() {
         return answer !== undefined && answer !== null && answer !== '';
       });
 
+      const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
       const response = await fetch('/api/client-portal/goals-questionnaire', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...headers,
         },
         body: JSON.stringify({
           clientId,
-          coachId,
+          coachId: coachId || undefined,
           section: currentSection,
           responses: allSectionResponses,
           markSectionComplete: sectionComplete
@@ -178,8 +182,8 @@ export default function GoalsQuestionnairePage() {
   };
 
   const handleSubmit = async () => {
-    if (!clientId || !coachId) {
-      alert('Unable to submit: Missing client or coach information.');
+    if (!clientId) {
+      alert('Unable to submit: Missing client information. Please refresh the page and try again.');
       return;
     }
 
@@ -188,14 +192,16 @@ export default function GoalsQuestionnairePage() {
 
     setSubmitting(true);
     try {
+      const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
       const response = await fetch('/api/client-portal/goals-questionnaire/submit', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...headers,
         },
         body: JSON.stringify({
           clientId,
-          coachId,
+          coachId: coachId || undefined,
         }),
       });
 

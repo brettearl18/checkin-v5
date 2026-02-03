@@ -70,7 +70,8 @@ export default function ClientGoalsPage() {
   const fetchQuestionnaireStatus = async () => {
     try {
       if (!clientId) return;
-      const response = await fetch(`/api/client-portal/goals-questionnaire?clientId=${clientId}`);
+      const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
+      const response = await fetch(`/api/client-portal/goals-questionnaire?clientId=${clientId}`, { headers });
       if (response.ok) {
         const data = await response.json();
         if (data.success && data.data) {
@@ -91,7 +92,8 @@ export default function ClientGoalsPage() {
       }
 
       // Fetch client ID from clients collection using email
-      const response = await fetch(`/api/client-portal?clientEmail=${userProfile.email}`);
+      const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
+      const response = await fetch(`/api/client-portal?clientEmail=${userProfile.email}`, { headers });
       const result = await response.json();
 
       if (result.success && result.data.client) {
@@ -114,7 +116,8 @@ export default function ClientGoalsPage() {
         return;
       }
 
-      const response = await fetch(`/api/client-portal/goals?clientId=${clientId}`);
+      const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
+      const response = await fetch(`/api/client-portal/goals?clientId=${clientId}`, { headers });
       
       if (response.ok) {
         const data = await response.json();
@@ -163,10 +166,12 @@ export default function ClientGoalsPage() {
       
       console.log('Submitting goal:', goalData);
 
+      const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
       const response = await fetch('/api/client-portal/goals', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...headers,
         },
         body: JSON.stringify(goalData),
       });
@@ -235,8 +240,10 @@ export default function ClientGoalsPage() {
     if (!deletingGoal) return;
 
     try {
+      const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
       const response = await fetch(`/api/client-portal/goals?goalId=${deletingGoal.id}`, {
         method: 'DELETE',
+        headers
       });
 
       const data = await response.json();
@@ -286,10 +293,12 @@ export default function ClientGoalsPage() {
       
       console.log('Updating progress:', goalData);
 
+      const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
       const response = await fetch('/api/client-portal/goals', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
+          ...headers,
         },
         body: JSON.stringify(goalData),
       });
@@ -346,10 +355,12 @@ export default function ClientGoalsPage() {
       
       console.log('Updating goal:', goalData);
 
+      const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
       const response = await fetch('/api/client-portal/goals', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
+          ...headers,
         },
         body: JSON.stringify(goalData),
       });

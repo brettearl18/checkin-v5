@@ -124,7 +124,7 @@ export default function ClientProgressPage() {
     try {
       setLoading(true);
       
-      if (!userProfile?.uid) {
+      if (!userProfile?.email) {
         console.log('No user profile found');
         setResponses([]);
         setStats({
@@ -138,8 +138,23 @@ export default function ClientProgressPage() {
         return;
       }
 
+      // First, fetch client data to get the actual clientId
+      let clientId = userProfile.uid; // Fallback to uid
+      const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
+      try {
+        const clientResponse = await fetch(`/api/client-portal?clientEmail=${encodeURIComponent(userProfile.email)}`, { headers });
+        if (clientResponse.ok) {
+          const clientData = await clientResponse.json();
+          if (clientData.success && clientData.data?.client?.id) {
+            clientId = clientData.data.client.id;
+          }
+        }
+      } catch (error) {
+        console.log('Error fetching client ID, using uid as fallback:', error);
+      }
+
       // Fetch real responses using the existing API endpoint
-      const response = await fetch(`/api/client-portal/history?clientId=${userProfile.uid}`);
+      const response = await fetch(`/api/client-portal/history?clientId=${clientId}`, { headers });
       
       if (!response.ok) {
         throw new Error('Failed to fetch progress data');
@@ -200,8 +215,8 @@ export default function ClientProgressPage() {
       // Process question-level progress
       processQuestionProgress(responsesData);
 
-      // Fetch measurements (will use responsesData)
-      fetchMeasurements(userProfile.uid, responsesData);
+      // Fetch measurements using the clientId we already fetched
+      fetchMeasurements(clientId, responsesData);
 
       // Calculate stats using real data only
       const totalCheckIns = responsesData.length;
@@ -554,8 +569,9 @@ export default function ClientProgressPage() {
       let allMeasurements: any[] = [];
       
       // Fetch onboarding data (baseline measurements)
+      const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
       try {
-        const onboardingResponse = await fetch(`/api/client-onboarding/data?clientId=${clientId}`);
+        const onboardingResponse = await fetch(`/api/client-onboarding/data?clientId=${clientId}`, { headers });
         const onboardingData = await onboardingResponse.json();
         
         if (onboardingData.success && onboardingData.data) {
@@ -586,7 +602,7 @@ export default function ClientProgressPage() {
 
       // Fetch from client_measurements collection
       try {
-        const measurementsResponse = await fetch(`/api/client-measurements?clientId=${clientId}`);
+        const measurementsResponse = await fetch(`/api/client-measurements?clientId=${clientId}`, { headers });
         const measurementsData = await measurementsResponse.json();
         
         if (measurementsData.success && measurementsData.data) {
@@ -594,7 +610,7 @@ export default function ClientProgressPage() {
             date: new Date(m.date),
             bodyWeight: m.bodyWeight,
             measurements: m.measurements || {},
-            isBaseline: false
+            isBaseline: m.isBaseline || false // Preserve baseline flag from API
           }));
           allMeasurements = [...allMeasurements, ...clientMeasurements];
         }
@@ -624,25 +640,39 @@ export default function ClientProgressPage() {
         })
         .filter(m => m !== null);
 
-      // Merge and deduplicate by date (prioritize baseline measurements)
+      // Merge and combine measurements by date (merge data from multiple entries on same date)
       const merged = [...allMeasurements, ...checkInMeasurements];
-      const uniqueByDate = new Map<string, any>();
+      const combinedByDate = new Map<string, any>();
       
       merged.forEach(m => {
         const dateKey = m.date.toISOString().split('T')[0];
-        const existing = uniqueByDate.get(dateKey);
+        const existing = combinedByDate.get(dateKey);
         
-        // Prioritize baseline measurements, then measurements with more data
         if (!existing) {
-          uniqueByDate.set(dateKey, m);
-        } else if (m.isBaseline && !existing.isBaseline) {
-          uniqueByDate.set(dateKey, m);
-        } else if (!existing.isBaseline && m.bodyWeight && !existing.bodyWeight) {
-          uniqueByDate.set(dateKey, m);
+          // First entry for this date - use it as base
+          combinedByDate.set(dateKey, {
+            date: m.date,
+            bodyWeight: m.bodyWeight || null,
+            measurements: { ...(m.measurements || {}) },
+            isBaseline: m.isBaseline || false
+          });
+        } else {
+          // Merge with existing entry - combine all data
+          // Preserve baseline status if either entry is baseline
+          const combined = {
+            date: existing.date,
+            bodyWeight: existing.bodyWeight || m.bodyWeight || null,
+            measurements: { 
+              ...existing.measurements, 
+              ...(m.measurements || {}) 
+            },
+            isBaseline: existing.isBaseline || m.isBaseline || false
+          };
+          combinedByDate.set(dateKey, combined);
         }
       });
 
-      const sortedMeasurements = Array.from(uniqueByDate.values())
+      const sortedMeasurements = Array.from(combinedByDate.values())
         .sort((a, b) => a.date.getTime() - b.date.getTime());
 
       setMeasurements(sortedMeasurements);

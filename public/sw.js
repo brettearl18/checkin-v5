@@ -3,18 +3,43 @@
  * Handles push events and notification clicks
  */
 
-const CACHE_NAME = 'vana-checkin-v2';
+const CACHE_NAME = 'vana-checkin-v3';
 const urlsToCache = [
   '/',
   '/icon-192.png',
   '/icon-512.png'
 ];
 
-// Install event - cache static assets
+// Install event - cache static assets ONLY (not JavaScript)
 self.addEventListener('install', (event) => {
+  // Skip waiting to activate immediately
+  self.skipWaiting();
+  
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => cache.addAll(urlsToCache))
+  );
+});
+
+// Fetch event - DON'T cache JavaScript files, let them load fresh
+self.addEventListener('fetch', (event) => {
+  const url = new URL(event.request.url);
+  
+  // Don't cache JavaScript or CSS files - always fetch fresh
+  if (url.pathname.endsWith('.js') || url.pathname.endsWith('.css') || url.pathname.includes('/_next/')) {
+    event.respondWith(
+      fetch(event.request).catch(() => {
+        // Only fallback to cache if network fails
+        return caches.match(event.request);
+      })
+    );
+    return;
+  }
+  
+  // For other resources, check cache first
+  event.respondWith(
+    caches.match(event.request)
+      .then((response) => response || fetch(event.request))
   );
 });
 

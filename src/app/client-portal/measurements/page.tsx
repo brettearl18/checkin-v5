@@ -136,7 +136,8 @@ export default function MeasurementsPage() {
         return;
       }
 
-      const response = await fetch(`/api/client-portal?clientEmail=${encodeURIComponent(userProfile.email)}`);
+      const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
+      const response = await fetch(`/api/client-portal?clientEmail=${encodeURIComponent(userProfile.email)}`, { headers });
       const result = await response.json();
 
       if (result.success && result.data.client) {
@@ -154,14 +155,15 @@ export default function MeasurementsPage() {
     if (!clientId) return;
 
     try {
+      const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
       // Check for baseline measurement entry
-      const measurementsResponse = await fetch(`/api/client-measurements?clientId=${clientId}`);
+      const measurementsResponse = await fetch(`/api/client-measurements?clientId=${clientId}`, { headers });
       const measurementsData = await measurementsResponse.json();
       
       const hasBaselineMeasurement = measurementsData.success && measurementsData.data?.some((m: any) => m.isBaseline);
       
       // Check for before photos
-      const imagesResponse = await fetch(`/api/progress-images?clientId=${clientId}`);
+      const imagesResponse = await fetch(`/api/progress-images?clientId=${clientId}`, { headers });
       const imagesData = await imagesResponse.json();
       
       const hasBeforePhotos = imagesData.success && imagesData.data?.some((img: any) => img.imageType === 'before');
@@ -200,7 +202,8 @@ export default function MeasurementsPage() {
     if (!clientId) return;
 
     try {
-      const response = await fetch(`/api/progress-images?clientId=${clientId}`);
+      const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
+      const response = await fetch(`/api/progress-images?clientId=${clientId}`, { headers });
       const data = await response.json();
       
       if (data.success && data.data) {
@@ -221,10 +224,15 @@ export default function MeasurementsPage() {
     if (!clientId) return;
 
     try {
-      const response = await fetch(`/api/client-measurements?clientId=${clientId}`);
+      const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
+      const response = await fetch(`/api/client-measurements?clientId=${clientId}`, { headers });
       const data = await response.json();
       if (data.success) {
-        const history = data.data || [];
+        const history = (data.data || []).sort((a: any, b: any) => {
+          const dateA = new Date(a.date).getTime();
+          const dateB = new Date(b.date).getTime();
+          return dateA - dateB; // Ascending: oldest first (correct chronological order for charts and table)
+        });
         console.log('✅ Measurement history loaded:', history.length, 'entries');
         console.log('✅ First entry:', history[0]);
         console.log('✅ Will render visualization:', history.length > 0 && !!history[0]);
@@ -271,8 +279,10 @@ export default function MeasurementsPage() {
       formData.append('orientation', orientation);
       formData.append('caption', `Before photo - ${orientation} view`);
 
+      const authHeaders = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
       const uploadResponse = await fetch('/api/progress-images/upload', {
         method: 'POST',
+        headers: authHeaders,
         body: formData
       });
 
@@ -371,10 +381,12 @@ export default function MeasurementsPage() {
         payload: JSON.stringify(measurementData)
       });
       
+      const authHeaders = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
       const response = await fetch('/api/client-measurements', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...authHeaders,
         },
         body: JSON.stringify(measurementData)
       });
@@ -476,10 +488,12 @@ export default function MeasurementsPage() {
           }
         });
 
+        const authHeaders = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
         const response = await fetch('/api/client-measurements', {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
+            ...authHeaders,
           },
           body: JSON.stringify(measurementData)
         });
@@ -508,10 +522,12 @@ export default function MeasurementsPage() {
           }
         });
 
+        const authHeaders = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
         const response = await fetch('/api/client-measurements', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            ...authHeaders,
           },
           body: JSON.stringify(measurementData)
         });
@@ -571,8 +587,10 @@ export default function MeasurementsPage() {
 
     setDeletingEntry(id);
     try {
+      const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
       const response = await fetch(`/api/client-measurements?id=${id}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers
       });
 
       const data = await response.json();
@@ -597,7 +615,7 @@ export default function MeasurementsPage() {
   };
 
   const getLatestMeasurement = (key: string) => {
-    const latest = measurementHistory[0];
+    const latest = measurementHistory[measurementHistory.length - 1]; // Last = newest (chronological order)
     if (!latest) return null;
     if (key === 'bodyWeight') {
       return latest.bodyWeight || null;
@@ -1006,7 +1024,7 @@ export default function MeasurementsPage() {
   // NORMAL MEASUREMENT TRACKING MODE
   console.log('🔍 Rendering measurements page - isBaselineSetup:', isBaselineSetup);
   console.log('🔍 measurementHistory.length:', measurementHistory.length);
-  console.log('🔍 Should render visualization:', measurementHistory.length > 0 && !!measurementHistory[0]);
+  console.log('🔍 Should render visualization:', measurementHistory.length > 0 && !!measurementHistory[measurementHistory.length - 1]);
   
   return (
     <RoleProtected requiredRole="client">
@@ -1127,19 +1145,33 @@ export default function MeasurementsPage() {
             </div>
           )}
 
-          {/* Body Measurements Visualization */}
-          {measurementHistory.length > 0 && measurementHistory[0] && (
+          {/* Body Measurements Visualization - show LATEST measurement (last in chronological order) */}
+          {measurementHistory.length > 0 && (() => {
+            const latestEntry = measurementHistory[measurementHistory.length - 1];
+            return latestEntry && (
             <div className="mb-6 lg:mb-8">
               <BodyMeasurementsVisualization
                 measurementData={{
-                  bodyWeight: measurementHistory[0].bodyWeight,
-                  measurements: measurementHistory[0].measurements,
-                  date: measurementHistory[0].date
+                  bodyWeight: latestEntry.bodyWeight,
+                  measurements: latestEntry.measurements,
+                  date: latestEntry.date
                 }}
-                onEdit={() => handleEdit(measurementHistory[0])}
+                baselineData={(() => {
+                  // Find baseline measurement
+                  const baseline = measurementHistory.find(m => m.isBaseline);
+                  if (baseline && baseline.id !== latestEntry.id) {
+                    return {
+                      bodyWeight: baseline.bodyWeight,
+                      measurements: baseline.measurements,
+                      date: baseline.date
+                    };
+                  }
+                  return undefined;
+                })()}
+                onEdit={() => handleEdit(latestEntry)}
                 onDelete={() => {
-                  if (!measurementHistory[0].isBaseline) {
-                    handleDelete(measurementHistory[0].id);
+                  if (!latestEntry.isBaseline) {
+                    handleDelete(latestEntry.id);
                   }
                 }}
                 showActions={true}
@@ -1149,7 +1181,8 @@ export default function MeasurementsPage() {
                 customImageUrl="https://firebasestorage.googleapis.com/v0/b/checkinv5.firebasestorage.app/o/5a79321a-365c-4c05-b198-609463189b7e_3_720_N.mp4?alt=media&token=0f154767-1004-41c8-96b5-ccad4b8c95ff"
               />
             </div>
-          )}
+          );
+          })()}
 
           {/* Measurement Trend Charts */}
           {measurementHistory.length > 1 && (

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase-server';
+import { requireCoach } from '@/lib/api-auth';
 export const dynamic = 'force-dynamic';
 
 // Helper function to remove undefined values
@@ -26,7 +27,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const clientId = await params.id;
+    const authResult = await requireCoach(request);
+    if (authResult instanceof NextResponse) return authResult;
+    const clientId = (await params).id;
     const db = getDb();
     const scoringDoc = await db.collection('clientScoring').doc(clientId).get();
     
@@ -64,7 +67,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const clientId = await params.id;
+    const authResult = await requireCoach(request);
+    if (authResult instanceof NextResponse) return authResult;
+    const clientId = (await params).id;
     const db = getDb();
     const formData = await request.json();
     

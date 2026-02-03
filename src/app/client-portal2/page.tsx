@@ -9,6 +9,7 @@ import Link from 'next/link';
 import NotificationBell from '@/components/NotificationBell';
 import QuickStatsBar from '@/components/client-portal/QuickStatsBar';
 import NoticeBoard from '@/components/NoticeBoard';
+import UnifiedTaskList from '@/components/client-portal/UnifiedTaskList';
 
 // Lazy load recharts components to reduce initial bundle size
 const ResponsiveContainer = dynamic(
@@ -770,70 +771,13 @@ export default function ClientPortalPageV2() {
                   </div>
                 )}
 
-                {/* Section 2: Priority Actions (Cards Grid) */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mb-6">
-                  {/* Next Check-in Card */}
-                  {nextScheduledCheckIn && (
-                    <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 p-4 sm:p-6 overflow-hidden">
-                      <div className="flex items-start gap-3 sm:gap-4">
-                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#daa450' }}>
-                          <svg className="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                          </svg>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <h3 className="text-base sm:text-lg font-bold text-gray-900 mb-1">Next Check-in</h3>
-                          <p className="text-sm sm:text-base font-medium text-gray-900 truncate mb-2">{nextScheduledCheckIn.title}</p>
-                          <p className="text-xs sm:text-sm text-gray-600 mb-3">
-                            {(() => {
-                              const dueDate = new Date(nextScheduledCheckIn.dueDate);
-                              const now = new Date();
-                              const daysDiff = Math.floor((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-                              return daysDiff === 0 ? 'Due today' : daysDiff === 1 ? 'Due tomorrow' : `Due in ${daysDiff} days`;
-                            })()}
-                          </p>
-                          <Link
-                            href={`/client-portal/check-in/${nextScheduledCheckIn.id}`}
-                            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white rounded-xl hover:opacity-90 transition-opacity shadow-sm"
-                            style={{ backgroundColor: '#daa450' }}
-                          >
-                            Start Check-in
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                            </svg>
-                          </Link>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Urgent Actions Card */}
-                  {urgentCheckIns.length > 0 && (
-                    <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border-2 border-red-200 p-4 sm:p-6 overflow-hidden">
-                      <div className="flex items-start gap-3 sm:gap-4">
-                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl flex items-center justify-center flex-shrink-0 bg-red-100">
-                          <svg className="w-5 h-5 sm:w-6 sm:h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <h3 className="text-base sm:text-lg font-bold text-gray-900 mb-1">Action Required</h3>
-                          <p className="text-sm text-red-600 font-medium mb-2">
-                            {urgentCheckIns.length} check-in{urgentCheckIns.length !== 1 ? 's' : ''} need{urgentCheckIns.length === 1 ? 's' : ''} attention
-                          </p>
-                          <Link
-                            href="/client-portal/check-ins"
-                            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white rounded-xl hover:bg-red-700 transition-colors shadow-sm bg-red-600"
-                          >
-                            View All
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                            </svg>
-                          </Link>
-                        </div>
-                      </div>
-                    </div>
-                  )}
+                {/* Section 2: Unified Task List */}
+                <div className="mb-6">
+                  <UnifiedTaskList
+                    checkIns={assignedCheckins}
+                    measurementTask={nextMeasurementTask}
+                    onboardingTodos={onboardingTodos}
+                  />
                 </div>
 
                 {/* Section 3: Progress Overview (Metric Cards) */}

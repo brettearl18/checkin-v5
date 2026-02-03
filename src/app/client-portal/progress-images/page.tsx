@@ -59,7 +59,18 @@ export default function ProgressImagesPage() {
         return;
       }
 
-      const response = await fetch(`/api/client-portal?clientEmail=${encodeURIComponent(userProfile.email)}`);
+      let headers: HeadersInit = {};
+      try {
+        const { auth } = await import('@/lib/firebase-client');
+        if (auth?.currentUser) {
+          const idToken = await auth.currentUser.getIdToken();
+          headers = { Authorization: `Bearer ${idToken}` };
+        }
+      } catch {
+        // Continue without token
+      }
+
+      const response = await fetch(`/api/client-portal?clientEmail=${encodeURIComponent(userProfile.email)}`, { headers });
       
       if (!response.ok) {
         // Silently handle non-OK responses - API might be starting up
@@ -92,7 +103,18 @@ export default function ProgressImagesPage() {
         return;
       }
 
-      const response = await fetch(`/api/progress-images?clientId=${clientId}`);
+      let headers: HeadersInit = {};
+      try {
+        const { auth } = await import('@/lib/firebase-client');
+        if (auth?.currentUser) {
+          const idToken = await auth.currentUser.getIdToken();
+          headers = { Authorization: `Bearer ${idToken}` };
+        }
+      } catch {
+        // Continue without token
+      }
+
+      const response = await fetch(`/api/progress-images?clientId=${clientId}`, { headers });
       const data = await response.json();
 
       if (data.success) {
@@ -328,12 +350,24 @@ export default function ProgressImagesPage() {
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, exportSize, exportSize);
 
+      // Get auth token for proxy (proxy requires authentication)
+      let authHeaders: HeadersInit = {};
+      try {
+        const { auth } = await import('@/lib/firebase-client');
+        if (auth?.currentUser) {
+          const idToken = await auth.currentUser.getIdToken();
+          authHeaders = { Authorization: `Bearer ${idToken}` };
+        }
+      } catch {
+        // Continue without token - will get 401 if proxy requires auth
+      }
+
       // Helper to load image
       const loadImage = (url: string): Promise<HTMLImageElement> => {
         return new Promise(async (resolve, reject) => {
           try {
             const proxyUrl = `/api/progress-images/proxy?url=${encodeURIComponent(url)}`;
-            const response = await fetch(proxyUrl);
+            const response = await fetch(proxyUrl, { headers: authHeaders });
             if (!response.ok) throw new Error(`Failed to fetch: ${response.statusText}`);
 
             const blob = await response.blob();

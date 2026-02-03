@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase-server';
 import { notificationService } from '@/lib/notification-service';
 import { FEATURE_FLAGS } from '@/lib/feature-flags';
+import { verifyClientAccess } from '@/lib/api-auth';
+import { logSafeError } from '@/lib/logger';
 // Window system removed - using fixed Friday 10am to Tuesday 12pm schedule
 
 export const dynamic = 'force-dynamic';
@@ -40,6 +42,9 @@ export async function GET(request: NextRequest) {
         message: 'Client ID is required'
       }, { status: 400 });
     }
+
+    const accessResult = await verifyClientAccess(request, clientId);
+    if (accessResult instanceof NextResponse) return accessResult;
 
     // Check if client has completed onboarding
     // If not, return empty check-ins list (coaches can still allocate, but clients won't see them)

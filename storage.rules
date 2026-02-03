@@ -78,36 +78,3 @@ service firebase.storage {
     }
   }
 }
-
-      // Coaches can delete images for their clients
-      allow delete: if isAuthenticated() && (
-        clientId == getUserId() ||
-        (resource.metadata.coachId != null && resource.metadata.coachId == getUserId())
-      );
-    }
-    
-    // ============================================
-    // Profile Images/Photos
-    // ============================================
-    // Path: profile-images/{userId}/{photoId}
-    // Note: Files may be made public for display, but rules protect write/delete
-    match /profile-images/{userId}/{photoId} {
-      // Any authenticated user can read profile images (for display in UI)
-      // Users can write their own profile images
-      // Users can delete their own profile images
-      allow read: if isAuthenticated();
-      
-      allow write: if isAuthenticated() && userId == getUserId();
-      
-      allow delete: if isAuthenticated() && userId == getUserId();
-    }
-    
-    // ============================================
-    // Default Deny
-    // ============================================
-    // Deny all other paths by default
-    match /{allPaths=**} {
-      allow read, write: if false;
-    }
-  }
-}

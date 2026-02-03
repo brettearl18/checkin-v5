@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase-server';
+import { verifyClientAccess } from '@/lib/api-auth';
 
 export async function GET(request: NextRequest) {
   try {
@@ -12,6 +13,9 @@ export async function GET(request: NextRequest) {
         message: 'Client ID is required'
       }, { status: 400 });
     }
+
+    const accessResult = await verifyClientAccess(request, clientId);
+    if (accessResult instanceof NextResponse) return accessResult;
 
     const db = getDb();
 
@@ -136,6 +140,9 @@ export async function POST(request: NextRequest) {
         message: 'Missing required fields: clientId, title, targetValue, unit, deadline'
       }, { status: 400 });
     }
+
+    const accessResult = await verifyClientAccess(request, clientId);
+    if (accessResult instanceof NextResponse) return accessResult;
 
     const db = getDb();
 
@@ -266,7 +273,11 @@ export async function PUT(request: NextRequest) {
         message: 'Goal data not found'
       }, { status: 404 });
     }
-
+    const goalClientId = existingGoal.clientId;
+    if (goalClientId) {
+      const accessResult = await verifyClientAccess(request, goalClientId);
+      if (accessResult instanceof NextResponse) return accessResult;
+    }
     // Parse deadline - date input sends ISO format (YYYY-MM-DD)
     let deadlineDate: Date;
     try {
@@ -380,6 +391,12 @@ export async function DELETE(request: NextRequest) {
         success: false,
         message: 'Goal data not found'
       }, { status: 404 });
+    }
+
+    const goalClientId = goalData.clientId;
+    if (goalClientId) {
+      const accessResult = await verifyClientAccess(request, goalClientId);
+      if (accessResult instanceof NextResponse) return accessResult;
     }
 
     console.log('Deleting goal:', goalId);

@@ -9,6 +9,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase-server';
+import { verifyClientAccess } from '@/lib/api-auth';
+import { logSafeError } from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 
@@ -48,6 +50,9 @@ export async function GET(request: NextRequest) {
       }, { status: 400 });
     }
 
+    const accessResult = await verifyClientAccess(request, clientId);
+    if (accessResult instanceof NextResponse) return accessResult;
+
     // Check if client has completed onboarding
     let onboardingCompleted = false;
     try {
@@ -62,7 +67,7 @@ export async function GET(request: NextRequest) {
           canStartCheckIns === true;
       }
     } catch (error) {
-      console.error('Error checking client onboarding status:', error);
+      logSafeError('Error checking client onboarding status', error);
       onboardingCompleted = true; // Fail open
     }
 

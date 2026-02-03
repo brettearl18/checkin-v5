@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase-server';
+import { requireAuth, verifyClientAccess } from '@/lib/api-auth';
 
 export const dynamic = 'force-dynamic';
 /**
@@ -11,6 +12,10 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(request: NextRequest) {
   try {
+    const authResult = await requireAuth(request);
+    if (authResult instanceof NextResponse) return authResult;
+    const { user } = authResult;
+
     const { searchParams } = new URL(request.url);
     const clientId = searchParams.get('clientId');
     const coachId = searchParams.get('coachId');
@@ -21,6 +26,16 @@ export async function GET(request: NextRequest) {
         success: false,
         message: 'Either clientId or coachId is required'
       }, { status: 400 });
+    }
+
+    if (clientId) {
+      const accessResult = await verifyClientAccess(request, clientId);
+      if (accessResult instanceof NextResponse) return accessResult;
+    } else if (coachId && coachId !== user.uid && !user.isAdmin) {
+      return NextResponse.json({
+        success: false,
+        message: 'Access denied. You can only view your own clients\' images.'
+      }, { status: 403 });
     }
 
     const db = getDb();

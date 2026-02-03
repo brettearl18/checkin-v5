@@ -220,13 +220,24 @@ export async function verifyClientAccess(
 
   // Clients can only access their own data
   if (user.isClient) {
-    if (clientId !== user.uid) {
-      return NextResponse.json(
-        { success: false, message: 'Access denied. You can only access your own data.' },
-        { status: 403 }
-      );
+    if (clientId === user.uid) return { user };
+    // Client may use document ID - verify the client doc belongs to them
+    try {
+      const db = getDb();
+      const clientDoc = await db.collection('clients').doc(clientId).get();
+      if (clientDoc.exists) {
+        const clientData = clientDoc.data();
+        if (clientData?.authUid === user.uid || clientData?.id === user.uid) {
+          return { user };
+        }
+      }
+    } catch {
+      // Fall through to deny
     }
-    return { user };
+    return NextResponse.json(
+      { success: false, message: 'Access denied. You can only access your own data.' },
+      { status: 403 }
+    );
   }
 
   return NextResponse.json(

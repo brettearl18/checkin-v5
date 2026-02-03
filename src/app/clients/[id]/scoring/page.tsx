@@ -88,8 +88,9 @@ export default function ClientScoringPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
+        const headers = await import('@/lib/auth-headers').then((m) => m.getAuthHeaders());
         // Fetch client data
-        const clientResponse = await fetch(`/api/clients/${clientId}`);
+        const clientResponse = await fetch(`/api/clients/${clientId}`, { headers });
         const clientData = await clientResponse.json();
         
         if (clientData.success) {
@@ -97,7 +98,7 @@ export default function ClientScoringPage() {
         }
 
         // Fetch scoring configuration
-        const scoringResponse = await fetch(`/api/clients/${clientId}/scoring`);
+        const scoringResponse = await fetch(`/api/clients/${clientId}/scoring`, { headers });
         const scoringData = await scoringResponse.json();
         
         if (scoringData.success) {
@@ -210,10 +211,12 @@ export default function ClientScoringPage() {
     
     setIsSaving(true);
     try {
+      const authHeaders = await import('@/lib/auth-headers').then((m) => m.getAuthHeaders());
       const response = await fetch(`/api/clients/${clientId}/scoring`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          ...authHeaders
         },
         body: JSON.stringify({
           ...scoringConfig,

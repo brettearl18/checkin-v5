@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase-server';
+import { verifyClientAccess } from '@/lib/api-auth';
+import { logSafeError, logWarn } from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 
@@ -8,8 +10,12 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const db = getDb();
     const { id: clientId } = await params;
+
+    const accessResult = await verifyClientAccess(request, clientId);
+    if (accessResult instanceof Response) return accessResult;
+
+    const db = getDb();
     
     // First, try to get by document ID
     let docRef = await db.collection('clients').doc(clientId).get();
@@ -36,8 +42,8 @@ export async function GET(
             docRef = queryById.docs[0];
           }
         }
-      } catch (queryError) {
-        console.log('Error querying by authUid or id:', queryError);
+      } catch {
+        // Fall through to 404 below
       }
     }
     
@@ -62,12 +68,12 @@ export async function GET(
       client
     });
 
-  } catch (error: any) {
-    console.error('Error fetching client:', error);
+  } catch (error: unknown) {
+    logSafeError('Error fetching client', error);
     return NextResponse.json(
       { 
         success: false, 
-        error: error.message 
+        error: error instanceof Error ? error.message : 'Failed to fetch client'
       },
       { status: 500 }
     );
@@ -79,8 +85,12 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const db = getDb();
     const { id: clientId } = await params;
+
+    const accessResult = await verifyClientAccess(request, clientId);
+    if (accessResult instanceof Response) return accessResult;
+
+    const db = getDb();
     const updateData = await request.json();
 
     // Remove fields that shouldn't be updated
@@ -105,12 +115,12 @@ export async function PUT(
       message: 'Client updated successfully'
     });
 
-  } catch (error: any) {
-    console.error('Error updating client:', error);
+  } catch (error: unknown) {
+    logSafeError('Error updating client', error);
     return NextResponse.json(
       { 
         success: false, 
-        error: error.message 
+        error: error instanceof Error ? error.message : 'Failed to update client'
       },
       { status: 500 }
     );
@@ -122,8 +132,12 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const db = getDb();
     const { id: clientId } = await params;
+
+    const accessResult = await verifyClientAccess(request, clientId);
+    if (accessResult instanceof Response) return accessResult;
+
+    const db = getDb();
     
     // First, get the client to find authUid if it exists
     const clientDoc = await db.collection('clients').doc(clientId).get();
@@ -159,7 +173,7 @@ export async function DELETE(
         deletions.push({ collection: 'check_in_assignments', count: assignmentsSnapshot.size });
       }
     } catch (error) {
-      console.error('Error fetching check-in assignments:', error);
+      logSafeError('Error fetching check-in assignments', error);
     }
 
     // 2. Delete form responses and collect response IDs for feedback deletion
@@ -179,7 +193,7 @@ export async function DELETE(
         deletions.push({ collection: 'formResponses', count: responsesSnapshot.size });
       }
     } catch (error) {
-      console.error('Error fetching form responses:', error);
+      logSafeError('Error fetching form responses', error);
     }
 
     // 3. Delete coach feedback related to this client's responses
@@ -201,7 +215,7 @@ export async function DELETE(
         deletions.push({ collection: 'coachFeedback', count: feedbackCount });
       }
     } catch (error) {
-      console.error('Error deleting coach feedback:', error);
+      logSafeError('Error deleting coach feedback', error);
     }
 
     // 4. Delete client measurements
@@ -218,7 +232,7 @@ export async function DELETE(
         deletions.push({ collection: 'client_measurements', count: measurementsSnapshot.size });
       }
     } catch (error) {
-      console.error('Error fetching client measurements:', error);
+      logSafeError('Error fetching client measurements', error);
     }
 
     // 5. Delete client goals
@@ -235,7 +249,7 @@ export async function DELETE(
         deletions.push({ collection: 'clientGoals', count: goalsSnapshot.size });
       }
     } catch (error) {
-      console.error('Error fetching client goals:', error);
+      logSafeError('Error fetching client goals', error);
     }
 
     // 6. Delete progress images
@@ -252,7 +266,7 @@ export async function DELETE(
         deletions.push({ collection: 'progress_images', count: imagesSnapshot.size });
       }
     } catch (error) {
-      console.error('Error fetching progress images:', error);
+      logSafeError('Error fetching progress images', error);
     }
 
     // 7. Delete onboarding data
@@ -264,7 +278,7 @@ export async function DELETE(
         deletions.push({ collection: 'client_onboarding', count: 1 });
       }
     } catch (error) {
-      console.error('Error fetching onboarding data:', error);
+      logSafeError('Error fetching onboarding data', error);
     }
 
     // 8. Delete client scoring config
@@ -276,7 +290,7 @@ export async function DELETE(
         deletions.push({ collection: 'clientScoring', count: 1 });
       }
     } catch (error) {
-      console.error('Error fetching scoring config:', error);
+      logSafeError('Error fetching scoring config', error);
     }
 
     // 9. Delete notifications related to this client
@@ -293,7 +307,7 @@ export async function DELETE(
         deletions.push({ collection: 'notifications', count: notificationsSnapshot.size });
       }
     } catch (error) {
-      console.error('Error fetching notifications:', error);
+      logSafeError('Error fetching notifications', error);
     }
 
     // 10. Delete user profile if it exists
@@ -305,7 +319,7 @@ export async function DELETE(
         deletions.push({ collection: 'users', count: 1 });
       }
     } catch (error) {
-      console.error('Error fetching user profile:', error);
+      logSafeError('Error fetching user profile', error);
     }
 
     // 11. Delete the client document itself
@@ -320,7 +334,7 @@ export async function DELETE(
       } else {
         // Need multiple batches - process in chunks
         // This is unlikely but handle it just in case
-        console.warn(`Large deletion detected (${deletionCount} operations), processing in chunks`);
+        logWarn('Large deletion detected', { deletionCount });
         // For now, commit what we have and log a warning
         // In production, you might want to split into multiple batches
         await batch.commit();
@@ -336,12 +350,12 @@ export async function DELETE(
       }
     });
 
-  } catch (error: any) {
-    console.error('Error deleting client:', error);
+  } catch (error: unknown) {
+    logSafeError('Error deleting client', error);
     return NextResponse.json(
       { 
         success: false, 
-        error: error.message 
+        error: error instanceof Error ? error.message : 'Failed to delete client'
       },
       { status: 500 }
     );

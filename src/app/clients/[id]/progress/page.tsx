@@ -115,6 +115,12 @@ export default function ClientProgressPage() {
   const [loadingImages, setLoadingImages] = useState(false);
   const [unrespondedCheckIns, setUnrespondedCheckIns] = useState<any[]>([]);
   const [loadingCheckIns, setLoadingCheckIns] = useState(false);
+  const [comparisonMode, setComparisonMode] = useState(false);
+  const [selectedOrientation, setSelectedOrientation] = useState<'front' | 'back' | 'side'>('front');
+  const [fullScreenComparison, setFullScreenComparison] = useState(false);
+  const [expandedImage, setExpandedImage] = useState<any | null>(null);
+  const [expandedViewComparisonMode, setExpandedViewComparisonMode] = useState(false);
+  const [selectedPhotosForComparison, setSelectedPhotosForComparison] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (clientId) {
@@ -133,7 +139,8 @@ export default function ClientProgressPage() {
 
   const fetchClientData = async () => {
     try {
-      const response = await fetch(`/api/clients/${clientId}`);
+      const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
+      const response = await fetch(`/api/clients/${clientId}`, { headers });
       if (response.ok) {
         const data = await response.json();
         if (data.success) {
@@ -150,8 +157,9 @@ export default function ClientProgressPage() {
 
     setLoadingMeasurements(true);
     try {
+      const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
       // Fetch from client_measurements collection
-      const response = await fetch(`/api/client-measurements?clientId=${clientId}`);
+      const response = await fetch(`/api/client-measurements?clientId=${clientId}`, { headers });
       const data = await response.json();
       if (data.success) {
         const measurements = data.data || [];
@@ -161,7 +169,7 @@ export default function ClientProgressPage() {
         let allMeasurements: any[] = [];
         
         try {
-          const onboardingResponse = await fetch(`/api/client-portal/onboarding/report?clientId=${clientId}`);
+          const onboardingResponse = await fetch(`/api/client-portal/onboarding/report?clientId=${clientId}`, { headers });
           const onboardingData = await onboardingResponse.json();
           
           if (onboardingData.success && onboardingData.data) {
@@ -215,7 +223,8 @@ export default function ClientProgressPage() {
 
     setLoadingImages(true);
     try {
-      const response = await fetch(`/api/progress-images?clientId=${clientId}&limit=12`);
+      const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
+      const response = await fetch(`/api/progress-images?clientId=${clientId}&limit=12`, { headers });
       const data = await response.json();
       if (data.success) {
         setProgressImages(data.data || []);
@@ -232,7 +241,8 @@ export default function ClientProgressPage() {
 
     setLoadingCheckIns(true);
     try {
-      const response = await fetch(`/api/dashboard/check-ins-to-review?coachId=${userProfile.uid}&sortBy=submittedAt&sortOrder=desc`);
+      const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
+      const response = await fetch(`/api/dashboard/check-ins-to-review?coachId=${userProfile.uid}&sortBy=submittedAt&sortOrder=desc`, { headers });
       const data = await response.json();
       if (data.success && data.data?.checkIns) {
         // Filter to only show check-ins for this specific client
@@ -246,12 +256,71 @@ export default function ClientProgressPage() {
     }
   };
 
+  // Helper function to organize photos for comparison
+  const getComparisonPhotos = () => {
+    const grouped: { [key: string]: { before?: any; after?: any } } = {
+      front: {},
+      back: {},
+      side: {}
+    };
+
+    // Filter out profile photos and group by orientation
+    const validPhotos = progressImages.filter(img => 
+      img.imageType !== 'profile' && img.orientation
+    );
+
+    // For each orientation, find earliest "before" and latest "after" or "progress"
+    ['front', 'back', 'side'].forEach(orientation => {
+      const orientationPhotos = validPhotos.filter(img => img.orientation === orientation);
+      
+      if (orientationPhotos.length === 0) return;
+
+      // Find earliest "before" photo
+      const beforePhotos = orientationPhotos
+        .filter(img => img.imageType === 'before')
+        .sort((a, b) => new Date(a.uploadedAt).getTime() - new Date(b.uploadedAt).getTime());
+      
+      if (beforePhotos.length > 0) {
+        grouped[orientation].before = beforePhotos[0];
+      }
+
+      // Find latest "after" or "progress" photo
+      const afterPhotos = orientationPhotos
+        .filter(img => img.imageType === 'after' || img.imageType === 'progress')
+        .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+      
+      if (afterPhotos.length > 0) {
+        grouped[orientation].after = afterPhotos[0];
+      }
+    });
+
+    return grouped;
+  };
+
+  const formatTimeDifference = (date1: string, date2: string) => {
+    const d1 = new Date(date1);
+    const d2 = new Date(date2);
+    const diffTime = Math.abs(d2.getTime() - d1.getTime());
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    const diffMonths = Math.floor(diffDays / 30);
+    const diffYears = Math.floor(diffDays / 365);
+
+    if (diffYears > 0) {
+      return `${diffYears} year${diffYears !== 1 ? 's' : ''}`;
+    } else if (diffMonths > 0) {
+      return `${diffMonths} month${diffMonths !== 1 ? 's' : ''}`;
+    } else {
+      return `${diffDays} day${diffDays !== 1 ? 's' : ''}`;
+    }
+  };
+
   const fetchQuestionProgress = async () => {
     if (!clientId) return;
     
     try {
       setLoading(true);
-      const response = await fetch(`/api/client-portal/history?clientId=${clientId}`);
+      const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
+      const response = await fetch(`/api/client-portal/history?clientId=${clientId}`, { headers });
       if (!response.ok) {
         throw new Error('Failed to fetch question progress data');
       }
@@ -575,11 +644,170 @@ export default function ClientProgressPage() {
           <div className="animate-pulse">
             <div className="h-8 bg-gray-200 rounded w-1/4 mb-6"></div>
             <div className="h-64 bg-gray-200 rounded"></div>
-          </div>
         </div>
       </div>
-    );
-  }
+
+      {/* Full-Screen Comparison Modal */}
+      {fullScreenComparison && (() => {
+        const comparisonPhotos = getComparisonPhotos();
+        const currentComparison = comparisonPhotos[selectedOrientation];
+        
+        return (
+          <div className="fixed inset-0 z-50 bg-black bg-opacity-90 flex items-center justify-center p-4">
+            <div className="relative w-full max-w-7xl max-h-[90vh] bg-white rounded-2xl overflow-hidden">
+              {/* Header */}
+              <div className="bg-pink-600 px-6 py-4 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <h3 className="text-xl font-bold text-white">
+                    {selectedOrientation.charAt(0).toUpperCase() + selectedOrientation.slice(1)} View Comparison
+                  </h3>
+                  {currentComparison.before && currentComparison.after && (
+                    <span className="px-3 py-1 bg-white/20 text-white rounded-lg text-sm font-medium">
+                      {formatTimeDifference(currentComparison.before.uploadedAt, currentComparison.after.uploadedAt)} progress
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-3">
+                  {/* Orientation Selector */}
+                  <div className="flex gap-2">
+                    {(['front', 'back', 'side'] as const).map((orientation) => {
+                      const hasPhotos = comparisonPhotos[orientation].before || comparisonPhotos[orientation].after;
+                      return (
+                        <button
+                          key={orientation}
+                          onClick={() => setSelectedOrientation(orientation)}
+                          disabled={!hasPhotos}
+                          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                            selectedOrientation === orientation
+                              ? 'bg-white text-pink-600'
+                              : hasPhotos
+                              ? 'bg-white/20 text-white hover:bg-white/30'
+                              : 'bg-white/10 text-white/50 cursor-not-allowed'
+                          }`}
+                        >
+                          {orientation.charAt(0).toUpperCase() + orientation.slice(1)}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <button
+                    onClick={() => setFullScreenComparison(false)}
+                    className="p-2 bg-white/20 hover:bg-white/30 text-white rounded-lg transition-colors"
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              {/* Comparison Images */}
+              <div className="grid grid-cols-2 gap-4 p-6 max-h-[calc(90vh-100px)] overflow-y-auto">
+                {/* Before Photo */}
+                <div className="flex flex-col">
+                  <div className="relative aspect-square rounded-xl overflow-hidden border-4 border-orange-400 bg-gray-50">
+                    {currentComparison.before ? (
+                      <Image
+                        src={currentComparison.before.imageUrl}
+                        alt="Before"
+                        width={800}
+                        height={800}
+                        className="w-full h-full object-contain"
+                        unoptimized={currentComparison.before.imageUrl?.includes('firebase') ? false : undefined}
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = `data:image/svg+xml,${encodeURIComponent(`
+                            <svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
+                              <rect width="200" height="200" fill="#f3f4f6"/>
+                              <text x="50%" y="50%" font-family="Arial" font-size="14" fill="#9ca3af" text-anchor="middle" dy=".3em">Image</text>
+                            </svg>
+                          `)}`;
+                        }}
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <div className="text-center">
+                          <svg className="w-16 h-16 text-gray-300 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                          <p className="text-gray-400 text-sm">No before photo</p>
+                        </div>
+                      </div>
+                    )}
+                    <div className="absolute top-4 left-4">
+                      <span className="px-4 py-2 rounded-full text-base font-bold bg-orange-500 text-white">
+                        Before
+                      </span>
+                    </div>
+                  </div>
+                  {currentComparison.before && (
+                    <div className="mt-3 text-center">
+                      <p className="text-gray-700 text-base font-semibold">
+                        {new Date(currentComparison.before.uploadedAt).toLocaleDateString('en-US', { 
+                          month: 'long', 
+                          day: 'numeric',
+                          year: 'numeric'
+                        })}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* After Photo */}
+                <div className="flex flex-col">
+                  <div className="relative aspect-square rounded-xl overflow-hidden border-4 border-green-400 bg-gray-50">
+                    {currentComparison.after ? (
+                      <Image
+                        src={currentComparison.after.imageUrl}
+                        alt="After"
+                        width={800}
+                        height={800}
+                        className="w-full h-full object-contain"
+                        unoptimized={currentComparison.after.imageUrl?.includes('firebase') ? false : undefined}
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = `data:image/svg+xml,${encodeURIComponent(`
+                            <svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
+                              <rect width="200" height="200" fill="#f3f4f6"/>
+                              <text x="50%" y="50%" font-family="Arial" font-size="14" fill="#9ca3af" text-anchor="middle" dy=".3em">Image</text>
+                            </svg>
+                          `)}`;
+                        }}
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <div className="text-center">
+                          <svg className="w-16 h-16 text-gray-300 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                          <p className="text-gray-400 text-sm">No after photo</p>
+                        </div>
+                      </div>
+                    )}
+                    <div className="absolute top-4 left-4">
+                      <span className="px-4 py-2 rounded-full text-base font-bold bg-green-500 text-white">
+                        After
+                      </span>
+                    </div>
+                  </div>
+                  {currentComparison.after && (
+                    <div className="mt-3 text-center">
+                      <p className="text-gray-700 text-base font-semibold">
+                        {new Date(currentComparison.after.uploadedAt).toLocaleDateString('en-US', { 
+                          month: 'long', 
+                          day: 'numeric',
+                          year: 'numeric'
+                        })}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+    </div>
+  );
+}
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex">
@@ -661,8 +889,7 @@ export default function ClientProgressPage() {
               ) : allMeasurementsData.length > 0 ? (
                 <div className="space-y-2">
                   {(() => {
-                    const latest = allMeasurementsData[allMeasurementsData.length - 1];
-                    const measurements = latest?.measurements || {};
+                    // Collect all measurement keys from ALL measurements, not just the latest
                     const measurementKeys = ['waist', 'hips', 'chest', 'leftThigh', 'rightThigh', 'leftArm', 'rightArm'];
                     const measurementLabels: { [key: string]: string } = {
                       waist: 'Waist',
@@ -673,18 +900,37 @@ export default function ClientProgressPage() {
                       leftArm: 'Left Arm',
                       rightArm: 'Right Arm'
                     };
-                    const availableMeasurements = measurementKeys.filter(key => measurements[key]);
                     
-                    if (availableMeasurements.length === 0) {
+                    // Find all measurement keys that exist in ANY measurement entry
+                    const allAvailableKeys = new Set<string>();
+                    allMeasurementsData.forEach((entry: any) => {
+                      const measurements = entry?.measurements || {};
+                      measurementKeys.forEach(key => {
+                        if (measurements[key] !== undefined && measurements[key] !== null && measurements[key] !== '') {
+                          allAvailableKeys.add(key);
+                        }
+                      });
+                    });
+                    
+                    if (allAvailableKeys.size === 0) {
                       return <div className="text-center py-4 text-gray-500 text-sm">No measurements recorded</div>;
                     }
+                    
+                    // Get the latest values for each measurement type
+                    const latest = allMeasurementsData[allMeasurementsData.length - 1];
+                    const latestMeasurements = latest?.measurements || {};
+                    const availableMeasurements = Array.from(allAvailableKeys);
                     
                     return (
                       <div className="space-y-2">
                         {availableMeasurements.slice(0, 4).map((key) => (
                           <div key={key} className="flex justify-between items-center">
                             <span className="text-sm text-gray-600">{measurementLabels[key]}</span>
-                            <span className="text-sm font-semibold text-gray-900">{measurements[key]} cm</span>
+                            <span className="text-sm font-semibold text-gray-900">
+                              {latestMeasurements[key] !== undefined && latestMeasurements[key] !== null && latestMeasurements[key] !== '' 
+                                ? `${latestMeasurements[key]} cm`
+                                : 'N/A'}
+                            </span>
                           </div>
                         ))}
                         {availableMeasurements.length > 4 && (
@@ -764,8 +1010,9 @@ export default function ClientProgressPage() {
                   {selectedMeasurements.size > 0 ? (
                     <div className="h-96 w-full">
                       <ResponsiveContainer width="100%" height="100%">
-                        <LineChart
-                          data={allMeasurementsData.map(m => {
+                        {(() => {
+                          // Prepare data
+                          const chartData = allMeasurementsData.map(m => {
                             const date = m.date instanceof Date ? m.date : new Date(m.date);
                             const dataPoint: any = {
                               date: date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' }),
@@ -784,33 +1031,69 @@ export default function ClientProgressPage() {
                             });
                             
                             return dataPoint;
-                          })}
-                          margin={{ top: 10, right: 30, left: 20, bottom: 60 }}
-                        >
-                          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                          <XAxis 
-                            dataKey="date" 
-                            stroke="#6b7280"
-                            fontSize={11}
-                            tick={{ fill: '#6b7280' }}
-                            angle={-45}
-                            textAnchor="end"
-                            height={60}
-                          />
-                          <YAxis
-                            stroke="#6b7280"
-                            fontSize={11}
-                            tick={{ fill: '#6b7280' }}
-                            label={{ 
-                              value: Array.from(selectedMeasurements).some(k => k === 'bodyWeight') 
-                                ? 'kg / cm' 
-                                : 'cm', 
-                              angle: -90, 
-                              position: 'insideLeft', 
-                              fill: '#6b7280', 
-                              fontSize: 11 
-                            }}
-                          />
+                          });
+
+                          // Calculate dynamic Y-axis domain
+                          let minValue = Infinity;
+                          let maxValue = -Infinity;
+                          
+                          chartData.forEach(dataPoint => {
+                            selectedMeasurements.forEach(key => {
+                              const label = getMeasurementLabel(key);
+                              const value = dataPoint[label];
+                              if (value !== null && value !== undefined && !isNaN(value) && value > 0) {
+                                minValue = Math.min(minValue, value);
+                                maxValue = Math.max(maxValue, value);
+                              }
+                            });
+                          });
+
+                          // Set domain with 10 units below minimum and padding above maximum
+                          let yAxisDomain: [number, number] = [0, 100];
+                          if (minValue !== Infinity && maxValue !== -Infinity) {
+                            // Calculate padding: 10% of range or minimum 5 units, whichever is larger
+                            const range = maxValue - minValue;
+                            const padding = Math.max(range * 0.1, 5);
+                            
+                            // Lower bound: 10 units below minimum (but not negative)
+                            const lowerBound = Math.max(0, minValue - 10);
+                            
+                            // Upper bound: maximum + padding
+                            const upperBound = maxValue + padding;
+                            
+                            yAxisDomain = [lowerBound, upperBound];
+                          }
+
+                          return (
+                            <LineChart
+                              data={chartData}
+                              margin={{ top: 10, right: 30, left: 20, bottom: 60 }}
+                            >
+                              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                              <XAxis 
+                                dataKey="date" 
+                                stroke="#6b7280"
+                                fontSize={11}
+                                tick={{ fill: '#6b7280' }}
+                                angle={-45}
+                                textAnchor="end"
+                                height={60}
+                              />
+                              <YAxis
+                                domain={yAxisDomain}
+                                stroke="#6b7280"
+                                fontSize={11}
+                                tick={{ fill: '#6b7280' }}
+                                label={{ 
+                                  value: Array.from(selectedMeasurements).some(k => k === 'bodyWeight') 
+                                    ? 'kg / cm' 
+                                    : 'cm', 
+                                  angle: -90, 
+                                  position: 'insideLeft', 
+                                  fill: '#6b7280', 
+                                  fontSize: 11 
+                                }}
+                              />
                           <Tooltip 
                             contentStyle={{ 
                               backgroundColor: 'white', 
@@ -864,7 +1147,9 @@ export default function ClientProgressPage() {
                               />
                             );
                           })}
-                        </LineChart>
+                            </LineChart>
+                          );
+                        })()}
                       </ResponsiveContainer>
                     </div>
                   ) : (
@@ -884,8 +1169,38 @@ export default function ClientProgressPage() {
           {/* Progress Photos - Right Side */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="bg-pink-50 px-6 py-4 border-b border-gray-100">
-              <h2 className="text-lg font-bold text-gray-900">Progress Photos</h2>
-              <p className="text-sm text-gray-600 mt-1">Visual progress tracking over time</p>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-bold text-gray-900">Progress Photos</h2>
+                  <p className="text-sm text-gray-600 mt-1">Visual progress tracking over time</p>
+                </div>
+                {progressImages.length > 0 && (
+                  <button
+                    onClick={() => setComparisonMode(!comparisonMode)}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      comparisonMode
+                        ? 'bg-pink-600 text-white hover:bg-pink-700'
+                        : 'bg-white text-pink-600 border border-pink-300 hover:bg-pink-50'
+                    }`}
+                  >
+                    {comparisonMode ? (
+                      <>
+                        <svg className="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                        </svg>
+                        Grid View
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+                        </svg>
+                        Compare Photos
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
             </div>
             <div className="p-6">
               {loadingImages ? (
@@ -903,29 +1218,342 @@ export default function ClientProgressPage() {
                   <p className="text-gray-500 text-sm mb-1">No progress images yet</p>
                   <p className="text-gray-400 text-xs">Client photos will appear here as they're uploaded</p>
                 </div>
+              ) : comparisonMode ? (
+                // Comparison View
+                (() => {
+                  // Check if photos are selected for comparison
+                  const selectedPhotos = Array.from(selectedPhotosForComparison)
+                    .map(id => progressImages.find(img => img.id === id))
+                    .filter(Boolean);
+                  
+                  // If 2 photos are selected, use those; otherwise use auto before/after
+                  const useSelectedPhotos = selectedPhotos.length === 2;
+                  
+                  let photo1: any = null;
+                  let photo2: any = null;
+                  
+                  if (useSelectedPhotos) {
+                    // Sort by date to show earlier photo first
+                    const sorted = selectedPhotos.sort((a, b) => 
+                      new Date(a.uploadedAt).getTime() - new Date(b.uploadedAt).getTime()
+                    );
+                    photo1 = sorted[0];
+                    photo2 = sorted[1];
+                  } else {
+                    // Use automatic before/after logic
+                    const comparisonPhotos = getComparisonPhotos();
+                    const currentComparison = comparisonPhotos[selectedOrientation];
+                    photo1 = currentComparison.before;
+                    photo2 = currentComparison.after;
+                  }
+                  
+                  return (
+                    <div className="space-y-4">
+                      {/* Orientation Tabs - only show if not using selected photos */}
+                      {!useSelectedPhotos && (
+                        <div className="flex gap-2 border-b border-gray-200 pb-3">
+                          {(['front', 'back', 'side'] as const).map((orientation) => {
+                            const comparisonPhotos = getComparisonPhotos();
+                            const hasPhotos = comparisonPhotos[orientation].before || comparisonPhotos[orientation].after;
+                            return (
+                              <button
+                                key={orientation}
+                                onClick={() => setSelectedOrientation(orientation)}
+                                disabled={!hasPhotos}
+                                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                                  selectedOrientation === orientation
+                                    ? 'bg-pink-600 text-white'
+                                    : hasPhotos
+                                    ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                    : 'bg-gray-50 text-gray-400 cursor-not-allowed'
+                                }`}
+                              >
+                                {orientation.charAt(0).toUpperCase() + orientation.slice(1)}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* Comparison Display */}
+                      {photo1 || photo2 ? (
+                        <div className="grid grid-cols-2 gap-4">
+                          {/* First Photo */}
+                          <div className="flex flex-col">
+                            <div className="relative aspect-square rounded-xl overflow-hidden border-2 border-orange-300 bg-gray-50">
+                              {photo1 ? (
+                                <>
+                                  <Image
+                                    src={photo1.imageUrl}
+                                    alt={photo1.caption || photo1.imageType}
+                                    width={400}
+                                    height={400}
+                                    className="w-full h-full object-cover"
+                                    unoptimized={photo1.imageUrl?.includes('firebase') ? false : undefined}
+                                    onError={(e) => {
+                                      (e.target as HTMLImageElement).src = `data:image/svg+xml,${encodeURIComponent(`
+                                        <svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
+                                          <rect width="200" height="200" fill="#f3f4f6"/>
+                                          <text x="50%" y="50%" font-family="Arial" font-size="14" fill="#9ca3af" text-anchor="middle" dy=".3em">Image</text>
+                                        </svg>
+                                      `)}`;
+                                    }}
+                                  />
+                                  <div className="absolute top-2 left-2 flex flex-col gap-1">
+                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                      photo1.imageType === 'profile' ? 'bg-blue-100 text-blue-800' :
+                                      photo1.imageType === 'before' ? 'bg-orange-100 text-orange-800' :
+                                      photo1.imageType === 'after' ? 'bg-green-100 text-green-800' :
+                                      'bg-purple-100 text-purple-800'
+                                    }`}>
+                                      {photo1.imageType === 'profile' ? 'Profile' :
+                                       photo1.imageType === 'before' ? 'Before' :
+                                       photo1.imageType === 'after' ? 'After' :
+                                       'Progress'}
+                                    </span>
+                                    {photo1.orientation && (
+                                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                        photo1.orientation === 'front' ? 'bg-pink-100 text-pink-800' :
+                                        photo1.orientation === 'back' ? 'bg-indigo-100 text-indigo-800' :
+                                        'bg-teal-100 text-teal-800'
+                                      }`}>
+                                        {photo1.orientation.charAt(0).toUpperCase() + photo1.orientation.slice(1)}
+                                      </span>
+                                    )}
+                                  </div>
+                                </>
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center">
+                                  <div className="text-center">
+                                    <svg className="w-12 h-12 text-gray-300 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                    </svg>
+                                    <p className="text-gray-400 text-sm">No photo</p>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                            {photo1 && (
+                              <div className="mt-2 text-center">
+                                <p className="text-gray-700 text-sm font-semibold">
+                                  {new Date(photo1.uploadedAt).toLocaleDateString('en-US', { 
+                                    month: 'long', 
+                                    day: 'numeric',
+                                    year: 'numeric'
+                                  })}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Second Photo */}
+                          <div className="flex flex-col">
+                            <div className="relative aspect-square rounded-xl overflow-hidden border-2 border-green-300 bg-gray-50">
+                              {photo2 ? (
+                                <>
+                                  <Image
+                                    src={photo2.imageUrl}
+                                    alt={photo2.caption || photo2.imageType}
+                                    width={400}
+                                    height={400}
+                                    className="w-full h-full object-cover"
+                                    unoptimized={photo2.imageUrl?.includes('firebase') ? false : undefined}
+                                    onError={(e) => {
+                                      (e.target as HTMLImageElement).src = `data:image/svg+xml,${encodeURIComponent(`
+                                        <svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
+                                          <rect width="200" height="200" fill="#f3f4f6"/>
+                                          <text x="50%" y="50%" font-family="Arial" font-size="14" fill="#9ca3af" text-anchor="middle" dy=".3em">Image</text>
+                                        </svg>
+                                      `)}`;
+                                    }}
+                                  />
+                                  <div className="absolute top-2 left-2 flex flex-col gap-1">
+                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                      photo2.imageType === 'profile' ? 'bg-blue-100 text-blue-800' :
+                                      photo2.imageType === 'before' ? 'bg-orange-100 text-orange-800' :
+                                      photo2.imageType === 'after' ? 'bg-green-100 text-green-800' :
+                                      'bg-purple-100 text-purple-800'
+                                    }`}>
+                                      {photo2.imageType === 'profile' ? 'Profile' :
+                                       photo2.imageType === 'before' ? 'Before' :
+                                       photo2.imageType === 'after' ? 'After' :
+                                       'Progress'}
+                                    </span>
+                                    {photo2.orientation && (
+                                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                        photo2.orientation === 'front' ? 'bg-pink-100 text-pink-800' :
+                                        photo2.orientation === 'back' ? 'bg-indigo-100 text-indigo-800' :
+                                        'bg-teal-100 text-teal-800'
+                                      }`}>
+                                        {photo2.orientation.charAt(0).toUpperCase() + photo2.orientation.slice(1)}
+                                      </span>
+                                    )}
+                                  </div>
+                                </>
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center">
+                                  <div className="text-center">
+                                    <svg className="w-12 h-12 text-gray-300 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                    </svg>
+                                    <p className="text-gray-400 text-sm">No photo</p>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                            {photo2 && (
+                              <div className="mt-2 text-center">
+                                <p className="text-gray-700 text-sm font-semibold">
+                                  {new Date(photo2.uploadedAt).toLocaleDateString('en-US', { 
+                                    month: 'long', 
+                                    day: 'numeric',
+                                    year: 'numeric'
+                                  })}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-center py-8">
+                          <p className="text-gray-500 text-sm">No photos available for comparison</p>
+                        </div>
+                      )}
+
+                      {/* Time Difference Indicator */}
+                      {photo1 && photo2 && (
+                        <div className="text-center py-3 bg-green-50 rounded-lg border border-green-200">
+                          <p className="text-sm font-semibold text-green-800 mb-2">
+                            Progress over {formatTimeDifference(photo1.uploadedAt, photo2.uploadedAt)}
+                          </p>
+                          <button
+                            onClick={() => setFullScreenComparison(true)}
+                            className="px-4 py-2 bg-pink-600 hover:bg-pink-700 text-white rounded-lg text-sm font-medium transition-colors inline-flex items-center gap-2"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                            </svg>
+                            View Full Screen
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()
               ) : (
+                // Grid View (Original)
                 <>
+                  {selectedPhotosForComparison.size > 0 && (
+                    <div className="mb-4 flex items-center justify-between p-3 bg-pink-50 rounded-lg border border-pink-200">
+                      <span className="text-sm font-medium text-gray-700">
+                        {selectedPhotosForComparison.size} photo{selectedPhotosForComparison.size !== 1 ? 's' : ''} selected
+                      </span>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => {
+                            if (selectedPhotosForComparison.size === 2) {
+                              const selected = Array.from(selectedPhotosForComparison).map(id => 
+                                progressImages.find(img => img.id === id)
+                              ).filter(Boolean);
+                              if (selected.length === 2) {
+                                setComparisonMode(true);
+                                // Set orientation based on first selected photo
+                                if (selected[0]?.orientation) {
+                                  setSelectedOrientation(selected[0].orientation as 'front' | 'back' | 'side');
+                                }
+                              }
+                            }
+                          }}
+                          disabled={selectedPhotosForComparison.size !== 2}
+                          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                            selectedPhotosForComparison.size === 2
+                              ? 'bg-pink-600 text-white hover:bg-pink-700'
+                              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                          }`}
+                        >
+                          Compare Selected
+                        </button>
+                        <button
+                          onClick={() => setSelectedPhotosForComparison(new Set())}
+                          className="px-4 py-2 rounded-lg text-sm font-medium bg-white text-gray-700 hover:bg-gray-50 border border-gray-300 transition-colors"
+                        >
+                          Clear
+                        </button>
+                      </div>
+                    </div>
+                  )}
                   <div className="grid grid-cols-2 gap-4">
-                    {progressImages.slice(0, 6).map((image) => (
-                      <div key={image.id} className="flex flex-col">
-                        <div className="group relative aspect-square rounded-xl overflow-hidden border border-gray-200 hover:border-pink-300 transition-all duration-300 hover:shadow-lg bg-white">
-                          <Image
-                            src={image.imageUrl}
-                            alt={image.caption || image.imageType}
-                            width={400}
-                            height={400}
-                            className="w-full h-full object-cover"
-                            loading="lazy"
-                            unoptimized={image.imageUrl?.includes('firebase') ? false : undefined}
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).src = `data:image/svg+xml,${encodeURIComponent(`
-                                <svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
-                                  <rect width="200" height="200" fill="#f3f4f6"/>
-                                  <text x="50%" y="50%" font-family="Arial" font-size="14" fill="#9ca3af" text-anchor="middle" dy=".3em">Image</text>
-                                </svg>
-                              `)}`;
+                    {progressImages.slice(0, 6).map((image) => {
+                      const isSelected = selectedPhotosForComparison.has(image.id);
+                      return (
+                        <div key={image.id} className="flex flex-col">
+                        <div 
+                          className={`group relative aspect-square rounded-xl overflow-hidden border-2 transition-all duration-300 hover:shadow-lg bg-white ${
+                            isSelected 
+                              ? 'border-pink-500 shadow-md' 
+                              : 'border-gray-200 hover:border-pink-300'
+                          }`}
+                          onClick={(e) => {
+                            // Only expand if clicking the image area, not the checkbox
+                            const target = e.target as HTMLElement;
+                            if (!target.closest('.checkbox-container')) {
+                              console.log('Image clicked:', image.id);
+                              setExpandedImage(image);
+                              setExpandedViewComparisonMode(false);
+                              // Set orientation based on clicked image
+                              if (image.orientation) {
+                                setSelectedOrientation(image.orientation as 'front' | 'back' | 'side');
+                              }
+                            }
+                          }}
+                        >
+                          <div className="cursor-pointer w-full h-full">
+                            <Image
+                              src={image.imageUrl}
+                              alt={image.caption || image.imageType}
+                              width={400}
+                              height={400}
+                              className="w-full h-full object-cover pointer-events-none"
+                              loading="lazy"
+                              unoptimized={image.imageUrl?.includes('firebase') ? false : undefined}
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).src = `data:image/svg+xml,${encodeURIComponent(`
+                                  <svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
+                                    <rect width="200" height="200" fill="#f3f4f6"/>
+                                    <text x="50%" y="50%" font-family="Arial" font-size="14" fill="#9ca3af" text-anchor="middle" dy=".3em">Image</text>
+                                  </svg>
+                                `)}`;
+                              }}
+                            />
+                          </div>
+                          {/* Checkbox */}
+                          <div 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const newSelected = new Set(selectedPhotosForComparison);
+                              if (isSelected) {
+                                newSelected.delete(image.id);
+                              } else {
+                                if (newSelected.size < 2) {
+                                  newSelected.add(image.id);
+                                }
+                              }
+                              setSelectedPhotosForComparison(newSelected);
                             }}
-                          />
+                            className="checkbox-container absolute top-2 right-2 cursor-pointer z-10"
+                          >
+                            <div className={`w-6 h-6 rounded border-2 flex items-center justify-center transition-all ${
+                              isSelected
+                                ? 'bg-pink-600 border-pink-600'
+                                : 'bg-white border-gray-300 hover:border-pink-400'
+                            }`}>
+                              {isSelected && (
+                                <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                </svg>
+                              )}
+                            </div>
+                          </div>
                           <div className="absolute top-2 left-2 flex flex-col gap-1">
                             <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                               image.imageType === 'profile' ? 'bg-blue-100 text-blue-800' :
@@ -958,8 +1586,9 @@ export default function ClientProgressPage() {
                             })}
                           </p>
                         </div>
-                      </div>
-                    ))}
+                        </div>
+                      );
+                    })}
                   </div>
                   {progressImages.length > 6 && (
                     <div className="mt-4 text-center">
@@ -1125,6 +1754,72 @@ export default function ClientProgressPage() {
                   </tr>
                 </thead>
                 <tbody>
+                  {/* Total Score Row */}
+                  <tr className="bg-gradient-to-r from-pink-50 to-purple-50 border-b-2 border-pink-200 sticky top-[41px] z-5">
+                    <td className="py-2 px-3 text-xs font-bold text-gray-900 sticky left-0 bg-gradient-to-r from-pink-50 to-purple-50 z-10 border-r border-pink-200">
+                      <div className="flex items-center gap-2">
+                        <span>Total Score</span>
+                        <span className="text-[9px] font-normal text-gray-600">(%)</span>
+                      </div>
+                    </td>
+                    {allWeeks.map((week, wIndex) => {
+                      // Calculate total and average for this week
+                      let totalScore = 0;
+                      let scoredCount = 0;
+                      
+                      filteredQuestions.forEach((question) => {
+                        const questionWeek = question.weeks.find(w => w.week === week.week);
+                        if (questionWeek && questionWeek.status !== 'grey' && questionWeek.score !== null && questionWeek.score !== undefined) {
+                          totalScore += questionWeek.score;
+                          scoredCount += 1;
+                        }
+                      });
+                      
+                      const average = scoredCount > 0 ? totalScore / scoredCount : 0;
+                      const percentage = average > 0 ? Math.round((average / 10) * 100) : 0;
+                      
+                      // Determine traffic light color based on average (same logic as individual scores)
+                      let trafficLightColor = 'bg-gray-400'; // Gray for no data
+                      let bgColor = 'bg-gray-50';
+                      let textColor = 'text-gray-700';
+                      let borderColor = 'border-gray-300';
+                      
+                      if (average > 0) {
+                        if (average >= 7) {
+                          trafficLightColor = 'bg-green-500';
+                          bgColor = 'bg-green-50';
+                          textColor = 'text-green-800';
+                          borderColor = 'border-green-300';
+                        } else if (average >= 4) {
+                          trafficLightColor = 'bg-orange-500';
+                          bgColor = 'bg-orange-50';
+                          textColor = 'text-orange-800';
+                          borderColor = 'border-orange-300';
+                        } else {
+                          trafficLightColor = 'bg-red-500';
+                          bgColor = 'bg-red-50';
+                          textColor = 'text-red-800';
+                          borderColor = 'border-red-300';
+                        }
+                      }
+                      
+                      return (
+                        <td
+                          key={wIndex}
+                          className="text-center py-2 px-1"
+                        >
+                          <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border ${bgColor} ${textColor} ${borderColor} min-w-[70px]`}>
+                            {/* Traffic Light Indicator */}
+                            <div className={`w-4 h-4 rounded-full ${trafficLightColor} shadow-sm`}></div>
+                            {/* Percentage */}
+                            <span className="text-sm font-bold">
+                              {percentage > 0 ? `${percentage}%` : '—'}
+                            </span>
+                          </div>
+                        </td>
+                      );
+                    })}
+                  </tr>
                   {filteredQuestions.map((question, qIndex) => {
                     const isDeprecated = !question.isActive;
                     const isNew = question.firstSeenWeek > 1;
@@ -1325,6 +2020,271 @@ export default function ClientProgressPage() {
             </div>
           </div>
         )}
+
+      {/* Expanded Image Modal */}
+      {expandedImage && (() => {
+        const comparisonPhotos = getComparisonPhotos();
+        const currentComparison = comparisonPhotos[selectedOrientation];
+        
+        return (
+          <div 
+            className="fixed inset-0 z-[9999] bg-black bg-opacity-90 flex items-center justify-center p-4"
+            onClick={(e) => {
+              // Close if clicking the backdrop
+              if (e.target === e.currentTarget) {
+                setExpandedImage(null);
+                setExpandedViewComparisonMode(false);
+              }
+            }}
+          >
+            <div 
+              className="relative w-full max-w-7xl max-h-[90vh] bg-white rounded-2xl overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="bg-pink-600 px-6 py-4 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <h3 className="text-xl font-bold text-white">
+                    {expandedViewComparisonMode 
+                      ? `${selectedOrientation.charAt(0).toUpperCase() + selectedOrientation.slice(1)} View Comparison`
+                      : 'Progress Photo'}
+                  </h3>
+                  {expandedViewComparisonMode && currentComparison.before && currentComparison.after && (
+                    <span className="px-3 py-1 bg-white/20 text-white rounded-lg text-sm font-medium">
+                      {formatTimeDifference(currentComparison.before.uploadedAt, currentComparison.after.uploadedAt)} progress
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-3">
+                  {/* Toggle Comparison Mode */}
+                  {!expandedViewComparisonMode && (
+                    <button
+                      onClick={() => {
+                        setExpandedViewComparisonMode(true);
+                        if (expandedImage.orientation) {
+                          setSelectedOrientation(expandedImage.orientation as 'front' | 'back' | 'side');
+                        }
+                      }}
+                      className="px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg text-sm font-medium transition-colors inline-flex items-center gap-2"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+                      </svg>
+                      Compare Side by Side
+                    </button>
+                  )}
+                  
+                  {/* Orientation Selector (only in comparison mode) */}
+                  {expandedViewComparisonMode && (
+                    <div className="flex gap-2">
+                      {(['front', 'back', 'side'] as const).map((orientation) => {
+                        const hasPhotos = comparisonPhotos[orientation].before || comparisonPhotos[orientation].after;
+                        return (
+                          <button
+                            key={orientation}
+                            onClick={() => setSelectedOrientation(orientation)}
+                            disabled={!hasPhotos}
+                            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                              selectedOrientation === orientation
+                                ? 'bg-white text-pink-600'
+                                : hasPhotos
+                                ? 'bg-white/20 text-white hover:bg-white/30'
+                                : 'bg-white/10 text-white/50 cursor-not-allowed'
+                            }`}
+                          >
+                            {orientation.charAt(0).toUpperCase() + orientation.slice(1)}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  
+                  {/* Close Button */}
+                  <button
+                    onClick={() => {
+                      setExpandedImage(null);
+                      setExpandedViewComparisonMode(false);
+                    }}
+                    className="p-2 bg-white/20 hover:bg-white/30 text-white rounded-lg transition-colors"
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              {/* Content */}
+              <div className="p-6 max-h-[calc(90vh-100px)] overflow-y-auto">
+                {expandedViewComparisonMode ? (
+                  // Comparison View
+                  currentComparison.before || currentComparison.after ? (
+                    <div className="grid grid-cols-2 gap-6">
+                      {/* Before Photo */}
+                      <div className="flex flex-col">
+                        <div className="relative aspect-square rounded-xl overflow-hidden border-4 border-orange-400 bg-gray-50">
+                          {currentComparison.before ? (
+                            <Image
+                              src={currentComparison.before.imageUrl}
+                              alt="Before"
+                              width={800}
+                              height={800}
+                              className="w-full h-full object-contain"
+                              unoptimized={currentComparison.before.imageUrl?.includes('firebase') ? false : undefined}
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).src = `data:image/svg+xml,${encodeURIComponent(`
+                                  <svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
+                                    <rect width="200" height="200" fill="#f3f4f6"/>
+                                    <text x="50%" y="50%" font-family="Arial" font-size="14" fill="#9ca3af" text-anchor="middle" dy=".3em">Image</text>
+                                  </svg>
+                                `)}`;
+                              }}
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center">
+                              <div className="text-center">
+                                <svg className="w-16 h-16 text-gray-300 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                </svg>
+                                <p className="text-gray-400 text-sm">No before photo</p>
+                              </div>
+                            </div>
+                          )}
+                          <div className="absolute top-4 left-4">
+                            <span className="px-4 py-2 rounded-full text-base font-bold bg-orange-500 text-white">
+                              Before
+                            </span>
+                          </div>
+                        </div>
+                        {currentComparison.before && (
+                          <div className="mt-3 text-center">
+                            <p className="text-gray-700 text-base font-semibold">
+                              {new Date(currentComparison.before.uploadedAt).toLocaleDateString('en-US', { 
+                                month: 'long', 
+                                day: 'numeric',
+                                year: 'numeric'
+                              })}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* After Photo */}
+                      <div className="flex flex-col">
+                        <div className="relative aspect-square rounded-xl overflow-hidden border-4 border-green-400 bg-gray-50">
+                          {currentComparison.after ? (
+                            <Image
+                              src={currentComparison.after.imageUrl}
+                              alt="After"
+                              width={800}
+                              height={800}
+                              className="w-full h-full object-contain"
+                              unoptimized={currentComparison.after.imageUrl?.includes('firebase') ? false : undefined}
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).src = `data:image/svg+xml,${encodeURIComponent(`
+                                  <svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
+                                    <rect width="200" height="200" fill="#f3f4f6"/>
+                                    <text x="50%" y="50%" font-family="Arial" font-size="14" fill="#9ca3af" text-anchor="middle" dy=".3em">Image</text>
+                                  </svg>
+                                `)}`;
+                              }}
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center">
+                              <div className="text-center">
+                                <svg className="w-16 h-16 text-gray-300 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                </svg>
+                                <p className="text-gray-400 text-sm">No after photo</p>
+                              </div>
+                            </div>
+                          )}
+                          <div className="absolute top-4 left-4">
+                            <span className="px-4 py-2 rounded-full text-base font-bold bg-green-500 text-white">
+                              After
+                            </span>
+                          </div>
+                        </div>
+                        {currentComparison.after && (
+                          <div className="mt-3 text-center">
+                            <p className="text-gray-700 text-base font-semibold">
+                              {new Date(currentComparison.after.uploadedAt).toLocaleDateString('en-US', { 
+                                month: 'long', 
+                                day: 'numeric',
+                                year: 'numeric'
+                              })}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-12">
+                      <p className="text-gray-500 text-lg">No photos available for {selectedOrientation} view</p>
+                    </div>
+                  )
+                ) : (
+                  // Single Image View
+                  <div className="flex flex-col items-center">
+                    <div className="relative w-full max-w-4xl aspect-square rounded-xl overflow-hidden border-4 border-pink-300 bg-gray-50">
+                      <Image
+                        src={expandedImage.imageUrl}
+                        alt={expandedImage.caption || expandedImage.imageType}
+                        width={1200}
+                        height={1200}
+                        className="w-full h-full object-contain"
+                        unoptimized={expandedImage.imageUrl?.includes('firebase') ? false : undefined}
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = `data:image/svg+xml,${encodeURIComponent(`
+                            <svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
+                              <rect width="200" height="200" fill="#f3f4f6"/>
+                              <text x="50%" y="50%" font-family="Arial" font-size="14" fill="#9ca3af" text-anchor="middle" dy=".3em">Image</text>
+                            </svg>
+                          `)}`;
+                        }}
+                      />
+                      <div className="absolute top-4 left-4 flex flex-col gap-2">
+                        <span className={`px-3 py-1.5 rounded-full text-sm font-semibold ${
+                          expandedImage.imageType === 'profile' ? 'bg-blue-500 text-white' :
+                          expandedImage.imageType === 'before' ? 'bg-orange-500 text-white' :
+                          expandedImage.imageType === 'after' ? 'bg-green-500 text-white' :
+                          'bg-purple-500 text-white'
+                        }`}>
+                          {expandedImage.imageType === 'profile' ? 'Profile' :
+                           expandedImage.imageType === 'before' ? 'Before' :
+                           expandedImage.imageType === 'after' ? 'After' :
+                           'Progress'}
+                        </span>
+                        {expandedImage.orientation && (
+                          <span className={`px-3 py-1.5 rounded-full text-sm font-semibold ${
+                            expandedImage.orientation === 'front' ? 'bg-pink-500 text-white' :
+                            expandedImage.orientation === 'back' ? 'bg-indigo-500 text-white' :
+                            'bg-teal-500 text-white'
+                          }`}>
+                            {expandedImage.orientation.charAt(0).toUpperCase() + expandedImage.orientation.slice(1)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="mt-4 text-center">
+                      <p className="text-gray-700 text-lg font-semibold">
+                        {new Date(expandedImage.uploadedAt).toLocaleDateString('en-US', { 
+                          month: 'long', 
+                          day: 'numeric',
+                          year: 'numeric'
+                        })}
+                      </p>
+                      {expandedImage.caption && (
+                        <p className="text-gray-600 text-sm mt-2">{expandedImage.caption}</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
       </div>
     </div>
   );

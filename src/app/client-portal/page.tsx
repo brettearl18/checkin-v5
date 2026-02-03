@@ -92,36 +92,32 @@ function ProgressImagesPreview({ clientEmail, clientId: providedClientId }: { cl
     }
 
     setLoading(true);
-    // First fetch client ID
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
     
-    fetch(`/api/client-portal?clientEmail=${encodeURIComponent(clientEmail)}`, {
-      signal: controller.signal
-    })
-      .then(res => {
+    (async () => {
+      try {
+        const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
+        const res = await fetch(`/api/client-portal?clientEmail=${encodeURIComponent(clientEmail)}`, {
+          signal: controller.signal,
+          headers
+        });
         clearTimeout(timeoutId);
-        if (!res.ok) {
-          throw new Error(`Failed to fetch: ${res.status} ${res.statusText}`);
-        }
-        return res.json();
-      })
-      .then(data => {
+        if (!res.ok) throw new Error(`Failed to fetch: ${res.status} ${res.statusText}`);
+        const data = await res.json();
         if (data.success && data.data.client) {
           setClientId(data.data.client.id);
         } else {
           setLoading(false);
         }
-      })
-      .catch(err => {
+      } catch (err: any) {
         clearTimeout(timeoutId);
-        // Silently handle errors - this is a preview component, not critical
-        // Only log network/abort errors in development
         if (process.env.NODE_ENV === 'development' && err.name !== 'AbortError' && err.message !== 'Failed to fetch') {
           console.debug('Error fetching client ID for progress images:', err);
         }
         setLoading(false);
-      });
+      }
+    })();
   }, [clientEmail, providedClientId]);
 
   useEffect(() => {
@@ -131,32 +127,28 @@ function ProgressImagesPreview({ clientEmail, clientId: providedClientId }: { cl
 
     setLoading(true);
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
     
-    fetch(`/api/progress-images?clientId=${clientId}&limit=4`, {
-      signal: controller.signal
-    })
-      .then(res => {
+    (async () => {
+      try {
+        const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
+        const res = await fetch(`/api/progress-images?clientId=${clientId}&limit=4`, {
+          signal: controller.signal,
+          headers
+        });
         clearTimeout(timeoutId);
-        if (!res.ok) {
-          throw new Error(`Failed to fetch: ${res.status} ${res.statusText}`);
-        }
-        return res.json();
-      })
-      .then(data => {
-        if (data.success) {
-          setImages(data.data || []);
-        }
-      })
-      .catch(err => {
+        if (!res.ok) throw new Error(`Failed to fetch: ${res.status} ${res.statusText}`);
+        const data = await res.json();
+        if (data.success) setImages(data.data || []);
+      } catch (err: any) {
         clearTimeout(timeoutId);
-        // Silently handle errors - this is a preview component, not critical
-        // Only log network/abort errors in development
         if (process.env.NODE_ENV === 'development' && err.name !== 'AbortError' && err.message !== 'Failed to fetch') {
           console.debug('Error fetching progress images:', err);
         }
-      })
-      .finally(() => setLoading(false));
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, [clientId]);
 
   if (loading) {
@@ -301,6 +293,7 @@ export default function ClientPortalPage() {
   const [thresholds, setThresholds] = useState<ScoringThresholds>(getDefaultThresholds('moderate'));
   const [averageTrafficLight, setAverageTrafficLight] = useState<TrafficLightStatus>('orange');
   const [clientId, setClientId] = useState<string | null>(null);
+  const [paymentStatus, setPaymentStatus] = useState<'paid' | 'past_due' | 'failed' | 'canceled' | null>(null);
   const [error, setError] = useState<string>('');
   const [showScoringInfo, setShowScoringInfo] = useState(false);
   const [onboardingTodos, setOnboardingTodos] = useState({
@@ -466,10 +459,12 @@ export default function ClientPortalPage() {
       // Fetch real data from API with timeout
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+      const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
       
       try {
         const response = await fetch(apiUrl, {
-          signal: controller.signal
+          signal: controller.signal,
+          headers: { ...headers }
         });
         clearTimeout(timeoutId);
         
@@ -484,9 +479,14 @@ export default function ClientPortalPage() {
           if (data.success) {
           const { client, coach, checkInAssignments, summary, nextMeasurementTask } = data.data;
           
-          // Store client ID (Phase 1: All data now comes from API)
+          // Store client ID and payment status (Phase 1: All data now comes from API)
           if (client?.id) {
             setClientId(client.id);
+          }
+          if (client?.paymentStatus !== undefined) {
+            setPaymentStatus(client.paymentStatus);
+          } else {
+            setPaymentStatus(null);
           }
           
           // Calculate average score from recent responses if available (must be done before using calculatedStats)
@@ -986,6 +986,33 @@ export default function ClientPortalPage() {
                   <p className="text-gray-600 text-sm mt-1">Track your progress and stay connected</p>
                 </div>
                 <div className="flex items-center space-x-4">
+                  {/* Payment status icon + link */}
+                  <Link
+                    href="/client-portal/payments"
+                    className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-sm font-medium transition-colors ${
+                      paymentStatus === 'paid'
+                        ? 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'
+                        : paymentStatus === 'failed' || paymentStatus === 'past_due'
+                          ? 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100'
+                          : 'bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100'
+                    }`}
+                    title="View payment status and history"
+                  >
+                    {paymentStatus === 'paid' ? (
+                      <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    ) : paymentStatus === 'failed' || paymentStatus === 'past_due' ? (
+                      <span className="w-5 h-5 flex items-center justify-center rounded-full bg-red-500 text-white text-xs font-bold">!</span>
+                    ) : (
+                      <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    )}
+                    <span>
+                      {paymentStatus === 'paid' ? 'Paid up' : paymentStatus === 'failed' ? 'Payment failed' : paymentStatus === 'past_due' ? 'Past due' : paymentStatus === 'canceled' ? 'Canceled' : 'Payments'}
+                    </span>
+                  </Link>
                   <NotificationBell />
                 </div>
             </div>
@@ -1001,6 +1028,52 @@ export default function ClientPortalPage() {
               <QuickStatsBar stats={analytics?.quickStats || null} loading={loadingAnalytics} />
             </div>
 
+            {/* Payment status card - status + link to payment list (like client settings) */}
+            <div className="mb-6 block">
+              <div className={`rounded-2xl lg:rounded-3xl border overflow-hidden ${
+                paymentStatus === 'paid'
+                  ? 'bg-emerald-50 border-emerald-200'
+                  : paymentStatus === 'failed' || paymentStatus === 'past_due'
+                    ? 'bg-red-50 border-red-200'
+                    : 'bg-white border-gray-100 shadow-[0_1px_3px_rgba(0,0,0,0.1)]'
+              }`}>
+                <div className="flex items-center justify-between p-4 sm:p-5">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                      paymentStatus === 'paid'
+                        ? 'bg-emerald-500'
+                        : paymentStatus === 'failed' || paymentStatus === 'past_due'
+                          ? 'bg-red-500'
+                          : 'bg-gray-400'
+                    }`}>
+                      {paymentStatus === 'paid' ? (
+                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      ) : paymentStatus === 'failed' || paymentStatus === 'past_due' ? (
+                        <span className="text-white text-lg font-bold">!</span>
+                      ) : (
+                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      )}
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-900 text-sm">Payment</p>
+                      <p className="text-xs text-gray-600 mt-0.5">
+                        {paymentStatus === 'paid' ? 'Paid up' : paymentStatus === 'failed' ? 'Payment failed' : paymentStatus === 'past_due' ? 'Past due' : paymentStatus === 'canceled' ? 'Canceled' : 'View your payment status and history'}
+                      </p>
+                    </div>
+                  </div>
+                  <Link
+                    href="/client-portal/payments"
+                    className="text-sm font-medium text-emerald-600 hover:text-emerald-700 whitespace-nowrap"
+                  >
+                    View payment history →
+                  </Link>
+                </div>
+              </div>
+            </div>
 
             {/* Coach Feedback Available Banner - Show prominently when coach has provided feedback */}
             {(() => {
@@ -2093,6 +2166,49 @@ export default function ClientPortalPage() {
                 <QuickStatsBar stats={analytics?.quickStats || null} loading={loadingAnalytics} />
               </div>
 
+              {/* Payment status card - mobile */}
+              <div className="mb-6">
+                <div className={`rounded-2xl border overflow-hidden ${
+                  paymentStatus === 'paid'
+                    ? 'bg-emerald-50 border-emerald-200'
+                    : paymentStatus === 'failed' || paymentStatus === 'past_due'
+                      ? 'bg-red-50 border-red-200'
+                      : 'bg-white border-gray-100 shadow-[0_1px_3px_rgba(0,0,0,0.1)]'
+                }`}>
+                  <div className="flex items-center justify-between p-4">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                        paymentStatus === 'paid'
+                          ? 'bg-emerald-500'
+                          : paymentStatus === 'failed' || paymentStatus === 'past_due'
+                            ? 'bg-red-500'
+                            : 'bg-gray-400'
+                      }`}>
+                        {paymentStatus === 'paid' ? (
+                          <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        ) : paymentStatus === 'failed' || paymentStatus === 'past_due' ? (
+                          <span className="text-white text-lg font-bold">!</span>
+                        ) : (
+                          <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        )}
+                      </div>
+                      <div>
+                        <p className="font-semibold text-gray-900 text-sm">Payment</p>
+                        <p className="text-xs text-gray-600 mt-0.5">
+                          {paymentStatus === 'paid' ? 'Paid up' : paymentStatus === 'failed' ? 'Payment failed' : paymentStatus === 'past_due' ? 'Past due' : paymentStatus === 'canceled' ? 'Canceled' : 'View status and history'}
+                        </p>
+                      </div>
+                    </div>
+                    <Link href="/client-portal/payments" className="text-sm font-medium text-emerald-600 hover:text-emerald-700 whitespace-nowrap">
+                      View →
+                    </Link>
+                  </div>
+                </div>
+              </div>
 
               {/* Onboarding Questionnaire Banner */}
               {onboardingStatus !== 'completed' && onboardingStatus !== 'submitted' && onboardingStatus !== 'skipped' && (

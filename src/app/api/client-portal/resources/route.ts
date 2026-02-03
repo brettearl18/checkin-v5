@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase-server';
+import { verifyClientAccess } from '@/lib/api-auth';
 
 export async function GET(request: NextRequest) {
   try {
@@ -12,6 +13,9 @@ export async function GET(request: NextRequest) {
         message: 'Client ID is required'
       }, { status: 400 });
     }
+
+    const accessResult = await verifyClientAccess(request, clientId);
+    if (accessResult instanceof NextResponse) return accessResult;
 
     const db = getDb();
 

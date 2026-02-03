@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase-server';
 import { Timestamp } from 'firebase-admin/firestore';
 import { logMeasurementSubmitted, logMeasurementUpdated } from '@/lib/audit-log';
+import { verifyClientAccess } from '@/lib/api-auth';
+import { logSafeError, logWarn, logInfo } from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 /**
@@ -21,11 +23,14 @@ export async function GET(request: NextRequest) {
       }, { status: 400 });
     }
 
+    const accessResult = await verifyClientAccess(request, clientId);
+    if (accessResult instanceof Response) return accessResult;
+
     let db;
     try {
       db = getDb();
     } catch (dbError) {
-      console.error('Error getting database:', dbError);
+      logSafeError('Error getting database', dbError);
       return NextResponse.json({
         success: false,
         message: 'Database connection failed',
@@ -40,9 +45,9 @@ export async function GET(request: NextRequest) {
         .orderBy('date', 'desc')
         .limit(limit)
         .get();
-    } catch (error: any) {
+    } catch (error: unknown) {
       // If orderBy fails due to missing index, try without orderBy
-      console.warn('OrderBy query failed, using simple query:', error.message);
+      logWarn('OrderBy query failed, using simple query', error instanceof Error ? error.message : error);
       snapshot = await db.collection('client_measurements')
         .where('clientId', '==', clientId)
         .limit(limit)
@@ -74,7 +79,7 @@ export async function GET(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Error fetching measurements:', error);
+    logSafeError('Error fetching measurements', error);
     return NextResponse.json({
       success: false,
       message: 'Failed to fetch measurements',
@@ -91,20 +96,6 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { clientId, date, bodyWeight, measurements, isBaseline } = body;
-
-    // Log request details for debugging
-    console.log('POST /api/client-measurements:', {
-      clientId,
-      bodyWeight,
-      bodyWeightType: typeof bodyWeight,
-      measurements,
-      measurementsType: typeof measurements,
-      measurementsKeys: measurements ? Object.keys(measurements) : [],
-      hasBodyWeight: bodyWeight !== undefined && bodyWeight !== null,
-      hasMeasurements: measurements && Object.keys(measurements).length > 0,
-      isBaseline,
-      fullBody: JSON.stringify(body)
-    });
 
     if (!clientId) {
       return NextResponse.json({
@@ -130,7 +121,7 @@ export async function POST(request: NextRequest) {
     try {
       db = getDb();
     } catch (dbError) {
-      console.error('Error getting database:', dbError);
+      logSafeError('Error getting database:', dbError);
       return NextResponse.json({
         success: false,
         message: 'Database connection failed',
@@ -203,7 +194,7 @@ export async function POST(request: NextRequest) {
               }
             }
           } catch (error) {
-            console.error('Error fetching client info for audit log:', error);
+            logSafeError('Error fetching client info for audit log:', error);
           }
 
           // Log audit event
@@ -218,7 +209,7 @@ export async function POST(request: NextRequest) {
               { bodyWeight, isBaseline: true }
             );
           } catch (error) {
-            console.error('Error logging audit event:', error);
+            logSafeError('Error logging audit event:', error);
           }
           
           return NextResponse.json({
@@ -236,7 +227,7 @@ export async function POST(request: NextRequest) {
         }
       } catch (baselineCheckError: any) {
         // If baseline check fails, log but continue with normal save
-        console.warn('Baseline check failed, continuing with save:', baselineCheckError?.message);
+        logWarn('Baseline check failed, continuing with save:', baselineCheckError?.message);
       }
     }
     
@@ -258,7 +249,7 @@ export async function POST(request: NextRequest) {
         const sameBaseline = Boolean(existing.isBaseline) === Boolean(isBaseline);
         
         if (sameDate && sameWeight && sameMeasurements && sameBaseline) {
-          console.log('Duplicate measurement detected, returning existing entry');
+          logInfo('Duplicate measurement detected, returning existing entry');
           return NextResponse.json({
             success: true,
             message: 'Measurement already saved',
@@ -275,7 +266,7 @@ export async function POST(request: NextRequest) {
     } catch (duplicateCheckError: any) {
       // If duplicate check fails (e.g., missing index), continue with save
       // Don't block the save operation due to duplicate check failures
-      console.warn('Duplicate check failed, continuing with save:', duplicateCheckError?.message);
+      logWarn('Duplicate check failed, continuing with save:', duplicateCheckError?.message);
     }
     
     const measurementData: any = {
@@ -300,7 +291,7 @@ export async function POST(request: NextRequest) {
     try {
       docRef = await db.collection('client_measurements').add(measurementData);
     } catch (addError: any) {
-      console.error('Firestore add error:', {
+      logSafeError('Firestore add error:', {
         error: addError,
         message: addError?.message,
         code: addError?.code,
@@ -320,7 +311,7 @@ export async function POST(request: NextRequest) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ clientId })
     }).catch(error => {
-      console.error('Error tracking goal progress after measurement:', error);
+      logSafeError('Error tracking goal progress after measurement:', error);
       // Don't fail the measurement save if goal tracking fails
     });
 
@@ -342,7 +333,7 @@ export async function POST(request: NextRequest) {
         }
         return new Date().toISOString(); // Fallback
       } catch (e) {
-        console.error('Error converting timestamp:', e, ts);
+        logSafeError('Error converting timestamp:', e, ts);
         return new Date().toISOString();
       }
     };
@@ -371,7 +362,7 @@ export async function POST(request: NextRequest) {
           { bodyWeight, isBaseline }
         );
       } catch (error) {
-        console.error('Error logging audit event:', error);
+        logSafeError('Error logging audit event:', error);
       }
 
       return NextResponse.json({
@@ -380,7 +371,7 @@ export async function POST(request: NextRequest) {
         data: responseData
       });
     } catch (responseError: any) {
-      console.error('Error creating response:', {
+      logSafeError('Error creating response:', {
         error: responseError,
         message: responseError?.message,
         measurementData: {
@@ -397,7 +388,7 @@ export async function POST(request: NextRequest) {
 
   } catch (error: any) {
     // Log comprehensive error details
-    console.error('Error saving measurement:', {
+    logSafeError('Error saving measurement:', {
       error,
       errorType: typeof error,
       errorName: error?.name,
@@ -438,6 +429,36 @@ export async function PUT(request: NextRequest) {
       }, { status: 400 });
     }
 
+    let db;
+    try {
+      db = getDb();
+    } catch (dbError) {
+      logSafeError('Error getting database', dbError);
+      return NextResponse.json({
+        success: false,
+        message: 'Database connection failed',
+        error: dbError instanceof Error ? dbError.message : 'Unknown error'
+      }, { status: 500 });
+    }
+
+    const measurementDoc = await db.collection('client_measurements').doc(id).get();
+    if (!measurementDoc.exists) {
+      return NextResponse.json({
+        success: false,
+        message: 'Measurement not found'
+      }, { status: 404 });
+    }
+    const clientId = measurementDoc.data()?.clientId;
+    if (!clientId) {
+      return NextResponse.json({
+        success: false,
+        message: 'Invalid measurement data'
+      }, { status: 400 });
+    }
+
+    const accessResult = await verifyClientAccess(request, clientId);
+    if (accessResult instanceof Response) return accessResult;
+
     // Validate: require at least bodyWeight OR at least one measurement value (not just empty keys)
     const hasBodyWeight = bodyWeight !== undefined && bodyWeight !== null && !isNaN(Number(bodyWeight));
     const hasMeasurements = measurements && Object.values(measurements).some(val => 
@@ -449,18 +470,6 @@ export async function PUT(request: NextRequest) {
         success: false,
         message: 'Either bodyWeight or at least one measurement must be provided'
       }, { status: 400 });
-    }
-
-    let db;
-    try {
-      db = getDb();
-    } catch (dbError) {
-      console.error('Error getting database:', dbError);
-      return NextResponse.json({
-        success: false,
-        message: 'Database connection failed',
-        error: dbError instanceof Error ? dbError.message : 'Unknown error'
-      }, { status: 500 });
     }
     
     const updateData: any = {
@@ -496,7 +505,7 @@ export async function PUT(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Error updating measurement:', error);
+    logSafeError('Error updating measurement:', error);
     return NextResponse.json({
       success: false,
       message: 'Failed to update measurement',
@@ -525,13 +534,32 @@ export async function DELETE(request: NextRequest) {
     try {
       db = getDb();
     } catch (dbError) {
-      console.error('Error getting database:', dbError);
+      logSafeError('Error getting database', dbError);
       return NextResponse.json({
         success: false,
         message: 'Database connection failed',
         error: dbError instanceof Error ? dbError.message : 'Unknown error'
       }, { status: 500 });
     }
+
+    const measurementDoc = await db.collection('client_measurements').doc(id).get();
+    if (!measurementDoc.exists) {
+      return NextResponse.json({
+        success: false,
+        message: 'Measurement not found'
+      }, { status: 404 });
+    }
+    const clientId = measurementDoc.data()?.clientId;
+    if (!clientId) {
+      return NextResponse.json({
+        success: false,
+        message: 'Invalid measurement data'
+      }, { status: 400 });
+    }
+
+    const accessResult = await verifyClientAccess(request, clientId);
+    if (accessResult instanceof Response) return accessResult;
+
     await db.collection('client_measurements').doc(id).delete();
 
     return NextResponse.json({
@@ -540,7 +568,7 @@ export async function DELETE(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Error deleting measurement:', error);
+    logSafeError('Error deleting measurement:', error);
     return NextResponse.json({
       success: false,
       message: 'Failed to delete measurement',

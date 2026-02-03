@@ -27,6 +27,7 @@ interface MeasurementData {
 
 interface BodyMeasurementsVisualizationProps {
   measurementData: MeasurementData;
+  baselineData?: MeasurementData; // Baseline measurements for comparison
   onEdit?: () => void;
   onDelete?: () => void;
   showActions?: boolean;
@@ -41,6 +42,7 @@ interface BodyMeasurementsVisualizationProps {
 
 export default function BodyMeasurementsVisualization({
   measurementData,
+  baselineData,
   onEdit,
   onDelete,
   showActions = true,
@@ -72,26 +74,111 @@ export default function BodyMeasurementsVisualization({
 
   const measurements = measurementData.measurements || {};
   const bodyWeight = measurementData.bodyWeight;
+  const baselineMeasurements = baselineData?.measurements || {};
+  const baselineWeight = baselineData?.bodyWeight;
+
+  // Helper function to calculate change direction
+  const getChangeDirection = (current: number | undefined, baseline: number | undefined): 'up' | 'down' | null => {
+    if (!current || !baseline) return null;
+    if (current > baseline) return 'up'; // Increased (red)
+    if (current < baseline) return 'down'; // Decreased (green)
+    return null; // No change
+  };
 
   // Measurement points configuration for the SVG
   // These are relative positions on the human silhouette
   const measurementPoints = {
-    shoulders: { x: 50, y: 15, label: 'Shoulders', value: measurements.shoulders },
-    neck: { x: 50, y: 18, label: 'Neck', value: measurements.neck },
-    chest: { x: 50, y: 28, label: 'Chest', value: measurements.chest },
-    leftBicep: { x: 25, y: 30, label: 'Left Bicep', value: measurements.leftBicep },
-    rightBicep: { x: 75, y: 30, label: 'Right Bicep', value: measurements.rightBicep },
-    leftForearm: { x: 20, y: 45, label: 'Left Forearm', value: measurements.leftForearm },
-    rightForearm: { x: 80, y: 45, label: 'Right Forearm', value: measurements.rightForearm },
-    waist: { x: 55, y: 40, label: 'Waist', value: measurements.waist }, // Belly button area
-    hips: { x: 38, y: 45, label: 'Hips', value: measurements.hips }, // Widest point of hips on left side
-    leftThigh: { x: 42, y: 55, label: 'Left Thigh', value: measurements.leftThigh }, // Moved up higher
-    rightThigh: { x: 58, y: 55, label: 'Right Thigh', value: measurements.rightThigh }, // Moved up higher
-    leftCalf: { x: 40, y: 88, label: 'Left Calf', value: measurements.leftCalf },
-    rightCalf: { x: 60, y: 88, label: 'Right Calf', value: measurements.rightCalf },
+    shoulders: { 
+      x: 50, y: 15, label: 'Shoulders', 
+      value: measurements.shoulders,
+      baseline: baselineMeasurements.shoulders,
+      change: getChangeDirection(measurements.shoulders, baselineMeasurements.shoulders)
+    },
+    neck: { 
+      x: 50, y: 18, label: 'Neck', 
+      value: measurements.neck,
+      baseline: baselineMeasurements.neck,
+      change: getChangeDirection(measurements.neck, baselineMeasurements.neck)
+    },
+    chest: { 
+      x: 50, y: 28, label: 'Chest', 
+      value: measurements.chest,
+      baseline: baselineMeasurements.chest,
+      change: getChangeDirection(measurements.chest, baselineMeasurements.chest)
+    },
+    leftBicep: { 
+      x: 25, y: 30, label: 'Left Bicep', 
+      value: measurements.leftBicep,
+      baseline: baselineMeasurements.leftBicep,
+      change: getChangeDirection(measurements.leftBicep, baselineMeasurements.leftBicep)
+    },
+    rightBicep: { 
+      x: 75, y: 30, label: 'Right Bicep', 
+      value: measurements.rightBicep,
+      baseline: baselineMeasurements.rightBicep,
+      change: getChangeDirection(measurements.rightBicep, baselineMeasurements.rightBicep)
+    },
+    leftForearm: { 
+      x: 20, y: 45, label: 'Left Forearm', 
+      value: measurements.leftForearm,
+      baseline: baselineMeasurements.leftForearm,
+      change: getChangeDirection(measurements.leftForearm, baselineMeasurements.leftForearm)
+    },
+    rightForearm: { 
+      x: 80, y: 45, label: 'Right Forearm', 
+      value: measurements.rightForearm,
+      baseline: baselineMeasurements.rightForearm,
+      change: getChangeDirection(measurements.rightForearm, baselineMeasurements.rightForearm)
+    },
+    waist: { 
+      x: 55, y: 40, label: 'Waist', 
+      value: measurements.waist,
+      baseline: baselineMeasurements.waist,
+      change: getChangeDirection(measurements.waist, baselineMeasurements.waist)
+    },
+    hips: { 
+      x: 38, y: 45, label: 'Hips', 
+      value: measurements.hips,
+      baseline: baselineMeasurements.hips,
+      change: getChangeDirection(measurements.hips, baselineMeasurements.hips)
+    },
+    leftThigh: { 
+      x: 42, y: 55, label: 'Left Thigh', 
+      value: measurements.leftThigh,
+      baseline: baselineMeasurements.leftThigh,
+      change: getChangeDirection(measurements.leftThigh, baselineMeasurements.leftThigh)
+    },
+    rightThigh: { 
+      x: 58, y: 55, label: 'Right Thigh', 
+      value: measurements.rightThigh,
+      baseline: baselineMeasurements.rightThigh,
+      change: getChangeDirection(measurements.rightThigh, baselineMeasurements.rightThigh)
+    },
+    leftCalf: { 
+      x: 40, y: 88, label: 'Left Calf', 
+      value: measurements.leftCalf,
+      baseline: baselineMeasurements.leftCalf,
+      change: getChangeDirection(measurements.leftCalf, baselineMeasurements.leftCalf)
+    },
+    rightCalf: { 
+      x: 60, y: 88, label: 'Right Calf', 
+      value: measurements.rightCalf,
+      baseline: baselineMeasurements.rightCalf,
+      change: getChangeDirection(measurements.rightCalf, baselineMeasurements.rightCalf)
+    },
     // Fallback for leftArm/rightArm (if bicep not available) - moved up to point at bicep
-    leftArm: { x: 25, y: 30, label: 'Left Arm', value: measurements.leftArm && !measurements.leftBicep ? measurements.leftArm : undefined },
-    rightArm: { x: 75, y: 30, label: 'Right Arm', value: measurements.rightArm && !measurements.rightBicep ? measurements.rightArm : undefined },
+    leftArm: { 
+      x: 25, y: 30, label: 'Left Arm', 
+      value: measurements.leftArm && !measurements.leftBicep ? measurements.leftArm : undefined,
+      baseline: baselineMeasurements.leftArm && !baselineMeasurements.leftBicep ? baselineMeasurements.leftArm : undefined,
+      change: measurements.leftArm && !measurements.leftBicep ? getChangeDirection(measurements.leftArm, baselineMeasurements.leftArm) : null
+    },
+    rightArm: { 
+      x: 75, y: 30, label: 'Right Arm', 
+      value: measurements.rightArm && !measurements.rightBicep ? measurements.rightArm : undefined,
+      baseline: baselineMeasurements.rightArm && !baselineMeasurements.rightBicep ? baselineMeasurements.rightArm : undefined,
+      change: measurements.rightArm && !measurements.rightBicep ? getChangeDirection(measurements.rightArm, baselineMeasurements.rightArm) : null
+    },
   };
 
   // Filter out measurements without values
@@ -276,6 +363,28 @@ export default function BodyMeasurementsVisualization({
                         >
                           {point.value?.toFixed(1)}
                         </text>
+                        {/* Arrow indicator for change from baseline */}
+                        {point.change && (
+                          <g transform={`translate(${labelX}, ${point.y + 2.5})`}>
+                            {point.change === 'up' ? (
+                              // Red up arrow (increased)
+                              <path
+                                d="M -1.5 0 L 0 -2 L 1.5 0"
+                                fill="#dc2626"
+                                stroke="#dc2626"
+                                strokeWidth="0.3"
+                              />
+                            ) : (
+                              // Green down arrow (decreased)
+                              <path
+                                d="M -1.5 0 L 0 2 L 1.5 0"
+                                fill="#10b981"
+                                stroke="#10b981"
+                                strokeWidth="0.3"
+                              />
+                            )}
+                          </g>
+                        )}
                         <text
                           x={labelX}
                           y={point.y - 3.5}
@@ -388,6 +497,28 @@ export default function BodyMeasurementsVisualization({
                     >
                       {point.value?.toFixed(1)}
                     </text>
+                    {/* Arrow indicator for change from baseline */}
+                    {point.change && (
+                      <g transform={`translate(${labelX}, ${point.y + 2.5})`}>
+                        {point.change === 'up' ? (
+                          // Red up arrow (increased)
+                          <path
+                            d="M -1.5 0 L 0 -2 L 1.5 0"
+                            fill="#dc2626"
+                            stroke="#dc2626"
+                            strokeWidth="0.3"
+                          />
+                        ) : (
+                          // Green down arrow (decreased)
+                          <path
+                            d="M -1.5 0 L 0 2 L 1.5 0"
+                            fill="#10b981"
+                            stroke="#10b981"
+                            strokeWidth="0.3"
+                          />
+                        )}
+                      </g>
+                    )}
                     {/* Measurement Label */}
                     <text
                       x={labelX}

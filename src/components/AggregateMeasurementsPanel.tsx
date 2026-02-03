@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 
 interface AggregateMeasurementsData {
   totalWeightChange: number;
+  totalBaselineWeight: number;
+  totalCurrentWeight: number;
   totalClients: number;
   clientsWithData: number;
   dateRange: {
@@ -11,6 +13,24 @@ interface AggregateMeasurementsData {
     endDate: string;
   };
   bodyPartChanges: {
+    waist: number;
+    hips: number;
+    chest: number;
+    leftThigh: number;
+    rightThigh: number;
+    leftArm: number;
+    rightArm: number;
+  };
+  bodyPartBaselines: {
+    waist: number;
+    hips: number;
+    chest: number;
+    leftThigh: number;
+    rightThigh: number;
+    leftArm: number;
+    rightArm: number;
+  };
+  bodyPartCurrents: {
     waist: number;
     hips: number;
     chest: number;
@@ -65,16 +85,26 @@ export default function AggregateMeasurementsPanel({ coachId }: AggregateMeasure
         headers
       });
 
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('API Error Response:', response.status, errorText);
+        setError(`Failed to fetch data: ${response.status} ${response.statusText}`);
+        return;
+      }
+
       const result = await response.json();
+      console.log('Aggregate measurements API response:', result);
 
       if (result.success) {
         setData(result.data);
+        console.log('Aggregate data set:', result.data);
       } else {
+        console.error('API returned success:false:', result);
         setError(result.message || 'Failed to fetch data');
       }
     } catch (err) {
       console.error('Error fetching aggregate measurements:', err);
-      setError('Error fetching aggregate measurements');
+      setError(`Error fetching aggregate measurements: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       setLoading(false);
     }
@@ -89,25 +119,39 @@ export default function AggregateMeasurementsPanel({ coachId }: AggregateMeasure
 
   const formatNumber = (num: number): string => {
     if (num === 0) return '0';
-    const sign = num > 0 ? '+' : '';
-    return `${sign}${num.toFixed(2)}`;
+    // For negative numbers (loss), don't show sign, just the number
+    // For positive numbers (gain), show + sign
+    if (num < 0) return num.toFixed(2);
+    return `+${num.toFixed(2)}`;
   };
 
   const getChangeColor = (value: number): string => {
-    if (value > 0) return 'text-green-600'; // Weight/measurements lost (positive change)
-    if (value < 0) return 'text-red-600'; // Weight/measurements gained (negative change)
+    if (value < 0) return 'text-green-600'; // Weight/measurements lost (negative change = good)
+    if (value > 0) return 'text-red-600'; // Weight/measurements gained (positive change = bad)
     return 'text-gray-600';
   };
 
   const getChangeLabel = (value: number, unit: string): string => {
-    if (value > 0) return `${formatNumber(value)} ${unit} lost`;
-    if (value < 0) return `${formatNumber(Math.abs(value))} ${unit} gained`;
+    if (value < 0) {
+      // Negative = loss (good), show absolute value without + sign
+      return `${Math.abs(value).toFixed(2)} ${unit} lost`;
+    }
+    if (value > 0) {
+      // Positive = gain (bad), show with + sign
+      return `+${value.toFixed(2)} ${unit} gained`;
+    }
     return `0 ${unit}`;
   };
 
   // Calculate average for thighs and arms
   const avgThighs = data ? (data.bodyPartChanges.leftThigh + data.bodyPartChanges.rightThigh) / 2 : 0;
   const avgArms = data ? (data.bodyPartChanges.leftArm + data.bodyPartChanges.rightArm) / 2 : 0;
+  
+  // Calculate baseline and current averages for thighs and arms
+  const avgThighsBaseline = data ? (data.bodyPartBaselines.leftThigh + data.bodyPartBaselines.rightThigh) / 2 : 0;
+  const avgThighsCurrent = data ? (data.bodyPartCurrents.leftThigh + data.bodyPartCurrents.rightThigh) / 2 : 0;
+  const avgArmsBaseline = data ? (data.bodyPartBaselines.leftArm + data.bodyPartBaselines.rightArm) / 2 : 0;
+  const avgArmsCurrent = data ? (data.bodyPartCurrents.leftArm + data.bodyPartCurrents.rightArm) / 2 : 0;
 
   return (
     <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1),0_1px_2px_rgba(0,0,0,0.06)] border border-gray-100 overflow-hidden">
@@ -171,10 +215,23 @@ export default function AggregateMeasurementsPanel({ coachId }: AggregateMeasure
             <div className="bg-gradient-to-br from-[#fef9e7] to-orange-50 border-2 border-[#daa450]/30 rounded-xl p-4">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-base font-semibold text-gray-900">Total Weight Change</h3>
-                <div className="w-10 h-10 bg-[#daa450]/20 rounded-lg flex items-center justify-center">
-                  <svg className="w-5 h-5 text-[#daa450]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                  </svg>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={fetchAggregateData}
+                    disabled={loading}
+                    className="px-3 py-1.5 bg-[#daa450] hover:bg-orange-600 text-white rounded-lg text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                    title="Recalculate weight change"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Calculate
+                  </button>
+                  <div className="w-10 h-10 bg-[#daa450]/20 rounded-lg flex items-center justify-center">
+                    <svg className="w-5 h-5 text-[#daa450]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                    </svg>
+                  </div>
                 </div>
               </div>
               <div className="mb-3">
@@ -186,7 +243,11 @@ export default function AggregateMeasurementsPanel({ coachId }: AggregateMeasure
               <p className={`text-xs font-medium ${getChangeColor(data.totalWeightChange)}`}>
                 {getChangeLabel(data.totalWeightChange, 'KG')}
               </p>
-              <p className="text-xs text-gray-500 mt-1">
+              <div className="text-xs text-gray-600 mt-2 space-y-0.5">
+                <p>Baseline: {data.totalBaselineWeight.toFixed(2)} KG</p>
+                <p>Current: {data.totalCurrentWeight.toFixed(2)} KG</p>
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
                 {data.clientsWithData} of {data.totalClients} clients tracked
               </p>
             </div>
@@ -205,41 +266,66 @@ export default function AggregateMeasurementsPanel({ coachId }: AggregateMeasure
                 {/* Waist */}
                 <div className="flex items-center justify-between py-1.5 border-b border-gray-100">
                   <span className="text-xs font-medium text-gray-700">Waist</span>
-                  <span className={`text-base font-semibold ${getChangeColor(data.bodyPartChanges.waist)}`}>
-                    {getChangeLabel(data.bodyPartChanges.waist, 'cm')}
-                  </span>
+                  <div className="flex flex-col items-end">
+                    <span className={`text-base font-semibold ${getChangeColor(data.bodyPartChanges.waist)}`}>
+                      {getChangeLabel(data.bodyPartChanges.waist, 'cm')}
+                    </span>
+                    <span className="text-xs text-gray-500">
+                      {data.bodyPartBaselines.waist.toFixed(1)} → {data.bodyPartCurrents.waist.toFixed(1)} cm
+                    </span>
+                  </div>
                 </div>
                 
                 {/* Hips */}
                 <div className="flex items-center justify-between py-1.5 border-b border-gray-100">
                   <span className="text-xs font-medium text-gray-700">Hips</span>
-                  <span className={`text-base font-semibold ${getChangeColor(data.bodyPartChanges.hips)}`}>
-                    {getChangeLabel(data.bodyPartChanges.hips, 'cm')}
-                  </span>
+                  <div className="flex flex-col items-end">
+                    <span className={`text-base font-semibold ${getChangeColor(data.bodyPartChanges.hips)}`}>
+                      {getChangeLabel(data.bodyPartChanges.hips, 'cm')}
+                    </span>
+                    <span className="text-xs text-gray-500">
+                      {data.bodyPartBaselines.hips.toFixed(1)} → {data.bodyPartCurrents.hips.toFixed(1)} cm
+                    </span>
+                  </div>
                 </div>
                 
                 {/* Chest */}
                 <div className="flex items-center justify-between py-1.5 border-b border-gray-100">
                   <span className="text-xs font-medium text-gray-700">Chest</span>
-                  <span className={`text-base font-semibold ${getChangeColor(data.bodyPartChanges.chest)}`}>
-                    {getChangeLabel(data.bodyPartChanges.chest, 'cm')}
-                  </span>
+                  <div className="flex flex-col items-end">
+                    <span className={`text-base font-semibold ${getChangeColor(data.bodyPartChanges.chest)}`}>
+                      {getChangeLabel(data.bodyPartChanges.chest, 'cm')}
+                    </span>
+                    <span className="text-xs text-gray-500">
+                      {data.bodyPartBaselines.chest.toFixed(1)} → {data.bodyPartCurrents.chest.toFixed(1)} cm
+                    </span>
+                  </div>
                 </div>
                 
                 {/* Thighs (Average) */}
                 <div className="flex items-center justify-between py-1.5 border-b border-gray-100">
                   <span className="text-xs font-medium text-gray-700">Thighs (Avg)</span>
-                  <span className={`text-base font-semibold ${getChangeColor(avgThighs)}`}>
-                    {getChangeLabel(avgThighs, 'cm')}
-                  </span>
+                  <div className="flex flex-col items-end">
+                    <span className={`text-base font-semibold ${getChangeColor(avgThighs)}`}>
+                      {getChangeLabel(avgThighs, 'cm')}
+                    </span>
+                    <span className="text-xs text-gray-500">
+                      {avgThighsBaseline.toFixed(1)} → {avgThighsCurrent.toFixed(1)} cm
+                    </span>
+                  </div>
                 </div>
                 
                 {/* Arms (Average) */}
                 <div className="flex items-center justify-between py-1.5">
                   <span className="text-xs font-medium text-gray-700">Arms (Avg)</span>
-                  <span className={`text-base font-semibold ${getChangeColor(avgArms)}`}>
-                    {getChangeLabel(avgArms, 'cm')}
-                  </span>
+                  <div className="flex flex-col items-end">
+                    <span className={`text-base font-semibold ${getChangeColor(avgArms)}`}>
+                      {getChangeLabel(avgArms, 'cm')}
+                    </span>
+                    <span className="text-xs text-gray-500">
+                      {avgArmsBaseline.toFixed(1)} → {avgArmsCurrent.toFixed(1)} cm
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>

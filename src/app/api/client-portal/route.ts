@@ -3,6 +3,8 @@ import { getDb } from '@/lib/firebase-server';
 import { getDefaultThresholds, convertLegacyThresholds } from '@/lib/scoring-utils';
 import { ONBOARDING_QUESTIONS } from '@/lib/onboarding-questions';
 import { FEATURE_FLAGS } from '@/lib/feature-flags';
+import { requireAuth, verifyClientAccess } from '@/lib/api-auth';
+import { logSafeError } from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,6 +27,10 @@ import { getCached, setCache, deleteCache } from '@/lib/dashboard-cache';
 
 export async function GET(request: NextRequest) {
   try {
+    const authResult = await requireAuth(request);
+    if (authResult instanceof NextResponse) return authResult;
+    const { user } = authResult;
+
     const db = getDb();
     const { searchParams } = new URL(request.url);
     const clientId = searchParams.get('clientId');
@@ -33,34 +39,33 @@ export async function GET(request: NextRequest) {
     const isPreview = searchParams.get('preview') === 'true';
     const coachId = searchParams.get('coachId');
 
-    // If in preview mode, verify coach/admin has access to this client
+    // If in preview mode, verify the authenticated user (coach/admin) has access to this client
     if (isPreview && clientId && coachId) {
+      if (coachId !== user.uid && !user.isAdmin) {
+        return NextResponse.json({
+          success: false,
+          message: 'You do not have permission to preview this client\'s portal'
+        }, { status: 403 });
+      }
       try {
-        // Check if user is an admin (admins can access any client)
-        const userDoc = await db.collection('users').doc(coachId).get();
-        const isAdmin = userDoc.exists && (userDoc.data()?.role === 'admin' || userDoc.data()?.roles?.includes('admin'));
-        
-        if (!isAdmin) {
-          // For non-admins (coaches), verify they're assigned to this client
+        if (!user.isAdmin) {
           const clientDoc = await db.collection('clients').doc(clientId).get();
-          if (clientDoc.exists) {
-            const clientData = clientDoc.data();
-            // Verify this coach is assigned to this client
-            if (clientData?.coachId !== coachId) {
-              return NextResponse.json({
-                success: false,
-                message: 'You do not have permission to preview this client\'s portal'
-              }, { status: 403 });
-            }
-          } else {
+          if (!clientDoc.exists) {
             return NextResponse.json({
               success: false,
               message: 'Client not found'
             }, { status: 404 });
           }
+          const clientData = clientDoc.data();
+          if (clientData?.coachId !== user.uid) {
+            return NextResponse.json({
+              success: false,
+              message: 'You do not have permission to preview this client\'s portal'
+            }, { status: 403 });
+          }
         }
-        // Admins can access any client, so no further checks needed
       } catch (error) {
+        logSafeError('Error verifying preview access', error);
         return NextResponse.json({
           success: false,
           message: 'Error verifying preview access'
@@ -76,11 +81,10 @@ export async function GET(request: NextRequest) {
     }
 
     // Check cache first (Phase 1: Add basic caching)
-    // Note: We need to determine clientIdToUse first for cache key
     let clientIdToUse = clientId || userUid;
-    
-    // Quick cache check if we have clientId or userUid directly
     if (clientIdToUse) {
+      const accessResult = await verifyClientAccess(request, clientIdToUse);
+      if (accessResult instanceof NextResponse) return accessResult;
       const cachedData = getCached(`dashboard:${clientIdToUse}`);
       if (cachedData) {
         return NextResponse.json({
@@ -114,7 +118,6 @@ export async function GET(request: NextRequest) {
         // If client not found by email, but we have userUid, use that
         // This handles cases where client document doesn't exist but responses do
         if (userUid) {
-          console.log('Client not found by email, using userUid:', userUid);
           clientIdToUse = userUid;
         } else {
           return NextResponse.json({
@@ -134,7 +137,6 @@ export async function GET(request: NextRequest) {
       } else {
         // If client document doesn't exist, but we have userUid, use that
         if (userUid) {
-          console.log('Client document not found, using userUid:', userUid);
           clientIdToUse = userUid;
         } else {
           return NextResponse.json({
@@ -147,7 +149,6 @@ export async function GET(request: NextRequest) {
 
     // Final fallback: if we still don't have a clientIdToUse, use userUid
     if (!clientIdToUse && userUid) {
-      console.log('Using userUid as final fallback:', userUid);
       clientIdToUse = userUid;
     }
 
@@ -157,6 +158,10 @@ export async function GET(request: NextRequest) {
         message: 'Unable to determine client ID'
       }, { status: 400 });
     }
+
+    // Verify access (in case we resolved clientIdToUse from email lookup above)
+    const accessResult = await verifyClientAccess(request, clientIdToUse);
+    if (accessResult instanceof NextResponse) return accessResult;
 
     // Fetch check-in assignments for this client
     let checkInAssignments = [];
@@ -168,7 +173,11 @@ export async function GET(request: NextRequest) {
           const baseUrl = new URL(request.url);
           const preCreatedUrl = new URL('/api/client-portal/check-ins-precreated', baseUrl.origin);
           preCreatedUrl.searchParams.set('clientId', clientIdToUse);
-          const preCreatedRequest = new NextRequest(preCreatedUrl.toString());
+          // Copy Authorization header so internal call passes verifyClientAccess
+          const headers = new Headers();
+          const authHeader = request.headers.get('authorization');
+          if (authHeader) headers.set('authorization', authHeader);
+          const preCreatedRequest = new NextRequest(preCreatedUrl.toString(), { headers });
           
           const preCreatedModule = await import('./check-ins-precreated/route');
           const preCreatedResponse = await preCreatedModule.GET(preCreatedRequest);

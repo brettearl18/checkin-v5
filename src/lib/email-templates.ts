@@ -1243,3 +1243,117 @@ export function getCoachFeedbackEmailTemplate(
 
   return { subject, html };
 }
+
+/**
+ * Email template for meal plan assignment/update notification
+ */
+export function getMealPlanAssignedEmailTemplate(
+  clientName: string,
+  mealPlanName: string,
+  mealPlanUrl: string,
+  coachName?: string
+): { subject: string; html: string } {
+  const subject = 'Your Meal Plan Has Been Updated';
+  
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <style>
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+          line-height: 1.6;
+          color: #333;
+          max-width: 600px;
+          margin: 0 auto;
+          padding: 20px;
+        }
+        .container {
+          background-color: #ffffff;
+          border-radius: 8px;
+          padding: 30px;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .brand-header {
+          background: linear-gradient(135deg, #14b8a6 0%, #0d9488 100%);
+          color: white;
+          padding: 20px 30px;
+          text-align: center;
+          font-size: 24px;
+          font-weight: 700;
+          letter-spacing: 0.5px;
+          margin-bottom: 0;
+          border-radius: 8px 8px 0 0;
+        }
+        .header {
+          background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+          color: white;
+          padding: 30px;
+          border-radius: 0;
+          text-align: center;
+          margin: 0 -30px 30px -30px;
+        }
+        .info-box {
+          background-color: #d1fae5;
+          border-left: 4px solid #10b981;
+          padding: 15px;
+          margin: 20px 0;
+          border-radius: 4px;
+        }
+        .button {
+          display: inline-block;
+          background-color: #10b981;
+          color: white;
+          padding: 12px 30px;
+          text-decoration: none;
+          border-radius: 6px;
+          margin: 20px 0;
+          font-weight: 600;
+        }
+        .button:hover {
+          background-color: #059669;
+        }
+        .footer {
+          margin-top: 30px;
+          padding-top: 20px;
+          border-top: 1px solid #e5e7eb;
+          font-size: 12px;
+          color: #6b7280;
+          text-align: center;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="brand-header">
+          Vana Health Check In
+        </div>
+        <div class="header">
+          <h1>Your Meal Plan Has Been Updated</h1>
+        </div>
+        <p>Hi ${clientName},</p>
+        <p>Your coach has assigned a new meal plan to help you reach your health and wellness goals!</p>
+        <div class="info-box">
+          <p><strong>Meal Plan:</strong> ${mealPlanName}</p>
+        </div>
+        <p>Click the button below to access your meal plan and start your nutrition journey.</p>
+        <div style="text-align: center;">
+          <a href="${mealPlanUrl}" class="button" target="_blank" rel="noopener noreferrer">View My Meal Plan</a>
+        </div>
+        <p>Or copy and paste this link into your browser:</p>
+        <p style="color: #6b7280; word-break: break-all; font-size: 12px;">${mealPlanUrl}</p>
+        <p>You can also access your meal plan anytime from your client portal under the "Meal Plan" section.</p>
+        <p>If you have any questions about your meal plan, please don't hesitate to reach out to your coach.</p>
+        <p>Best regards,<br>${coachName || 'Your Coach'}</p>
+        <div class="footer">
+          <p>This email was sent to ${clientName}. If you have questions, please contact your coach.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return { subject, html };
+}
