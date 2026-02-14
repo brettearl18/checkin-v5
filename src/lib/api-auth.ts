@@ -24,8 +24,9 @@ export interface AuthenticatedUser {
 async function verifyAuthToken(request: NextRequest): Promise<AuthenticatedUser | null> {
   try {
     const authHeader = request.headers.get('authorization');
-    
+
     if (!authHeader?.startsWith('Bearer ')) {
+      console.warn('[api-auth] Missing or invalid Authorization header (expected Bearer token)');
       return null;
     }
 
@@ -55,6 +56,7 @@ async function verifyAuthToken(request: NextRequest): Promise<AuthenticatedUser 
       isClient
     };
   } catch (error) {
+    console.warn('[api-auth] Token verification failed:', error instanceof Error ? error.message : error);
     logSafeError('Error verifying auth token', error);
     return null;
   }

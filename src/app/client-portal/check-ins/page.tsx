@@ -69,6 +69,9 @@ export default function ClientCheckInsPage() {
   const [missedReason, setMissedReason] = useState<string>('');
   const [missedComment, setMissedComment] = useState<string>('');
   const [markingAsMissed, setMarkingAsMissed] = useState(false);
+  const [wrongWeekExpandedFor, setWrongWeekExpandedFor] = useState<string | null>(null);
+  const [reassignTargetWeek, setReassignTargetWeek] = useState<string>('3');
+  const [reassigningFor, setReassigningFor] = useState<string | null>(null);
 
   useEffect(() => {
     // Wait for auth to finish loading before fetching client ID
@@ -196,6 +199,32 @@ export default function ClientCheckInsPage() {
       console.error('Error fetching completed responses:', error);
     } finally {
       setCompletedLoading(false);
+    }
+  };
+
+  const reassignResponseToWeek = async (responseId: string, targetRecurringWeek: number) => {
+    if (!clientId) return;
+    setReassigningFor(responseId);
+    try {
+      const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
+      const res = await fetch(`/api/clients/${clientId}/reassign-response-to-week`, {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ responseId, targetRecurringWeek }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        await fetchCompletedResponses();
+        setWrongWeekExpandedFor(null);
+        alert(data.message || 'Moved to the correct week. Your coach will see the update.');
+      } else {
+        alert(data.message || 'Could not move this completion. Ask your coach to fix it.');
+      }
+    } catch (e) {
+      console.error('Reassign failed:', e);
+      alert('Something went wrong. Please try again or ask your coach.');
+    } finally {
+      setReassigningFor(null);
     }
   };
 
@@ -1150,6 +1179,39 @@ export default function ClientCheckInsPage() {
                                     )
                                   )}
                                 </div>
+                                {/* Wrong week? Self-fix - only for recurring check-ins */}
+                                {item.recurringWeek != null && (item.totalWeeks ?? 0) > 1 && (
+                                  <div className="mt-3 pt-3 border-t border-gray-100">
+                                    <button
+                                      type="button"
+                                      onClick={() => setWrongWeekExpandedFor(wrongWeekExpandedFor === item.id ? null : item.id)}
+                                      className="text-xs text-gray-500 hover:text-gray-700"
+                                    >
+                                      {wrongWeekExpandedFor === item.id ? '▼' : '▶'} Recorded as wrong week? Fix it here
+                                    </button>
+                                    {wrongWeekExpandedFor === item.id && (
+                                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                                        <span className="text-xs text-gray-600">I actually completed week</span>
+                                        <input
+                                          type="number"
+                                          min={1}
+                                          max={item.totalWeeks || 52}
+                                          value={reassignTargetWeek}
+                                          onChange={(e) => setReassignTargetWeek(e.target.value)}
+                                          className="w-12 px-2 py-1 border border-gray-300 rounded text-sm"
+                                        />
+                                        <button
+                                          type="button"
+                                          disabled={reassigningFor === item.id}
+                                          onClick={() => reassignResponseToWeek(item.id, parseInt(reassignTargetWeek, 10) || 1)}
+                                          className="px-2 py-1 bg-emerald-600 text-white rounded text-xs font-medium hover:bg-emerald-700 disabled:opacity-50"
+                                        >
+                                          {reassigningFor === item.id ? 'Moving…' : 'Move to this week'}
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
                               </div>
                               <div className="flex flex-col sm:flex-row gap-2 sm:gap-2">
                                 {/* Feedback Button - Only show if coach has responded */}

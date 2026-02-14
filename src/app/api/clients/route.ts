@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb, getAuthInstance } from '@/lib/firebase-server';
+import { requireAuth } from '@/lib/api-auth';
 import { autoCreateMeasurementSchedule } from '@/lib/auto-allocate-checkin';
 import { logSafeError, logInfo } from '@/lib/logger';
 import { validatePassword } from '@/lib/password-validation';
@@ -47,18 +48,30 @@ async function sendOnboardingEmail(email: string, onboardingToken: string, coach
 }
 
 export async function GET(request: NextRequest) {
-  const db = getDb();
   try {
+    const authResult = await requireAuth(request);
+    if (authResult instanceof NextResponse) return authResult;
+    const { user } = authResult;
+
     const { searchParams } = new URL(request.url);
     const coachId = searchParams.get('coachId');
 
-    let query = db.collection('clients');
-
-    // If coachId is provided, filter by coachId
-    if (coachId) {
-      query = query.where('coachId', '==', coachId);
+    // Coach can only request their own clients; admin can request any coach's clients
+    if (!coachId) {
+      return NextResponse.json(
+        { success: false, message: 'coachId is required' },
+        { status: 400 }
+      );
+    }
+    if (coachId !== user.uid && !user.isAdmin) {
+      return NextResponse.json(
+        { success: false, message: 'Access denied. You can only view your own clients.' },
+        { status: 403 }
+      );
     }
 
+    const db = getDb();
+    const query = db.collection('clients').where('coachId', '==', coachId);
     const snapshot = await query.get();
     const now = new Date();
     

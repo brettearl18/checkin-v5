@@ -274,6 +274,7 @@ export default function ClientProfilePage() {
   } | null>(null);
   const [billingStripeError, setBillingStripeError] = useState<string | null>(null);
   const [loadingBillingHistory, setLoadingBillingHistory] = useState(false);
+  const [syncingPaymentStatus, setSyncingPaymentStatus] = useState(false);
   const [aiAnalytics, setAiAnalytics] = useState<any>(null);
   const [loadingAiAnalytics, setLoadingAiAnalytics] = useState(false);
   const [showGenerateAnalyticsModal, setShowGenerateAnalyticsModal] = useState(false);
@@ -411,6 +412,25 @@ export default function ClientProfilePage() {
   useEffect(() => {
     if (activeTab === 'payment' && clientId) fetchBillingHistory();
   }, [activeTab, clientId]);
+
+  const handleSyncPaymentStatus = async () => {
+    if (!clientId) return;
+    setSyncingPaymentStatus(true);
+    try {
+      const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
+      const res = await fetch(`/api/clients/${clientId}/billing/sync`, { method: 'POST', headers });
+      const data = await res.json();
+      if (data.success) {
+        await fetchClient();
+      } else {
+        alert(data.message || 'Sync failed');
+      }
+    } catch {
+      alert('Failed to sync payment status');
+    } finally {
+      setSyncingPaymentStatus(false);
+    }
+  };
 
   const fetchClient = async () => {
     try {
@@ -5763,8 +5783,22 @@ export default function ClientProfilePage() {
                 <div className="space-y-6">
                   <div className="bg-white rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden">
                     <div className="bg-gradient-to-r from-emerald-50 to-teal-50 px-8 py-6 border-b-2 border-emerald-200">
-                      <h2 className="text-2xl font-bold text-gray-900">Payment & Program</h2>
-                      <p className="text-sm text-gray-600 mt-1">Subscription and payment history from Stripe</p>
+                      <div className="flex flex-wrap items-center justify-between gap-4">
+                        <div>
+                          <h2 className="text-2xl font-bold text-gray-900">Payment & Program</h2>
+                          <p className="text-sm text-gray-600 mt-1">Subscription and payment history from Stripe</p>
+                        </div>
+                        {client?.stripeCustomerId && (
+                          <button
+                            type="button"
+                            onClick={handleSyncPaymentStatus}
+                            disabled={syncingPaymentStatus}
+                            className="px-4 py-2 bg-white border border-emerald-300 text-emerald-700 rounded-xl text-sm font-medium hover:bg-emerald-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {syncingPaymentStatus ? 'Syncing…' : 'Refresh payment status'}
+                          </button>
+                        )}
+                      </div>
                     </div>
                     <div className="p-8">
                       {loadingBillingHistory ? (

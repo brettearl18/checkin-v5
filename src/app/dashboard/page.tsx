@@ -124,7 +124,7 @@ interface QuestionProgress {
 }
 
 export default function DashboardPage() {
-  const { userProfile, logout } = useAuth();
+  const { user, userProfile, logout } = useAuth();
   const { unreadCount } = useNotifications();
   const [stats, setStats] = useState<DashboardStats>({
     totalClients: 0,
@@ -169,12 +169,12 @@ export default function DashboardPage() {
     type: string;
   } | null>(null);
 
-  // Refresh dashboard data when notifications change
+  // Refresh dashboard data when coach is fully loaded (user + profile so we can send auth token)
   useEffect(() => {
-    if (userProfile?.uid) {
+    if (user && userProfile?.uid) {
       fetchDashboardData();
     }
-  }, [userProfile?.uid]);
+  }, [user, userProfile?.uid]);
 
   // Add manual refresh capability for real-time updates
   const handleManualRefresh = () => {
@@ -189,13 +189,17 @@ export default function DashboardPage() {
     }
     
     try {
-      if (!userProfile?.uid) {
-        console.error('No user profile found');
+      if (!userProfile?.uid || !user) {
+        if (!userProfile?.uid) console.error('No user profile found');
+        setLoading(false);
+        setRefreshing(false);
         return;
       }
       const coachId = userProfile.uid;
+      const token = await user.getIdToken(/* forceRefresh */ true);
+      const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
       
-      // Fetch all data in parallel for better performance
+      // Fetch all data in parallel for better performance (auth sent for protected APIs)
       const [
         coachResponse,
         clientsResponse,
@@ -205,13 +209,13 @@ export default function DashboardPage() {
         completedCheckInsResponse,
         activityResponse
       ] = await Promise.all([
-        fetch(`/api/coaches/${coachId}`).catch(err => ({ ok: false, json: () => ({ success: false }) })),
-        fetch(`/api/clients?coachId=${coachId}`).catch(err => ({ ok: false, json: () => ({ clients: [] }) })),
-        fetch(`/api/forms?coachId=${coachId}`).catch(err => ({ ok: false, json: () => ({ success: false, forms: [] }) })),
-        fetch(`/api/analytics/overview?coachId=${coachId}&timeRange=30d`).catch(err => ({ ok: false, json: () => ({}) })),
-        fetch(`/api/dashboard/check-ins-to-review?coachId=${coachId}&sortBy=${sortBy}&sortOrder=${sortOrder}`).catch(err => ({ ok: false, json: () => ({ success: false, data: { checkIns: [] } }) })),
-        fetch(`/api/check-ins?coachId=${coachId}&status=completed&sortBy=${completedSortBy}&sortOrder=${completedSortOrder}`).catch(err => ({ ok: false, json: () => ({ success: false, data: { checkIns: [] } }) })),
-        fetch(`/api/dashboard/recent-activity?coachId=${coachId}`).catch(err => ({ ok: false, json: () => ({ success: false, data: [] }) }))
+        fetch(`/api/coaches/${coachId}`, { headers }).catch(err => ({ ok: false, json: () => ({ success: false }) })),
+        fetch(`/api/clients?coachId=${coachId}`, { headers }).catch(err => ({ ok: false, json: () => ({ clients: [] }) })),
+        fetch(`/api/forms?coachId=${coachId}`, { headers }).catch(err => ({ ok: false, json: () => ({ success: false, forms: [] }) })),
+        fetch(`/api/analytics/overview?coachId=${coachId}&timeRange=30d`, { headers }).catch(err => ({ ok: false, json: () => ({}) })),
+        fetch(`/api/dashboard/check-ins-to-review?coachId=${coachId}&sortBy=${sortBy}&sortOrder=${sortOrder}`, { headers }).catch(err => ({ ok: false, json: () => ({ success: false, data: { checkIns: [] } }) })),
+        fetch(`/api/check-ins?coachId=${coachId}&status=completed&sortBy=${completedSortBy}&sortOrder=${completedSortOrder}`, { headers }).catch(err => ({ ok: false, json: () => ({ success: false, data: { checkIns: [] } }) })),
+        fetch(`/api/dashboard/recent-activity?coachId=${coachId}`, { headers }).catch(err => ({ ok: false, json: () => ({ success: false, data: [] }) }))
       ]);
 
       // Process coach data
@@ -327,9 +331,9 @@ export default function DashboardPage() {
       setCompletedCheckIns(completedCheckIns);
       setRecentActivity(realActivity);
       
-      // Fetch real progress images for coach's clients
+      // Fetch real progress images for coach's clients (reuse auth headers from above)
       try {
-        const photosResponse = await fetch(`/api/progress-images?coachId=${coachId}&limit=8`);
+        const photosResponse = await fetch(`/api/progress-images?coachId=${coachId}&limit=8`, { headers });
         if (photosResponse.ok) {
           const photosData = await photosResponse.json();
           if (photosData.success && photosData.data) {

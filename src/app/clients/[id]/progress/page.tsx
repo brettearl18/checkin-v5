@@ -121,6 +121,16 @@ export default function ClientProgressPage() {
   const [expandedImage, setExpandedImage] = useState<any | null>(null);
   const [expandedViewComparisonMode, setExpandedViewComparisonMode] = useState(false);
   const [selectedPhotosForComparison, setSelectedPhotosForComparison] = useState<Set<string>>(new Set());
+  const [weekDebugOpen, setWeekDebugOpen] = useState(false);
+  const [weekDebugData, setWeekDebugData] = useState<{
+    assignments: { documentId: string; formTitle?: string; recurringWeek: number | null; totalWeeks: number | null; responseId: string | null }[];
+    responses: { documentId: string; assignmentId: string; formTitle?: string; recurringWeek: number | null; submittedAt: string | null }[];
+  } | null>(null);
+  const [weekDebugLoading, setWeekDebugLoading] = useState(false);
+  const [correctingWeekFor, setCorrectingWeekFor] = useState<string | null>(null);
+  const [correctWeekValue, setCorrectWeekValue] = useState<string>('4');
+  const [reassigningWeekFor, setReassigningWeekFor] = useState<string | null>(null);
+  const [reassignTargetWeek, setReassignTargetWeek] = useState<string>('3');
 
   useEffect(() => {
     if (clientId) {
@@ -253,6 +263,74 @@ export default function ClientProgressPage() {
       console.error('Error fetching unresponded check-ins:', error);
     } finally {
       setLoadingCheckIns(false);
+    }
+  };
+
+  const fetchWeekDebug = async () => {
+    if (!clientId) return;
+    setWeekDebugLoading(true);
+    try {
+      const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
+      const res = await fetch(`/api/clients/${clientId}/progress-week-debug`, { headers });
+      const data = await res.json();
+      if (data.success) {
+        setWeekDebugData({ assignments: data.assignments || [], responses: data.responses || [] });
+      }
+    } catch (e) {
+      console.error('Week debug fetch failed:', e);
+    } finally {
+      setWeekDebugLoading(false);
+    }
+  };
+
+  const correctWeek = async (responseId: string, recurringWeek: number) => {
+    if (!clientId) return;
+    setCorrectingWeekFor(responseId);
+    try {
+      const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
+      const res = await fetch(`/api/clients/${clientId}/progress-week-debug`, {
+        method: 'PATCH',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ responseId, recurringWeek }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        await fetchUnrespondedCheckIns();
+        if (weekDebugOpen) await fetchWeekDebug();
+      } else {
+        alert(data.message || 'Failed to update week');
+      }
+    } catch (e) {
+      console.error('Correct week failed:', e);
+      alert('Failed to update week');
+    } finally {
+      setCorrectingWeekFor(null);
+    }
+  };
+
+  const reassignResponseToWeek = async (responseId: string, targetRecurringWeek: number) => {
+    if (!clientId) return;
+    setReassigningWeekFor(responseId);
+    try {
+      const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
+      const res = await fetch(`/api/clients/${clientId}/reassign-response-to-week`, {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ responseId, targetRecurringWeek }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        await fetchUnrespondedCheckIns();
+        if (weekDebugOpen) await fetchWeekDebug();
+        alert(data.message || 'Completion moved successfully.');
+      } else {
+        alert(data.message || 'Failed to move completion.');
+      }
+    } catch (e) {
+      console.error('Reassign failed:', e);
+      alert('Failed to move completion.');
+    } finally {
+      setReassigningWeekFor(null);
     }
   };
 
@@ -1687,6 +1765,93 @@ export default function ClientProgressPage() {
               </div>
             )}
           </div>
+          {/* Week number wrong? — see why and fix */}
+          {unrespondedCheckIns.some((c) => c.isRecurring && c.recurringWeek) && (
+            <div className="border-t border-gray-100 px-6 py-3 bg-gray-50/50">
+              <button
+                type="button"
+                onClick={() => {
+                  setWeekDebugOpen((o) => !o);
+                  if (!weekDebugOpen && !weekDebugData) void fetchWeekDebug();
+                }}
+                className="text-sm text-gray-600 hover:text-gray-900 font-medium flex items-center gap-1"
+              >
+                {weekDebugOpen ? '▼' : '▶'} Week number wrong? See why and fix
+              </button>
+              {weekDebugOpen && (
+                <div className="mt-3 text-sm text-gray-700 space-y-3">
+                  <p className="text-gray-600">
+                    The week shown comes from the check-in assignment or the submitted response. If the client completed a different week (e.g. Week 3) but it was recorded against another (e.g. Week 10), use <strong>Move completion to week</strong> to fix without losing data.
+                  </p>
+                  {weekDebugLoading ? (
+                    <div className="flex items-center gap-2 text-gray-500">
+                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-gray-300 border-t-gray-600" />
+                      Loading…
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {unrespondedCheckIns.filter((c) => c.responseId).map((checkIn) => (
+                        <div key={checkIn.id} className="p-3 bg-white rounded border border-gray-200 space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-medium">{checkIn.formTitle || 'Check-in'}</span>
+                            <span className="text-gray-500">
+                              Currently: Week {checkIn.recurringWeek}/{checkIn.totalWeeks ?? '?'}
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-gray-500 text-xs">Label only:</span>
+                            <label className="sr-only" htmlFor={`correct-week-${checkIn.responseId}`}>
+                              Set to week
+                            </label>
+                            <input
+                              id={`correct-week-${checkIn.responseId}`}
+                              type="number"
+                              min={1}
+                              max={checkIn.totalWeeks || 52}
+                              value={correctWeekValue}
+                              onChange={(e) => setCorrectWeekValue(e.target.value)}
+                              className="w-14 px-2 py-1 border border-gray-300 rounded text-center"
+                            />
+                            <button
+                              type="button"
+                              disabled={correctingWeekFor === checkIn.responseId}
+                              onClick={() => correctWeek(checkIn.responseId, parseInt(correctWeekValue, 10) || 1)}
+                              className="px-2 py-1 bg-purple-600 text-white rounded text-xs font-medium hover:bg-purple-700 disabled:opacity-50"
+                            >
+                              {correctingWeekFor === checkIn.responseId ? 'Updating…' : 'Correct to this week'}
+                            </button>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-gray-100">
+                            <span className="text-gray-500 text-xs">Completion on wrong week? Move to:</span>
+                            <label className="sr-only" htmlFor={`reassign-week-${checkIn.responseId}`}>
+                              Target week
+                            </label>
+                            <input
+                              id={`reassign-week-${checkIn.responseId}`}
+                              type="number"
+                              min={1}
+                              max={checkIn.totalWeeks || 52}
+                              value={reassignTargetWeek}
+                              onChange={(e) => setReassignTargetWeek(e.target.value)}
+                              className="w-14 px-2 py-1 border border-gray-300 rounded text-center"
+                            />
+                            <button
+                              type="button"
+                              disabled={reassigningWeekFor === checkIn.responseId}
+                              onClick={() => reassignResponseToWeek(checkIn.responseId, parseInt(reassignTargetWeek, 10) || 1)}
+                              className="px-2 py-1 bg-emerald-600 text-white rounded text-xs font-medium hover:bg-emerald-700 disabled:opacity-50"
+                            >
+                              {reassigningWeekFor === checkIn.responseId ? 'Moving…' : 'Move completion to this week'}
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Question Progress Grid */}

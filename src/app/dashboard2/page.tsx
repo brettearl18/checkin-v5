@@ -79,17 +79,17 @@ export default function Dashboard2Page() {
       const coachId = userProfile?.uid;
       if (!coachId) return;
 
-      // Fetch all data in parallel
+      const headers = await import('@/lib/auth-headers').then((m) => m.getAuthHeaders());
       const [
         clientsResponse,
         activityResponse,
         analyticsResponse,
         checkInsResponse
       ] = await Promise.all([
-        fetch(`/api/clients?coachId=${coachId}`),
-        fetch(`/api/dashboard/recent-activity?coachId=${coachId}`),
-        fetch(`/api/analytics/overview?coachId=${coachId}&timeRange=1y`),
-        fetch(`/api/dashboard/check-ins-to-review?coachId=${coachId}`)
+        fetch(`/api/clients?coachId=${coachId}`, { headers }),
+        fetch(`/api/dashboard/recent-activity?coachId=${coachId}`, { headers }),
+        fetch(`/api/analytics/overview?coachId=${coachId}&timeRange=1y`, { headers }),
+        fetch(`/api/dashboard/check-ins-to-review?coachId=${coachId}`, { headers })
       ]);
 
       // Process clients

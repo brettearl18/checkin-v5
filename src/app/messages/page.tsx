@@ -217,7 +217,8 @@ export default function CoachMessagesPage() {
       }
 
       console.log('Fetching clients for coachId:', coachId);
-      const response = await fetch(`/api/clients?coachId=${coachId}`);
+      const headers = await import('@/lib/auth-headers').then((m) => m.getAuthHeaders());
+      const response = await fetch(`/api/clients?coachId=${coachId}`, { headers });
       
       if (response.ok) {
         const data = await response.json();

@@ -18,7 +18,7 @@ interface ClientPhoto {
 }
 
 export default function ClientPhotosGalleryPage() {
-  const { userProfile } = useAuth();
+  const { user, userProfile } = useAuth();
   const [photos, setPhotos] = useState<ClientPhoto[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterClient, setFilterClient] = useState<string>('all');
@@ -27,18 +27,37 @@ export default function ClientPhotosGalleryPage() {
   const [sortBy, setSortBy] = useState<'date' | 'clientName'>('date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [selectedPhoto, setSelectedPhoto] = useState<ClientPhoto | null>(null);
+  const [authError, setAuthError] = useState(false);
 
   useEffect(() => {
-    if (userProfile?.uid) {
+    setAuthError(false);
+    if (user && userProfile?.uid) {
       fetchPhotos();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userProfile?.uid]);
+  }, [user, userProfile?.uid]);
 
-  const fetchPhotos = async () => {
+  const fetchPhotos = async (retry = false) => {
+    const uid = userProfile?.uid;
+    if (!uid) return;
     try {
       setLoading(true);
-      const response = await fetch(`/api/progress-images?coachId=${userProfile?.uid}&limit=1000`);
+      setAuthError(false);
+      const token = user ? await user.getIdToken(/* forceRefresh */ true) : null;
+      if (!token) {
+        if (!retry) {
+          setTimeout(() => fetchPhotos(true), 800);
+          return;
+        }
+        setAuthError(true);
+        setLoading(false);
+        return;
+      }
+      const headers: HeadersInit = { Authorization: `Bearer ${token}` };
+      const response = await fetch(`/api/progress-images?coachId=${uid}&limit=1000`, {
+        headers,
+        credentials: 'same-origin',
+      });
       if (response.ok) {
         const data = await response.json();
         if (data.success && data.data) {
@@ -277,9 +296,11 @@ export default function ClientPhotosGalleryPage() {
                   </div>
                   <p className="text-gray-700 text-lg mb-2">No photos found</p>
                   <p className="text-gray-400 text-sm">
-                    {photos.length === 0 
-                      ? "No client photos have been uploaded yet"
-                      : "Try adjusting your filters to see more photos"}
+                    {authError
+                      ? "Couldn’t load photos. Please refresh the page and try again."
+                      : photos.length === 0
+                        ? "No client photos have been uploaded yet"
+                        : "Try adjusting your filters to see more photos"}
                   </p>
                 </div>
               ) : (

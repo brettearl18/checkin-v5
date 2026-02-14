@@ -145,7 +145,8 @@ export default function ClientsPage() {
         } else {
           // Fallback to old endpoint if new one fails
           console.warn('Inventory endpoint failed, falling back to legacy endpoint');
-          const fallbackResponse = await fetch(`/api/clients?coachId=${userProfile.uid}`);
+          const authHeaders = await import('@/lib/auth-headers').then((m) => m.getAuthHeaders());
+          const fallbackResponse = await fetch(`/api/clients?coachId=${userProfile.uid}`, { headers: authHeaders });
           if (fallbackResponse.ok) {
             const fallbackData = await fallbackResponse.json();
             setClients(fallbackData.clients || []);
@@ -156,7 +157,8 @@ export default function ClientsPage() {
       console.error('Error fetching clients:', error);
       // Fallback to old endpoint on error
       try {
-        const fallbackResponse = await fetch(`/api/clients?coachId=${userProfile.uid}`);
+        const authHeaders = await import('@/lib/auth-headers').then((m) => m.getAuthHeaders());
+        const fallbackResponse = await fetch(`/api/clients?coachId=${userProfile.uid}`, { headers: authHeaders });
         if (fallbackResponse.ok) {
           const fallbackData = await fallbackResponse.json();
           setClients(fallbackData.clients || []);

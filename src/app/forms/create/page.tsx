@@ -248,7 +248,8 @@ function CreateFormPageContent() {
         }
 
         // Fetch clients
-        const clientsResponse = await fetch(`/api/clients?coachId=${coachId}`);
+        const authHeaders = await import('@/lib/auth-headers').then((m) => m.getAuthHeaders());
+        const clientsResponse = await fetch(`/api/clients?coachId=${coachId}`, { headers: authHeaders });
         if (clientsResponse.ok) {
           const clientsData = await clientsResponse.json();
           if (clientsData.success) {
