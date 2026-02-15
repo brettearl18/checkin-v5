@@ -452,6 +452,8 @@ export default function ClientCheckInsPage() {
     return checkins.filter(checkin => {
       // Exclude completed check-ins from "To Do"
       if (checkin.status === 'completed') return false;
+      // Coach opened for check-in (extension granted)
+      if ((checkin as any).extensionGranted) return true;
 
       const dueDate = new Date(checkin.dueDate);
       

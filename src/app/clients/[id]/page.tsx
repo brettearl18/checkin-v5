@@ -225,6 +225,7 @@ export default function ClientProfilePage() {
   const [checkInToDelete, setCheckInToDelete] = useState<string | null>(null);
   const [updatingCheckIn, setUpdatingCheckIn] = useState(false);
   const [markingAsMissed, setMarkingAsMissed] = useState<string | null>(null);
+  const [openingForCheckIn, setOpeningForCheckIn] = useState<string | null>(null);
   const [deletingSeries, setDeletingSeries] = useState(false);
   const [showPauseModal, setShowPauseModal] = useState(false);
   const [selectedSeriesForPause, setSelectedSeriesForPause] = useState<{formId: string, formTitle: string} | null>(null);
@@ -2020,6 +2021,34 @@ export default function ClientProfilePage() {
   const openCheckInManagementModal = (checkIn: any) => {
     setSelectedCheckIn(checkIn);
     setShowCheckInManagementModal(true);
+  };
+
+  const handleOpenForCheckIn = async (checkInId: string) => {
+    if (!checkInId || checkInId.includes('_week_')) {
+      alert('This check-in is not yet allocated. Allocate it first or the client can complete it when the window opens.');
+      return;
+    }
+    setOpeningForCheckIn(checkInId);
+    try {
+      const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
+      const response = await fetch(`/api/check-in-assignments/${checkInId}/open-for-check-in`, {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const data = await response.json();
+      if (response.ok && data.success) {
+        setHasLoadedCheckIns(false);
+        await fetchAllocatedCheckIns();
+      } else {
+        alert(data.message || 'Could not open check-in for client.');
+      }
+    } catch (e) {
+      console.error('Open for check-in failed:', e);
+      alert('Failed to open check-in. Please try again.');
+    } finally {
+      setOpeningForCheckIn(null);
+    }
   };
 
   const handleDeleteSeries = async (formId: string, formTitle: string, preserveHistory: boolean = true) => {
@@ -5157,22 +5186,42 @@ export default function ClientProfilePage() {
                                     <td className="px-4 py-3 whitespace-nowrap text-sm">
                                       <div className="flex space-x-2" onClick={(e) => e.stopPropagation()}>
                                         {checkIn.status === 'overdue' && (
-                                          <button
-                                            onClick={() => handleMarkAsMissed(checkIn.id)}
-                                            disabled={markingAsMissed === checkIn.id}
-                                            className="text-gray-600 hover:text-gray-800 font-medium disabled:opacity-50"
-                                            title="Mark as missed - removes overdue status"
-                                          >
-                                            {markingAsMissed === checkIn.id ? 'Marking...' : 'Mark as Missed'}
-                                          </button>
+                                          <>
+                                            <button
+                                              onClick={() => handleOpenForCheckIn(checkIn.id)}
+                                              disabled={openingForCheckIn === checkIn.id}
+                                              className="text-emerald-600 hover:text-emerald-800 font-medium disabled:opacity-50"
+                                              title="Open for check-in so client can submit now"
+                                            >
+                                              {openingForCheckIn === checkIn.id ? 'Opening…' : 'Open for check-in'}
+                                            </button>
+                                            <button
+                                              onClick={() => handleMarkAsMissed(checkIn.id)}
+                                              disabled={markingAsMissed === checkIn.id}
+                                              className="text-gray-600 hover:text-gray-800 font-medium disabled:opacity-50"
+                                              title="Mark as missed - removes overdue status"
+                                            >
+                                              {markingAsMissed === checkIn.id ? 'Marking...' : 'Mark as Missed'}
+                                            </button>
+                                          </>
                                         )}
                                         {checkIn.status === 'pending' && (
-                                          <button
-                                            onClick={() => openCheckInManagementModal(checkIn)}
-                                            className="text-blue-600 hover:text-blue-800 font-medium"
-                                          >
-                                            Edit
-                                          </button>
+                                          <>
+                                            <button
+                                              onClick={() => handleOpenForCheckIn(checkIn.id)}
+                                              disabled={openingForCheckIn === checkIn.id}
+                                              className="text-emerald-600 hover:text-emerald-800 font-medium disabled:opacity-50"
+                                              title="Open for check-in so client can submit now (even if window is closed)"
+                                            >
+                                              {openingForCheckIn === checkIn.id ? 'Opening…' : 'Open for check-in'}
+                                            </button>
+                                            <button
+                                              onClick={() => openCheckInManagementModal(checkIn)}
+                                              className="text-blue-600 hover:text-blue-800 font-medium"
+                                            >
+                                              Edit
+                                            </button>
+                                          </>
                                         )}
                                         <button
                                           onClick={() => handleDeleteCheckInClick(checkIn.id)}

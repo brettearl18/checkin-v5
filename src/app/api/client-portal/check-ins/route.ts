@@ -212,7 +212,8 @@ export async function GET(request: NextRequest) {
           checkInWindow: checkInWindow,
           pausedUntil: pausedUntil ? (pausedUntil?.toDate ? pausedUntil.toDate().toISOString() : new Date(pausedUntil).toISOString()) : undefined,
           responseId: responseId,
-          coachResponded: coachResponded || data.coachResponded || false
+          coachResponded: coachResponded || data.coachResponded || false,
+          extensionGranted: data.extensionGranted || false
         };
 
         return assignmentData;
@@ -338,7 +339,8 @@ export async function GET(request: NextRequest) {
           totalWeeks: data.totalWeeks || 1,
           checkInWindow: checkInWindow,
           responseId: responseId,
-          coachResponded: coachResponded || data.coachResponded || false
+          coachResponded: coachResponded || data.coachResponded || false,
+          extensionGranted: data.extensionGranted || false
         };
       }));
 
@@ -499,7 +501,8 @@ export async function GET(request: NextRequest) {
             totalWeeks: data.totalWeeks || 1,
             checkInWindow: data.checkInWindow || null,
             responseId: data.responseId,
-            coachResponded: false
+            coachResponded: false,
+            extensionGranted: data.extensionGranted || false
           });
         }
       });
@@ -723,13 +726,13 @@ export async function GET(request: NextRequest) {
     }).length;
 
     // Check for overdue check-ins and create notifications
-    // Only send notifications for ACTIVE check-ins (not inactive/paused ones)
+    // Exclude completed (responseId or status), include only past-due pending/overdue
     const overdueAssignments = allAssignments.filter(assignment => {
+      if (assignment.status === 'completed' || assignment.responseId) return false;
       const dueDate = assignment.dueDate?.toDate ? assignment.dueDate.toDate() : new Date(assignment.dueDate);
       const now = new Date();
       const diffDays = Math.floor((now.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
-      // Only notify for active check-ins that are overdue
-      return diffDays > 0 && (assignment.status === 'active' || assignment.status === 'pending');
+      return diffDays > 0 && (assignment.status === 'overdue' || assignment.status === 'pending');
     });
 
     // Create notifications for overdue check-ins (limit to prevent spam)

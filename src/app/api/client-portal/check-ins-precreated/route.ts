@@ -145,7 +145,8 @@ export async function GET(request: NextRequest) {
         totalWeeks: data.totalWeeks || 1,
         checkInWindow: data.checkInWindow || null,
         responseId: data.responseId,
-        coachResponded: coachResponded || data.coachResponded || false
+        coachResponded: coachResponded || data.coachResponded || false,
+        extensionGranted: data.extensionGranted || false
       });
     }
 

@@ -64,8 +64,8 @@ export async function POST(request: NextRequest) {
       results.checked++;
       const assignmentData = doc.data();
 
-      // Skip if already completed
-      if (assignmentData.status === 'completed' || assignmentData.completedAt) {
+      // Skip if already completed (responseId is definitive proof)
+      if (assignmentData.status === 'completed' || assignmentData.completedAt || assignmentData.responseId) {
         results.skipped++;
         continue;
       }

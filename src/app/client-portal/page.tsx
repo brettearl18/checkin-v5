@@ -37,6 +37,7 @@ interface CheckIn {
   status: 'pending' | 'completed' | 'overdue' | 'missed';
   formId: string;
   checkInWindow?: CheckInWindow;
+  extensionGranted?: boolean;
 }
 
 interface RecentResponse {
@@ -659,7 +660,8 @@ export default function ClientPortalPage() {
               dueDate: convertDate(assignment.dueDate),
               status: assignment.status || 'pending',
               formId: assignment.formId || '',
-              checkInWindow: assignment.checkInWindow || DEFAULT_CHECK_IN_WINDOW
+              checkInWindow: assignment.checkInWindow || DEFAULT_CHECK_IN_WINDOW,
+              extensionGranted: assignment.extensionGranted || false
             };
           });
           
@@ -1375,6 +1377,8 @@ export default function ClientPortalPage() {
                             // Exclude completed and parked/missed check-ins (coach has marked as missed)
                             if (checkIn.status === 'completed') return false;
                             if (checkIn.status === 'missed') return false;
+                            // Coach opened for check-in (extension granted)
+                            if (checkIn.extensionGranted) return true;
 
                             const dueDate = new Date(checkIn.dueDate);
                             const normalizedDueDate = new Date(dueDate);
@@ -1449,6 +1453,8 @@ export default function ClientPortalPage() {
                     // Exclude completed and parked/missed check-ins (coach has marked as missed)
                     if (checkIn.status === 'completed') return false;
                     if (checkIn.status === 'missed') return false;
+                    // Coach opened for check-in (extension granted)
+                    if (checkIn.extensionGranted) return true;
 
                     const dueDate = new Date(checkIn.dueDate);
                     const normalizedDueDate = new Date(dueDate);
@@ -2548,6 +2554,7 @@ export default function ClientPortalPage() {
                             const filtered = assignedCheckins.filter(checkIn => {
                               if (checkIn.status === 'completed') return false;
                               if (checkIn.status === 'missed') return false;
+                              if (checkIn.extensionGranted) return true;
                               const dueDate = new Date(checkIn.dueDate);
                               const normalizedDueDate = new Date(dueDate);
                               normalizedDueDate.setHours(0, 0, 0, 0);
@@ -2610,6 +2617,7 @@ export default function ClientPortalPage() {
                       const filteredCheckins = assignedCheckins.filter(checkIn => {
                         if (checkIn.status === 'completed') return false;
                         if (checkIn.status === 'missed') return false;
+                        if (checkIn.extensionGranted) return true;
                         const dueDate = new Date(checkIn.dueDate);
                         const normalizedDueDate = new Date(dueDate);
                         normalizedDueDate.setHours(0, 0, 0, 0);

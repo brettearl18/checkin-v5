@@ -246,7 +246,7 @@ export async function GET(request: NextRequest) {
         
         // Determine display status (include 'missed' so dashboard can hide parked check-ins)
         let displayStatus: 'pending' | 'completed' | 'overdue' | 'missed' = 'pending';
-        if (data.status === 'completed' || data.completedAt) {
+        if (data.status === 'completed' || data.completedAt || data.responseId) {
           displayStatus = 'completed';
         } else if (data.status === 'missed') {
           displayStatus = 'missed';
@@ -277,7 +277,8 @@ export async function GET(request: NextRequest) {
           recurringWeek: data.recurringWeek || 1,
           totalWeeks: data.totalWeeks || 1,
           isRecurring: data.isRecurring || false,
-          clientId: clientIdToUse
+          clientId: clientIdToUse,
+          extensionGranted: data.extensionGranted || false
         };
       });
 
