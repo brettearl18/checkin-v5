@@ -244,10 +244,12 @@ export async function GET(request: NextRequest) {
         const dueDateObj = dueDate ? (typeof dueDate === 'string' ? new Date(dueDate) : (dueDate.toDate ? dueDate.toDate() : dueDate)) : new Date();
         const now = new Date();
         
-        // Determine display status
-        let displayStatus: 'pending' | 'completed' | 'overdue' = 'pending';
+        // Determine display status (include 'missed' so dashboard can hide parked check-ins)
+        let displayStatus: 'pending' | 'completed' | 'overdue' | 'missed' = 'pending';
         if (data.status === 'completed' || data.completedAt) {
           displayStatus = 'completed';
+        } else if (data.status === 'missed') {
+          displayStatus = 'missed';
         } else {
           // Check if overdue (3+ days past due date)
           const daysPastDue = Math.floor((now.getTime() - dueDateObj.getTime()) / (1000 * 60 * 60 * 24));

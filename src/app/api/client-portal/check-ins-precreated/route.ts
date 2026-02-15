@@ -102,10 +102,12 @@ export async function GET(request: NextRequest) {
       const dueDate = convertDate(data.dueDate);
       const dueDateObj = new Date(dueDate);
 
-      // Determine display status
-      let displayStatus: 'pending' | 'completed' | 'overdue';
+      // Determine display status (include 'missed' so dashboard can hide parked check-ins)
+      let displayStatus: 'pending' | 'completed' | 'overdue' | 'missed';
       if (data.status === 'completed' || data.completedAt || data.responseId) {
         displayStatus = 'completed';
+      } else if (data.status === 'missed') {
+        displayStatus = 'missed';
       } else if (dueDateObj < now) {
         displayStatus = 'overdue';
       } else {

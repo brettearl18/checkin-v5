@@ -148,11 +148,13 @@ export async function GET(request: NextRequest) {
         const dueDateObj = new Date(dueDate);
         const now = new Date();
         
-        // Determine display status: 'pending', 'completed', or 'overdue'
+        // Determine display status: 'pending', 'completed', 'overdue', or 'missed' (parked by coach)
         // A check-in is completed if: status is 'completed', OR has completedAt, OR has responseId (definitive proof of completion)
-        let displayStatus: 'pending' | 'completed' | 'overdue';
+        let displayStatus: 'pending' | 'completed' | 'overdue' | 'missed';
         if (assignmentStatus === 'completed' || data.completedAt || data.responseId) {
           displayStatus = 'completed';
+        } else if (assignmentStatus === 'missed') {
+          displayStatus = 'missed';
         } else {
           // Check if overdue (3+ days past due date)
           const daysPastDue = Math.floor((now.getTime() - dueDateObj.getTime()) / (1000 * 60 * 60 * 24));
@@ -262,11 +264,13 @@ export async function GET(request: NextRequest) {
         const dueDateObj = new Date(dueDate);
         const now = new Date();
         
-        // Determine display status: 'pending', 'completed', or 'overdue'
+        // Determine display status: 'pending', 'completed', 'overdue', or 'missed' (parked by coach)
         // A check-in is completed if: status is 'completed', OR has completedAt, OR has responseId (definitive proof of completion)
-        let displayStatus: 'pending' | 'completed' | 'overdue';
+        let displayStatus: 'pending' | 'completed' | 'overdue' | 'missed';
         if (assignmentStatus === 'completed' || data.completedAt || data.responseId) {
           displayStatus = 'completed';
+        } else if (assignmentStatus === 'missed') {
+          displayStatus = 'missed';
         } else {
           // Check if overdue (3+ days past due date)
           const daysPastDue = Math.floor((now.getTime() - dueDateObj.getTime()) / (1000 * 60 * 60 * 24));
@@ -447,9 +451,11 @@ export async function GET(request: NextRequest) {
         
         // Determine display status
         // A check-in is completed if: status is 'completed', OR has completedAt, OR has responseId (definitive proof of completion)
-        let displayStatus: 'pending' | 'completed' | 'overdue';
+        let displayStatus: 'pending' | 'completed' | 'overdue' | 'missed';
         if (data.status === 'completed' || data.completedAt || data.responseId) {
           displayStatus = 'completed';
+        } else if (data.status === 'missed') {
+          displayStatus = 'missed';
         } else {
           // Check if overdue (3+ days past due date)
           const daysPastDue = Math.floor((now.getTime() - dueDateObj.getTime()) / (1000 * 60 * 60 * 24));
