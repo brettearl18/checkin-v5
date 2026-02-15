@@ -255,8 +255,9 @@ export default function ClientProgressPage() {
       const response = await fetch(`/api/dashboard/check-ins-to-review?coachId=${userProfile.uid}&sortBy=submittedAt&sortOrder=desc`, { headers });
       const data = await response.json();
       if (data.success && data.data?.checkIns) {
-        // Filter to only show check-ins for this specific client
-        const clientCheckIns = data.data.checkIns.filter((checkIn: any) => checkIn.clientId === clientId);
+        // Filter to only show check-ins for this specific client that still need coach response
+        const clientCheckIns = data.data.checkIns
+          .filter((checkIn: any) => checkIn.clientId === clientId && !checkIn.coachResponded);
         setUnrespondedCheckIns(clientCheckIns.slice(0, 10)); // Show latest 10
       }
     } catch (error) {

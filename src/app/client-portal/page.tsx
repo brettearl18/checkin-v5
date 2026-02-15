@@ -1377,6 +1377,7 @@ export default function ClientPortalPage() {
                             // Exclude completed and parked/missed check-ins (coach has marked as missed)
                             if (checkIn.status === 'completed') return false;
                             if (checkIn.status === 'missed') return false;
+                            if ((checkIn as any).responseId || (checkIn as any).completedAt) return false;
                             // Coach opened for check-in (extension granted)
                             if (checkIn.extensionGranted) return true;
 
@@ -1453,6 +1454,7 @@ export default function ClientPortalPage() {
                     // Exclude completed and parked/missed check-ins (coach has marked as missed)
                     if (checkIn.status === 'completed') return false;
                     if (checkIn.status === 'missed') return false;
+                    if ((checkIn as any).responseId || (checkIn as any).completedAt) return false;
                     // Coach opened for check-in (extension granted)
                     if (checkIn.extensionGranted) return true;
 
@@ -1515,7 +1517,7 @@ export default function ClientPortalPage() {
                   if (upcomingCheckins.length === 0) {
                     // Find the next upcoming scheduled check-in
                     const nextScheduledCheckIn = assignedCheckins
-                      .filter(checkIn => checkIn.status !== 'completed')
+                      .filter(checkIn => checkIn.status !== 'completed' && !(checkIn as any).responseId && !(checkIn as any).completedAt)
                       .sort((a, b) => {
                         const dateA = new Date(a.dueDate).getTime();
                         const dateB = new Date(b.dueDate).getTime();
@@ -2554,6 +2556,7 @@ export default function ClientPortalPage() {
                             const filtered = assignedCheckins.filter(checkIn => {
                               if (checkIn.status === 'completed') return false;
                               if (checkIn.status === 'missed') return false;
+                              if ((checkIn as any).responseId || (checkIn as any).completedAt) return false;
                               if (checkIn.extensionGranted) return true;
                               const dueDate = new Date(checkIn.dueDate);
                               const normalizedDueDate = new Date(dueDate);
@@ -2617,6 +2620,7 @@ export default function ClientPortalPage() {
                       const filteredCheckins = assignedCheckins.filter(checkIn => {
                         if (checkIn.status === 'completed') return false;
                         if (checkIn.status === 'missed') return false;
+                        if ((checkIn as any).responseId || (checkIn as any).completedAt) return false;
                         if (checkIn.extensionGranted) return true;
                         const dueDate = new Date(checkIn.dueDate);
                         const normalizedDueDate = new Date(dueDate);

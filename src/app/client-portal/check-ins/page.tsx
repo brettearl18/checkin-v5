@@ -450,8 +450,9 @@ export default function ClientCheckInsPage() {
     today.setHours(0, 0, 0, 0);
 
     return checkins.filter(checkin => {
-      // Exclude completed check-ins from "To Do"
+      // Exclude completed check-ins from "To Do" (status + defensive responseId/completedAt)
       if (checkin.status === 'completed') return false;
+      if (checkin.responseId || (checkin as any).completedAt) return false;
       // Coach opened for check-in (extension granted)
       if ((checkin as any).extensionGranted) return true;
 
@@ -538,6 +539,7 @@ export default function ClientCheckInsPage() {
       .filter(checkin => {
         // Exclude completed check-ins from "Scheduled" (they go to "Completed" tab)
         if (checkin.status === 'completed') return false;
+        if (checkin.responseId || (checkin as any).completedAt) return false;
         
         const dueDate = new Date(checkin.dueDate);
         // Normalize due date to start of day for accurate comparison

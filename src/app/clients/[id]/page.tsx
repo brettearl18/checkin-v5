@@ -226,6 +226,8 @@ export default function ClientProfilePage() {
   const [updatingCheckIn, setUpdatingCheckIn] = useState(false);
   const [markingAsMissed, setMarkingAsMissed] = useState<string | null>(null);
   const [openingForCheckIn, setOpeningForCheckIn] = useState<string | null>(null);
+  const [reassigningForResponseId, setReassigningForResponseId] = useState<string | null>(null);
+  const [reassignTargetWeekByResponseId, setReassignTargetWeekByResponseId] = useState<Record<string, string>>({});
   const [deletingSeries, setDeletingSeries] = useState(false);
   const [showPauseModal, setShowPauseModal] = useState(false);
   const [selectedSeriesForPause, setSelectedSeriesForPause] = useState<{formId: string, formTitle: string} | null>(null);
@@ -2048,6 +2050,36 @@ export default function ClientProfilePage() {
       alert('Failed to open check-in. Please try again.');
     } finally {
       setOpeningForCheckIn(null);
+    }
+  };
+
+  const handleReassignResponseToWeek = async (responseId: string, targetRecurringWeek: number) => {
+    if (!clientId || !responseId || targetRecurringWeek < 1) return;
+    setReassigningForResponseId(responseId);
+    try {
+      const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
+      const res = await fetch(`/api/clients/${clientId}/reassign-response-to-week`, {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ responseId, targetRecurringWeek }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setReassignTargetWeekByResponseId(prev => {
+          const next = { ...prev };
+          delete next[responseId];
+          return next;
+        });
+        setHasLoadedCheckIns(false);
+        await fetchAllocatedCheckIns();
+      } else {
+        alert(data.message || 'Could not move completion to that week.');
+      }
+    } catch (e) {
+      console.error('Reassign response to week failed:', e);
+      alert('Failed to move completion. Please try again.');
+    } finally {
+      setReassigningForResponseId(null);
     }
   };
 
@@ -4870,15 +4902,16 @@ export default function ClientProfilePage() {
                     <div id="check-ins-section" className="space-y-8">
                       {/* Current Check-in Status Card */}
                       {(() => {
-                        // Find the current check-in (next pending/active, or most recent if all completed)
+                        // "Current" = next actionable check-in (pending or overdue), not missed (window closed, no longer current)
                         const now = new Date();
-                        const currentCheckIn = allocatedCheckIns
-                          .filter(c => c.status === 'pending' || c.status === 'active' || c.status === 'overdue' || c.status === 'missed')
+                        const actionable = allocatedCheckIns
+                          .filter(c => c.status === 'pending' || c.status === 'active' || c.status === 'overdue')
                           .sort((a, b) => {
                             const dateA = a.dueDate ? new Date(a.dueDate).getTime() : 0;
                             const dateB = b.dueDate ? new Date(b.dueDate).getTime() : 0;
                             return dateA - dateB; // Earliest first
-                          })[0] || allocatedCheckIns
+                          });
+                        const currentCheckIn = actionable[0] || allocatedCheckIns
                           .filter(c => c.status === 'completed')
                           .sort((a, b) => {
                             const dateA = a.completedAt ? new Date(a.completedAt).getTime() : 0;
@@ -5104,10 +5137,13 @@ export default function ClientProfilePage() {
                           <div className="p-6 space-y-6">
                             {/* All Allocated Check-ins Table */}
                             <div className="bg-orange-50 rounded-2xl p-6 border border-orange-200">
-                              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                              <h3 className="text-lg font-semibold text-gray-900 mb-2 flex items-center">
                                 <span className="w-2 h-2 bg-orange-500 rounded-full mr-3"></span>
                                 All Allocated Check-ins ({allocatedCheckIns.length})
                               </h3>
+                              <p className="text-xs text-gray-600 mb-4">
+                                If a completion shows the wrong week (e.g. Week 17 while earlier weeks are overdue), the client likely submitted from a later-week link. Use <strong>Move to week</strong> on that row to reassign the completion to the correct week without losing data.
+                              </p>
                         <div className="bg-white rounded-lg overflow-hidden border border-gray-200">
                           <div className="overflow-x-auto">
                             <table className="w-full">
@@ -5222,6 +5258,28 @@ export default function ClientProfilePage() {
                                               Edit
                                             </button>
                                           </>
+                                        )}
+                                        {checkIn.status === 'completed' && checkIn.responseId && checkIn.isRecurring && (checkIn.totalWeeks ?? 1) > 1 && (
+                                          <span className="inline-flex items-center gap-1">
+                                            <input
+                                              type="number"
+                                              min={1}
+                                              max={checkIn.totalWeeks ?? 20}
+                                              className="w-12 px-1 py-0.5 text-xs border border-gray-300 rounded"
+                                              placeholder="Week"
+                                              value={reassignTargetWeekByResponseId[checkIn.responseId] ?? ''}
+                                              onChange={(e) => setReassignTargetWeekByResponseId(prev => ({ ...prev, [checkIn.responseId]: e.target.value }))}
+                                              onClick={(e) => e.stopPropagation()}
+                                            />
+                                            <button
+                                              onClick={() => handleReassignResponseToWeek(checkIn.responseId, parseInt(reassignTargetWeekByResponseId[checkIn.responseId], 10) || 1)}
+                                              disabled={reassigningForResponseId === checkIn.responseId}
+                                              className="text-emerald-600 hover:text-emerald-800 font-medium disabled:opacity-50 text-xs"
+                                              title="Move this completion to a different week (e.g. if client completed out of order)"
+                                            >
+                                              {reassigningForResponseId === checkIn.responseId ? 'Moving…' : 'Move to week'}
+                                            </button>
+                                          </span>
                                         )}
                                         <button
                                           onClick={() => handleDeleteCheckInClick(checkIn.id)}

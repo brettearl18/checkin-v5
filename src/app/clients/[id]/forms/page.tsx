@@ -5,8 +5,6 @@ import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { AuthenticatedOnly } from '@/components/ProtectedRoute';
 import Link from 'next/link';
-import { collection, getDocs, query, orderBy, doc, getDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase-client';
 import CoachNavigation from '@/components/CoachNavigation';
 
 interface FormResponse {
@@ -14,9 +12,9 @@ interface FormResponse {
   formTitle: string;
   formId: string;
   clientId: string;
-  clientName: string;
-  submittedAt: any;
-  completedAt: any;
+  clientName?: string;
+  submittedAt: string | null;
+  completedAt: string | null;
   score?: number;
   totalQuestions: number;
   answeredQuestions: number;
@@ -53,72 +51,26 @@ export default function ClientFormResponsesPage() {
 
   const fetchData = async () => {
     try {
+      const headers = await import('@/lib/auth-headers').then((m) => m.getAuthHeaders());
+
       // Fetch client data
-      const clientResponse = await fetch(`/api/clients/${clientId}`);
+      const clientResponse = await fetch(`/api/clients/${clientId}`, { headers });
       if (clientResponse.ok) {
         const clientData = await clientResponse.json();
         setClient(clientData.client);
       }
 
-      // Fetch form responses
-      const responsesQuery = query(
-        collection(db, 'formResponses'),
-        orderBy('submittedAt', 'desc')
-      );
-      const responsesSnapshot = await getDocs(responsesQuery);
-      const responsesData: FormResponse[] = [];
-      const deduplicatedMap = new Map<string, FormResponse>();
-      
-      responsesSnapshot.forEach((doc) => {
-        const data = doc.data();
-        if (data.clientId === clientId) {
-          const response = { id: doc.id, ...data } as FormResponse;
-          
-          // Deduplicate by assignmentId - keep only the most recent response for each assignment
-          // If no assignmentId, deduplicate by formId + date
-          const assignmentId = (data as any).assignmentId;
-          if (assignmentId) {
-            const existing = deduplicatedMap.get(assignmentId);
-            if (!existing) {
-              deduplicatedMap.set(assignmentId, response);
-            } else {
-              // Keep the one with the most recent submittedAt
-              const existingDate = new Date(existing.submittedAt);
-              const currentDate = new Date(response.submittedAt);
-              if (currentDate > existingDate) {
-                deduplicatedMap.set(assignmentId, response);
-              }
-            }
-          } else {
-            // If no assignmentId, deduplicate by formId + date (same form submitted on same day)
-            const responseDate = new Date(response.submittedAt);
-            const dateKey = responseDate.toISOString().split('T')[0]; // YYYY-MM-DD
-            const dedupeKey = `${response.formId || 'unknown'}-${dateKey}`;
-            
-            const existing = deduplicatedMap.get(dedupeKey);
-            if (!existing) {
-              deduplicatedMap.set(dedupeKey, response);
-            } else {
-              // Keep the most recent one
-              const existingDate = new Date(existing.submittedAt);
-              if (responseDate > existingDate) {
-                deduplicatedMap.set(dedupeKey, response);
-              }
-            }
-          }
-        }
-      });
-
-      // Convert map values to array and sort by submittedAt descending
-      const deduplicatedResponses = Array.from(deduplicatedMap.values()).sort((a, b) => {
-        const dateA = new Date(a.submittedAt);
-        const dateB = new Date(b.submittedAt);
-        return dateB.getTime() - dateA.getTime();
-      });
-
-      setFormResponses(deduplicatedResponses);
+      // Fetch form responses via API (server-side Firestore; avoids client permission errors)
+      const responsesResponse = await fetch(`/api/clients/${clientId}/form-responses`, { headers });
+      if (responsesResponse.ok) {
+        const data = await responsesResponse.json();
+        setFormResponses(data.formResponses ?? []);
+      } else {
+        setFormResponses([]);
+      }
     } catch (error) {
       console.error('Error fetching data:', error);
+      setFormResponses([]);
     } finally {
       setLoading(false);
     }
@@ -142,9 +94,9 @@ export default function ClientFormResponsesPage() {
     return 'text-red-600';
   };
 
-  const formatDate = (timestamp: any) => {
+  const formatDate = (timestamp: string | null | any) => {
     if (!timestamp) return 'N/A';
-    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    const date = typeof timestamp === 'string' ? new Date(timestamp) : (timestamp.toDate ? timestamp.toDate() : new Date(timestamp));
     return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
@@ -364,7 +316,7 @@ export default function ClientFormResponsesPage() {
               {/* Individual Responses */}
               <div className="space-y-4">
                 <h4 className="font-medium text-gray-900">Question Responses</h4>
-                {selectedResponse.responses.map((response, index) => (
+                {(Array.isArray(selectedResponse.responses) ? selectedResponse.responses : []).map((response, index) => (
                   <div key={index} className="border border-gray-200 rounded-lg p-4">
                     <div className="flex items-start justify-between mb-2">
                       <h5 className="font-medium text-gray-900">{response.question}</h5>

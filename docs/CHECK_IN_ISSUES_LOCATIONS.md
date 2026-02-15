@@ -69,7 +69,7 @@ Concrete code locations for the bugs and inconsistencies described in `CHECK_IN_
 
 ---
 
-## 6. Client-side “To Do” / “Requiring Attention” – no defensive completed guard
+## 6. Client-side “To Do” / “Requiring Attention” – defensive completed guard ✅ FIXED
 
 - **File:** `src/app/client-portal/check-ins/page.tsx`  
   - **Lines:** 447–456 (`getToDoCheckins`)  
