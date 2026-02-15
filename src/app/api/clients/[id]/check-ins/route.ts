@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase-server';
 import { FEATURE_FLAGS } from '@/lib/feature-flags';
+import { isNextWeeksWindowOpen } from '@/lib/checkin-window-utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,6 +24,7 @@ interface CheckIn {
   responseCount: number;
   responseId?: string; // Link to formResponse document
   coachResponded?: boolean; // Whether coach has provided feedback
+  extensionGranted?: boolean; // Coach opened for check-in; client can submit
   checkInWindow?: {
     enabled: boolean;
     startDay: string;
@@ -298,7 +300,22 @@ export async function GET(
         }
       }
 
-      // Auto-update status to 'overdue' if 3+ days past due date
+      // Auto-mark as missed when next week's check-in window has opened (this week's window is closed)
+      if (status !== 'completed' && data.dueDate) {
+        const dueDate = data.dueDate?.toDate ? data.dueDate.toDate() : new Date(data.dueDate);
+        const now = new Date();
+        if (isNextWeeksWindowOpen(dueDate, now)) {
+          if (status !== 'missed') {
+            db.collection('check_in_assignments').doc(doc.id).update({
+              status: 'missed',
+              updatedAt: new Date()
+            }).catch(err => console.error('Error auto-marking assignment as missed:', err));
+          }
+          status = 'missed';
+        }
+      }
+
+      // Auto-update status to 'overdue' if 3+ days past due date (and not already missed)
       if (status !== 'completed' && status !== 'missed' && data.dueDate) {
         const dueDate = data.dueDate?.toDate ? data.dueDate.toDate() : new Date(data.dueDate);
         const now = new Date();
@@ -384,6 +401,7 @@ export async function GET(
         responseCount: responseCount, // Use the fetched/corrected responseCount
         responseId: data.responseId || undefined, // Include responseId for linking to form response
         coachResponded: coachResponded, // Include coach response status
+        extensionGranted: data.extensionGranted === true, // Coach opened for check-in; show as "Open" and available to client
         checkInWindow: data.checkInWindow || {
           enabled: false,
           startDay: 'monday',

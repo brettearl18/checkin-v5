@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase-server';
 import { verifyClientAccess } from '@/lib/api-auth';
 import { logSafeError } from '@/lib/logger';
+import { isNextWeeksWindowOpen } from '@/lib/checkin-window-utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -108,6 +109,14 @@ export async function GET(request: NextRequest) {
         displayStatus = 'completed';
       } else if (data.status === 'missed') {
         displayStatus = 'missed';
+      } else if (isNextWeeksWindowOpen(dueDateObj, now)) {
+        displayStatus = 'missed';
+        if (data.status !== 'missed') {
+          db.collection('check_in_assignments').doc(doc.id).update({
+            status: 'missed',
+            updatedAt: new Date()
+          }).catch(err => console.error('Error auto-marking assignment as missed:', err));
+        }
       } else if (dueDateObj < now) {
         displayStatus = 'overdue';
       } else {

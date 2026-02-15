@@ -5,6 +5,7 @@ import { ONBOARDING_QUESTIONS } from '@/lib/onboarding-questions';
 import { FEATURE_FLAGS } from '@/lib/feature-flags';
 import { requireAuth, verifyClientAccess } from '@/lib/api-auth';
 import { logSafeError } from '@/lib/logger';
+import { isNextWeeksWindowOpen } from '@/lib/checkin-window-utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -250,6 +251,15 @@ export async function GET(request: NextRequest) {
           displayStatus = 'completed';
         } else if (data.status === 'missed') {
           displayStatus = 'missed';
+        } else if (isNextWeeksWindowOpen(dueDateObj, now)) {
+          displayStatus = 'missed';
+          const currentStatus = data.status || 'pending';
+          if (currentStatus !== 'missed') {
+            db.collection('check_in_assignments').doc(doc.id).update({
+              status: 'missed',
+              updatedAt: new Date()
+            }).catch(err => console.error('Error auto-marking assignment as missed:', err));
+          }
         } else {
           // Check if overdue (3+ days past due date)
           const daysPastDue = Math.floor((now.getTime() - dueDateObj.getTime()) / (1000 * 60 * 60 * 24));

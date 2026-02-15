@@ -4,7 +4,7 @@ import { notificationService } from '@/lib/notification-service';
 import { FEATURE_FLAGS } from '@/lib/feature-flags';
 import { verifyClientAccess } from '@/lib/api-auth';
 import { logSafeError } from '@/lib/logger';
-// Window system removed - using fixed Friday 10am to Tuesday 12pm schedule
+import { isNextWeeksWindowOpen } from '@/lib/checkin-window-utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -155,6 +155,15 @@ export async function GET(request: NextRequest) {
           displayStatus = 'completed';
         } else if (assignmentStatus === 'missed') {
           displayStatus = 'missed';
+        } else if (isNextWeeksWindowOpen(dueDateObj, now)) {
+          // Next week's window has opened → this week's check-in is closed; auto-mark as missed
+          displayStatus = 'missed';
+          if (assignmentStatus !== 'missed') {
+            db.collection('check_in_assignments').doc(doc.id).update({
+              status: 'missed',
+              updatedAt: new Date()
+            }).catch(err => console.error('Error auto-marking assignment as missed:', err));
+          }
         } else {
           // Check if overdue (3+ days past due date)
           const daysPastDue = Math.floor((now.getTime() - dueDateObj.getTime()) / (1000 * 60 * 60 * 24));
@@ -272,6 +281,15 @@ export async function GET(request: NextRequest) {
           displayStatus = 'completed';
         } else if (assignmentStatus === 'missed') {
           displayStatus = 'missed';
+        } else if (isNextWeeksWindowOpen(dueDateObj, now)) {
+          // Next week's window has opened → this week's check-in is closed; auto-mark as missed
+          displayStatus = 'missed';
+          if (assignmentStatus !== 'missed') {
+            db.collection('check_in_assignments').doc(doc.id).update({
+              status: 'missed',
+              updatedAt: new Date()
+            }).catch(err => console.error('Error auto-marking assignment as missed:', err));
+          }
         } else {
           // Check if overdue (3+ days past due date)
           const daysPastDue = Math.floor((now.getTime() - dueDateObj.getTime()) / (1000 * 60 * 60 * 24));
@@ -458,6 +476,16 @@ export async function GET(request: NextRequest) {
           displayStatus = 'completed';
         } else if (data.status === 'missed') {
           displayStatus = 'missed';
+        } else if (isNextWeeksWindowOpen(dueDateObj, now)) {
+          // Next week's window has opened → this week's check-in is closed; auto-mark as missed
+          displayStatus = 'missed';
+          const currentStatus = data.status || 'pending';
+          if (currentStatus !== 'missed') {
+            db.collection('check_in_assignments').doc(doc.id).update({
+              status: 'missed',
+              updatedAt: new Date()
+            }).catch(err => console.error('Error auto-marking assignment as missed:', err));
+          }
         } else {
           // Check if overdue (3+ days past due date)
           const daysPastDue = Math.floor((now.getTime() - dueDateObj.getTime()) / (1000 * 60 * 60 * 24));

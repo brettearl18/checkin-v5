@@ -285,6 +285,25 @@ export function getNextCheckInWindowTime(window?: CheckInWindow): Date | null {
 }
 
 /**
+ * Returns true when the check-in window for the *following* week has opened.
+ * Used to auto-mark the previous week's check-in as missed when it's still incomplete.
+ * Window: opens Friday 10:00 before the week's Monday, closes Tuesday 12:00 after that Monday.
+ * So "next week's window opens" = (this week's Monday + 7 days) - 3 days at 10:00 = this week's Monday + 4 days at 10:00.
+ */
+export function isNextWeeksWindowOpen(dueDate: Date | string, now: Date = new Date()): boolean {
+  const due = typeof dueDate === 'string' ? new Date(dueDate) : dueDate;
+  const dayOfWeek = due.getDay();
+  const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  const weekMonday = new Date(due);
+  weekMonday.setDate(due.getDate() - daysToMonday);
+  weekMonday.setHours(0, 0, 0, 0);
+  const nextWeekWindowOpen = new Date(weekMonday);
+  nextWeekWindowOpen.setDate(weekMonday.getDate() + 4);
+  nextWeekWindowOpen.setHours(10, 0, 0, 0);
+  return now >= nextWeekWindowOpen;
+}
+
+/**
  * Calculate the window close time based on due date and window configuration
  * The window closes on the endDay at endTime of the week containing the due date
  */

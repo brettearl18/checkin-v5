@@ -39,7 +39,7 @@ interface CheckIn {
   title: string;
   description: string;
   dueDate: string;
-  status: 'pending' | 'completed' | 'overdue';
+  status: 'pending' | 'completed' | 'overdue' | 'missed';
   formId: string;
   assignedBy: string;
   assignedAt: string;
@@ -51,6 +51,7 @@ interface CheckIn {
   totalWeeks?: number;
   responseId?: string;
   coachResponded?: boolean;
+  extensionGranted?: boolean;
 }
 
 export default function ClientCheckInsPage() {
@@ -443,18 +444,20 @@ export default function ClientCheckInsPage() {
   };
 
   // "To Do" - Actionable check-ins that need attention
-  // Priority: Overdue check-ins first, then available check-ins (window open), then upcoming (within 7 days)
+  // Missed check-ins are excluded (no longer actionable); current check-in = first pending/overdue/available.
   const getToDoCheckins = () => {
     const now = new Date();
     const today = new Date(now);
     today.setHours(0, 0, 0, 0);
 
     return checkins.filter(checkin => {
+      // Exclude missed check-ins from task/to-do lists (window closed, no longer actionable)
+      if (checkin.status === 'missed') return false;
       // Exclude completed check-ins from "To Do" (status + defensive responseId/completedAt)
       if (checkin.status === 'completed') return false;
       if (checkin.responseId || (checkin as any).completedAt) return false;
       // Coach opened for check-in (extension granted)
-      if ((checkin as any).extensionGranted) return true;
+      if (checkin.extensionGranted) return true;
 
       const dueDate = new Date(checkin.dueDate);
       
@@ -537,6 +540,8 @@ export default function ClientCheckInsPage() {
 
     const futureCheckins = checkins
       .filter(checkin => {
+        // Exclude missed check-ins from "Scheduled" (not actionable)
+        if (checkin.status === 'missed') return false;
         // Exclude completed check-ins from "Scheduled" (they go to "Completed" tab)
         if (checkin.status === 'completed') return false;
         if (checkin.responseId || (checkin as any).completedAt) return false;

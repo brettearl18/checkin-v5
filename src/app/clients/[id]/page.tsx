@@ -5196,12 +5196,13 @@ export default function ClientProfilePage() {
                                     <td className="px-4 py-3 whitespace-nowrap">
                                       <span className={`px-2 py-1 text-xs font-medium rounded-full border ${
                                         checkIn.status === 'completed' ? 'bg-[#34C759]/10 text-[#34C759] border-[#34C759]/20' :
+                                        checkIn.extensionGranted ? 'bg-emerald-100 text-emerald-800 border-emerald-200' :
                                         checkIn.status === 'pending' ? 'bg-orange-100 text-orange-700 border-orange-200' :
                                         checkIn.status === 'overdue' ? 'bg-[#FF3B30]/10 text-[#FF3B30] border-[#FF3B30]/20' :
                                         checkIn.status === 'missed' ? 'bg-gray-100 text-gray-600 border-gray-300' :
                                         'bg-gray-100 text-gray-700 border-gray-200'
                                       }`}>
-                                        {checkIn.status === 'missed' ? 'Missed' : checkIn.status}
+                                        {checkIn.status === 'missed' ? 'Missed' : checkIn.extensionGranted ? 'Open' : checkIn.status}
                                       </span>
                                     </td>
                                     <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
@@ -5230,40 +5231,52 @@ export default function ClientProfilePage() {
                                       <div className="flex space-x-2" onClick={(e) => e.stopPropagation()}>
                                         {checkIn.status === 'overdue' && (
                                           <>
-                                            <button
-                                              onClick={() => handleOpenForCheckIn(checkIn.id)}
-                                              disabled={openingForCheckIn === checkIn.id}
-                                              className="text-emerald-600 hover:text-emerald-800 font-medium disabled:opacity-50"
-                                              title="Open for check-in so client can submit now"
-                                            >
-                                              {openingForCheckIn === checkIn.id ? 'Opening…' : 'Open for check-in'}
-                                            </button>
-                                            <button
-                                              onClick={() => handleMarkAsMissed(checkIn.id)}
-                                              disabled={markingAsMissed === checkIn.id}
-                                              className="text-gray-600 hover:text-gray-800 font-medium disabled:opacity-50"
-                                              title="Mark as missed - removes overdue status"
-                                            >
-                                              {markingAsMissed === checkIn.id ? 'Marking...' : 'Mark as Missed'}
-                                            </button>
+                                            {checkIn.extensionGranted ? (
+                                              <span className="text-emerald-600 font-medium">Currently open</span>
+                                            ) : (
+                                              <>
+                                                <button
+                                                  onClick={() => handleOpenForCheckIn(checkIn.id)}
+                                                  disabled={openingForCheckIn === checkIn.id}
+                                                  className="text-emerald-600 hover:text-emerald-800 font-medium disabled:opacity-50"
+                                                  title="Open for check-in so client can submit now"
+                                                >
+                                                  {openingForCheckIn === checkIn.id ? 'Opening…' : 'Open for check-in'}
+                                                </button>
+                                                <button
+                                                  onClick={() => handleMarkAsMissed(checkIn.id)}
+                                                  disabled={markingAsMissed === checkIn.id}
+                                                  className="text-gray-600 hover:text-gray-800 font-medium disabled:opacity-50"
+                                                  title="Mark as missed - removes overdue status"
+                                                >
+                                                  {markingAsMissed === checkIn.id ? 'Marking...' : 'Mark as Missed'}
+                                                </button>
+                                              </>
+                                            )}
                                           </>
                                         )}
                                         {checkIn.status === 'pending' && (
                                           <>
-                                            <button
-                                              onClick={() => handleOpenForCheckIn(checkIn.id)}
-                                              disabled={openingForCheckIn === checkIn.id}
-                                              className="text-emerald-600 hover:text-emerald-800 font-medium disabled:opacity-50"
-                                              title="Open for check-in so client can submit now (even if window is closed)"
-                                            >
-                                              {openingForCheckIn === checkIn.id ? 'Opening…' : 'Open for check-in'}
-                                            </button>
-                                            <button
-                                              onClick={() => openCheckInManagementModal(checkIn)}
-                                              className="text-blue-600 hover:text-blue-800 font-medium"
-                                            >
-                                              Edit
-                                            </button>
+                                            {checkIn.extensionGranted ? (
+                                              <span className="text-emerald-600 font-medium">Currently open</span>
+                                            ) : (
+                                              <>
+                                                <button
+                                                  onClick={() => handleOpenForCheckIn(checkIn.id)}
+                                                  disabled={openingForCheckIn === checkIn.id}
+                                                  className="text-emerald-600 hover:text-emerald-800 font-medium disabled:opacity-50"
+                                                  title="Open for check-in so client can submit now (even if window is closed)"
+                                                >
+                                                  {openingForCheckIn === checkIn.id ? 'Opening…' : 'Open for check-in'}
+                                                </button>
+                                                <button
+                                                  onClick={() => openCheckInManagementModal(checkIn)}
+                                                  className="text-blue-600 hover:text-blue-800 font-medium"
+                                                >
+                                                  Edit
+                                                </button>
+                                              </>
+                                            )}
                                           </>
                                         )}
                                         {checkIn.status === 'completed' && checkIn.responseId && checkIn.isRecurring && (checkIn.totalWeeks ?? 1) > 1 && (
