@@ -4902,16 +4902,23 @@ export default function ClientProfilePage() {
                     <div id="check-ins-section" className="space-y-8">
                       {/* Current Check-in Status Card */}
                       {(() => {
-                        // "Current" = next actionable check-in (pending or overdue), not missed (window closed, no longer current)
+                        // "Current" = next check-in (first pending); skip missed/overdue so we show what's coming up, not what's past
                         const now = new Date();
-                        const actionable = allocatedCheckIns
-                          .filter(c => c.status === 'pending' || c.status === 'active' || c.status === 'overdue')
+                        const pending = allocatedCheckIns
+                          .filter(c => c.status === 'pending' || c.status === 'active')
                           .sort((a, b) => {
                             const dateA = a.dueDate ? new Date(a.dueDate).getTime() : 0;
                             const dateB = b.dueDate ? new Date(b.dueDate).getTime() : 0;
-                            return dateA - dateB; // Earliest first
+                            return dateA - dateB;
                           });
-                        const currentCheckIn = actionable[0] || allocatedCheckIns
+                        const overdue = allocatedCheckIns
+                          .filter(c => c.status === 'overdue')
+                          .sort((a, b) => {
+                            const dateA = a.dueDate ? new Date(a.dueDate).getTime() : 0;
+                            const dateB = b.dueDate ? new Date(b.dueDate).getTime() : 0;
+                            return dateA - dateB;
+                          });
+                        const currentCheckIn = pending[0] || overdue[0] || allocatedCheckIns
                           .filter(c => c.status === 'completed')
                           .sort((a, b) => {
                             const dateA = a.completedAt ? new Date(a.completedAt).getTime() : 0;
