@@ -94,6 +94,8 @@ export default function ClientProgressPage() {
   const router = useRouter();
   const { userProfile } = useAuth();
   const clientId = params.id as string;
+  // Resolved client document id (URL may be doc id or authUid; formResponses/measurements use doc id)
+  const effectiveClientId = client?.id ?? clientId;
   const [client, setClient] = useState<any>(null);
   const [responses, setResponses] = useState<FormResponse[]>([]);
   const [loading, setLoading] = useState(true);
@@ -135,17 +137,21 @@ export default function ClientProgressPage() {
   useEffect(() => {
     if (clientId) {
       fetchClientData();
-      fetchQuestionProgress();
-      fetchMeasurementHistory();
-      fetchProgressImages();
     }
   }, [clientId]);
+
+  useEffect(() => {
+    if (!effectiveClientId) return;
+    fetchQuestionProgress();
+    fetchMeasurementHistory();
+    fetchProgressImages();
+  }, [effectiveClientId]);
 
   useEffect(() => {
     if (clientId && userProfile?.uid) {
       fetchUnrespondedCheckIns();
     }
-  }, [clientId, userProfile?.uid]);
+  }, [clientId, userProfile?.uid, client?.id]);
 
   const fetchClientData = async () => {
     try {
@@ -163,13 +169,13 @@ export default function ClientProgressPage() {
   };
 
   const fetchMeasurementHistory = async () => {
-    if (!clientId) return;
+    if (!effectiveClientId) return;
 
     setLoadingMeasurements(true);
     try {
       const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
-      // Fetch from client_measurements collection
-      const response = await fetch(`/api/client-measurements?clientId=${clientId}`, { headers });
+      // Fetch from client_measurements collection (use resolved doc id)
+      const response = await fetch(`/api/client-measurements?clientId=${effectiveClientId}`, { headers });
       const data = await response.json();
       if (data.success) {
         const measurements = data.data || [];
@@ -179,7 +185,7 @@ export default function ClientProgressPage() {
         let allMeasurements: any[] = [];
         
         try {
-          const onboardingResponse = await fetch(`/api/client-portal/onboarding/report?clientId=${clientId}`, { headers });
+          const onboardingResponse = await fetch(`/api/client-portal/onboarding/report?clientId=${effectiveClientId}`, { headers });
           const onboardingData = await onboardingResponse.json();
           
           if (onboardingData.success && onboardingData.data) {
@@ -229,12 +235,12 @@ export default function ClientProgressPage() {
   };
 
   const fetchProgressImages = async () => {
-    if (!clientId) return;
+    if (!effectiveClientId) return;
 
     setLoadingImages(true);
     try {
       const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
-      const response = await fetch(`/api/progress-images?clientId=${clientId}&limit=12`, { headers });
+      const response = await fetch(`/api/progress-images?clientId=${effectiveClientId}&limit=12`, { headers });
       const data = await response.json();
       if (data.success) {
         setProgressImages(data.data || []);
@@ -257,7 +263,7 @@ export default function ClientProgressPage() {
       if (data.success && data.data?.checkIns) {
         // Filter to only show check-ins for this specific client that still need coach response
         const clientCheckIns = data.data.checkIns
-          .filter((checkIn: any) => checkIn.clientId === clientId && !checkIn.coachResponded);
+          .filter((checkIn: any) => (checkIn.clientId === clientId || checkIn.clientId === client?.id) && !checkIn.coachResponded);
         setUnrespondedCheckIns(clientCheckIns.slice(0, 10)); // Show latest 10
       }
     } catch (error) {
@@ -268,11 +274,11 @@ export default function ClientProgressPage() {
   };
 
   const fetchWeekDebug = async () => {
-    if (!clientId) return;
+    if (!effectiveClientId) return;
     setWeekDebugLoading(true);
     try {
       const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
-      const res = await fetch(`/api/clients/${clientId}/progress-week-debug`, { headers });
+      const res = await fetch(`/api/clients/${effectiveClientId}/progress-week-debug`, { headers });
       const data = await res.json();
       if (data.success) {
         setWeekDebugData({ assignments: data.assignments || [], responses: data.responses || [] });
@@ -285,11 +291,11 @@ export default function ClientProgressPage() {
   };
 
   const correctWeek = async (responseId: string, recurringWeek: number) => {
-    if (!clientId) return;
+    if (!effectiveClientId) return;
     setCorrectingWeekFor(responseId);
     try {
       const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
-      const res = await fetch(`/api/clients/${clientId}/progress-week-debug`, {
+      const res = await fetch(`/api/clients/${effectiveClientId}/progress-week-debug`, {
         method: 'PATCH',
         headers: { ...headers, 'Content-Type': 'application/json' },
         body: JSON.stringify({ responseId, recurringWeek }),
@@ -310,11 +316,11 @@ export default function ClientProgressPage() {
   };
 
   const reassignResponseToWeek = async (responseId: string, targetRecurringWeek: number) => {
-    if (!clientId) return;
+    if (!effectiveClientId) return;
     setReassigningWeekFor(responseId);
     try {
       const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
-      const res = await fetch(`/api/clients/${clientId}/reassign-response-to-week`, {
+      const res = await fetch(`/api/clients/${effectiveClientId}/reassign-response-to-week`, {
         method: 'POST',
         headers: { ...headers, 'Content-Type': 'application/json' },
         body: JSON.stringify({ responseId, targetRecurringWeek }),
@@ -394,12 +400,12 @@ export default function ClientProgressPage() {
   };
 
   const fetchQuestionProgress = async () => {
-    if (!clientId) return;
+    if (!effectiveClientId) return;
     
     try {
       setLoading(true);
       const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
-      const response = await fetch(`/api/client-portal/history?clientId=${clientId}`, { headers });
+      const response = await fetch(`/api/client-portal/history?clientId=${effectiveClientId}`, { headers });
       if (!response.ok) {
         throw new Error('Failed to fetch question progress data');
       }

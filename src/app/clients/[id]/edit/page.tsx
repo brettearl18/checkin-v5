@@ -18,7 +18,7 @@ export default function EditClientPage() {
   const router = useRouter();
   const params = useParams();
   const clientId = params?.id as string;
-  const { userProfile } = useAuth();
+  const { userProfile, authLoading } = useAuth();
   const [formData, setFormData] = useState<ClientForm>({
     firstName: '',
     lastName: '',
@@ -37,9 +37,20 @@ export default function EditClientPage() {
         setLoading(false);
         return;
       }
+      if (authLoading) return;
+      if (!userProfile?.uid) {
+        setError('Please sign in to load client data');
+        setLoading(false);
+        return;
+      }
 
       try {
         const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
+        if (!headers || !(headers as Record<string, string>).Authorization) {
+          setError('Please sign in again to load client data');
+          setLoading(false);
+          return;
+        }
         const response = await fetch(`/api/clients/${clientId}`, { headers });
         if (response.ok) {
           const data = await response.json();
@@ -64,10 +75,10 @@ export default function EditClientPage() {
       }
     };
 
-    if (clientId) {
+    if (clientId && !authLoading) {
       fetchClient();
     }
-  }, [clientId]);
+  }, [clientId, userProfile?.uid, authLoading]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;

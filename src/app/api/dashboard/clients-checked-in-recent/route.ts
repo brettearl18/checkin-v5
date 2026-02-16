@@ -110,7 +110,9 @@ export async function GET(request: NextRequest) {
       docs.forEach(doc => {
         if (doc.exists) {
           const d = doc.data();
-          const name = d ? `${d.firstName || ''} ${d.lastName || ''}`.trim() || 'Unknown';
+          const first = (d && d.firstName) ? String(d.firstName) : '';
+          const last = (d && d.lastName) ? String(d.lastName) : '';
+          const name = `${first} ${last}`.trim() || 'Unknown';
           clientsData.push({ id: doc.id, name, email: d?.email });
         }
       });

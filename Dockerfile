@@ -13,9 +13,11 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NEXT_PHASE=phase-production-build
+# Avoid OOM during Next.js build in Cloud Build (default heap can be too small)
+ENV NODE_OPTIONS="--max-old-space-size=4096"
 
 # Standard Next.js build (standalone output)
-RUN npm run build
+RUN npm run build && test -d .next/standalone && test -f .next/standalone/server.js || (echo "Missing .next/standalone - build may have failed" && exit 1)
 
 # Production
 FROM base AS runner
