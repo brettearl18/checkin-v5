@@ -1200,6 +1200,15 @@ export default function CheckInCompletionPage() {
                         })}
                       </p>
                     )}
+                    {!windowStatus.isOpen && (
+                      <button
+                        type="button"
+                        onClick={() => document.querySelector('.question-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                        className="mt-4 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl shadow-sm transition-colors"
+                      >
+                        Check in anyway
+                      </button>
+                    )}
                   </div>
                   <div className="text-xs lg:text-sm text-gray-700 font-semibold bg-white/60 px-3 py-1.5 lg:px-4 lg:py-2 rounded-lg lg:rounded-xl">
                     <span className="hidden sm:inline">Window: </span>
