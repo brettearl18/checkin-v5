@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase-server';
-import { requireAuth, verifyClientAccess } from '@/lib/api-auth';
+import { requireAuth, verifyClientAccess, resolveClientDoc } from '@/lib/api-auth';
 
 export const dynamic = 'force-dynamic';
 /**
@@ -28,9 +28,20 @@ export async function GET(request: NextRequest) {
       }, { status: 400 });
     }
 
+    let resolvedClientIds: string[] = [];
     if (clientId) {
       const accessResult = await verifyClientAccess(request, clientId);
       if (accessResult instanceof NextResponse) return accessResult;
+      // Resolve so we query by both doc id and authUid (images may be stored with either)
+      const clientDoc = await resolveClientDoc(clientId);
+      if (clientDoc?.exists) {
+        const data = clientDoc.data();
+        const docId = clientDoc.id;
+        const authUid = data?.authUid;
+        resolvedClientIds = [...new Set([docId, authUid].filter(Boolean))];
+      } else {
+        resolvedClientIds = [clientId];
+      }
     } else if (coachId && coachId !== user.uid && !user.isAdmin) {
       return NextResponse.json({
         success: false,
@@ -40,15 +51,22 @@ export async function GET(request: NextRequest) {
 
     const db = getDb();
     
-    console.log('Fetching progress images:', { clientId, coachId, limit });
+    console.log('Fetching progress images:', { clientId, coachId, limit, resolvedClientIds });
     
     let query;
-    if (clientId) {
-      // Use where first, then orderBy (correct order for Firestore)
-      query = db.collection('progress_images')
-        .where('clientId', '==', clientId)
-        .orderBy('uploadedAt', 'desc')
-        .limit(limit);
+    if (clientId && resolvedClientIds.length > 0) {
+      // Query by doc id and/or authUid so images load whether stored with either (e.g. on refresh)
+      if (resolvedClientIds.length === 1) {
+        query = db.collection('progress_images')
+          .where('clientId', '==', resolvedClientIds[0])
+          .orderBy('uploadedAt', 'desc')
+          .limit(limit);
+      } else {
+        query = db.collection('progress_images')
+          .where('clientId', 'in', resolvedClientIds)
+          .orderBy('uploadedAt', 'desc')
+          .limit(limit);
+      }
     } else if (coachId) {
       query = db.collection('progress_images')
         .where('coachId', '==', coachId)
@@ -67,14 +85,22 @@ export async function GET(request: NextRequest) {
     } catch (error: any) {
       // If orderBy fails due to missing index, try without orderBy
       console.warn('Query with orderBy failed, trying without orderBy:', error.message);
-      if (clientId) {
-        query = db.collection('progress_images')
-          .where('clientId', '==', clientId)
-          .limit(limit * 2);
-      } else {
+      if (clientId && resolvedClientIds.length > 0) {
+        if (resolvedClientIds.length === 1) {
+          query = db.collection('progress_images')
+            .where('clientId', '==', resolvedClientIds[0])
+            .limit(limit * 2);
+        } else {
+          query = db.collection('progress_images')
+            .where('clientId', 'in', resolvedClientIds)
+            .limit(limit * 2);
+        }
+      } else if (coachId) {
         query = db.collection('progress_images')
           .where('coachId', '==', coachId)
           .limit(limit * 2);
+      } else {
+        throw error;
       }
       snapshot = await query.get();
     }

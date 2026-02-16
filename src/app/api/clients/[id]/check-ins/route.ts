@@ -331,6 +331,11 @@ export async function GET(
         }
       }
 
+      // If client has opened the form (startedAt) but not submitted, show as 'started'
+      if (status !== 'completed' && status !== 'missed' && data.startedAt) {
+        status = 'started';
+      }
+
       // Check if coach has responded (has feedback)
       let coachResponded = false;
       const responseId = data.responseId;
@@ -402,6 +407,7 @@ export async function GET(
         responseId: data.responseId || undefined, // Include responseId for linking to form response
         coachResponded: coachResponded, // Include coach response status
         extensionGranted: data.extensionGranted === true, // Coach opened for check-in; show as "Open" and available to client
+        startedAt: data.startedAt?.toDate?.()?.toISOString() || data.startedAt, // When client first opened the form
         checkInWindow: data.checkInWindow || {
           enabled: false,
           startDay: 'monday',

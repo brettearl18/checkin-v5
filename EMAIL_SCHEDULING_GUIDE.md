@@ -53,7 +53,25 @@ All scheduled email endpoints are located in `/api/scheduled-emails/`:
      - Skips if reminder already sent
      - Sends due reminder email
 
-### 4. **Check-In Overdue Reminders**
+### 4. **Window Close 24h**
+   - **Endpoint:** `POST /api/scheduled-emails/check-in-window-close-24h`
+   - **Purpose:** Reminds clients 24 hours before their check-in window closes
+   - **Frequency:** Run every hour
+   - **Logic:** Finds check-ins whose window closes in ~24h; skips completed; sends once per check-in.
+
+### 5. **Window Close 1h**
+   - **Endpoint:** `POST /api/scheduled-emails/check-in-window-close-1h`
+   - **Purpose:** Reminds clients 1 hour before their check-in window closes
+   - **Frequency:** Run every hour
+   - **Logic:** Finds check-ins whose window closes in ~1h; skips completed; sends once per check-in.
+
+### 6. **Window Closed**
+   - **Endpoint:** `POST /api/scheduled-emails/check-in-window-closed`
+   - **Purpose:** Notifies clients after their check-in window has closed
+   - **Frequency:** Run every hour
+   - **Logic:** Finds check-ins whose window recently closed; skips completed; sends once per check-in.
+
+### 7. **Check-In Overdue Reminders**
    - **Endpoint:** `POST /api/scheduled-emails/check-in-overdue`
    - **Purpose:** Reminds clients 1 day after check-in becomes overdue
    - **Frequency:** Run daily (e.g., once per day at 10:00 AM)
@@ -124,6 +142,33 @@ gcloud scheduler jobs create http check-in-due-reminders \
   --headers="Content-Type=application/json" \
   --time-zone="Australia/Perth"
 
+# Window Close 24h (Every hour – reminds 24h before window closes)
+gcloud scheduler jobs create http check-in-window-close-24h \
+  --location=australia-southeast2 \
+  --schedule="0 * * * *" \
+  --uri="https://checkinv5-awvzknsmhq-km.a.run.app/api/scheduled-emails/check-in-window-close-24h" \
+  --http-method=POST \
+  --headers="Content-Type=application/json" \
+  --time-zone="Australia/Perth"
+
+# Window Close 1h (Every hour – reminds 1h before window closes)
+gcloud scheduler jobs create http check-in-window-close-1h \
+  --location=australia-southeast2 \
+  --schedule="0 * * * *" \
+  --uri="https://checkinv5-awvzknsmhq-km.a.run.app/api/scheduled-emails/check-in-window-close-1h" \
+  --http-method=POST \
+  --headers="Content-Type=application/json" \
+  --time-zone="Australia/Perth"
+
+# Window Closed (Every hour – notifies after window has closed)
+gcloud scheduler jobs create http check-in-window-closed \
+  --location=australia-southeast2 \
+  --schedule="0 * * * *" \
+  --uri="https://checkinv5-awvzknsmhq-km.a.run.app/api/scheduled-emails/check-in-window-closed" \
+  --http-method=POST \
+  --headers="Content-Type=application/json" \
+  --time-zone="Australia/Perth"
+
 # Check-In Overdue (Daily at 10 AM)
 gcloud scheduler jobs create http check-in-overdue \
   --location=australia-southeast2 \
@@ -141,18 +186,19 @@ gcloud run services describe checkinv5 --region=australia-southeast2 --format="v
 
 #### Step 3: Test the Schedulers
 
+Use the same `--location` as when you created each job (onboarding: `asia-southeast2`, all others: `australia-southeast2`).
+
 ```bash
 # Test onboarding reminders
 gcloud scheduler jobs run onboarding-reminders --location=asia-southeast2
 
-# Test check-in window open
-gcloud scheduler jobs run check-in-window-open --location=asia-southeast2
-
-# Test check-in due reminders
-gcloud scheduler jobs run check-in-due-reminders --location=asia-southeast2
-
-# Test check-in overdue
-gcloud scheduler jobs run check-in-overdue --location=asia-southeast2
+# Test check-in jobs (australia-southeast2)
+gcloud scheduler jobs run check-in-window-open --location=australia-southeast2
+gcloud scheduler jobs run check-in-due-reminders --location=australia-southeast2
+gcloud scheduler jobs run check-in-window-close-24h --location=australia-southeast2
+gcloud scheduler jobs run check-in-window-close-1h --location=australia-southeast2
+gcloud scheduler jobs run check-in-window-closed --location=australia-southeast2
+gcloud scheduler jobs run check-in-overdue --location=australia-southeast2
 ```
 
 ### Option 2: Manual Testing via API
@@ -168,6 +214,11 @@ curl -X POST https://checkinv5.web.app/api/scheduled-emails/check-in-window-open
 
 # Check-in due reminders
 curl -X POST https://checkinv5.web.app/api/scheduled-emails/check-in-due-reminders
+
+# Window close 24h / 1h / closed
+curl -X POST https://checkinv5.web.app/api/scheduled-emails/check-in-window-close-24h
+curl -X POST https://checkinv5.web.app/api/scheduled-emails/check-in-window-close-1h
+curl -X POST https://checkinv5.web.app/api/scheduled-emails/check-in-window-closed
 
 # Check-in overdue
 curl -X POST https://checkinv5.web.app/api/scheduled-emails/check-in-overdue

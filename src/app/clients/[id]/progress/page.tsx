@@ -237,7 +237,8 @@ export default function ClientProgressPage() {
   const fetchProgressImages = async () => {
     if (!effectiveClientId) return;
 
-    setLoadingImages(true);
+    // Only show loading spinner when we don't have images yet (avoids flash on refresh when client id resolves)
+    setLoadingImages(prev => (progressImages.length === 0 ? true : prev));
     try {
       const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
       const response = await fetch(`/api/progress-images?clientId=${effectiveClientId}&limit=12`, { headers });
@@ -934,20 +935,21 @@ export default function ClientProgressPage() {
                     const baseline = allMeasurementsData.find(m => m.isBaseline) || allMeasurementsData[0];
                     const currentWeight = latest?.bodyWeight;
                     const baselineWeight = baseline?.bodyWeight;
-                    const change = baselineWeight && currentWeight ? baselineWeight - currentWeight : null;
+                    // Change = current − baseline: negative = loss (green), positive = gain (red)
+                    const change = baselineWeight != null && currentWeight != null ? currentWeight - baselineWeight : null;
                     
                     return (
                       <>
                         <div>
                           <p className="text-sm text-gray-600">Current Weight</p>
                           <p className="text-2xl font-bold text-gray-900 mt-1">
-                            {currentWeight ? `${currentWeight} kg` : 'Not recorded'}
+                            {currentWeight != null ? `${currentWeight} kg` : 'Not recorded'}
                           </p>
                         </div>
-                        {baselineWeight && change !== null && (
+                        {baselineWeight != null && change !== null && (
                           <div className="pt-3 border-t border-gray-100">
                             <p className="text-sm text-gray-600">Change from Baseline</p>
-                            <p className={`text-xl font-bold mt-1 ${change > 0 ? 'text-green-600' : change < 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                            <p className={`text-xl font-bold mt-1 ${change < 0 ? 'text-green-600' : change > 0 ? 'text-red-600' : 'text-gray-900'}`}>
                               {change > 0 ? '+' : ''}{change.toFixed(1)} kg
                             </p>
                             <p className="text-xs text-gray-500 mt-1">Baseline: {baselineWeight} kg</p>

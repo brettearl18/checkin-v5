@@ -169,8 +169,30 @@ export async function requireRole(
 }
 
 /**
+ * Resolve client identifier (doc id or authUid) to the client's Firestore document.
+ * Returns the document snapshot if found, null otherwise.
+ */
+export async function resolveClientDoc(
+  clientId: string
+): Promise<{ id: string; exists: boolean; data: () => { authUid?: string; coachId?: string; id?: string } | undefined } | null> {
+  const db = getDb();
+  let docRef = await db.collection('clients').doc(clientId).get();
+  if (docRef.exists) return docRef as unknown as { id: string; exists: boolean; data: () => { authUid?: string; coachId?: string; id?: string } | undefined };
+  try {
+    const byAuth = await db.collection('clients').where('authUid', '==', clientId).limit(1).get();
+    if (!byAuth.empty) return byAuth.docs[0] as unknown as { id: string; exists: boolean; data: () => { authUid?: string; coachId?: string; id?: string } | undefined };
+    const byId = await db.collection('clients').where('id', '==', clientId).limit(1).get();
+    if (!byId.empty) return byId.docs[0] as unknown as { id: string; exists: boolean; data: () => { authUid?: string; coachId?: string; id?: string } | undefined };
+  } catch {
+    // Fall through
+  }
+  return null;
+}
+
+/**
  * Verify that a user can access a specific client's data
  * Coaches can only access their own clients, admins can access all
+ * clientId may be the Firestore document ID or the client's authUid.
  */
 export async function verifyClientAccess(
   request: NextRequest,
@@ -192,10 +214,8 @@ export async function verifyClientAccess(
   // Coaches can only access their own clients
   if (user.isCoach) {
     try {
-      const db = getDb();
-      const clientDoc = await db.collection('clients').doc(clientId).get();
-      
-      if (!clientDoc.exists) {
+      const clientDoc = await resolveClientDoc(clientId);
+      if (!clientDoc?.exists) {
         return NextResponse.json(
           { success: false, message: 'Client not found' },
           { status: 404 }
@@ -223,11 +243,9 @@ export async function verifyClientAccess(
   // Clients can only access their own data
   if (user.isClient) {
     if (clientId === user.uid) return { user };
-    // Client may use document ID - verify the client doc belongs to them
     try {
-      const db = getDb();
-      const clientDoc = await db.collection('clients').doc(clientId).get();
-      if (clientDoc.exists) {
+      const clientDoc = await resolveClientDoc(clientId);
+      if (clientDoc?.exists) {
         const clientData = clientDoc.data();
         if (clientData?.authUid === user.uid || clientData?.id === user.uid) {
           return { user };

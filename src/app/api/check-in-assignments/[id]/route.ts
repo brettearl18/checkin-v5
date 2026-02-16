@@ -63,6 +63,15 @@ export async function GET(
     }
 
     let assignmentData = assignmentDoc.data();
+
+    // Record "started" when client first opens the form (not completed, no startedAt yet)
+    if (!isDynamicWeek && assignmentData && !assignmentData.responseId && !assignmentData.completedAt && !assignmentData.startedAt) {
+      db.collection('check_in_assignments').doc(assignmentDoc.id).update({
+        startedAt: new Date(),
+        updatedAt: new Date()
+      }).catch((err) => console.error('Error recording check-in startedAt:', err));
+      assignmentData = { ...assignmentData, startedAt: new Date() };
+    }
     
     // If this is a dynamically generated week, modify the assignment data
     if (isDynamicWeek && assignmentData) {
@@ -142,6 +151,7 @@ export async function GET(
         ...assignmentData,
         assignedAt: assignmentData?.assignedAt?.toDate?.() || assignmentData?.assignedAt,
         completedAt: assignmentData?.completedAt?.toDate?.() || assignmentData?.completedAt,
+        startedAt: assignmentData?.startedAt?.toDate?.() || assignmentData?.startedAt,
         dueDate: assignmentData?.dueDate instanceof Date 
           ? assignmentData.dueDate.toISOString() 
           : (assignmentData?.dueDate?.toDate?.()?.toISOString() || assignmentData?.dueDate)

@@ -23,12 +23,18 @@ export default function TestScheduledEmailsPage() {
     onboarding: null,
     windowOpen: null,
     dueReminder: null,
+    windowClose24h: null,
+    windowClose1h: null,
+    windowClosed: null,
     overdue: null,
   });
   const [testing, setTesting] = useState<{ [key: string]: boolean }>({
     onboarding: false,
     windowOpen: false,
     dueReminder: false,
+    windowClose24h: false,
+    windowClose1h: false,
+    windowClosed: false,
     overdue: false,
   });
 
@@ -120,6 +126,30 @@ export default function TestScheduledEmailsPage() {
       endpoint: 'check-in-due-reminders',
       schedule: 'Every hour',
       color: 'from-blue-600 to-cyan-600',
+    },
+    {
+      key: 'windowClose24h',
+      title: 'Window Close 24h',
+      description: 'Reminds clients 24 hours before check-in window closes',
+      endpoint: 'check-in-window-close-24h',
+      schedule: 'Every hour',
+      color: 'from-amber-600 to-orange-600',
+    },
+    {
+      key: 'windowClose1h',
+      title: 'Window Close 1h',
+      description: 'Reminds clients 1 hour before check-in window closes',
+      endpoint: 'check-in-window-close-1h',
+      schedule: 'Every hour',
+      color: 'from-yellow-600 to-amber-600',
+    },
+    {
+      key: 'windowClosed',
+      title: 'Window Closed',
+      description: 'Notifies clients after their check-in window has closed',
+      endpoint: 'check-in-window-closed',
+      schedule: 'Every hour',
+      color: 'from-slate-600 to-gray-600',
     },
     {
       key: 'overdue',
