@@ -94,9 +94,9 @@ export default function ClientProgressPage() {
   const router = useRouter();
   const { userProfile } = useAuth();
   const clientId = params.id as string;
+  const [client, setClient] = useState<any>(null);
   // Resolved client document id (URL may be doc id or authUid; formResponses/measurements use doc id)
   const effectiveClientId = client?.id ?? clientId;
-  const [client, setClient] = useState<any>(null);
   const [responses, setResponses] = useState<FormResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [questionProgress, setQuestionProgress] = useState<QuestionProgress[]>([]);
