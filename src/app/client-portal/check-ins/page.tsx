@@ -524,19 +524,19 @@ export default function ClientCheckInsPage() {
       // Don't include future check-ins whose window isn't open yet - they belong in "Scheduled"
       return false;
     }).sort((a, b) => {
-      // Sort by priority: overdue first, then available (window open), then by due date
+      // Sort so the CURRENT week's check-in is first (most recent due date), not the oldest overdue.
+      // Otherwise "Check in now" sends clients to Week 1 instead of the week of Feb 16.
       const aDue = new Date(a.dueDate).getTime();
       const bDue = new Date(b.dueDate).getTime();
       const todayTime = today.getTime();
       
-      // Overdue check-ins come first
       const aOverdue = aDue < todayTime;
       const bOverdue = bDue < todayTime;
       if (aOverdue && !bOverdue) return -1;
       if (!aOverdue && bOverdue) return 1;
       
-      // Then sort by due date (earliest first)
-      return aDue - bDue;
+      // Among overdue or among open: put most recent due date first (current week first)
+      return bDue - aDue;
     });
   };
 

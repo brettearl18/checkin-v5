@@ -80,6 +80,21 @@ Or use the combined command:
 npm run deploy:firebase
 ```
 
+### After you deploy to Cloud Run
+
+Firebase Hosting uses a CDN that **caches responses** from your Cloud Run service. When you deploy a new revision to Cloud Run, that CDN cache is **not** cleared automatically.
+
+- **Direct Cloud Run URL** (e.g. `https://checkinv5-644898823056.australia-southeast2.run.app`) → always hits the latest revision.
+- **Main site** (`https://checkinv5.web.app`) → goes through the CDN, which may still be serving cached responses from the previous revision.
+
+**Fix:** After every Cloud Run deploy, run:
+
+```bash
+firebase deploy --only hosting
+```
+
+You don’t need to change any files. Redeploying hosting refreshes the CDN so the main site serves the new Cloud Run revision. Optionally, users can hard-refresh (Ctrl+Shift+R / Cmd+Shift+R) or use an incognito window to bypass browser cache.
+
 ### Environment Variables
 
 **Important**: Environment variables must be set at build time for Next.js.
