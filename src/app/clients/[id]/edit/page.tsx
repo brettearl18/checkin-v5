@@ -39,7 +39,8 @@ export default function EditClientPage() {
       }
 
       try {
-        const response = await fetch(`/api/clients/${clientId}`);
+        const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
+        const response = await fetch(`/api/clients/${clientId}`, { headers });
         if (response.ok) {
           const data = await response.json();
           if (data.success && data.client) {
@@ -105,10 +106,12 @@ export default function EditClientPage() {
     }
 
     try {
+      const authHeaders = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
       const response = await fetch(`/api/clients/${clientId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
+          ...authHeaders,
         },
         body: JSON.stringify(formData),
       });

@@ -134,59 +134,69 @@ async function fetchCheckIns(coachId: string, status?: string, sortBy: string = 
         // No clients, return empty
         responsesSnapshot = { docs: [] };
       } else {
+        const runClientIdFallback = async (): Promise<any[]> => {
+          if (clientIdsArray.length <= 10) {
+            const snap = await db.collection('formResponses')
+              .where('clientId', 'in', clientIdsArray)
+              .where('status', '==', 'completed')
+              .get();
+            return snap.docs.filter((d: any) => clientIds.has(d.data().clientId));
+          }
+          const batches: any[] = [];
+          for (let i = 0; i < clientIdsArray.length; i += 10) {
+            const batch = clientIdsArray.slice(i, i + 10);
+            const batchSnapshot = await db.collection('formResponses')
+              .where('clientId', 'in', batch)
+              .where('status', '==', 'completed')
+              .get();
+            batchSnapshot.docs.forEach((d: any) => {
+              if (clientIds.has(d.data().clientId)) batches.push(d);
+            });
+          }
+          return batches;
+        };
+
         try {
           // Primary method: Filter by coachId (more efficient and no item limit)
           const coachIdSnapshot = await db.collection('formResponses')
             .where('coachId', '==', coachId)
             .where('status', '==', 'completed')
             .get();
-          
-          // Filter to only include clients that belong to this coach (safety check)
+
           const filteredDocs = coachIdSnapshot.docs.filter((doc: any) => {
             const data = doc.data();
             return clientIds.has(data.clientId);
           });
-          
-          responsesSnapshot = { docs: filteredDocs };
+
+          // If primary returns 0, use clientId fallback (formResponses may not have coachId set)
+          if (filteredDocs.length === 0) {
+            const fallbackDocs = await runClientIdFallback();
+            responsesSnapshot = { docs: fallbackDocs };
+            if (fallbackDocs.length > 0) {
+              console.log('Check-ins API: coachId query returned 0; used clientId fallback, found', fallbackDocs.length, 'completed');
+            }
+          } else {
+            responsesSnapshot = { docs: filteredDocs };
+          }
         } catch (coachIdError: any) {
           // Fallback to clientId filter if coachId filter fails (missing index or field)
           console.log('coachId filter not available, using clientId filter:', coachIdError?.message);
-          
-          if (clientIdsArray.length <= 10) {
-            // Single query if 10 or fewer clients (Firestore 'in' limit is 10)
-            responsesSnapshot = await db.collection('formResponses')
-              .where('clientId', 'in', clientIdsArray)
-              .where('status', '==', 'completed')
-              .get();
-          } else {
-            // Batch queries if more than 10 clients
-            const batches: any[] = [];
-            for (let i = 0; i < clientIdsArray.length; i += 10) {
-              const batch = clientIdsArray.slice(i, i + 10);
-              try {
-                const batchSnapshot = await db.collection('formResponses')
-                  .where('clientId', 'in', batch)
-                  .where('status', '==', 'completed')
-                  .get();
-                batches.push(...batchSnapshot.docs);
-              } catch (batchError) {
-                console.error(`Error fetching batch ${i}-${i + 10}:`, batchError);
-              }
-            }
-            responsesSnapshot = { docs: batches };
-          }
+          const fallbackDocs = await runClientIdFallback();
+          responsesSnapshot = { docs: fallbackDocs };
         }
       }
 
+      const addedResponseIds = new Set<string>();
       responsesSnapshot.docs.forEach(doc => {
         const responseData = doc.data();
+        addedResponseIds.add(doc.id);
         checkIns.push({
           id: doc.id,
           clientId: responseData.clientId,
           clientName: clientsData[responseData.clientId]?.name || 'Unknown Client',
           formId: responseData.formId,
           formTitle: responseData.formTitle || 'Unknown Form',
-          responses: responseData.responses || {}, // Store actual response data
+          responses: responseData.responses || {},
           score: responseData.score || 0,
           totalQuestions: responseData.totalQuestions || 0,
           answeredQuestions: responseData.answeredQuestions || 0,
@@ -195,10 +205,57 @@ async function fetchCheckIns(coachId: string, status?: string, sortBy: string = 
           energy: responseData.energy,
           status: 'completed',
           isAssignment: false,
-          responseId: doc.id // Store the response ID for linking
+          responseId: doc.id
         });
         formIds.add(responseData.formId);
       });
+
+      // Fallback: if no completed from formResponses, get completed from assignments (responseId) and fetch formResponses by id
+      if (responsesSnapshot.docs.length === 0 && clientIdsArray.length > 0) {
+        const responseIds: string[] = [];
+        for (let i = 0; i < clientIdsArray.length; i += 10) {
+          const batch = clientIdsArray.slice(i, i + 10);
+          const assignmentsSnapshot = await db.collection('check_in_assignments')
+            .where('clientId', 'in', batch)
+            .get();
+          assignmentsSnapshot.docs.forEach(doc => {
+            const d = doc.data();
+            if (d.responseId && clientIds.has(d.clientId)) responseIds.push(d.responseId);
+          });
+        }
+        for (let i = 0; i < responseIds.length; i += 10) {
+          const batch = responseIds.slice(i, i + 10);
+          const refs = batch.map(id => db.collection('formResponses').doc(id));
+          const formRespDocs = await db.getAll(...refs);
+          formRespDocs.forEach(doc => {
+            if (!doc.exists || addedResponseIds.has(doc.id)) return;
+            const responseData = doc.data();
+            if (!responseData || responseData.status !== 'completed' || !clientIds.has(responseData.clientId)) return;
+            addedResponseIds.add(doc.id);
+            checkIns.push({
+              id: doc.id,
+              clientId: responseData.clientId,
+              clientName: clientsData[responseData.clientId]?.name || 'Unknown Client',
+              formId: responseData.formId,
+              formTitle: responseData.formTitle || 'Unknown Form',
+              responses: responseData.responses || {},
+              score: responseData.score || 0,
+              totalQuestions: responseData.totalQuestions || 0,
+              answeredQuestions: responseData.answeredQuestions || 0,
+              submittedAt: responseData.submittedAt,
+              mood: responseData.mood,
+              energy: responseData.energy,
+              status: 'completed',
+              isAssignment: false,
+              responseId: doc.id
+            });
+            formIds.add(responseData.formId);
+          });
+        }
+        if (addedResponseIds.size > 0) {
+          console.log('Check-ins API: used assignment fallback, found', addedResponseIds.size, 'completed');
+        }
+      }
     }
 
     // Sort the check-ins based on the specified criteria

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/firebase-server';
+import { getDb, getAuthInstance } from '@/lib/firebase-server';
 import { verifyClientAccess } from '@/lib/api-auth';
 import { logSafeError, logWarn } from '@/lib/logger';
 
@@ -93,6 +93,21 @@ export async function PUT(
     const db = getDb();
     const updateData = await request.json();
 
+    // Resolve client document (URL clientId may be doc id or authUid)
+    let clientDoc = await db.collection('clients').doc(clientId).get();
+    if (!clientDoc.exists) {
+      const byAuth = await db.collection('clients').where('authUid', '==', clientId).limit(1).get();
+      if (!byAuth.empty) clientDoc = byAuth.docs[0];
+      else {
+        const byId = await db.collection('clients').where('id', '==', clientId).limit(1).get();
+        if (!byId.empty) clientDoc = byId.docs[0];
+      }
+    }
+    if (!clientDoc.exists) {
+      return NextResponse.json({ success: false, error: 'Client not found' }, { status: 404 });
+    }
+    const docId = clientDoc.id;
+
     // Remove fields that shouldn't be updated
     const { id, createdAt, ...dataToUpdate } = updateData;
     
@@ -108,7 +123,33 @@ export async function PUT(
     // Add updated timestamp
     dataToUpdate.updatedAt = new Date();
 
-    await db.collection('clients').doc(clientId).update(dataToUpdate);
+    // If email is being changed and the client has a Firebase Auth account, update Auth so the new email becomes the login email
+    if (dataToUpdate.email !== undefined && typeof dataToUpdate.email === 'string' && dataToUpdate.email.trim()) {
+      const current = clientDoc.data();
+      const authUid = current?.authUid;
+      const currentEmail = (current?.email || '').toString().trim().toLowerCase();
+      const newEmail = dataToUpdate.email.trim().toLowerCase();
+      if (authUid && currentEmail !== newEmail) {
+        try {
+          const auth = getAuthInstance();
+          await auth.updateUser(authUid, { email: dataToUpdate.email.trim() });
+          logWarn('Client Auth email updated', { docId, authUid, newEmail: dataToUpdate.email.trim() });
+        } catch (authErr: unknown) {
+          logSafeError('Failed to update client Auth email', authErr);
+          const message = authErr && typeof authErr === 'object' && 'code' in authErr
+            ? (authErr as { code: string }).code === 'auth/email-already-in-use'
+              ? 'That email is already used by another account.'
+              : 'Profile email was saved, but the login email could not be updated. The client may need to keep using their current email to sign in.'
+            : 'Profile email was saved, but the login email could not be updated.';
+          return NextResponse.json(
+            { success: false, error: message },
+            { status: 400 }
+          );
+        }
+      }
+    }
+
+    await db.collection('clients').doc(docId).update(dataToUpdate);
 
     return NextResponse.json({
       success: true,
