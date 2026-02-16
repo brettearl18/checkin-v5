@@ -36,6 +36,7 @@ import { getTrafficLightStatus, getDefaultThresholds, convertLegacyThresholds, t
 
 interface CheckIn {
   id: string;
+  documentId?: string; // Firestore doc id (use for request-reopen)
   title: string;
   description: string;
   dueDate: string;
@@ -73,6 +74,8 @@ export default function ClientCheckInsPage() {
   const [wrongWeekExpandedFor, setWrongWeekExpandedFor] = useState<string | null>(null);
   const [reassignTargetWeek, setReassignTargetWeek] = useState<string>('3');
   const [reassigningFor, setReassigningFor] = useState<string | null>(null);
+  const [requestingReopenForId, setRequestingReopenForId] = useState<string | null>(null);
+  const [reopenRequestedIds, setReopenRequestedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     // Wait for auth to finish loading before fetching client ID
@@ -200,6 +203,32 @@ export default function ClientCheckInsPage() {
       console.error('Error fetching completed responses:', error);
     } finally {
       setCompletedLoading(false);
+    }
+  };
+
+  const requestReopen = async (checkin: CheckIn) => {
+    if (!clientId) return;
+    const docId = (checkin as any).documentId || checkin.id;
+    setRequestingReopenForId(docId);
+    try {
+      const headers = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
+      const res = await fetch(`/api/check-in-assignments/${docId}/request-reopen`, {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setReopenRequestedIds(prev => new Set(prev).add(docId));
+        alert(data.message || 'Request sent. Your coach can reopen this check-in for you.');
+      } else {
+        alert(data.message || 'Could not send request. Try messaging your coach.');
+      }
+    } catch (e) {
+      console.error(e);
+      alert('Could not send request. Try messaging your coach from the Support menu.');
+    } finally {
+      setRequestingReopenForId(null);
     }
   };
 
@@ -613,6 +642,7 @@ export default function ClientCheckInsPage() {
   const toDoCheckins = getToDoCheckins();
   const scheduledCheckins = getScheduledCheckins();
   const completedCheckins = checkins.filter(c => c.status === 'completed');
+  const missedCheckins = checkins.filter(c => c.status === 'missed').sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
   
   // Only show "To Do" tab if there are check-ins that need attention
   const showToDoTab = toDoCheckins.length > 0;
@@ -979,6 +1009,71 @@ export default function ClientCheckInsPage() {
                 </div>
               );
             })()}
+
+            {/* Don't see your check-in? - Help block when no current or when missed exist */}
+            {(missedCheckins.length > 0 || (!toDoCheckins.length && !scheduledCheckins.length && checkins.length > 0)) && (
+              <div id="find-my-checkin" className="mb-4 lg:mb-6">
+                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 lg:p-5">
+                  <div className="flex items-start gap-3">
+                    <span className="text-2xl flex-shrink-0">💡</span>
+                    <div>
+                      <h3 className="font-semibold text-gray-900 mb-1">Can&apos;t find your check-in?</h3>
+                      <p className="text-sm text-gray-700 mb-3">
+                        If you missed a check-in or the window closed, you can ask your coach to reopen it. Once they reopen it, it will appear under &quot;Current Check-in&quot; and you can complete it.
+                      </p>
+                      {missedCheckins.length > 0 ? (
+                        <p className="text-sm text-gray-600">
+                          Scroll to <strong>Missed check-ins</strong> below and tap &quot;Request coach to reopen&quot; for the one you want to complete.
+                        </p>
+                      ) : (
+                        <Link href="/client-portal/support" className="text-sm font-medium text-amber-800 hover:text-amber-900 underline">
+                          Contact support or message your coach
+                        </Link>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Missed check-ins - Request reopen */}
+            {missedCheckins.length > 0 && (
+              <div className="mb-4 lg:mb-6">
+                <div className="bg-white border-2 rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border-gray-200 p-5 lg:p-6">
+                  <h3 className="text-lg font-bold text-gray-900 mb-2 flex items-center gap-2">
+                    <span>📋</span> Missed check-ins
+                  </h3>
+                  <p className="text-sm text-gray-600 mb-4">
+                    These check-ins are past their window. Request your coach to reopen one so you can complete it.
+                  </p>
+                  <ul className="space-y-3">
+                    {missedCheckins.map((c) => {
+                      const docId = (c as any).documentId || c.id;
+                      const requested = reopenRequestedIds.has(docId);
+                      const sending = requestingReopenForId === docId;
+                      const label = c.isRecurring && c.recurringWeek ? `Week ${c.recurringWeek}: ${c.title}` : c.title;
+                      return (
+                        <li key={c.id} className="flex flex-wrap items-center justify-between gap-3 py-3 border-b border-gray-100 last:border-0">
+                          <div>
+                            <p className="font-medium text-gray-900">{label}</p>
+                            <p className="text-xs text-gray-500">Due: {new Date(c.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => requestReopen(c)}
+                            disabled={sending || requested}
+                            className="px-4 py-2 rounded-xl text-sm font-semibold transition-all disabled:opacity-60 min-h-[44px] flex items-center justify-center"
+                            style={{ backgroundColor: requested ? '#e5e7eb' : '#daa450', color: requested ? '#6b7280' : '#fff' }}
+                          >
+                            {sending ? 'Sending…' : requested ? 'Request sent' : 'Request coach to reopen'}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              </div>
+            )}
 
             {/* Filters - Tabs (conditionally show To Do) */}
             <div className="mb-4 lg:mb-6">

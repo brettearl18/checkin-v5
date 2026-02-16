@@ -427,12 +427,16 @@ export default function ClientPortalPage() {
   }, [userProfile?.email]);
 
   // Fetch billing history for dashboard panel: last 3 for list, full duration for Paid/Failed summary
+  // Skip in preview mode: coach is viewing client portal; /api/clients/... uses verifyClientAccess but
+  // we avoid extra API calls that could 401 if auth isn't ready, and prevent any session confusion
   useEffect(() => {
-    if (!clientId) {
-      setRecentInvoices([]);
-      setTotalPaidCount(0);
-      setTotalPendingCount(0);
-      setTotalFailedCount(0);
+    if (!clientId || previewClientId) {
+      if (!clientId) {
+        setRecentInvoices([]);
+        setTotalPaidCount(0);
+        setTotalPendingCount(0);
+        setTotalFailedCount(0);
+      }
       return;
     }
     const controller = new AbortController();
@@ -467,7 +471,7 @@ export default function ClientPortalPage() {
       }
     })();
     return () => controller.abort();
-  }, [clientId]);
+  }, [clientId, previewClientId]);
 
   const fetchClientData = async () => {
     try {

@@ -74,6 +74,9 @@ export default function CheckInCompletionPage() {
   const [extensionReason, setExtensionReason] = useState('');
   const [requestingExtension, setRequestingExtension] = useState(false);
   const [extensionGranted, setExtensionGranted] = useState(false);
+  const [showWrongWeekDropdown, setShowWrongWeekDropdown] = useState(false);
+  const [otherWeeks, setOtherWeeks] = useState<{ id: string; documentId?: string; recurringWeek: number; dueDate: string }[]>([]);
+  const [loadingOtherWeeks, setLoadingOtherWeeks] = useState(false);
 
   const assignmentId = params.id as string;
 
@@ -457,6 +460,36 @@ export default function CheckInCompletionPage() {
   const handlePrevious = () => {
     if (currentQuestion > 0) {
       setCurrentQuestion(currentQuestion - 1);
+    }
+  };
+
+  // Fetch other available weeks for "Wrong week?" so client can switch to the correct check-in
+  const fetchOtherWeeks = async () => {
+    if (!assignment?.clientId || !assignment?.formId || otherWeeks.length > 0) return;
+    setLoadingOtherWeeks(true);
+    try {
+      const headers = await import('@/lib/auth-headers').then((m) => m.getAuthHeaders());
+      const res = await fetch(`/api/client-portal/check-ins?clientId=${encodeURIComponent(assignment.clientId)}`, { headers });
+      const data = await res.json();
+      if (data.success && Array.isArray(data.data?.checkins)) {
+        const sameForm = data.data.checkins.filter(
+          (c: any) => c.formId === assignment.formId && c.id !== assignmentId && c.status !== 'completed'
+        );
+        const list = sameForm
+          .map((c: any) => ({
+            id: c.id,
+            documentId: c.documentId,
+            recurringWeek: c.recurringWeek ?? 0,
+            dueDate: c.dueDate || ''
+          }))
+          .filter((c: { recurringWeek: number }) => c.recurringWeek >= 1)
+          .sort((a: { recurringWeek: number }, b: { recurringWeek: number }) => a.recurringWeek - b.recurringWeek);
+        setOtherWeeks(list);
+      }
+    } catch (e) {
+      console.error('Error fetching other weeks:', e);
+    } finally {
+      setLoadingOtherWeeks(false);
     }
   };
 
@@ -1086,6 +1119,51 @@ export default function CheckInCompletionPage() {
                       });
                     })()}
                   </span>
+                </div>
+              )}
+              {/* Wrong week? Let client switch to the correct check-in */}
+              {assignment.isRecurring && assignment.recurringWeek != null && assignment.totalWeeks != null && (
+                <div className="mt-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowWrongWeekDropdown(!showWrongWeekDropdown);
+                      if (!showWrongWeekDropdown) fetchOtherWeeks();
+                    }}
+                    className="text-xs sm:text-sm text-gray-500 hover:text-gray-700 underline focus:outline-none"
+                  >
+                    {showWrongWeekDropdown ? 'Hide other weeks' : 'Wrong week? Select the week you\'re completing'}
+                  </button>
+                  {showWrongWeekDropdown && (
+                    <div className="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                      {loadingOtherWeeks ? (
+                        <p className="text-sm text-gray-500">Loading...</p>
+                      ) : otherWeeks.length === 0 ? (
+                        <p className="text-sm text-gray-500">No other open check-ins for this form, or you&apos;re on the only one.</p>
+                      ) : (
+                        <>
+                          <p className="text-xs text-gray-600 mb-2">Open the check-in for the week you&apos;re actually completing:</p>
+                          <ul className="space-y-1">
+                            {otherWeeks.map((w) => (
+                              <li key={w.id}>
+                                <Link
+                                  href={`/client-portal/check-in/${w.id}`}
+                                  className="text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline"
+                                >
+                                  Week {w.recurringWeek}
+                                  {w.dueDate && (
+                                    <span className="text-gray-500 font-normal ml-1">
+                                      (due {new Date(w.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })})
+                                    </span>
+                                  )}
+                                </Link>
+                              </li>
+                            ))}
+                          </ul>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

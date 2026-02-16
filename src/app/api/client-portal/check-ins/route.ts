@@ -613,14 +613,15 @@ export async function GET(request: NextRequest) {
           weekMonday.setHours(9, 0, 0, 0); // Set to 9:00 AM (default due time)
           
           // Include weeks that are:
-          // 1. Future weeks (not yet arrived), OR
+          // 1. Future weeks (not yet arrived) BUT only within the next 6 weeks (prevent showing week 17 when on week 7)
           // 2. Recent weeks (within 3 weeks in the past) that weren't completed
-          // This ensures Week 2, Week 3, etc. show up even if their Monday has passed
           const weeksAgo = (now.getTime() - weekMonday.getTime()) / (1000 * 60 * 60 * 24 * 7);
+          const weeksFromNow = (weekMonday.getTime() - now.getTime()) / (1000 * 60 * 60 * 24 * 7);
           const isFuture = weekMonday >= now;
           const isRecentPast = weeksAgo <= 3 && weekMonday < now;
+          const isFutureWithinHorizon = isFuture && weeksFromNow <= 6; // Cap at 6 weeks ahead
           
-          if (isFuture || isRecentPast) {
+          if (isFutureWithinHorizon || isRecentPast) {
             expandedAssignments.push({
               ...baseAssignment,
               id: `${baseAssignment.id}_week_${week}`, // Unique ID for each week
@@ -715,8 +716,24 @@ export async function GET(request: NextRequest) {
       }
     });
     
-    // Show all assignments (including expanded recurring ones, now deduplicated)
-    const assignments = deduplicatedAssignments;
+    // Sort by due date so client always sees chronological order (current/next first)
+    let assignments = deduplicatedAssignments.sort((a, b) => {
+      const dateA = new Date(a.dueDate).getTime();
+      const dateB = new Date(b.dueDate).getTime();
+      return dateA - dateB;
+    });
+
+    // Limit to a sensible horizon so clients don't see week 17 when on week 7:
+    // Keep all completed + missed; for pending/overdue only within last 3 weeks or next 6 weeks
+    const threeWeeksAgo = new Date(now);
+    threeWeeksAgo.setDate(now.getDate() - 21);
+    const sixWeeksFromNow = new Date(now);
+    sixWeeksFromNow.setDate(now.getDate() + 42);
+    assignments = assignments.filter((a) => {
+      if (a.status === 'completed' || a.status === 'missed') return true;
+      const due = new Date(a.dueDate).getTime();
+      return due >= threeWeeksAgo.getTime() && due <= sixWeeksFromNow.getTime();
+    });
 
     // Fetch coach names for all unique coach IDs
     const coachIds = [...new Set(assignments.map(a => a.assignedBy).filter(id => id && id !== 'Coach'))];
@@ -743,34 +760,34 @@ export async function GET(request: NextRequest) {
       assignment.assignedBy = coachNames[assignment.assignedBy] || assignment.assignedBy || 'Coach';
     });
 
-    // Calculate summary statistics based on ALL assignments (not just current ones)
-    const total = allAssignments.length;
-    const pending = allAssignments.filter(a => a.status === 'pending').length;
-    const completed = allAssignments.filter(a => a.status === 'completed').length;
-    const overdue = allAssignments.filter(a => {
+    // Summary based on returned (horizon-filtered) assignments
+    const total = assignments.length;
+    const pending = assignments.filter(a => a.status === 'pending').length;
+    const completed = assignments.filter(a => a.status === 'completed').length;
+    const overdue = assignments.filter(a => {
       if (a.status === 'completed') return false;
       const dueDate = new Date(a.dueDate);
-      return dueDate < new Date(); // Use new Date() for current date
+      return dueDate < new Date();
     }).length;
 
-    // Check for overdue check-ins and create notifications
-    // Exclude completed (responseId or status), include only past-due pending/overdue
-    const overdueAssignments = allAssignments.filter(assignment => {
+    // Check for overdue check-ins and create notifications (use full list before horizon filter for notifications)
+    const overdueAssignments = deduplicatedAssignments.filter((assignment: any) => {
       if (assignment.status === 'completed' || assignment.responseId) return false;
-      const dueDate = assignment.dueDate?.toDate ? assignment.dueDate.toDate() : new Date(assignment.dueDate);
-      const now = new Date();
-      const diffDays = Math.floor((now.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
+      const dueDate = new Date(assignment.dueDate);
+      const nowDate = new Date();
+      const diffDays = Math.floor((nowDate.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
       return diffDays > 0 && (assignment.status === 'overdue' || assignment.status === 'pending');
     });
 
     // Create notifications for overdue check-ins (limit to prevent spam)
     for (const assignment of overdueAssignments.slice(0, 3)) {
       try {
+        const dueForNotif = typeof assignment.dueDate === 'string' ? new Date(assignment.dueDate) : (assignment.dueDate?.toDate?.() ?? new Date(assignment.dueDate));
         await notificationService.createCheckInDueNotification(
           clientId,
           assignment.id,
           assignment.title,
-          assignment.dueDate?.toDate ? assignment.dueDate.toDate() : new Date(assignment.dueDate)
+          dueForNotif
         );
       } catch (error) {
         console.error('Error creating overdue notification:', error);

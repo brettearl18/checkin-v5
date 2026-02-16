@@ -125,8 +125,9 @@ How do I know when my check-in window is open?
 - You'll receive an email when your window opens
 
 What happens if the window closes?
-- Contact your coach - they may reopen it for you
-- Late submissions may still be accepted
+- On Check-ins, go to "Missed check-ins" and tap "Request coach to reopen"
+- Your coach gets a message and can reopen it for you
+- You can also message your coach from the Messages section
 - Always try to complete check-ins during the window if possible`
   },
   {
@@ -135,23 +136,22 @@ What happens if the window closes?
     title: 'What to Do If You Miss a Check-in',
     content: `Life happens! If you miss a check-in, here's what to do:
 
-Option 1: Contact Your Coach
+Option 1: Request Reopen (easiest)
+- Go to Check-ins and scroll to "Missed check-ins"
+- Tap "Request coach to reopen" for the check-in you want to complete
+- Your coach gets a message and can reopen it; it will then appear as "Current Check-in"
+
+Option 2: Message Your Coach
 - Send a message via the Messages section
-- Explain why you missed it
-- Ask if you can still complete it
+- Explain why you missed it and ask to complete it
 
-Option 2: Check If It's Still Open
-- Some check-ins have extended windows
-- Check the "To Do" section - it may still be available
-
-Option 3: Wait for Next Check-in
-- Don't worry - one missed check-in isn't the end of the world
-- Focus on completing your next one on time
+Option 3: Check If It's Still Open
+- Check the "To Do" section - your coach may have already reopened it
 
 Tips:
 - Set reminders on your phone
 - Try to complete check-ins early in the window
-- Communicate with your coach if you're having trouble`
+- One missed check-in isn't the end of the world – focus on the next one`
   },
   {
     id: 'edit-checkin',

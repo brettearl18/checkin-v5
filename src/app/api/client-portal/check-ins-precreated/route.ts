@@ -159,19 +159,33 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Calculate summary
+    // Only return assignments within a sensible horizon to avoid clients seeing week 17 when on week 7:
+    // - Include all completed and missed (so history/request reopen work)
+    // - For pending/overdue, only include if due date is within last 3 weeks or next 6 weeks
+    const threeWeeksAgo = new Date(now);
+    threeWeeksAgo.setDate(now.getDate() - 21);
+    const sixWeeksFromNow = new Date(now);
+    sixWeeksFromNow.setDate(now.getDate() + 42);
+    const inHorizon = (a: any) => {
+      const due = new Date(a.dueDate).getTime();
+      if (a.status === 'completed' || a.status === 'missed') return true;
+      return due >= threeWeeksAgo.getTime() && due <= sixWeeksFromNow.getTime();
+    };
+    const checkins = allAssignments.filter(inHorizon);
+
+    // Summary based on returned list
     const summary = {
-      total: allAssignments.length,
-      pending: allAssignments.filter(a => a.status === 'pending').length,
-      completed: allAssignments.filter(a => a.status === 'completed').length,
-      overdue: allAssignments.filter(a => a.status === 'overdue').length
+      total: checkins.length,
+      pending: checkins.filter(a => a.status === 'pending').length,
+      completed: checkins.filter(a => a.status === 'completed').length,
+      overdue: checkins.filter(a => a.status === 'overdue').length
     };
 
     return NextResponse.json({
       success: true,
       data: {
-        checkins: allAssignments,
-        summary: summary
+        checkins,
+        summary
       }
     });
 

@@ -156,6 +156,18 @@ firebase deploy --only storage
 - Check Firebase Hosting logs in console
 - Verify rewrites in `firebase.json`
 
+#### ChunkLoadError / 404 for \_next/static (client portal or any page)
+
+- **Symptom:** "Loading chunk failed", 404 for `/_next/static/css/...` or JS chunks; "Application error: a client-side exception".
+- **Cause:** HTML was built with references to chunk filenames that don't exist on the server (e.g. deploy used cached HTML from an older build, or static assets weren't deployed with the same build).
+- **Fix:** Do a clean build and full deploy so the same build produces both the HTML and the static files. Clear CDN/cache if you use one. Ensure `build:firebase` (or your deploy step) copies `.next/static` into the standalone output.
+
+#### Client portal preview logs coach out / 401 errors
+
+- **Symptom:** Opening `/client-portal?preview=<clientId>` as a coach shows errors and coach ends up on login.
+- **Cause:** The client portal page, when loading in preview mode, used to call `/api/clients/<clientId>/billing/history`. If that request ran before auth was ready or the chunk failed to load, the API returned 401 and the broken state could look like a logout.
+- **Fix (in code):** Billing history fetch is now skipped in preview mode so the coach session is not hit by 401s from that call. If you still see 401s, ensure you're opening the preview link while logged in as a coach and, if possible, open it in a **new tab** so your coach tab stays intact.
+
 #### API Routes Not Working
 
 - Ensure rewrites include `/api/**` routes

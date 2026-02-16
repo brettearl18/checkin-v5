@@ -40,7 +40,7 @@ const faqs: FAQItem[] = [
     id: 'miss-checkin',
     category: 'Check-ins',
     question: 'What happens if I miss a check-in?',
-    answer: `If you miss a check-in, contact your coach via Messages. They can reopen the check-in window for you or help you catch up. Don't worry - one missed check-in isn't a problem, but try to complete them on time for best results.`
+    answer: `On the Check-ins page, scroll to "Missed check-ins" and tap "Request coach to reopen" for the one you want to complete. Your coach will get a message and can reopen it for you. You can also message your coach via Messages. Don't worry - one missed check-in isn't a problem, but try to complete them on time for best results.`
   },
   {
     id: 'edit-checkin',
@@ -52,7 +52,7 @@ const faqs: FAQItem[] = [
     id: 'no-checkin-visible',
     category: 'Check-ins',
     question: 'Why can\'t I see my check-in yet?',
-    answer: `Check-ins have specific "windows" when they're available. Your check-in window may not have opened yet, or you may have already completed it. Check the "Check-ins" page to see all your assignments and their status.`
+    answer: `Check-ins have specific "windows" when they're available (usually Friday–Tuesday). If you don't see one: (1) Check "Current Check-in" and "Next Check-in" at the top of the Check-ins page. (2) If you missed it, scroll to "Missed check-ins" and use "Request coach to reopen". (3) You can also message your coach from Support.`
   },
   // Progress & Measurements
   {
