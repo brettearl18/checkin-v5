@@ -59,7 +59,7 @@ export default function ClientCheckInsPage() {
   const { userProfile, authLoading } = useAuth();
   const [checkins, setCheckins] = useState<CheckIn[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<'toDo' | 'scheduled' | 'completed'>('scheduled');
+  const [filter, setFilter] = useState<'toDo' | 'scheduled' | 'completed' | 'missed'>('scheduled');
   const [clientId, setClientId] = useState<string | null>(null);
   const [completedResponses, setCompletedResponses] = useState<any[]>([]);
   const [completedLoading, setCompletedLoading] = useState(false);
@@ -600,7 +600,24 @@ export default function ClientCheckInsPage() {
   };
 
 
-  const filteredCompletedResponses = completedResponses
+  // Deduplicate: one entry per week (recurring) or per assignment (non-recurring), keep most recent submission
+  // So clients who already completed Week 1 don't see five "Week 1" rows from duplicate submissions
+  const deduplicatedCompletedResponses = (() => {
+    const byKey = new Map<string, any>();
+    const getSubmittedTime = (item: any) => new Date(item.submittedAt || 0).getTime();
+    for (const item of completedResponses) {
+      const key = item.recurringWeek != null
+        ? `${item.formId || 'form'}_week_${item.recurringWeek}`
+        : (item.assignmentId || item.id);
+      const existing = byKey.get(key);
+      if (!existing || getSubmittedTime(item) > getSubmittedTime(existing)) {
+        byKey.set(key, item);
+      }
+    }
+    return Array.from(byKey.values());
+  })();
+
+  const filteredCompletedResponses = deduplicatedCompletedResponses
     .filter(item => {
       switch (completedFilter) {
         case 'recent':
@@ -774,7 +791,7 @@ export default function ClientCheckInsPage() {
   const stats = {
     toDo: getToDoCheckins().length,
     scheduled: getScheduledCheckins().length,
-    completed: completedResponses.length, // Use formResponses count instead of assignments
+    completed: deduplicatedCompletedResponses.length, // One per week/assignment (deduplicated)
     total: checkins.length,
     needsAction: getToDoCheckins().length,
     upcoming: getScheduledCheckins().length,
@@ -1023,7 +1040,7 @@ export default function ClientCheckInsPage() {
                       </p>
                       {missedCheckins.length > 0 ? (
                         <p className="text-sm text-gray-600">
-                          Scroll to <strong>Missed check-ins</strong> below and tap &quot;Request coach to reopen&quot; for the one you want to complete.
+                          Open the <strong>Missed</strong> tab below and tap &quot;Request coach to reopen&quot; for the one you want to complete.
                         </p>
                       ) : (
                         <Link href="/client-portal/support" className="text-sm font-medium text-amber-800 hover:text-amber-900 underline">
@@ -1036,45 +1053,6 @@ export default function ClientCheckInsPage() {
               </div>
             )}
 
-            {/* Missed check-ins - Request reopen */}
-            {missedCheckins.length > 0 && (
-              <div className="mb-4 lg:mb-6">
-                <div className="bg-white border-2 rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border-gray-200 p-5 lg:p-6">
-                  <h3 className="text-lg font-bold text-gray-900 mb-2 flex items-center gap-2">
-                    <span>📋</span> Missed check-ins
-                  </h3>
-                  <p className="text-sm text-gray-600 mb-4">
-                    These check-ins are past their window. Request your coach to reopen one so you can complete it.
-                  </p>
-                  <ul className="space-y-3">
-                    {missedCheckins.map((c) => {
-                      const docId = (c as any).documentId || c.id;
-                      const requested = reopenRequestedIds.has(docId);
-                      const sending = requestingReopenForId === docId;
-                      const label = c.isRecurring && c.recurringWeek ? `Week ${c.recurringWeek}: ${c.title}` : c.title;
-                      return (
-                        <li key={c.id} className="flex flex-wrap items-center justify-between gap-3 py-3 border-b border-gray-100 last:border-0">
-                          <div>
-                            <p className="font-medium text-gray-900">{label}</p>
-                            <p className="text-xs text-gray-500">Due: {new Date(c.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => requestReopen(c)}
-                            disabled={sending || requested}
-                            className="px-4 py-2 rounded-xl text-sm font-semibold transition-all disabled:opacity-60 min-h-[44px] flex items-center justify-center"
-                            style={{ backgroundColor: requested ? '#e5e7eb' : '#daa450', color: requested ? '#6b7280' : '#fff' }}
-                          >
-                            {sending ? 'Sending…' : requested ? 'Request sent' : 'Request coach to reopen'}
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-              </div>
-            )}
-
             {/* Filters - Tabs (conditionally show To Do) */}
             <div className="mb-4 lg:mb-6">
               <div className="flex flex-wrap gap-2 sm:gap-2">
@@ -1082,7 +1060,8 @@ export default function ClientCheckInsPage() {
                   // Only include "To Do" tab if there are check-ins that need attention
                   ...(showToDoTab ? [{ key: 'toDo', label: 'To Do', count: stats.toDo, color: 'red', icon: '📋' }] : []),
                   { key: 'scheduled', label: 'Scheduled', count: stats.scheduled, color: 'blue', icon: '📅' },
-                  { key: 'completed', label: 'Completed', count: completedResponses.length, color: 'green', icon: '✅' }
+                  { key: 'missed', label: 'Missed', count: missedCheckins.length, color: 'amber', icon: '⏳' },
+                  { key: 'completed', label: 'Completed', count: deduplicatedCompletedResponses.length, color: 'green', icon: '✅' }
                 ].map((filterOption) => (
                   <button
                     key={filterOption.key}
@@ -1110,8 +1089,48 @@ export default function ClientCheckInsPage() {
               </div>
             </div>
 
-            {/* Completed Tab Content */}
-            {filter === 'completed' ? (
+            {/* Missed Tab Content */}
+            {filter === 'missed' ? (
+              <div className="space-y-4">
+                <div className="bg-white border-2 rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border-gray-200 p-5 lg:p-6">
+                  <h3 className="text-lg font-bold text-gray-900 mb-2 flex items-center gap-2">
+                    <span>⏳</span> Missed check-ins
+                  </h3>
+                  <p className="text-sm text-gray-600 mb-4">
+                    These check-ins are past their window. Request your coach to reopen one so you can complete it.
+                  </p>
+                  {missedCheckins.length === 0 ? (
+                    <p className="text-gray-500 py-4">No missed check-ins.</p>
+                  ) : (
+                    <ul className="space-y-3">
+                      {missedCheckins.map((c) => {
+                        const docId = (c as any).documentId || c.id;
+                        const requested = reopenRequestedIds.has(docId);
+                        const sending = requestingReopenForId === docId;
+                        const label = c.isRecurring && c.recurringWeek ? `Week ${c.recurringWeek}: ${c.title}` : c.title;
+                        return (
+                          <li key={c.id} className="flex flex-wrap items-center justify-between gap-3 py-3 border-b border-gray-100 last:border-0">
+                            <div>
+                              <p className="font-medium text-gray-900">{label}</p>
+                              <p className="text-xs text-gray-500">Due: {new Date(c.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => requestReopen(c)}
+                              disabled={sending || requested}
+                              className="px-4 py-2 rounded-xl text-sm font-semibold transition-all disabled:opacity-60 min-h-[44px] flex items-center justify-center"
+                              style={{ backgroundColor: requested ? '#e5e7eb' : '#daa450', color: requested ? '#6b7280' : '#fff' }}
+                            >
+                              {sending ? 'Sending…' : requested ? 'Request sent' : 'Request coach to reopen'}
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            ) : filter === 'completed' ? (
               <div className="space-y-4">
                 {/* Completed Filters */}
                 <div className="bg-white rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 p-4 lg:p-4">
@@ -1147,7 +1166,7 @@ export default function ClientCheckInsPage() {
                       </div>
                       <div>
                         <p className="text-xs lg:text-xs text-gray-600 font-medium">Total</p>
-                        <p className="text-2xl lg:text-xl font-bold text-gray-900">{completedResponses.length}</p>
+                        <p className="text-2xl lg:text-xl font-bold text-gray-900">{deduplicatedCompletedResponses.length}</p>
                       </div>
                     </div>
                   </div>
@@ -1159,8 +1178,8 @@ export default function ClientCheckInsPage() {
                       <div>
                         <p className="text-xs lg:text-xs text-gray-600 font-medium">Average</p>
                         <p className="text-2xl lg:text-xl font-bold text-gray-900">
-                          {completedResponses.length > 0 
-                            ? Math.round(completedResponses.reduce((sum, item) => sum + item.score, 0) / completedResponses.length)
+                          {deduplicatedCompletedResponses.length > 0 
+                            ? Math.round(deduplicatedCompletedResponses.reduce((sum, item) => sum + item.score, 0) / deduplicatedCompletedResponses.length)
                             : 0}%
                         </p>
                       </div>
@@ -1174,7 +1193,7 @@ export default function ClientCheckInsPage() {
                       <div>
                         <p className="text-xs lg:text-xs text-gray-600 font-medium">High Scores</p>
                         <p className="text-2xl lg:text-xl font-bold text-gray-900">
-                          {completedResponses.filter(item => item.score >= 80).length}
+                          {deduplicatedCompletedResponses.filter(item => item.score >= 80).length}
                         </p>
                       </div>
                     </div>
@@ -1187,7 +1206,7 @@ export default function ClientCheckInsPage() {
                       <div>
                         <p className="text-xs lg:text-xs text-gray-600 font-medium">Needs Attention</p>
                         <p className="text-2xl lg:text-xl font-bold text-gray-900">
-                          {completedResponses.filter(item => item.score < 60).length}
+                          {deduplicatedCompletedResponses.filter(item => item.score < 60).length}
                         </p>
                       </div>
                     </div>
