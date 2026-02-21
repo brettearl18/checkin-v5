@@ -128,8 +128,10 @@ export default function CheckInCompletionPage() {
         const currentMonday = new Date(thisMonday);
         if (day >= 5 || day === 0) currentMonday.setDate(thisMonday.getDate() + 7);
         const currentMondayStr = currentMonday.toISOString().split('T')[0];
+        const docId = (assignment as any).documentId || assignmentId;
         const open = data.data.checkins.find((c: any) => {
           if (c.status === 'completed' || c.status === 'missed') return false;
+          if (c.id === assignmentId || c.documentId === docId) return false;
           const d = new Date(c.dueDate);
           d.setHours(0, 0, 0, 0);
           return d.toISOString().split('T')[0] === currentMondayStr;
