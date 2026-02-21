@@ -105,10 +105,32 @@ export default function CheckInCompletionPage() {
   }, [assignmentId, authLoading, userProfile?.uid]);
 
   // When this assignment is for a past week, redirect so user never sees the old form (e.g. from old email link).
+  // Only redirect when assignment's week is strictly before the current window's week (not during current week).
+  // Never redirect on API errors (e.g. 401) so the user can still complete the form if it loaded.
   useEffect(() => {
     if (!assignment?.clientId || !windowStatus || windowStatus.isOpen) return;
+
     const dueDate = assignment.dueDate ? (assignment.dueDate.toDate ? assignment.dueDate.toDate() : new Date(assignment.dueDate)) : new Date();
-    if (!isNextWeeksWindowOpen(dueDate, new Date())) return;
+    const dueDay = dueDate.getDay();
+    const daysToMonday = dueDay === 0 ? 6 : dueDay - 1;
+    const assignmentWeekMonday = new Date(dueDate);
+    assignmentWeekMonday.setDate(dueDate.getDate() - daysToMonday);
+    assignmentWeekMonday.setHours(0, 0, 0, 0);
+    const assignmentWeekMondayStr = assignmentWeekMonday.toISOString().split('T')[0];
+
+    const now = new Date();
+    const today = new Date(now);
+    today.setHours(0, 0, 0, 0);
+    const day = now.getDay();
+    const daysToMondayNow = day === 0 ? 6 : day - 1;
+    const thisMonday = new Date(today);
+    thisMonday.setDate(today.getDate() - daysToMondayNow);
+    const currentWindowMonday = new Date(thisMonday);
+    if (day >= 5 || day === 0) currentWindowMonday.setDate(thisMonday.getDate() + 7);
+    const currentWindowMondayStr = currentWindowMonday.toISOString().split('T')[0];
+
+    // Only redirect if this assignment is for a week strictly before the current window's week
+    if (assignmentWeekMondayStr >= currentWindowMondayStr) return;
 
     let cancelled = false;
     const run = async () => {
@@ -117,33 +139,22 @@ export default function CheckInCompletionPage() {
         const res = await fetch(`/api/client-portal/check-ins?clientId=${encodeURIComponent(assignment.clientId)}`, { headers });
         const data = await res.json();
         if (cancelled) return;
-        if (data.success && Array.isArray(data.data?.checkins)) {
-          const now = new Date();
-          const today = new Date(now);
-          today.setHours(0, 0, 0, 0);
-          const day = now.getDay();
-          const daysToMonday = day === 0 ? 6 : day - 1;
-          const thisMonday = new Date(today);
-          thisMonday.setDate(today.getDate() - daysToMonday);
-          const currentMonday = new Date(thisMonday);
-          if (day >= 5 || day === 0) currentMonday.setDate(thisMonday.getDate() + 7);
-          const currentMondayStr = currentMonday.toISOString().split('T')[0];
-          const docId = (assignment as any).documentId || assignmentId;
-          const open = data.data.checkins.find((c: any) => {
-            if (c.status === 'completed' || c.status === 'missed') return false;
-            if (c.id === assignmentId || c.documentId === docId) return false;
-            const d = new Date(c.dueDate);
-            d.setHours(0, 0, 0, 0);
-            return d.toISOString().split('T')[0] === currentMondayStr;
-          });
-          if (open?.id) {
-            router.replace(`/client-portal/check-in/${open.id}`);
-            return;
-          }
+        if (!res.ok || !data.success || !Array.isArray(data.data?.checkins)) return;
+        const docId = (assignment as any).documentId || assignmentId;
+        const open = data.data.checkins.find((c: any) => {
+          if (c.status === 'completed' || c.status === 'missed') return false;
+          if (c.id === assignmentId || c.documentId === docId) return false;
+          const d = new Date(c.dueDate);
+          d.setHours(0, 0, 0, 0);
+          return d.toISOString().split('T')[0] === currentWindowMondayStr;
+        });
+        if (open?.id) {
+          router.replace(`/client-portal/check-in/${open.id}`);
+        } else {
+          router.replace('/client-portal/check-ins');
         }
-        router.replace('/client-portal/check-ins');
       } catch {
-        if (!cancelled) router.replace('/client-portal/check-ins');
+        // Do not redirect on error (e.g. 401) so user can still use the form
       }
     };
     run();
