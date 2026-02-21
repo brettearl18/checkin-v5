@@ -1503,22 +1503,47 @@ export default function ClientPortalPage() {
                     }
                   });
 
-                  const upcomingCheckins = Array.from(deduplicatedMap.values()).sort((a, b) => {
-                    // Sort so CURRENT week's check-in is first (not the oldest missed).
-                    // Otherwise "Start Check-in" sends clients to a month-old week instead of this week.
+                  const allUpcoming = Array.from(deduplicatedMap.values()).sort((a, b) => {
                     const aDue = new Date(a.dueDate).getTime();
                     const bDue = new Date(b.dueDate).getTime();
                     const now = new Date().getTime();
                     const aIsOverdue = aDue < now;
                     const bIsOverdue = bDue < now;
-                    
-                    if (aIsOverdue && !bIsOverdue) return -1; // overdue before not-yet-due
+                    if (aIsOverdue && !bIsOverdue) return -1;
                     if (!aIsOverdue && bIsOverdue) return 1;
-                    if (aIsOverdue && bIsOverdue) return bDue - aDue; // Both overdue: most recent (current week) first
-                    return aDue - bDue; // Both upcoming: earliest first
+                    if (aIsOverdue && bIsOverdue) return bDue - aDue;
+                    return aDue - bDue;
                   });
 
-                  // If no actionable check-ins, show the next scheduled check-in
+                  // Only show the CURRENT window's check-in in "Requiring Attention" so "Complete Now" never sends to a past week
+                  const getCurrentWindowMondayStr = (): string | null => {
+                    const day = now.getDay();
+                    const thisMonday = new Date(today);
+                    const daysToMonday = day === 0 ? 6 : day - 1;
+                    thisMonday.setDate(today.getDate() - daysToMonday);
+                    const currentMonday = new Date(thisMonday);
+                    if (day >= 5 || day === 0) currentMonday.setDate(thisMonday.getDate() + 7);
+                    const checkMonday = new Date(currentMonday);
+                    checkMonday.setHours(0, 0, 0, 0);
+                    const windowOpen = new Date(checkMonday);
+                    windowOpen.setDate(checkMonday.getDate() - 3);
+                    windowOpen.setHours(10, 0, 0, 0);
+                    const windowClose = new Date(checkMonday);
+                    windowClose.setDate(checkMonday.getDate() + 1);
+                    windowClose.setHours(12, 0, 0, 0);
+                    if (now >= windowOpen && now <= windowClose) return checkMonday.toISOString().split('T')[0];
+                    return null;
+                  };
+                  const currentWindowMondayStr = getCurrentWindowMondayStr();
+                  const upcomingCheckins = currentWindowMondayStr
+                    ? allUpcoming.filter((c) => {
+                        const d = new Date(c.dueDate);
+                        d.setHours(0, 0, 0, 0);
+                        return d.toISOString().split('T')[0] === currentWindowMondayStr;
+                      })
+                    : [];
+
+                  // If no actionable check-ins (or not in a window), show the next scheduled check-in
                   if (upcomingCheckins.length === 0) {
                     // Find the next upcoming scheduled check-in
                     const nextScheduledCheckIn = assignedCheckins
@@ -2653,7 +2678,7 @@ export default function ClientPortalPage() {
                           deduplicatedMap.set(key, checkIn);
                         }
                       });
-                      const upcomingCheckins = Array.from(deduplicatedMap.values()).sort((a, b) => {
+                      const allUpcomingMobile = Array.from(deduplicatedMap.values()).sort((a, b) => {
                         const aDue = new Date(a.dueDate).getTime();
                         const bDue = new Date(b.dueDate).getTime();
                         const now = new Date().getTime();
@@ -2661,9 +2686,35 @@ export default function ClientPortalPage() {
                         const bIsOverdue = bDue < now;
                         if (aIsOverdue && !bIsOverdue) return -1;
                         if (!aIsOverdue && bIsOverdue) return 1;
-                        if (aIsOverdue && bIsOverdue) return aDue - bDue;
+                        if (aIsOverdue && bIsOverdue) return bDue - aDue;
                         return aDue - bDue;
                       });
+                      const getCurrentWindowMondayStrMobile = (): string | null => {
+                        const day = now.getDay();
+                        const thisMonday = new Date(today);
+                        const daysToMonday = day === 0 ? 6 : day - 1;
+                        thisMonday.setDate(today.getDate() - daysToMonday);
+                        const currentMonday = new Date(thisMonday);
+                        if (day >= 5 || day === 0) currentMonday.setDate(thisMonday.getDate() + 7);
+                        const checkMonday = new Date(currentMonday);
+                        checkMonday.setHours(0, 0, 0, 0);
+                        const windowOpen = new Date(checkMonday);
+                        windowOpen.setDate(checkMonday.getDate() - 3);
+                        windowOpen.setHours(10, 0, 0, 0);
+                        const windowClose = new Date(checkMonday);
+                        windowClose.setDate(checkMonday.getDate() + 1);
+                        windowClose.setHours(12, 0, 0, 0);
+                        if (now >= windowOpen && now <= windowClose) return checkMonday.toISOString().split('T')[0];
+                        return null;
+                      };
+                      const currentWindowMondayStrMobile = getCurrentWindowMondayStrMobile();
+                      const upcomingCheckins = currentWindowMondayStrMobile
+                        ? allUpcomingMobile.filter((c) => {
+                            const d = new Date(c.dueDate);
+                            d.setHours(0, 0, 0, 0);
+                            return d.toISOString().split('T')[0] === currentWindowMondayStrMobile;
+                          })
+                        : [];
                       if (upcomingCheckins.length === 0) {
                         return (
                           <div className="text-center py-6">
