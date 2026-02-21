@@ -13,8 +13,8 @@ export async function getAuthHeaders(forceRefresh = false): Promise<HeadersInit>
       const token = await auth.currentUser.getIdToken(forceRefresh);
       return { Authorization: `Bearer ${token}` };
     }
-  } catch {
-    // Fall through to empty headers (e.g. token refresh failed in production)
+  } catch (err) {
+    console.error('[auth-headers] Failed to get auth token:', err instanceof Error ? err.message : err);
   }
   return {};
 }

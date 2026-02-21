@@ -128,6 +128,24 @@ Result: No perceived “block”; clear path to the only check-in we want them t
 
 ---
 
+## What we're hoping to achieve (check-in flow)
+
+1. **"Check in now" always opens the form**  
+   When the client clicks "Check in now" for the **current week's** check-in (e.g. Week 8), they must land on the form and stay there. No redirect back to My Check-ins.
+
+2. **Only the current window's check-in is the main action**  
+   My Check-ins and Dashboard show a single "Current check-in" for the week whose window is open (Fri 10am–Tue 12pm). Past weeks are missed; no long list of old weeks to complete.
+
+3. **Past-week links (e.g. old email) don’t trap the user**  
+   If they open a **past** week’s URL:
+   - We can **redirect** them to the **current** week’s check-in URL when we find it from the API.
+   - We **never** redirect them back to the **list** from this effect: if we don’t find another open check-in, we leave them on the form (they may already be on the current one, or the API may be incomplete).
+
+4. **Auth/401 must not cause redirect**  
+   If the API returns 401 or the request fails, we do **not** redirect. The user stays on the form (or sees an error on the form). We use cached token first, then retry with force refresh, then try assignment fetch without auth so the form can still load.
+
+---
+
 ## Summary
 
 | Issue | Cause | Fix |

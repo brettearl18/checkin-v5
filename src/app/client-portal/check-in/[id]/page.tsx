@@ -139,7 +139,10 @@ export default function CheckInCompletionPage() {
         const res = await fetch(`/api/client-portal/check-ins?clientId=${encodeURIComponent(assignment.clientId)}`, { headers });
         const data = await res.json();
         if (cancelled) return;
-        if (!res.ok || !data.success || !Array.isArray(data.data?.checkins)) return;
+        if (!res.ok || !data.success || !Array.isArray(data.data?.checkins)) {
+          console.error('[check-in] Past-week redirect: fetch check-ins failed', { status: res.status, ok: res.ok });
+          return;
+        }
         const docId = (assignment as any).documentId || assignmentId;
         const open = data.data.checkins.find((c: any) => {
           if (c.status === 'completed' || c.status === 'missed') return false;
@@ -150,11 +153,11 @@ export default function CheckInCompletionPage() {
         });
         if (open?.id) {
           router.replace(`/client-portal/check-in/${open.id}`);
-        } else {
-          router.replace('/client-portal/check-ins');
         }
-      } catch {
-        // Do not redirect on error (e.g. 401) so user can still use the form
+        // Do NOT redirect to /client-portal/check-ins when we don't find another open check-in:
+        // the user may already be on the current week's form, or the API returned incomplete data.
+      } catch (err) {
+        console.error('[check-in] Past-week redirect: error fetching check-ins', err instanceof Error ? err.message : err);
       }
     };
     run();
@@ -191,6 +194,7 @@ export default function CheckInCompletionPage() {
                 );
           const res = await fetch(`/api/check-in-assignments/${encodedAssignmentId}`, { headers });
           if (res.status === 401) {
+            console.warn('[check-in] Assignment fetch 401, retrying', { attempt });
             if (attempt === 'cached') {
               await new Promise((r) => setTimeout(r, 1000));
               return doFetch('forceRefresh');
@@ -241,13 +245,13 @@ export default function CheckInCompletionPage() {
         } else {
           // HTTP error status
           const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
-          console.error('API request failed:', response.status, errorData);
+          console.error('[check-in] Assignment fetch failed', { status: response.status, message: errorData?.message });
           setError(errorData.message || 'Failed to load check-in data. Please try refreshing the page.');
           setLoading(false);
           return;
         }
       } catch (apiError) {
-        console.error('API fetch error:', apiError);
+        console.error('[check-in] Assignment fetch error', apiError instanceof Error ? apiError.message : apiError);
         setError('Failed to load check-in data. Please try refreshing the page.');
         setLoading(false);
         return;
