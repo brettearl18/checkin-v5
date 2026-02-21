@@ -498,6 +498,17 @@ export default function ClientCheckInsPage() {
     };
 
     // Which Monday is "current" for the open window? (so we only show that one check-in)
+    // Use local date strings so deploy matches localhost (no UTC shift).
+    const toLocalDateStr = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const getWeekMondayLocalStr = (date: Date): string => {
+      const x = new Date(date);
+      const day = x.getDay();
+      const daysToMonday = day === 0 ? 6 : day - 1;
+      x.setDate(x.getDate() - daysToMonday);
+      x.setHours(0, 0, 0, 0);
+      return toLocalDateStr(x);
+    };
     const getCurrentWindowMonday = (): string | null => {
       const day = now.getDay();
       const thisMonday = new Date(today);
@@ -513,7 +524,7 @@ export default function ClientCheckInsPage() {
       const checkMonday = new Date(currentMonday);
       checkMonday.setHours(0, 0, 0, 0);
       if (!isCheckInOpenForWeek(checkMonday)) return null;
-      return checkMonday.toISOString().split('T')[0];
+      return toLocalDateStr(checkMonday);
     };
 
     const currentMondayStr = getCurrentWindowMonday();
@@ -524,12 +535,10 @@ export default function ClientCheckInsPage() {
       if (checkin.responseId || (checkin as any).completedAt) return false;
       if (checkin.extensionGranted) return true;
 
-      const dueDate = new Date(checkin.dueDate);
-      dueDate.setHours(0, 0, 0, 0);
-      const dueStr = dueDate.toISOString().split('T')[0];
+      const dueMondayStr = getWeekMondayLocalStr(new Date(checkin.dueDate));
 
       // Only include the single check-in for the week whose window is open right now
-      if (currentMondayStr && dueStr === currentMondayStr) return true;
+      if (currentMondayStr && dueMondayStr === currentMondayStr) return true;
       return false;
     }).sort((a, b) => {
       const aDue = new Date(a.dueDate).getTime();
