@@ -1515,7 +1515,18 @@ export default function ClientPortalPage() {
                     return aDue - bDue;
                   });
 
-                  // Only show the CURRENT window's check-in in "Requiring Attention" so "Complete Now" never sends to a past week
+                  // Only show the CURRENT window's check-in in "Requiring Attention" so "Complete Now" never sends to a past week.
+                  // Use local date strings so behavior is identical in deploy (no UTC shift).
+                  const toLocalDateStr = (d: Date) =>
+                    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                  const getWeekMondayLocalStr = (date: Date): string => {
+                    const x = new Date(date);
+                    const day = x.getDay();
+                    const daysToMonday = day === 0 ? 6 : day - 1;
+                    x.setDate(x.getDate() - daysToMonday);
+                    x.setHours(0, 0, 0, 0);
+                    return toLocalDateStr(x);
+                  };
                   const getCurrentWindowMondayStr = (): string | null => {
                     const day = now.getDay();
                     const thisMonday = new Date(today);
@@ -1531,15 +1542,14 @@ export default function ClientPortalPage() {
                     const windowClose = new Date(checkMonday);
                     windowClose.setDate(checkMonday.getDate() + 1);
                     windowClose.setHours(12, 0, 0, 0);
-                    if (now >= windowOpen && now <= windowClose) return checkMonday.toISOString().split('T')[0];
+                    if (now >= windowOpen && now <= windowClose) return toLocalDateStr(checkMonday);
                     return null;
                   };
                   const currentWindowMondayStr = getCurrentWindowMondayStr();
                   const upcomingCheckins = currentWindowMondayStr
                     ? allUpcoming.filter((c) => {
-                        const d = new Date(c.dueDate);
-                        d.setHours(0, 0, 0, 0);
-                        return d.toISOString().split('T')[0] === currentWindowMondayStr;
+                        const dueMondayStr = getWeekMondayLocalStr(new Date(c.dueDate));
+                        return dueMondayStr === currentWindowMondayStr;
                       })
                     : [];
 
@@ -2689,6 +2699,16 @@ export default function ClientPortalPage() {
                         if (aIsOverdue && bIsOverdue) return bDue - aDue;
                         return aDue - bDue;
                       });
+                      const toLocalDateStrMobile = (d: Date) =>
+                        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                      const getWeekMondayLocalStrMobile = (date: Date): string => {
+                        const x = new Date(date);
+                        const day = x.getDay();
+                        const daysToMonday = day === 0 ? 6 : day - 1;
+                        x.setDate(x.getDate() - daysToMonday);
+                        x.setHours(0, 0, 0, 0);
+                        return toLocalDateStrMobile(x);
+                      };
                       const getCurrentWindowMondayStrMobile = (): string | null => {
                         const day = now.getDay();
                         const thisMonday = new Date(today);
@@ -2704,15 +2724,14 @@ export default function ClientPortalPage() {
                         const windowClose = new Date(checkMonday);
                         windowClose.setDate(checkMonday.getDate() + 1);
                         windowClose.setHours(12, 0, 0, 0);
-                        if (now >= windowOpen && now <= windowClose) return checkMonday.toISOString().split('T')[0];
+                        if (now >= windowOpen && now <= windowClose) return toLocalDateStrMobile(checkMonday);
                         return null;
                       };
                       const currentWindowMondayStrMobile = getCurrentWindowMondayStrMobile();
                       const upcomingCheckins = currentWindowMondayStrMobile
                         ? allUpcomingMobile.filter((c) => {
-                            const d = new Date(c.dueDate);
-                            d.setHours(0, 0, 0, 0);
-                            return d.toISOString().split('T')[0] === currentWindowMondayStrMobile;
+                            const dueMondayStr = getWeekMondayLocalStrMobile(new Date(c.dueDate));
+                            return dueMondayStr === currentWindowMondayStrMobile;
                           })
                         : [];
                       if (upcomingCheckins.length === 0) {
