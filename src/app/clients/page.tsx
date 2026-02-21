@@ -49,6 +49,8 @@ interface Client {
   }>;
   lastCheckInScore?: number;
   lastCheckInTrafficLight?: TrafficLightStatus;
+  /** Status of this week's check-in: completed | due | overdue | none */
+  currentWeekCheckInStatus?: 'completed' | 'due' | 'overdue' | 'none';
 }
 
 export default function ClientsPage() {
@@ -136,7 +138,8 @@ export default function ClientsPage() {
                 trafficLightStatus: ci.trafficLight
               })),
               lastCheckInScore: m.lastCheckInScore,
-              lastCheckInTrafficLight: m.lastCheckInTrafficLight
+              lastCheckInTrafficLight: m.lastCheckInTrafficLight,
+              currentWeekCheckInStatus: m.currentWeekCheckInStatus
             };
           });
           
@@ -1132,6 +1135,12 @@ export default function ClientsPage() {
                                 <span className="text-gray-400 text-sm">-</span>
                               )}
                             </td>
+                            {/* Progress: weeks on program */}
+                            <td className="px-4 py-2.5 whitespace-nowrap text-center">
+                              <div className="text-sm font-medium text-gray-900">{isNaN(weeksOnProgram) ? '0' : String(weeksOnProgram)}</div>
+                              <div className="text-[10px] text-gray-500">weeks</div>
+                            </td>
+                            {/* Trend: recent check-ins */}
                             <td className="px-4 py-2.5 whitespace-nowrap text-center">
                               {client.recentCheckIns && client.recentCheckIns.length > 0 ? (
                                 <div className="flex items-center justify-center gap-0.5" title={client.recentCheckIns.map((ci, idx) => 
@@ -1153,19 +1162,7 @@ export default function ClientsPage() {
                                 <span className="text-gray-400 text-xs">-</span>
                               )}
                             </td>
-                            <td className="px-4 py-2.5 whitespace-nowrap text-center">
-                              <div className="text-sm font-medium text-gray-900">{isNaN(weeksOnProgram) ? '0' : String(weeksOnProgram)}</div>
-                              <div className="text-[10px] text-gray-500">weeks</div>
-                            </td>
-                            <td className="px-4 py-2.5 whitespace-nowrap text-center">
-                              <div className={`text-sm font-bold ${
-                                score >= 80 ? 'text-green-600' :
-                                score >= 60 ? 'text-yellow-600' :
-                                'text-red-600'
-                              }`}>
-                                {score > 0 && !isNaN(score) ? `${score}%` : 'N/A'}
-                              </div>
-                            </td>
+                            {/* Weeks: completed/total */}
                             <td className="px-4 py-2.5 whitespace-nowrap text-center">
                               <div className="flex flex-col items-center">
                                 <div className="text-xs font-semibold text-gray-900 mb-1">
@@ -1189,7 +1186,40 @@ export default function ClientsPage() {
                                 </div>
                               </div>
                             </td>
+                            {/* Avg Score */}
+                            <td className="px-4 py-2.5 whitespace-nowrap text-center">
+                              <div className={`text-sm font-bold ${
+                                score >= 80 ? 'text-green-600' :
+                                score >= 60 ? 'text-yellow-600' :
+                                'text-red-600'
+                              }`}>
+                                {score > 0 && !isNaN(score) ? `${score}%` : 'N/A'}
+                              </div>
+                            </td>
+                            {/* Engagement */}
                             <td className="px-4 py-2.5 whitespace-nowrap">
+                              <div className="flex items-center justify-center gap-2">
+                                <Link
+                                  href={`/clients/${client.id}/progress`}
+                                  className="text-orange-600 hover:text-orange-700 text-xs font-medium"
+                                >
+                                  View →
+                                </Link>
+                                {client.status === 'archived' && (
+                                    <button
+                                      onClick={() => handleDeleteClient(client.id)}
+                                      disabled={deletingClient === client.id}
+                                      className="text-red-600 hover:text-red-700 text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                                      title="Permanently delete this archived client"
+                                    >
+                                      {deletingClient === client.id ? 'Deleting...' : 'Delete'}
+                                    </button>
+                                  )}
+                              </div>
+                            </td>
+                            {/* Last Check-in: date, overdue, and this week */}
+                            <td className="px-4 py-2.5 whitespace-nowrap">
+                              <div className="space-y-1">
                               {client.lastCheckInDate ? (
                                 <div>
                                   <div className="flex items-center gap-1.5">
@@ -1236,26 +1266,26 @@ export default function ClientsPage() {
                                   )}
                                 </div>
                               )}
-                            </td>
-                            <td className="px-4 py-2.5 whitespace-nowrap">
-                              <div className="flex items-center justify-center gap-2">
-                                <Link
-                                  href={`/clients/${client.id}/progress`}
-                                  className="text-orange-600 hover:text-orange-700 text-xs font-medium"
-                                >
-                                  View →
-                                </Link>
-                                {client.status === 'archived' && (
-                                  <button
-                                    onClick={() => handleDeleteClient(client.id)}
-                                    disabled={deletingClient === client.id}
-                                    className="text-red-600 hover:text-red-700 text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                                    title="Permanently delete this archived client"
-                                  >
-                                    {deletingClient === client.id ? 'Deleting...' : 'Delete'}
-                                  </button>
+                                {client.currentWeekCheckInStatus && client.currentWeekCheckInStatus !== 'none' && (
+                                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                                    client.currentWeekCheckInStatus === 'completed'
+                                      ? 'bg-[#34C759]/10 text-[#34C759] border border-[#34C759]/20'
+                                      : client.currentWeekCheckInStatus === 'overdue'
+                                      ? 'bg-[#FF3B30]/10 text-[#FF3B30] border border-[#FF3B30]/20'
+                                      : 'bg-amber-100 text-amber-800 border border-amber-200'
+                                  }`}>
+                                    {client.currentWeekCheckInStatus === 'completed'
+                                      ? 'This week: Done'
+                                      : client.currentWeekCheckInStatus === 'overdue'
+                                      ? 'This week: Overdue'
+                                      : 'This week: Due'}
+                                  </span>
                                 )}
                               </div>
+                            </td>
+                            {/* Actions */}
+                            <td className="px-4 py-2.5 whitespace-nowrap text-center">
+                              {/* Reserved for future per-row actions */}
                             </td>
                           </tr>
                         );
@@ -1550,8 +1580,19 @@ export default function ClientsPage() {
                             </div>
                             
                             {/* Badges */}
-                            {(hasOverdue || daysSinceLastCheckIn !== undefined) && (
+                            {(hasOverdue || daysSinceLastCheckIn !== undefined || (client.currentWeekCheckInStatus && client.currentWeekCheckInStatus !== 'none')) && (
                               <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                                {client.currentWeekCheckInStatus && client.currentWeekCheckInStatus !== 'none' && (
+                                  <span className={`px-2 py-0.5 text-[10px] font-medium rounded-full ${
+                                    client.currentWeekCheckInStatus === 'completed'
+                                      ? 'bg-[#34C759]/10 text-[#34C759] border border-[#34C759]/20'
+                                      : client.currentWeekCheckInStatus === 'overdue'
+                                      ? 'bg-[#FF3B30]/10 text-[#FF3B30] border border-[#FF3B30]/20'
+                                      : 'bg-amber-100 text-amber-800 border border-amber-200'
+                                  }`}>
+                                    {client.currentWeekCheckInStatus === 'completed' ? 'This week: Done' : client.currentWeekCheckInStatus === 'overdue' ? 'This week: Overdue' : 'This week: Due'}
+                                  </span>
+                                )}
                                 {hasOverdue && (
                                   <span className="px-2 py-0.5 text-[10px] font-medium rounded-full bg-[#FF3B30]/10 text-[#FF3B30] border border-[#FF3B30]/20">
                                     {client.overdueCheckIns} overdue

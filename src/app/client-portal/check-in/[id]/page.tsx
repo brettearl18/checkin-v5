@@ -7,7 +7,7 @@ import { RoleProtected, AuthenticatedOnly } from '@/components/ProtectedRoute';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase-client';
 import Link from 'next/link';
-import { isWithinCheckInWindow, getCheckInWindowDescription, DEFAULT_CHECK_IN_WINDOW, CheckInWindow } from '@/lib/checkin-window-utils';
+import { isWithinCheckInWindow, isNextWeeksWindowOpen, getCheckInWindowDescription, DEFAULT_CHECK_IN_WINDOW, CheckInWindow } from '@/lib/checkin-window-utils';
 
 interface CheckInAssignment {
   id: string;
@@ -77,6 +77,7 @@ export default function CheckInCompletionPage() {
   const [showWrongWeekDropdown, setShowWrongWeekDropdown] = useState(false);
   const [otherWeeks, setOtherWeeks] = useState<{ id: string; documentId?: string; recurringWeek: number; dueDate: string }[]>([]);
   const [loadingOtherWeeks, setLoadingOtherWeeks] = useState(false);
+  const [currentWeekCheckInId, setCurrentWeekCheckInId] = useState<string | null>(null);
 
   const assignmentId = params.id as string;
 
@@ -102,6 +103,45 @@ export default function CheckInCompletionPage() {
       fetchAssignmentData();
     }
   }, [assignmentId, authLoading, userProfile?.uid]);
+
+  // When this assignment is for a past week (window closed, next week's window already opened),
+  // fetch the current week's check-in so we can link the user to it.
+  useEffect(() => {
+    if (!assignment?.clientId || !windowStatus || windowStatus.isOpen) return;
+    const dueDate = assignment.dueDate ? (assignment.dueDate.toDate ? assignment.dueDate.toDate() : new Date(assignment.dueDate)) : new Date();
+    if (!isNextWeeksWindowOpen(dueDate, new Date())) return;
+
+    let cancelled = false;
+    const run = async () => {
+      try {
+        const headers = await import('@/lib/auth-headers').then((m) => m.getAuthHeaders());
+        const res = await fetch(`/api/client-portal/check-ins?clientId=${encodeURIComponent(assignment.clientId)}`, { headers });
+        const data = await res.json();
+        if (cancelled || !data.success || !Array.isArray(data.data?.checkins)) return;
+        const now = new Date();
+        const today = new Date(now);
+        today.setHours(0, 0, 0, 0);
+        const day = now.getDay();
+        const daysToMonday = day === 0 ? 6 : day - 1;
+        const thisMonday = new Date(today);
+        thisMonday.setDate(today.getDate() - daysToMonday);
+        const currentMonday = new Date(thisMonday);
+        if (day >= 5 || day === 0) currentMonday.setDate(thisMonday.getDate() + 7);
+        const currentMondayStr = currentMonday.toISOString().split('T')[0];
+        const open = data.data.checkins.find((c: any) => {
+          if (c.status === 'completed' || c.status === 'missed') return false;
+          const d = new Date(c.dueDate);
+          d.setHours(0, 0, 0, 0);
+          return d.toISOString().split('T')[0] === currentMondayStr;
+        });
+        if (!cancelled && open?.id) setCurrentWeekCheckInId(open.id);
+      } catch {
+        // ignore
+      }
+    };
+    run();
+    return () => { cancelled = true; };
+  }, [assignment?.clientId, assignment?.dueDate, windowStatus?.isOpen]);
 
   const fetchAssignmentData = async () => {
     try {
@@ -1173,41 +1213,73 @@ export default function CheckInCompletionPage() {
               <div className={`mt-4 lg:mt-6 p-4 lg:p-5 rounded-xl lg:rounded-2xl shadow-lg border-2 ${
                 windowStatus.isOpen 
                   ? 'bg-gradient-to-r from-green-50 to-emerald-50 border-green-300' 
-                  : 'bg-gradient-to-r from-yellow-50 to-amber-50 border-yellow-300'
+                  : (assignment && assignment.dueDate && isNextWeeksWindowOpen(assignment.dueDate.toDate ? assignment.dueDate.toDate() : new Date(assignment.dueDate), new Date()))
+                    ? 'bg-gradient-to-r from-amber-50 to-orange-50 border-amber-300'
+                    : 'bg-gradient-to-r from-yellow-50 to-amber-50 border-yellow-300'
               }`}>
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 lg:gap-4">
                   <div className="flex-1">
-                    <p className={`text-base lg:text-lg font-bold mb-1.5 lg:mb-2 ${
-                      windowStatus.isOpen ? 'text-green-800' : 'text-yellow-800'
-                    }`}>
-                      {windowStatus.isOpen ? '✅ Check-in window is open' : '⏰ Check-in window is closed'}
-                    </p>
-                    <p className={`text-sm lg:text-base ${
-                      windowStatus.isOpen ? 'text-green-700' : 'text-yellow-700'
-                    }`}>
-                      {windowStatus.isOpen 
-                        ? windowStatus.message 
-                        : windowStatus.message + ' Your check-in can still be updated and will be reviewed during the next check-in period.'}
-                    </p>
-                    {windowStatus.nextOpenTime && (
-                      <p className="text-xs lg:text-sm mt-2 text-yellow-700 font-medium">
-                        Next check-in window: {windowStatus.nextOpenTime.toLocaleString('en-US', {
-                          weekday: 'short',
-                          month: 'short',
-                          day: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
-                      </p>
-                    )}
-                    {!windowStatus.isOpen && (
-                      <button
-                        type="button"
-                        onClick={() => document.querySelector('.question-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                        className="mt-4 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl shadow-sm transition-colors"
-                      >
-                        Check in anyway
-                      </button>
+                    {windowStatus.isOpen ? (
+                      <>
+                        <p className="text-base lg:text-lg font-bold mb-1.5 lg:mb-2 text-green-800">
+                          ✅ Check-in window is open
+                        </p>
+                        <p className="text-sm lg:text-base text-green-700">{windowStatus.message}</p>
+                      </>
+                    ) : assignment && assignment.dueDate && isNextWeeksWindowOpen(assignment.dueDate.toDate ? assignment.dueDate.toDate() : new Date(assignment.dueDate), new Date()) ? (
+                      <>
+                        <p className="text-base lg:text-lg font-bold mb-1.5 lg:mb-2 text-amber-800">
+                          This check-in is for a past week
+                        </p>
+                        <p className="text-sm lg:text-base text-amber-700 mb-3">
+                          You don&apos;t need to complete it. Complete your current week&apos;s check-in instead.
+                        </p>
+                        {currentWeekCheckInId ? (
+                          <Link
+                            href={`/client-portal/check-in/${currentWeekCheckInId}`}
+                            className="inline-block mt-2 px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl shadow-sm transition-colors"
+                          >
+                            Go to current week&apos;s check-in →
+                          </Link>
+                        ) : (
+                          <Link
+                            href="/client-portal/check-ins"
+                            className="inline-block mt-2 px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl shadow-sm transition-colors"
+                          >
+                            View my check-ins →
+                          </Link>
+                        )}
+                        <p className="text-xs text-amber-600 mt-3">
+                          You can still submit this past week if needed; it will be reviewed by your coach.
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-base lg:text-lg font-bold mb-1.5 lg:mb-2 text-yellow-800">
+                          ⏰ Check-in window is closed
+                        </p>
+                        <p className="text-sm lg:text-base text-yellow-700">
+                          {windowStatus.message + ' Your check-in can still be updated and will be reviewed during the next check-in period.'}
+                        </p>
+                        {windowStatus.nextOpenTime && (
+                          <p className="text-xs lg:text-sm mt-2 text-yellow-700 font-medium">
+                            Next check-in window: {windowStatus.nextOpenTime.toLocaleString('en-US', {
+                              weekday: 'short',
+                              month: 'short',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </p>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => document.querySelector('.question-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                          className="mt-4 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl shadow-sm transition-colors"
+                        >
+                          Check in anyway
+                        </button>
+                      </>
                     )}
                   </div>
                   <div className="text-xs lg:text-sm text-gray-700 font-semibold bg-white/60 px-3 py-1.5 lg:px-4 lg:py-2 rounded-lg lg:rounded-xl">

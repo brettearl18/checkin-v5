@@ -5,6 +5,9 @@ import { getTrafficLightStatus, getDefaultThresholds } from '@/lib/scoring-utils
 // Enable ISR caching for 30 seconds (allows stale-while-revalidate)
 export const revalidate = 30;
 
+/** Current week's check-in status for coach visibility */
+export type CurrentWeekCheckInStatus = 'completed' | 'due' | 'overdue' | 'none';
+
 interface ClientInventoryMetrics {
   progressScore: number;
   totalCheckIns: number;
@@ -22,6 +25,8 @@ interface ClientInventoryMetrics {
   }>;
   daysSinceLastCheckIn?: number;
   averageScore: number;
+  /** Status of this week's check-in (so coaches can see who has done/due/overdue for current week) */
+  currentWeekCheckInStatus?: CurrentWeekCheckInStatus;
 }
 
 interface ClientInventoryItem {
@@ -34,6 +39,49 @@ interface ClientInventoryItem {
   createdAt: string;
   joinDate?: string;
   metrics: ClientInventoryMetrics;
+}
+
+/**
+ * Get Monday 00:00 of the week containing the given date (week start).
+ */
+function getWeekStart(date: Date): Date {
+  const d = new Date(date);
+  const dayOfWeek = d.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+  const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  d.setDate(d.getDate() - daysToMonday);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+/**
+ * Normalize a date to YYYY-MM-DD for comparison.
+ */
+function toDateString(date: Date): string {
+  return date.toISOString().split('T')[0];
+}
+
+/**
+ * Determine current week's check-in status for a client from their assignments.
+ * "Current week" = the week containing today (Monday start). We look for an assignment
+ * whose due date falls on this week's Monday; if found and completed -> 'completed',
+ * else if past due -> 'overdue', else -> 'due'. If no assignment for this week -> 'none'.
+ */
+function getCurrentWeekCheckInStatus(assignments: any[], now: Date): CurrentWeekCheckInStatus {
+  const thisWeekMonday = getWeekStart(now);
+  const thisWeekMondayStr = toDateString(thisWeekMonday);
+
+  for (const a of assignments) {
+    if (!a.dueDate) continue;
+    const due = a.dueDate?.toDate ? a.dueDate.toDate() : new Date(a.dueDate);
+    const dueStr = toDateString(due);
+    if (dueStr !== thisWeekMondayStr) continue;
+
+    const isCompleted = a.status === 'completed' || a.responseId || a.completedAt;
+    if (isCompleted) return 'completed';
+    if (due < now) return 'overdue';
+    return 'due';
+  }
+  return 'none';
 }
 
 /**
@@ -256,6 +304,9 @@ async function aggregateClientInventory(coachId: string): Promise<ClientInventor
     
     // Progress score is the average score
     const progressScore = averageScore;
+
+    // Current week check-in status (for coach table: Done / Due / Overdue this week)
+    const currentWeekCheckInStatus = getCurrentWeekCheckInStatus(assignments, now);
     
     clientsData.push({
       id: clientId,
@@ -278,7 +329,8 @@ async function aggregateClientInventory(coachId: string): Promise<ClientInventor
         lastCheckInTrafficLight,
         recentCheckIns,
         daysSinceLastCheckIn,
-        averageScore
+        averageScore,
+        currentWeekCheckInStatus
       }
     });
   }

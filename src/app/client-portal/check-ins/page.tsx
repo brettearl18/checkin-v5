@@ -472,71 +472,69 @@ export default function ClientCheckInsPage() {
     }
   };
 
-  // "To Do" - Actionable check-ins that need attention
-  // Missed check-ins are excluded (no longer actionable); current check-in = first pending/overdue/available.
+  // "To Do" - Only the check-in for the week whose window is currently open.
+  // Past missed check-ins are not actionable; we only show the single current window's check-in
+  // so clients are never blocked or asked to fill in old weeks.
   const getToDoCheckins = () => {
     const now = new Date();
     const today = new Date(now);
     today.setHours(0, 0, 0, 0);
 
+    // Is the check-in window open right now? (Friday 10am to Tuesday 12pm for a given week's Monday)
+    const isCheckInOpenForWeek = (due: Date): boolean => {
+      const d = new Date(due);
+      const dayOfWeek = d.getDay();
+      const daysToMonday = dayOfWeek === 0 ? 1 : (dayOfWeek === 1 ? 0 : (8 - dayOfWeek));
+      const weekMonday = new Date(d);
+      weekMonday.setDate(d.getDate() - daysToMonday);
+      weekMonday.setHours(0, 0, 0, 0);
+      const windowOpen = new Date(weekMonday);
+      windowOpen.setDate(weekMonday.getDate() - 3);
+      windowOpen.setHours(10, 0, 0, 0);
+      const windowClose = new Date(weekMonday);
+      windowClose.setDate(weekMonday.getDate() + 1);
+      windowClose.setHours(12, 0, 0, 0);
+      return now >= windowOpen && now <= windowClose;
+    };
+
+    // Which Monday is "current" for the open window? (so we only show that one check-in)
+    const getCurrentWindowMonday = (): string | null => {
+      const day = now.getDay();
+      const thisMonday = new Date(today);
+      const daysToMonday = day === 0 ? 6 : day - 1;
+      thisMonday.setDate(today.getDate() - daysToMonday);
+      let currentMonday: Date;
+      if (day >= 5 || day === 0) {
+        currentMonday = new Date(thisMonday);
+        currentMonday.setDate(thisMonday.getDate() + 7);
+      } else {
+        currentMonday = new Date(thisMonday);
+      }
+      const checkMonday = new Date(currentMonday);
+      checkMonday.setHours(0, 0, 0, 0);
+      if (!isCheckInOpenForWeek(checkMonday)) return null;
+      return checkMonday.toISOString().split('T')[0];
+    };
+
+    const currentMondayStr = getCurrentWindowMonday();
+
     return checkins.filter(checkin => {
-      // Exclude missed check-ins from task/to-do lists (window closed, no longer actionable)
       if (checkin.status === 'missed') return false;
-      // Exclude completed check-ins from "To Do" (status + defensive responseId/completedAt)
       if (checkin.status === 'completed') return false;
       if (checkin.responseId || (checkin as any).completedAt) return false;
-      // Coach opened for check-in (extension granted)
       if (checkin.extensionGranted) return true;
 
       const dueDate = new Date(checkin.dueDate);
-      
-      // Normalize dates for comparison (set to start of day)
       dueDate.setHours(0, 0, 0, 0);
-      
-      // Always include overdue check-ins (past due date) - these are priority
-      if (dueDate < today) return true;
-      
-      // Include check-ins due today
-      if (dueDate.getTime() === today.getTime()) return true;
-      
-      // Include if window is open (Friday 10am to Tuesday 12pm) - available now
-      const isCheckInOpenForWeek = (due: Date): boolean => {
-        const d = new Date(due);
-        const dayOfWeek = d.getDay();
-        const daysToMonday = dayOfWeek === 0 ? 1 : (dayOfWeek === 1 ? 0 : (8 - dayOfWeek));
-        const weekMonday = new Date(d);
-        weekMonday.setDate(d.getDate() - daysToMonday);
-        weekMonday.setHours(0, 0, 0, 0);
-        
-        const windowOpen = new Date(weekMonday);
-        windowOpen.setDate(weekMonday.getDate() - 3); // Friday
-        windowOpen.setHours(10, 0, 0, 0);
-        
-        const windowClose = new Date(weekMonday);
-        windowClose.setDate(weekMonday.getDate() + 1); // Tuesday
-        windowClose.setHours(12, 0, 0, 0);
-        
-        return now >= windowOpen && now <= windowClose;
-      };
-      
-      if (isCheckInOpenForWeek(dueDate)) return true;
-      
-      // Don't include future check-ins whose window isn't open yet - they belong in "Scheduled"
+      const dueStr = dueDate.toISOString().split('T')[0];
+
+      // Only include the single check-in for the week whose window is open right now
+      if (currentMondayStr && dueStr === currentMondayStr) return true;
       return false;
     }).sort((a, b) => {
-      // Sort so the CURRENT week's check-in is first (most recent due date), not the oldest overdue.
-      // Otherwise "Check in now" sends clients to Week 1 instead of the week of Feb 16.
       const aDue = new Date(a.dueDate).getTime();
       const bDue = new Date(b.dueDate).getTime();
-      const todayTime = today.getTime();
-      
-      const aOverdue = aDue < todayTime;
-      const bOverdue = bDue < todayTime;
-      if (aOverdue && !bOverdue) return -1;
-      if (!aOverdue && bOverdue) return 1;
-      
-      // Among overdue or among open: put most recent due date first (current week first)
-      return bDue - aDue;
+      return aDue - bDue;
     });
   };
 

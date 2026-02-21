@@ -1504,17 +1504,18 @@ export default function ClientPortalPage() {
                   });
 
                   const upcomingCheckins = Array.from(deduplicatedMap.values()).sort((a, b) => {
-                    // Sort: overdue check-ins first (most overdue first), then upcoming check-ins (earliest first)
+                    // Sort so CURRENT week's check-in is first (not the oldest missed).
+                    // Otherwise "Start Check-in" sends clients to a month-old week instead of this week.
                     const aDue = new Date(a.dueDate).getTime();
                     const bDue = new Date(b.dueDate).getTime();
                     const now = new Date().getTime();
                     const aIsOverdue = aDue < now;
                     const bIsOverdue = bDue < now;
                     
-                    if (aIsOverdue && !bIsOverdue) return -1; // a is overdue, b is not - a comes first
-                    if (!aIsOverdue && bIsOverdue) return 1;  // b is overdue, a is not - b comes first
-                    if (aIsOverdue && bIsOverdue) return aDue - bDue; // Both overdue - most overdue first
-                    return aDue - bDue; // Both upcoming - earliest first
+                    if (aIsOverdue && !bIsOverdue) return -1; // overdue before not-yet-due
+                    if (!aIsOverdue && bIsOverdue) return 1;
+                    if (aIsOverdue && bIsOverdue) return bDue - aDue; // Both overdue: most recent (current week) first
+                    return aDue - bDue; // Both upcoming: earliest first
                   });
 
                   // If no actionable check-ins, show the next scheduled check-in

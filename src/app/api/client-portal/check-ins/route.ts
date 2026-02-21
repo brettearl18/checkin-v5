@@ -622,15 +622,18 @@ export async function GET(request: NextRequest) {
           const isFutureWithinHorizon = isFuture && weeksFromNow <= 6; // Cap at 6 weeks ahead
           
           if (isFutureWithinHorizon || isRecentPast) {
+            // Use same status logic as real assignments: past window = missed (no need to fill)
+            const status = (() => {
+              if (isNextWeeksWindowOpen(weekMonday, now)) return 'missed';
+              const daysPastDue = Math.floor((now.getTime() - weekMonday.getTime()) / (1000 * 60 * 60 * 24));
+              return daysPastDue >= 3 ? 'overdue' : 'pending';
+            })();
             expandedAssignments.push({
               ...baseAssignment,
               id: `${baseAssignment.id}_week_${week}`, // Unique ID for each week
               recurringWeek: week,
               dueDate: weekMonday.toISOString(),
-                status: (() => {
-                  const daysPastDue = Math.floor((now.getTime() - weekMonday.getTime()) / (1000 * 60 * 60 * 24));
-                  return daysPastDue >= 3 ? 'overdue' : 'pending';
-                })(),
+              status,
               checkInWindow: checkInWindow,
               responseId: undefined,
               coachResponded: false,
