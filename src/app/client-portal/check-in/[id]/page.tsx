@@ -180,8 +180,30 @@ export default function CheckInCompletionPage() {
         
         // URL encode the assignment ID to handle special characters (like underscores in week IDs)
         const encodedAssignmentId = encodeURIComponent(assignmentId);
-        const response = await fetch(`/api/check-in-assignments/${encodedAssignmentId}`);
-        
+        const doFetch = async (
+          attempt: 'cached' | 'forceRefresh' | 'noAuth' = 'cached'
+        ): Promise<Response> => {
+          const headers =
+            attempt === 'noAuth'
+              ? {}
+              : await import('@/lib/auth-headers').then((m) =>
+                  m.getAuthHeaders(attempt === 'forceRefresh')
+                );
+          const res = await fetch(`/api/check-in-assignments/${encodedAssignmentId}`, { headers });
+          if (res.status === 401) {
+            if (attempt === 'cached') {
+              await new Promise((r) => setTimeout(r, 1000));
+              return doFetch('forceRefresh');
+            }
+            if (attempt === 'forceRefresh') {
+              await new Promise((r) => setTimeout(r, 500));
+              return doFetch('noAuth');
+            }
+          }
+          return res;
+        };
+        const response = await doFetch();
+
         if (response.ok) {
           const data = await response.json();
           if (data.success && data.assignment) {
@@ -267,7 +289,8 @@ export default function CheckInCompletionPage() {
       // Check if extension has been granted
       if (!status.isOpen && docId) {
         try {
-          const extensionResponse = await fetch(`/api/check-in-assignments/${docId}/extension`);
+          const extHeaders = await import('@/lib/auth-headers').then((m) => m.getAuthHeaders());
+          const extensionResponse = await fetch(`/api/check-in-assignments/${docId}/extension`, { headers: extHeaders });
           if (extensionResponse.ok) {
             const extensionData = await extensionResponse.json();
             if (extensionData.success && extensionData.extensionGranted) {
@@ -788,11 +811,12 @@ export default function CheckInCompletionPage() {
 
       console.log('Submitting response data via API route');
 
-      // Use API route instead of direct Firestore updates to avoid permission issues
+      const submitHeaders = await import('@/lib/auth-headers').then((m) => m.getAuthHeaders());
       const submitResponse = await fetch(`/api/client-portal/check-in/${assignmentId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...submitHeaders,
         },
         body: JSON.stringify({
           responses: filteredResponses,

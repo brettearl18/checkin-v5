@@ -194,7 +194,8 @@ export default function ClientNavigation() {
     const fetchClientId = async () => {
       if (userProfile?.email) {
         try {
-          const response = await fetch(`/api/client-portal?clientEmail=${encodeURIComponent(userProfile.email)}`);
+          const headers = await import('@/lib/auth-headers').then((m) => m.getAuthHeaders());
+          const response = await fetch(`/api/client-portal?clientEmail=${encodeURIComponent(userProfile.email)}`, { headers });
           if (!response.ok) {
             // Silently handle non-OK responses - API might be starting up
             return;

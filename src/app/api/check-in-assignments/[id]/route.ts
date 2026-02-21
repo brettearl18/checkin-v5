@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase-server';
 import { logCheckInDeleted } from '@/lib/audit-log';
 
-// GET - Fetch a specific check-in assignment with form and questions
+// GET - Fetch a specific check-in assignment with form and questions.
+// Intentionally does NOT require auth so the check-in form can load even when
+// token refresh fails in production (e.g. "Error refreshing token"). Submission is protected elsewhere.
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
