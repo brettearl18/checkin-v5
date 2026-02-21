@@ -206,6 +206,7 @@ export async function GET(request: NextRequest) {
         const assignmentData = {
           id: data.id || doc.id, // Use original id field if it exists, otherwise use document ID
           documentId: doc.id, // Preserve the Firestore document ID separately
+          clientId: data.clientId || clientId, // Required for recurring series expansion (seriesKey + allWeeksQuery)
           title: data.formTitle || 'Check-in Assignment',
           description: data.description || 'Complete your assigned check-in',
           dueDate: dueDate,
@@ -343,6 +344,7 @@ export async function GET(request: NextRequest) {
         return {
           id: data.id || doc.id, // Use original id field if it exists, otherwise use document ID
           documentId: doc.id, // Preserve the Firestore document ID separately
+          clientId: data.clientId || clientId, // Required for recurring series expansion (seriesKey + allWeeksQuery)
           title: data.formTitle || 'Check-in Assignment',
           description: data.description || 'Complete your assigned check-in',
           dueDate: dueDate,
