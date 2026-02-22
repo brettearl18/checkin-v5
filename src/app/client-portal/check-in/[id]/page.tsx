@@ -7,7 +7,7 @@ import { RoleProtected, AuthenticatedOnly } from '@/components/ProtectedRoute';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase-client';
 import Link from 'next/link';
-import { isWithinCheckInWindow, isNextWeeksWindowOpen, getCheckInWindowDescription, DEFAULT_CHECK_IN_WINDOW, CheckInWindow } from '@/lib/checkin-window-utils';
+import type { CheckInWindow } from '@/lib/checkin-window-utils';
 
 interface CheckInAssignment {
   id: string;
@@ -67,7 +67,6 @@ export default function CheckInCompletionPage() {
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [error, setError] = useState('');
   const [unansweredQuestionIndices, setUnansweredQuestionIndices] = useState<number[]>([]);
-  const [windowStatus, setWindowStatus] = useState<{ isOpen: boolean; message: string; nextOpenTime?: Date } | null>(null);
   const [lastSaved, setLastSaved] = useState<Date | null>(null); // Track when last saved for visual feedback
   const isSubmittingRef = useRef(false); // Ref to prevent double submissions
   const [showExtensionModal, setShowExtensionModal] = useState(false);
@@ -77,7 +76,6 @@ export default function CheckInCompletionPage() {
   const [showWrongWeekDropdown, setShowWrongWeekDropdown] = useState(false);
   const [otherWeeks, setOtherWeeks] = useState<{ id: string; documentId?: string; recurringWeek: number; dueDate: string }[]>([]);
   const [loadingOtherWeeks, setLoadingOtherWeeks] = useState(false);
-  const [currentWeekCheckInId, setCurrentWeekCheckInId] = useState<string | null>(null);
 
   const assignmentId = params.id as string;
 
@@ -103,66 +101,6 @@ export default function CheckInCompletionPage() {
       fetchAssignmentData();
     }
   }, [assignmentId, authLoading, userProfile?.uid]);
-
-  // When this assignment is for a past week, redirect so user never sees the old form (e.g. from old email link).
-  // Only redirect when assignment's week is strictly before the current window's week (not during current week).
-  // Never redirect on API errors (e.g. 401) so the user can still complete the form if it loaded.
-  useEffect(() => {
-    if (!assignment?.clientId || !windowStatus || windowStatus.isOpen) return;
-
-    const dueDate = assignment.dueDate ? (assignment.dueDate.toDate ? assignment.dueDate.toDate() : new Date(assignment.dueDate)) : new Date();
-    const dueDay = dueDate.getDay();
-    const daysToMonday = dueDay === 0 ? 6 : dueDay - 1;
-    const assignmentWeekMonday = new Date(dueDate);
-    assignmentWeekMonday.setDate(dueDate.getDate() - daysToMonday);
-    assignmentWeekMonday.setHours(0, 0, 0, 0);
-    const assignmentWeekMondayStr = assignmentWeekMonday.toISOString().split('T')[0];
-
-    const now = new Date();
-    const today = new Date(now);
-    today.setHours(0, 0, 0, 0);
-    const day = now.getDay();
-    const daysToMondayNow = day === 0 ? 6 : day - 1;
-    const thisMonday = new Date(today);
-    thisMonday.setDate(today.getDate() - daysToMondayNow);
-    const currentWindowMonday = new Date(thisMonday);
-    if (day >= 5 || day === 0) currentWindowMonday.setDate(thisMonday.getDate() + 7);
-    const currentWindowMondayStr = currentWindowMonday.toISOString().split('T')[0];
-
-    // Only redirect if this assignment is for a week strictly before the current window's week
-    if (assignmentWeekMondayStr >= currentWindowMondayStr) return;
-
-    let cancelled = false;
-    const run = async () => {
-      try {
-        const headers = await import('@/lib/auth-headers').then((m) => m.getAuthHeaders());
-        const res = await fetch(`/api/client-portal/check-ins?clientId=${encodeURIComponent(assignment.clientId)}`, { headers });
-        const data = await res.json();
-        if (cancelled) return;
-        if (!res.ok || !data.success || !Array.isArray(data.data?.checkins)) {
-          console.error('[check-in] Past-week redirect: fetch check-ins failed', { status: res.status, ok: res.ok });
-          return;
-        }
-        const docId = (assignment as any).documentId || assignmentId;
-        const open = data.data.checkins.find((c: any) => {
-          if (c.status === 'completed' || c.status === 'missed') return false;
-          if (c.id === assignmentId || c.documentId === docId) return false;
-          const d = new Date(c.dueDate);
-          d.setHours(0, 0, 0, 0);
-          return d.toISOString().split('T')[0] === currentWindowMondayStr;
-        });
-        if (open?.id) {
-          router.replace(`/client-portal/check-in/${open.id}`);
-        }
-        // Do NOT redirect to /client-portal/check-ins when we don't find another open check-in:
-        // the user may already be on the current week's form, or the API returned incomplete data.
-      } catch (err) {
-        console.error('[check-in] Past-week redirect: error fetching check-ins', err instanceof Error ? err.message : err);
-      }
-    };
-    run();
-    return () => { cancelled = true; };
-  }, [assignment?.clientId, assignment?.dueDate, windowStatus?.isOpen, assignmentId, router]);
 
   const fetchAssignmentData = async () => {
     try {
@@ -283,15 +221,8 @@ export default function CheckInCompletionPage() {
       
       setAssignment(assignmentData);
 
-      // Check check-in window status (relative to this check-in's week - Monday start)
-      const checkInWindow = assignmentData.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
-      const dueDate = assignmentData.dueDate?.toDate ? assignmentData.dueDate.toDate() : 
-                     (assignmentData.dueDate ? new Date(assignmentData.dueDate) : new Date());
-      const status = isWithinCheckInWindow(checkInWindow, dueDate);
-      setWindowStatus(status);
-
-      // Check if extension has been granted
-      if (!status.isOpen && docId) {
+      // Check if extension has been granted (for coach visibility; we no longer enforce check-in windows)
+      if (docId) {
         try {
           const extHeaders = await import('@/lib/auth-headers').then((m) => m.getAuthHeaders());
           const extensionResponse = await fetch(`/api/check-in-assignments/${docId}/extension`, { headers: extHeaders });
@@ -390,13 +321,6 @@ export default function CheckInCompletionPage() {
       }
       
       setAssignment(assignmentData);
-
-      // Check check-in window status (relative to this check-in's week - Monday start)
-      const checkInWindow = assignmentData.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
-      const dueDate = assignmentData.dueDate?.toDate ? assignmentData.dueDate.toDate() : 
-                     (assignmentData.dueDate ? new Date(assignmentData.dueDate) : new Date());
-      const status = isWithinCheckInWindow(checkInWindow, dueDate);
-      setWindowStatus(status);
 
       const questionIds = formData.questions || [];
 
@@ -594,19 +518,6 @@ export default function CheckInCompletionPage() {
 
     isSubmittingRef.current = true;
     setSubmitting(true);
-
-    // Check if check-in window is open (relative to this check-in's week - Monday start)
-    const checkInWindow = assignment.checkInWindow || DEFAULT_CHECK_IN_WINDOW;
-    const dueDate = assignment.dueDate ? (assignment.dueDate.toDate ? assignment.dueDate.toDate() : new Date(assignment.dueDate)) : new Date();
-    const status = isWithinCheckInWindow(checkInWindow, dueDate);
-    
-    // Special case: Week 1 (first check-in) can be submitted even if window is closed
-    // This allows clients who signed up Jan 3-5 to submit their Week 1 check-in on Jan 5
-    // regardless of window hours.
-    const isFirstCheckIn = assignment.recurringWeek === 1;
-    
-    // Allow submission even if window is closed - it will be reviewed during the next check-in period
-    // The notice already indicates this to the client
 
     try {
       // Validate that all REQUIRED questions are answered
@@ -1153,11 +1064,6 @@ export default function CheckInCompletionPage() {
               <p className="text-sm lg:text-lg text-gray-700 font-medium">Complete your assigned check-in</p>
               {assignment.dueDate && (
                 <div className="mt-2 flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-3">
-                  {assignment.recurringWeek && assignment.totalWeeks && (
-                    <span className="text-xs sm:text-sm lg:text-base text-purple-600 font-semibold bg-purple-50 px-3 py-1.5 rounded-lg border border-purple-200">
-                      Week {assignment.recurringWeek} of {assignment.totalWeeks}
-                    </span>
-                  )}
                   {assignment.dueDate && assignment.recurringWeek && (() => {
                     // Calculate the reference week (the week this check-in is ABOUT)
                     // Check-ins are retrospective - they're about the PREVIOUS week
@@ -1253,88 +1159,6 @@ export default function CheckInCompletionPage() {
                 </div>
               )}
             </div>
-
-            {/* Check-in Window Status */}
-            {windowStatus && (
-              <div className={`mt-4 lg:mt-6 p-4 lg:p-5 rounded-xl lg:rounded-2xl shadow-lg border-2 ${
-                windowStatus.isOpen 
-                  ? 'bg-gradient-to-r from-green-50 to-emerald-50 border-green-300' 
-                  : (assignment && assignment.dueDate && isNextWeeksWindowOpen(assignment.dueDate.toDate ? assignment.dueDate.toDate() : new Date(assignment.dueDate), new Date()))
-                    ? 'bg-gradient-to-r from-amber-50 to-orange-50 border-amber-300'
-                    : 'bg-gradient-to-r from-yellow-50 to-amber-50 border-yellow-300'
-              }`}>
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 lg:gap-4">
-                  <div className="flex-1">
-                    {windowStatus.isOpen ? (
-                      <>
-                        <p className="text-base lg:text-lg font-bold mb-1.5 lg:mb-2 text-green-800">
-                          ✅ Check-in window is open
-                        </p>
-                        <p className="text-sm lg:text-base text-green-700">{windowStatus.message}</p>
-                      </>
-                    ) : assignment && assignment.dueDate && isNextWeeksWindowOpen(assignment.dueDate.toDate ? assignment.dueDate.toDate() : new Date(assignment.dueDate), new Date()) ? (
-                      <>
-                        <p className="text-base lg:text-lg font-bold mb-1.5 lg:mb-2 text-amber-800">
-                          This check-in is for a past week
-                        </p>
-                        <p className="text-sm lg:text-base text-amber-700 mb-3">
-                          You don&apos;t need to complete it. Complete your current week&apos;s check-in instead.
-                        </p>
-                        {currentWeekCheckInId ? (
-                          <Link
-                            href={`/client-portal/check-in/${currentWeekCheckInId}`}
-                            className="inline-block mt-2 px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl shadow-sm transition-colors"
-                          >
-                            Go to current week&apos;s check-in →
-                          </Link>
-                        ) : (
-                          <Link
-                            href="/client-portal/check-ins"
-                            className="inline-block mt-2 px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl shadow-sm transition-colors"
-                          >
-                            View my check-ins →
-                          </Link>
-                        )}
-                        <p className="text-xs text-amber-600 mt-3">
-                          You can still submit this past week if needed; it will be reviewed by your coach.
-                        </p>
-                      </>
-                    ) : (
-                      <>
-                        <p className="text-base lg:text-lg font-bold mb-1.5 lg:mb-2 text-yellow-800">
-                          ⏰ Check-in window is closed
-                        </p>
-                        <p className="text-sm lg:text-base text-yellow-700">
-                          {windowStatus.message + ' Your check-in can still be updated and will be reviewed during the next check-in period.'}
-                        </p>
-                        {windowStatus.nextOpenTime && (
-                          <p className="text-xs lg:text-sm mt-2 text-yellow-700 font-medium">
-                            Next check-in window: {windowStatus.nextOpenTime.toLocaleString('en-US', {
-                              weekday: 'short',
-                              month: 'short',
-                              day: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit'
-                            })}
-                          </p>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => document.querySelector('.question-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                          className="mt-4 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl shadow-sm transition-colors"
-                        >
-                          Check in anyway
-                        </button>
-                      </>
-                    )}
-                  </div>
-                  <div className="text-xs lg:text-sm text-gray-700 font-semibold bg-white/60 px-3 py-1.5 lg:px-4 lg:py-2 rounded-lg lg:rounded-xl">
-                    <span className="hidden sm:inline">Window: </span>
-                    {getCheckInWindowDescription(assignment.checkInWindow || DEFAULT_CHECK_IN_WINDOW)}
-                  </div>
-                </div>
-              </div>
-            )}
 
             {/* Progress Bar */}
             <div className="mt-4 lg:mt-6 mb-3 lg:mb-4">
