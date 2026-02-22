@@ -47,6 +47,7 @@ export default function CheckIn2Page() {
   const [clientId, setClientId] = useState<string | null>(null);
   const [formTypes, setFormTypes] = useState<FormType[]>([]);
   const [checkins, setCheckins] = useState<ResumableCheckIn[]>([]);
+  const [checkinsError, setCheckinsError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [step, setStep] = useState<1 | 2>(1);
   const [selectedFormId, setSelectedFormId] = useState<string | null>(null);
@@ -93,7 +94,7 @@ export default function CheckIn2Page() {
     thisMonday.setDate(today.getDate() - daysToMonday);
     thisMonday.setHours(0, 0, 0, 0);
     const options: { weekStart: string; label: string }[] = [];
-    for (let i = -4; i <= 1; i++) {
+    for (let i = -2; i <= 0; i++) {
       const m = new Date(thisMonday);
       m.setDate(thisMonday.getDate() + i * 7);
       const y = m.getFullYear();
@@ -143,9 +144,15 @@ export default function CheckIn2Page() {
     let cancelled = false;
     (async () => {
       try {
-        const headers = await import('@/lib/auth-headers').then((m) => m.getAuthHeaders());
-        const res = await fetch(`/api/client-portal?clientEmail=${userProfile.email}`, { headers });
-        if (!res.ok || cancelled) return;
+        const { getAuthHeaders } = await import('@/lib/auth-headers');
+        let headers = await getAuthHeaders(false);
+        let res = await fetch(`/api/client-portal?clientEmail=${encodeURIComponent(userProfile.email)}`, { headers });
+        if (res.status === 401) {
+          headers = await getAuthHeaders(true);
+          res = await fetch(`/api/client-portal?clientEmail=${encodeURIComponent(userProfile.email)}`, { headers });
+        }
+        if (cancelled) return;
+        if (!res.ok) return;
         const result = await res.json();
         if (cancelled) return;
         if (result.success && result.data?.client) {
@@ -160,24 +167,44 @@ export default function CheckIn2Page() {
     };
   }, [userProfile?.email]);
 
+  const fetchCheckins = async (forceRefreshToken = false) => {
+      const { getAuthHeaders } = await import('@/lib/auth-headers');
+      const headers = await getAuthHeaders(forceRefreshToken);
+      const res = await fetch(`/api/client-portal/check-ins?clientId=${clientId}`, { headers });
+      const result = await res.json().catch(() => ({}));
+      if (res.status === 401 && !forceRefreshToken) {
+        const retryHeaders = await getAuthHeaders(true);
+        const retryRes = await fetch(`/api/client-portal/check-ins?clientId=${clientId}`, { headers: retryHeaders });
+        const retryResult = await retryRes.json().catch(() => ({}));
+        if (retryRes.ok && retryResult.success && Array.isArray(retryResult.data?.checkins)) {
+          return { ok: true, checkins: retryResult.data.checkins as ResumableCheckIn[] };
+        }
+        return { ok: false, error: 'Sign in again or refresh the page to load your check-ins.' };
+      }
+      if (!res.ok) {
+        return { ok: false, error: result?.message || 'Could not load check-ins.' };
+      }
+      if (result.success && Array.isArray(result.data?.checkins)) {
+        return { ok: true, checkins: result.data.checkins as ResumableCheckIn[] };
+      }
+      return { ok: false, error: result?.message || 'Could not load check-ins.' };
+    };
+
   useEffect(() => {
     if (!clientId) {
       setLoading(false);
       return;
     }
+    setCheckinsError(null);
     let cancelled = false;
     (async () => {
       try {
-        const headers = await import('@/lib/auth-headers').then((m) => m.getAuthHeaders());
-        const res = await fetch(`/api/client-portal/check-ins?clientId=${clientId}`, { headers });
-        if (!res.ok || cancelled) return;
-        const result = await res.json();
+        const out = await fetchCheckins();
         if (cancelled) return;
-        if (result.success && Array.isArray(result.data?.checkins)) {
-          const list = result.data.checkins as ResumableCheckIn[];
-          setCheckins(list);
+        if (out.ok && out.checkins) {
+          setCheckins(out.checkins);
           const seen = new Set<string>();
-          const types: FormType[] = list
+          const types: FormType[] = out.checkins
             .filter((c) => {
               if (seen.has(c.formId)) return false;
               seen.add(c.formId);
@@ -185,6 +212,8 @@ export default function CheckIn2Page() {
             })
             .map((c) => ({ formId: c.formId, title: c.title || c.formId }));
           setFormTypes(types);
+        } else {
+          setCheckinsError(out.error || null);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -234,6 +263,40 @@ export default function CheckIn2Page() {
                 Choose the type and week, then we’ll open the form for that week.
               </p>
             </div>
+
+            {checkinsError && (
+              <div className="mb-6 rounded-xl bg-amber-50 border border-amber-200 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <p className="text-sm text-amber-800">{checkinsError}</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCheckinsError(null);
+                    setLoading(true);
+                    (async () => {
+                      const out = await fetchCheckins();
+                      setLoading(false);
+                      if (out.ok && out.checkins) {
+                        setCheckins(out.checkins);
+                        const seen = new Set<string>();
+                        const types: FormType[] = out.checkins
+                          .filter((c) => {
+                            if (seen.has(c.formId)) return false;
+                            seen.add(c.formId);
+                            return true;
+                          })
+                          .map((c) => ({ formId: c.formId, title: c.title || c.formId }));
+                        setFormTypes(types);
+                      } else {
+                        setCheckinsError(out.error || null);
+                      }
+                    })();
+                  }}
+                  className="flex-shrink-0 px-4 py-2 rounded-lg bg-amber-600 text-white text-sm font-medium hover:bg-amber-700 transition-colors"
+                >
+                  Retry
+                </button>
+              </div>
+            )}
 
             {!loading && visibleResumableCheckins.length > 0 && (
               <div className="mb-6">

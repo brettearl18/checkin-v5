@@ -5209,7 +5209,11 @@ export default function ClientProfilePage() {
                                       {formatDate(checkIn.assignedAt)}
                                     </td>
                                     <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
-                                      {checkIn.dueDate ? formatDate(checkIn.dueDate) : 'N/A'}
+                                      {isCompleted && checkIn.completedAt
+                                        ? formatDate(checkIn.completedAt)
+                                        : checkIn.dueDate
+                                          ? formatDate(checkIn.dueDate)
+                                          : 'N/A'}
                                     </td>
                                     <td className="px-4 py-3 whitespace-nowrap">
                                       {checkIn.status === 'completed' && checkIn.score !== undefined ? (
