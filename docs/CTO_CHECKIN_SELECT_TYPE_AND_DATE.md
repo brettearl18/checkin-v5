@@ -131,6 +131,10 @@ So: **no data loss**, and **progress continues** to be tracked the same way.
    - It keeps all **completed** assignments and exactly **one template** per (clientId, formId) for incomplete ones; deletes the rest.  
    - Clients remain allocated to their form(s); no form response data is touched. Use `{ "dryRun": true }` first to see what would be deleted.
 
+5. **Coach check-ins list (no synthetic pending):**  
+   - When `USE_PRE_CREATED_ASSIGNMENTS` is false, the coach client check-ins API used to **expand** one template assignment into many synthetic “future week” rows (pending). That made pending appear to remain after Delete Pending.  
+   - The API now returns **only real assignment documents** (no synthetic future weeks). After Delete Pending or cleanup, the list shows only completed + the one template; no phantom pending rows.
+
 ---
 
 ## Summary

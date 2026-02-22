@@ -42,19 +42,13 @@ async function runDeleteSeries(body: { clientId?: string; formId?: string; prese
   }
   possibleClientIds = [...new Set(possibleClientIds)];
 
-  const seen = new Set<string>();
-  const docsToProcess: { id: string; ref: { id: string }; data: () => Record<string, unknown> }[] = [];
-  for (const idToTry of possibleClientIds) {
-    const snap = await db.collection('check_in_assignments')
-      .where('clientId', '==', idToTry)
-      .where('formId', '==', formId)
-      .get();
-    for (const d of snap.docs) {
-      if (seen.has(d.id)) continue;
-      seen.add(d.id);
-      docsToProcess.push(d as { id: string; ref: { id: string }; data: () => Record<string, unknown> });
-    }
-  }
+  // Single query: formId + clientId in [docId, authUid] so we never miss due to clientId mismatch
+  const idList = possibleClientIds.slice(0, 10); // Firestore 'in' limit is 10
+  const snap = await db.collection('check_in_assignments')
+    .where('formId', '==', formId)
+    .where('clientId', 'in', idList)
+    .get();
+  const docsToProcess = snap.docs;
 
   if (docsToProcess.length === 0) {
     return NextResponse.json({

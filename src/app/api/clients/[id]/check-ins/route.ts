@@ -486,43 +486,13 @@ export async function GET(
         const baseAssignment = deduplicatedSeries.find(a => a.recurringWeek === 1) || deduplicatedSeries[0];
         if (!baseAssignment) return;
         
-        // Add existing assignments
+        // Add existing assignments only (no synthetic future weeks when using type+date / dynamic-create flow)
         deduplicatedSeries.forEach(assignment => {
           expandedCheckIns.push(assignment);
         });
         
-        // Generate future weeks if needed
-        if (baseAssignment.totalWeeks && baseAssignment.totalWeeks > 1) {
-          const firstDueDate = baseAssignment.dueDate ? new Date(baseAssignment.dueDate) : new Date();
-          const firstWeekStart = getWeekStart(firstDueDate);
-          const maxExistingWeek = Math.max(...deduplicatedSeries.map(a => a.recurringWeek || 1));
-          
-          for (let week = maxExistingWeek + 1; week <= baseAssignment.totalWeeks; week++) {
-            const weekMonday = new Date(firstWeekStart);
-            weekMonday.setDate(firstWeekStart.getDate() + (7 * (week - 1)));
-            weekMonday.setHours(9, 0, 0, 0);
-            
-            // Include future weeks OR recent past weeks (within 3 weeks)
-            const weeksAgo = (now.getTime() - weekMonday.getTime()) / (1000 * 60 * 60 * 24 * 7);
-            const isFuture = weekMonday >= now;
-            const isRecentPast = weeksAgo <= 3 && weekMonday < now;
-            
-            if (isFuture || isRecentPast) {
-              expandedCheckIns.push({
-                ...baseAssignment,
-                id: `${baseAssignment.id}_week_${week}`,
-                recurringWeek: week,
-                dueDate: weekMonday.toISOString(),
-                status: weekMonday < now ? 'overdue' : 'pending',
-                completedAt: undefined,
-                score: 0,
-                responseCount: 0,
-                responseId: undefined,
-                coachResponded: false
-              } as CheckIn);
-            }
-          }
-        }
+        // Do not generate future weeks: with "Start a check-in" (type + date), clients create
+        // check-ins on demand. Coach list should show only real assignments, not synthetic pending.
       });
     }
     

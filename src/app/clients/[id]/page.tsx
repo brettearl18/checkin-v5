@@ -724,8 +724,8 @@ export default function ClientProfilePage() {
     }
   };
 
-  const fetchAllocatedCheckIns = async () => {
-    if (!clientId || hasLoadedCheckIns) {
+  const fetchAllocatedCheckIns = async (forceRefresh = false) => {
+    if (!clientId || (!forceRefresh && hasLoadedCheckIns)) {
       return;
     }
     
@@ -2116,10 +2116,9 @@ export default function ClientProfilePage() {
 
       if (response.ok) {
         const result = await response.json();
-        alert(`Series ${action} deleted successfully! ${result.message}`);
-        // Refresh check-ins
         setHasLoadedCheckIns(false);
-        fetchAllocatedCheckIns();
+        await fetchAllocatedCheckIns(true);
+        alert(`Series ${action} deleted successfully! ${result.message}`);
       } else {
         const errorData = await response.json();
         alert(`Failed to delete ${action} series: ${errorData.message}`);
