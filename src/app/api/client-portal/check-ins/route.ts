@@ -269,7 +269,8 @@ export async function GET(request: NextRequest) {
           pausedUntil: pausedUntil ? (pausedUntil?.toDate ? pausedUntil.toDate().toISOString() : new Date(pausedUntil).toISOString()) : undefined,
           responseId: responseId,
           coachResponded: coachResponded || data.coachResponded || false,
-          extensionGranted: data.extensionGranted || false
+          extensionGranted: data.extensionGranted || false,
+          reflectionWeekStart: data.reflectionWeekStart ? (typeof data.reflectionWeekStart === 'string' ? data.reflectionWeekStart.slice(0, 10) : null) : undefined
         };
 
         return assignmentData;
@@ -415,7 +416,8 @@ export async function GET(request: NextRequest) {
           checkInWindow: checkInWindow,
           responseId: responseId,
           coachResponded: coachResponded || data.coachResponded || false,
-          extensionGranted: data.extensionGranted || false
+          extensionGranted: data.extensionGranted || false,
+          reflectionWeekStart: data.reflectionWeekStart ? (typeof data.reflectionWeekStart === 'string' ? data.reflectionWeekStart.slice(0, 10) : null) : undefined
         };
       }));
 
@@ -593,7 +595,8 @@ export async function GET(request: NextRequest) {
             checkInWindow: data.checkInWindow || null,
             responseId: data.responseId,
             coachResponded: false,
-            extensionGranted: data.extensionGranted || false
+            extensionGranted: data.extensionGranted || false,
+            reflectionWeekStart: data.reflectionWeekStart ? (typeof data.reflectionWeekStart === 'string' ? data.reflectionWeekStart.slice(0, 10) : null) : undefined
           });
         }
       });

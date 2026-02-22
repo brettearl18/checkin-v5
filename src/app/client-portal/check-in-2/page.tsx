@@ -23,11 +23,14 @@ interface ResumableCheckIn {
   isRecurring?: boolean;
   recurringWeek?: number;
   responseId?: string;
+  /** Monday YYYY-MM-DD for the week this check-in was for (from API when set by resolve-v2). */
+  reflectionWeekStart?: string;
 }
 
-/** Get Monday YYYY-MM-DD (local) for the reflection week (week this check-in was for). */
+/** Get Monday YYYY-MM-DD (local) for the reflection week (week this check-in was for). Uses date part only to avoid timezone skew. */
 function getReflectionWeekMonday(dueDate: string): string {
-  const d = new Date(dueDate);
+  const dateOnly = dueDate.slice(0, 10);
+  const d = new Date(dateOnly + 'T12:00:00');
   d.setDate(d.getDate() - 7);
   const day = d.getDay();
   const toMon = day === 0 ? 6 : day - 1;
@@ -114,6 +117,11 @@ export default function CheckIn2Page() {
     checkins.forEach((c) => {
       if (c.formId !== selectedFormId) return;
       if (c.status !== 'completed' && !c.responseId) return;
+      // Prefer server-provided reflection week (set by resolve-v2) so completed weeks match exactly
+      if (c.reflectionWeekStart && /^\d{4}-\d{2}-\d{2}$/.test(c.reflectionWeekStart)) {
+        set.add(c.reflectionWeekStart);
+        return;
+      }
       const due =
         typeof c.dueDate === 'string'
           ? c.dueDate
@@ -267,7 +275,7 @@ export default function CheckIn2Page() {
                     );
                   })}
                 </div>
-                <p className="text-xs text-gray-500 mt-1.5">Removing only hides it from this list. The check-in is still available from Check-ins.</p>
+                <p className="text-xs text-gray-500 mt-1.5">Removing only hides it from this list. You can still open it from New check-in.</p>
               </div>
             )}
 
@@ -311,7 +319,7 @@ export default function CheckIn2Page() {
                       <div className="flex gap-3">
                         <button
                           type="button"
-                          onClick={() => router.push('/client-portal/check-ins')}
+                          onClick={() => router.push('/client-portal/check-in-2')}
                           className="flex-1 px-4 py-2.5 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium"
                         >
                           Cancel

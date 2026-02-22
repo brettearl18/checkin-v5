@@ -16,6 +16,7 @@ interface NavItem {
 }
 
 const clientNavItems: NavItem[] = [
+  // Note: "Check-ins" removed; clients use "New check-in" and Dashboard/Progress instead.
   {
     name: 'Dashboard',
     href: '/client-portal',
@@ -498,7 +499,7 @@ export default function ClientNavigation() {
             {/* Navigation */}
             <nav className="px-4 py-4 flex-1 overflow-y-auto">
               <div className="space-y-2">
-                {clientNavItems.map((item) => (
+                {clientNavItems.filter((item) => item.href !== '/client-portal/check-ins').map((item) => (
                   <Link
                     key={item.name}
                     href={item.href}
@@ -635,7 +636,7 @@ export default function ClientNavigation() {
       {/* Navigation Menu */}
       <nav className="px-4 py-6 flex-1 overflow-y-auto">
         <div className="space-y-2">
-          {clientNavItems.map((item) => (
+          {clientNavItems.filter((item) => item.href !== '/client-portal/check-ins').map((item) => (
             <Link
               key={item.name}
               href={item.href}
