@@ -25,14 +25,17 @@ interface ResumableCheckIn {
   responseId?: string;
 }
 
-/** Get Monday YYYY-MM-DD for the reflection week (week this check-in was for). */
+/** Get Monday YYYY-MM-DD (local) for the reflection week (week this check-in was for). */
 function getReflectionWeekMonday(dueDate: string): string {
   const d = new Date(dueDate);
   d.setDate(d.getDate() - 7);
   const day = d.getDay();
   const toMon = day === 0 ? 6 : day - 1;
   d.setDate(d.getDate() - toMon);
-  return d.toISOString().split('T')[0];
+  const y = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, '0');
+  const date = String(d.getDate()).padStart(2, '0');
+  return `${y}-${mo}-${date}`;
 }
 
 export default function CheckIn2Page() {
@@ -111,7 +114,15 @@ export default function CheckIn2Page() {
     checkins.forEach((c) => {
       if (c.formId !== selectedFormId) return;
       if (c.status !== 'completed' && !c.responseId) return;
-      set.add(getReflectionWeekMonday(c.dueDate));
+      const due =
+        typeof c.dueDate === 'string'
+          ? c.dueDate
+          : (c.dueDate as any)?.toDate?.()
+            ? (c.dueDate as any).toDate().toISOString()
+            : c.dueDate != null
+              ? new Date(c.dueDate).toISOString()
+              : null;
+      if (due) set.add(getReflectionWeekMonday(due));
     });
     return set;
   }, [checkins, selectedFormId]);
