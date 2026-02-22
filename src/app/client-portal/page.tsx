@@ -1777,7 +1777,7 @@ export default function ClientPortalPage() {
                                   {statusLabel}
                                 </div>
                                 <Link
-                                  href={`/client-portal/check-in/${getCheckInLinkId(checkIn)}`}
+                                  href="/client-portal/check-in-2"
                                   className={`px-3 py-1.5 lg:px-4 lg:py-2 rounded-lg text-xs lg:text-sm font-medium transition-all duration-200 text-white shadow-md hover:shadow-lg ${buttonBg}`}
                                 >
                                   {buttonText}
@@ -2710,7 +2710,7 @@ export default function ClientPortalPage() {
                                     </p>
                                   </div>
                                   <Link
-                                    href={`/client-portal/check-in/${getCheckInLinkId(checkIn)}`}
+                                    href="/client-portal/check-in-2"
                                     className={`w-full px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 text-white text-center ${buttonBg}`}
                                   >
                                     {buttonText}
