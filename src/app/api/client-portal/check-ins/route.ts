@@ -450,38 +450,44 @@ export async function GET(request: NextRequest) {
     // Process each recurring series and expand missing weeks
     // Use for...of instead of forEach to support await
     for (const [seriesKey, seriesAssignments] of recurringSeriesMap.entries()) {
-      // If multiple assignments exist for the same form+client (multiple allocations), merge them
-      // Group by recurringWeek and keep only one per week (prefer completed, then most recent)
+      // If multiple assignments exist for the same form+client (multiple allocations), merge them.
+      // Prefer the coach-allocated schedule: same week, keep the one with EARLIEST dueDate (original allocation), then prefer completed, then most recent.
       const weekMap = new Map<number, any>();
+      const dueTime = (a: any) => new Date(a.dueDate).getTime();
       seriesAssignments.forEach(assignment => {
         const week = assignment.recurringWeek || 1;
         if (!weekMap.has(week)) {
           weekMap.set(week, assignment);
         } else {
-          // If duplicate week exists, prefer completed ones, then most recent
           const existing = weekMap.get(week)!;
           if (assignment.status === 'completed' && existing.status !== 'completed') {
             weekMap.set(week, assignment);
-          } else if (assignment.status === existing.status) {
-            // Both same status, prefer most recent assignedAt
-            const existingDate = existing.assignedAt ? new Date(existing.assignedAt).getTime() : 0;
-            const currentDate = assignment.assignedAt ? new Date(assignment.assignedAt).getTime() : 0;
-            if (currentDate > existingDate) {
+          } else if (existing.status === 'completed' && assignment.status !== 'completed') {
+            // Keep existing completed
+          } else {
+            // Same completion status: prefer earliest dueDate so coach's original schedule wins (avoids deploy showing April when localhost shows Feb)
+            if (dueTime(assignment) < dueTime(existing)) {
               weekMap.set(week, assignment);
+            } else if (dueTime(assignment) === dueTime(existing) && (assignment.assignedAt && existing.assignedAt)) {
+              const existingDate = new Date(existing.assignedAt).getTime();
+              const currentDate = new Date(assignment.assignedAt).getTime();
+              if (currentDate > existingDate) weekMap.set(week, assignment);
             }
           }
         }
       });
-      
-      // Convert back to array, sorted by week number
+
       const deduplicatedSeries = Array.from(weekMap.values()).sort((a, b) => {
         const weekA = a.recurringWeek || 1;
         const weekB = b.recurringWeek || 1;
         return weekA - weekB;
       });
-      
-      // Get the base assignment (prefer one with recurringWeek: 1, otherwise the first one)
-      const baseAssignment = deduplicatedSeries.find(a => a.recurringWeek === 1) || deduplicatedSeries[0];
+
+      // Base = Week 1 with earliest dueDate (coach's original schedule), so expansion and links use correct dates
+      const week1Candidates = deduplicatedSeries.filter(a => (a.recurringWeek || 1) === 1);
+      const baseAssignment = week1Candidates.length > 0
+        ? week1Candidates.reduce((best, a) => dueTime(a) < dueTime(best) ? a : best)
+        : (deduplicatedSeries.find(a => a.recurringWeek === 1) || deduplicatedSeries[0]);
       
       // Skip if no base assignment found (shouldn't happen, but safety check)
       if (!baseAssignment || !baseAssignment.clientId || !baseAssignment.formId) {
@@ -631,12 +637,14 @@ export async function GET(request: NextRequest) {
           } else if (existingIsCompleted && !currentIsCompleted) {
             // Keep existing completed one
           } else {
-            // Both same completion status, prefer the one from allWeeksFromDB (more recent query)
-            allExistingAssignmentsMap.set(week, assignment);
+            // Same completion: prefer earliest dueDate so coach-allocated schedule wins (deploy matches localhost)
+            const existingDue = new Date(existing.dueDate).getTime();
+            const currentDue = new Date(assignment.dueDate).getTime();
+            if (currentDue < existingDue) allExistingAssignmentsMap.set(week, assignment);
           }
         }
       });
-      
+
       const allExistingAssignments = Array.from(allExistingAssignmentsMap.values());
       const existingWeeks = new Set(allExistingAssignments.map(a => a.recurringWeek || 1));
       

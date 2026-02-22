@@ -77,12 +77,20 @@ export async function GET(
     
     // If this is a dynamically generated week, modify the assignment data
     if (isDynamicWeek && assignmentData) {
-      // Calculate the due date for this specific week
+      const docRecurringWeek = assignmentData.recurringWeek ?? 1;
       const firstDueDate = assignmentData.dueDate?.toDate?.() || new Date(assignmentData.dueDate);
-      const weekMonday = new Date(firstDueDate);
-      weekMonday.setDate(firstDueDate.getDate() + (7 * (dynamicWeekNumber - 1)));
-      weekMonday.setHours(9, 0, 0, 0); // Default due time
-      
+      // If this doc IS the real Week N doc (e.g. coach-allocated Week 8), use its dueDate so deploy matches localhost
+      const weekMonday =
+        docRecurringWeek === dynamicWeekNumber
+          ? new Date(firstDueDate)
+          : (() => {
+              const d = new Date(firstDueDate);
+              d.setDate(firstDueDate.getDate() + (7 * (dynamicWeekNumber - 1)));
+              d.setHours(9, 0, 0, 0);
+              return d;
+            })();
+      if (weekMonday.getHours() !== 9) weekMonday.setHours(9, 0, 0, 0);
+
       // Update assignment data for this specific week
       assignmentData = {
         ...assignmentData,
