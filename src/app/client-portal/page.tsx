@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { RoleProtected } from '@/components/ProtectedRoute';
 import ClientNavigation from '@/components/ClientNavigation';
 import Link from 'next/link';
+import { getCheckInLinkId } from '@/lib/checkin-link-utils';
 import NotificationBell from '@/components/NotificationBell';
 import {
   getTrafficLightStatus,
@@ -22,7 +23,6 @@ import {
   type CheckInWindow
 } from '@/lib/checkin-window-utils';
 import QuickStatsBar from '@/components/client-portal/QuickStatsBar';
-import { getCheckInLinkId } from '@/lib/checkin-link-utils';
 
 interface ClientStats {
   overallProgress: number;
@@ -1516,46 +1516,11 @@ export default function ClientPortalPage() {
                     return aDue - bDue;
                   });
 
-                  // Only show the CURRENT window's check-in in "Requiring Attention" so "Complete Now" never sends to a past week.
-                  // Use local date strings so behavior is identical in deploy (no UTC shift).
-                  const toLocalDateStr = (d: Date) =>
-                    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-                  const getWeekMondayLocalStr = (date: Date): string => {
-                    const x = new Date(date);
-                    const day = x.getDay();
-                    const daysToMonday = day === 0 ? 6 : day - 1;
-                    x.setDate(x.getDate() - daysToMonday);
-                    x.setHours(0, 0, 0, 0);
-                    return toLocalDateStr(x);
-                  };
-                  const getCurrentWindowMondayStr = (): string | null => {
-                    const day = now.getDay();
-                    const thisMonday = new Date(today);
-                    const daysToMonday = day === 0 ? 6 : day - 1;
-                    thisMonday.setDate(today.getDate() - daysToMonday);
-                    const currentMonday = new Date(thisMonday);
-                    if (day >= 5 || day === 0) currentMonday.setDate(thisMonday.getDate() + 7);
-                    const checkMonday = new Date(currentMonday);
-                    checkMonday.setHours(0, 0, 0, 0);
-                    const windowOpen = new Date(checkMonday);
-                    windowOpen.setDate(checkMonday.getDate() - 3);
-                    windowOpen.setHours(10, 0, 0, 0);
-                    const windowClose = new Date(checkMonday);
-                    windowClose.setDate(checkMonday.getDate() + 1);
-                    windowClose.setHours(12, 0, 0, 0);
-                    if (now >= windowOpen && now <= windowClose) return toLocalDateStr(checkMonday);
-                    return null;
-                  };
-                  const currentWindowMondayStr = getCurrentWindowMondayStr();
-                  const upcomingCheckins = currentWindowMondayStr
-                    ? allUpcoming.filter((c) => {
-                        const dueMondayStr = getWeekMondayLocalStr(new Date(c.dueDate));
-                        return dueMondayStr === currentWindowMondayStr;
-                      })
-                    : [];
+                  // Show all actionable check-ins (overdue + due soon) – aligned with Check-in 2 / no window enforcement
+                  const displayCheckins = allUpcoming.slice(0, 5);
 
-                  // If no actionable check-ins (or not in a window), show the next scheduled check-in
-                  if (upcomingCheckins.length === 0) {
+                  // If no actionable check-ins, show the next scheduled check-in
+                  if (displayCheckins.length === 0) {
                     // Find the next upcoming scheduled check-in
                     const nextScheduledCheckIn = assignedCheckins
                       .filter(checkIn => checkIn.status !== 'completed' && !(checkIn as any).responseId && !(checkIn as any).completedAt)
@@ -1726,7 +1691,7 @@ export default function ClientPortalPage() {
 
                   return (
                     <div className="space-y-4">
-                      {upcomingCheckins.map((checkIn) => {
+                      {displayCheckins.map((checkIn) => {
                         const dueDate = new Date(checkIn.dueDate);
                         const now = new Date();
                         
@@ -2691,42 +2656,8 @@ export default function ClientPortalPage() {
                         if (aIsOverdue && bIsOverdue) return bDue - aDue;
                         return aDue - bDue;
                       });
-                      const toLocalDateStrMobile = (d: Date) =>
-                        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-                      const getWeekMondayLocalStrMobile = (date: Date): string => {
-                        const x = new Date(date);
-                        const day = x.getDay();
-                        const daysToMonday = day === 0 ? 6 : day - 1;
-                        x.setDate(x.getDate() - daysToMonday);
-                        x.setHours(0, 0, 0, 0);
-                        return toLocalDateStrMobile(x);
-                      };
-                      const getCurrentWindowMondayStrMobile = (): string | null => {
-                        const day = now.getDay();
-                        const thisMonday = new Date(today);
-                        const daysToMonday = day === 0 ? 6 : day - 1;
-                        thisMonday.setDate(today.getDate() - daysToMonday);
-                        const currentMonday = new Date(thisMonday);
-                        if (day >= 5 || day === 0) currentMonday.setDate(thisMonday.getDate() + 7);
-                        const checkMonday = new Date(currentMonday);
-                        checkMonday.setHours(0, 0, 0, 0);
-                        const windowOpen = new Date(checkMonday);
-                        windowOpen.setDate(checkMonday.getDate() - 3);
-                        windowOpen.setHours(10, 0, 0, 0);
-                        const windowClose = new Date(checkMonday);
-                        windowClose.setDate(checkMonday.getDate() + 1);
-                        windowClose.setHours(12, 0, 0, 0);
-                        if (now >= windowOpen && now <= windowClose) return toLocalDateStrMobile(checkMonday);
-                        return null;
-                      };
-                      const currentWindowMondayStrMobile = getCurrentWindowMondayStrMobile();
-                      const upcomingCheckins = currentWindowMondayStrMobile
-                        ? allUpcomingMobile.filter((c) => {
-                            const dueMondayStr = getWeekMondayLocalStrMobile(new Date(c.dueDate));
-                            return dueMondayStr === currentWindowMondayStrMobile;
-                          })
-                        : [];
-                      if (upcomingCheckins.length === 0) {
+                      const displayCheckinsMobile = allUpcomingMobile.slice(0, 5);
+                      if (displayCheckinsMobile.length === 0) {
                         return (
                           <div className="text-center py-6">
                             <div className="w-14 h-14 bg-gradient-to-br from-emerald-400 to-green-500 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-lg">
@@ -2741,7 +2672,7 @@ export default function ClientPortalPage() {
                       }
                       return (
                         <div className="space-y-4">
-                          {upcomingCheckins.slice(0, 3).map((checkIn) => {
+                          {displayCheckinsMobile.map((checkIn) => {
                             const dueDate = new Date(checkIn.dueDate);
                             const now = new Date();
                             

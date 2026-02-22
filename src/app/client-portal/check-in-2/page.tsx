@@ -19,8 +19,20 @@ interface ResumableCheckIn {
   title: string;
   dueDate: string;
   status: string;
+  formId?: string;
   isRecurring?: boolean;
   recurringWeek?: number;
+  responseId?: string;
+}
+
+/** Get Monday YYYY-MM-DD for the reflection week (week this check-in was for). */
+function getReflectionWeekMonday(dueDate: string): string {
+  const d = new Date(dueDate);
+  d.setDate(d.getDate() - 7);
+  const day = d.getDay();
+  const toMon = day === 0 ? 6 : day - 1;
+  d.setDate(d.getDate() - toMon);
+  return d.toISOString().split('T')[0];
 }
 
 export default function CheckIn2Page() {
@@ -75,7 +87,7 @@ export default function CheckIn2Page() {
     thisMonday.setDate(today.getDate() - daysToMonday);
     thisMonday.setHours(0, 0, 0, 0);
     const options: { weekStart: string; label: string }[] = [];
-    for (let i = -4; i <= 2; i++) {
+    for (let i = -4; i <= 1; i++) {
       const m = new Date(thisMonday);
       m.setDate(thisMonday.getDate() + i * 7);
       const y = m.getFullYear();
@@ -92,6 +104,17 @@ export default function CheckIn2Page() {
     }
     return options;
   }, []);
+
+  const completedWeekStartsForForm = useMemo(() => {
+    if (!selectedFormId) return new Set<string>();
+    const set = new Set<string>();
+    checkins.forEach((c) => {
+      if (c.formId !== selectedFormId) return;
+      if (c.status !== 'completed' && !c.responseId) return;
+      set.add(getReflectionWeekMonday(c.dueDate));
+    });
+    return set;
+  }, [checkins, selectedFormId]);
 
   useEffect(() => {
     if (!userProfile?.email) {
@@ -298,20 +321,27 @@ export default function CheckIn2Page() {
                     <>
                       <p className="text-gray-600 text-sm mb-4">Which week are you completing this for?</p>
                       <div className="space-y-2 mb-6">
-                        {weekOptions.map((wo) => (
-                          <button
-                            key={wo.weekStart}
-                            type="button"
-                            onClick={() => setSelectedWeekStart(wo.weekStart)}
-                            className={`w-full text-left px-4 py-3 rounded-xl border-2 transition-colors ${
-                              selectedWeekStart === wo.weekStart
-                                ? 'border-amber-400 bg-amber-50 text-amber-900'
-                                : 'border-gray-200 hover:border-gray-300 text-gray-900'
-                            }`}
-                          >
-                            {wo.label}
-                          </button>
-                        ))}
+                        {weekOptions.map((wo) => {
+                          const alreadyDone = completedWeekStartsForForm.has(wo.weekStart);
+                          return (
+                            <button
+                              key={wo.weekStart}
+                              type="button"
+                              disabled={alreadyDone}
+                              onClick={() => !alreadyDone && setSelectedWeekStart(wo.weekStart)}
+                              className={`w-full text-left px-4 py-3 rounded-xl border-2 transition-colors ${
+                                alreadyDone
+                                  ? 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed'
+                                  : selectedWeekStart === wo.weekStart
+                                    ? 'border-amber-400 bg-amber-50 text-amber-900'
+                                    : 'border-gray-200 hover:border-gray-300 text-gray-900'
+                              }`}
+                            >
+                              <span>{wo.label}</span>
+                              {alreadyDone && <span className="ml-2 text-sm font-medium">✓ Done</span>}
+                            </button>
+                          );
+                        })}
                       </div>
                       <div className="flex gap-3">
                         <button
@@ -324,7 +354,11 @@ export default function CheckIn2Page() {
                         </button>
                         <button
                           type="button"
-                          disabled={!selectedWeekStart || resolving}
+                          disabled={
+                            !selectedWeekStart ||
+                            resolving ||
+                            completedWeekStartsForForm.has(selectedWeekStart)
+                          }
                           onClick={handleContinue}
                           className="flex-1 px-4 py-2.5 text-white rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                           style={{ backgroundColor: '#daa450' }}
