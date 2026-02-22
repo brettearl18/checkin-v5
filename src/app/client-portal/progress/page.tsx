@@ -378,36 +378,17 @@ export default function ClientProgressPage() {
   };
 
   const processQuestionProgress = (responses: FormResponse[]) => {
-    // Group responses by week
-    // Sort by recurringWeek first (most accurate), then by assignmentDueDate, then by submittedAt
+    // Sort by date (chronological) so "Question Progress Over Time" columns are left-to-right earliest → latest
     const sortedResponses = [...responses]
       .filter(r => r.responses && Array.isArray(r.responses) && r.responses.length > 0)
       .sort((a, b) => {
-        // First, sort by recurringWeek if both have it
-        if (a.recurringWeek !== null && a.recurringWeek !== undefined && 
-            b.recurringWeek !== null && b.recurringWeek !== undefined) {
-          return a.recurringWeek - b.recurringWeek;
-        }
-        
-        // If one has recurringWeek and the other doesn't, prioritize the one with it
-        if (a.recurringWeek !== null && a.recurringWeek !== undefined) {
-          return -1;
-        }
-        if (b.recurringWeek !== null && b.recurringWeek !== undefined) {
-          return 1;
-        }
-        
-        // Next, sort by assignmentDueDate if available
-        if (a.assignmentDueDate && b.assignmentDueDate) {
-          const dateA = new Date(a.assignmentDueDate);
-          const dateB = new Date(b.assignmentDueDate);
-          return dateA.getTime() - dateB.getTime();
-        }
-        
-        // Fall back to submittedAt
-        const dateA = new Date(a.submittedAt);
-        const dateB = new Date(b.submittedAt);
-        return dateA.getTime() - dateB.getTime();
+        const dateA = a.assignmentDueDate
+          ? new Date(a.assignmentDueDate).getTime()
+          : new Date(a.submittedAt).getTime();
+        const dateB = b.assignmentDueDate
+          ? new Date(b.assignmentDueDate).getTime()
+          : new Date(b.submittedAt).getTime();
+        return dateA - dateB;
       });
 
     if (sortedResponses.length === 0) {
@@ -866,6 +847,62 @@ export default function ClientProgressPage() {
               </div>
             </div>
 
+            {/* Completed check-ins – quick reference list */}
+            {filteredResponses.length > 0 && (
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-6">
+                <div className="px-3 md:px-6 py-3 md:py-4 border-b border-gray-100" style={{ backgroundColor: '#fef9e7' }}>
+                  <h2 className="text-base md:text-lg font-bold text-gray-900">Completed check-ins</h2>
+                  <p className="text-xs md:text-sm text-gray-600 mt-0.5 md:mt-1">Quick reference of check-ins you’ve submitted (for the selected time range)</p>
+                </div>
+                <div className="p-3 md:p-4">
+                  <ul className="space-y-2">
+                    {[...filteredResponses]
+                      .sort((a, b) => {
+                        const dateA = new Date(a.submittedAt || a.completedAt || 0).getTime();
+                        const dateB = new Date(b.submittedAt || b.completedAt || 0).getTime();
+                        return dateB - dateA;
+                      })
+                      .map((r) => {
+                        const date = r.submittedAt || r.completedAt;
+                        const dateStr = date
+                          ? new Date(date).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
+                          : '—';
+                        const scoreStr = r.score != null ? `${r.score}%` : '—';
+                        const weekLabel = r.recurringWeek != null && r.totalWeeks != null ? `Week ${r.recurringWeek} of ${r.totalWeeks}` : null;
+                        return (
+                          <li
+                            key={r.id || r.assignmentId || dateStr}
+                            className="flex flex-wrap items-center justify-between gap-2 py-2 px-3 rounded-lg hover:bg-gray-50 border border-transparent hover:border-gray-100"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <span className="font-medium text-gray-900 truncate block">{r.formTitle || 'Check-in'}</span>
+                              <span className="text-xs text-gray-500">
+                                {dateStr}
+                                {weekLabel ? ` · ${weekLabel}` : ''}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              {r.score != null && (
+                                <span className="text-sm font-semibold text-gray-700">{scoreStr}</span>
+                              )}
+                              {r.id && (
+                                <Link
+                                  href={`/client-portal/feedback/${r.id}`}
+                                  className="text-xs font-medium whitespace-nowrap"
+                                  style={{ color: '#daa450' }}
+                                >
+                                  View →
+                                </Link>
+                              )}
+                            </div>
+                          </li>
+                        );
+                      })}
+                  </ul>
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Question Progress Grid */}
               {questionProgress.length > 0 ? (
@@ -909,8 +946,8 @@ export default function ClientProgressPage() {
                             className="text-center py-1.5 px-1 font-semibold text-[10px] text-gray-600 uppercase tracking-wider min-w-[60px]"
                           >
                             <div className="flex flex-col items-center">
-                              <span className="text-[9px] text-gray-500 font-medium">W{week.week}</span>
-                              <span className="text-[9px] text-gray-400">{week.date}</span>
+                              <span className="text-[9px] text-gray-700 font-medium">{week.date}</span>
+                              <span className="text-[8px] text-gray-400">Wk {week.week}</span>
                             </div>
                           </th>
                         ))}
@@ -994,7 +1031,7 @@ export default function ClientProgressPage() {
                               })}
                             >
                             </div>
-                            <span className="text-[8px] text-gray-500 font-medium">W{week.week}</span>
+                            <span className="text-[8px] text-gray-500 font-medium" title={week.date}>Wk {week.week}</span>
                           </div>
                         ))}
                         {/* Fill empty weeks if needed */}
