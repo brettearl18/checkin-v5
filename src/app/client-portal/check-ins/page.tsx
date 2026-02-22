@@ -33,6 +33,7 @@ const isCheckInCurrentlyOpen = (dueDate: Date | string): boolean => {
   return now >= windowOpen && now <= windowClose;
 };
 import { getTrafficLightStatus, getDefaultThresholds, convertLegacyThresholds, type ScoringThresholds } from '@/lib/scoring-utils';
+import { getCheckInLinkId } from '@/lib/checkin-link-utils';
 
 interface CheckIn {
   id: string;
@@ -497,8 +498,9 @@ export default function ClientCheckInsPage() {
       return now >= windowOpen && now <= windowClose;
     };
 
-    // Which Monday is "current" for the open window? (so we only show that one check-in)
-    // Use local date strings so deploy matches localhost (no UTC shift).
+    // Which Monday is "current"? Use the reflection week (the week containing today).
+    // That way "Check in now" is always for the week the user is in (e.g. Sat Feb 21 → Week of Feb 16–22),
+    // not next week. Use local date strings so deploy matches localhost (no UTC shift).
     const toLocalDateStr = (d: Date) =>
       `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     const getWeekMondayLocalStr = (date: Date): string => {
@@ -509,22 +511,14 @@ export default function ClientCheckInsPage() {
       x.setHours(0, 0, 0, 0);
       return toLocalDateStr(x);
     };
-    const getCurrentWindowMonday = (): string | null => {
+    // Current = this week's Monday (reflection week), so Saturday shows "this week" not "next week"
+    const getCurrentWindowMonday = (): string => {
       const day = now.getDay();
       const thisMonday = new Date(today);
       const daysToMonday = day === 0 ? 6 : day - 1;
       thisMonday.setDate(today.getDate() - daysToMonday);
-      let currentMonday: Date;
-      if (day >= 5 || day === 0) {
-        currentMonday = new Date(thisMonday);
-        currentMonday.setDate(thisMonday.getDate() + 7);
-      } else {
-        currentMonday = new Date(thisMonday);
-      }
-      const checkMonday = new Date(currentMonday);
-      checkMonday.setHours(0, 0, 0, 0);
-      if (!isCheckInOpenForWeek(checkMonday)) return null;
-      return toLocalDateStr(checkMonday);
+      thisMonday.setHours(0, 0, 0, 0);
+      return toLocalDateStr(thisMonday);
     };
 
     const currentMondayStr = getCurrentWindowMonday();
@@ -537,8 +531,8 @@ export default function ClientCheckInsPage() {
 
       const dueMondayStr = getWeekMondayLocalStr(new Date(checkin.dueDate));
 
-      // Only include the single check-in for the week whose window is open right now
-      if (currentMondayStr && dueMondayStr === currentMondayStr) return true;
+      // Only include the single check-in for the reflection week (week containing today)
+      if (dueMondayStr === currentMondayStr) return true;
       return false;
     }).sort((a, b) => {
       const aDue = new Date(a.dueDate).getTime();
@@ -972,17 +966,15 @@ export default function ClientCheckInsPage() {
                             </p>
                           ) : currentDueDate ? (
                             <p className="text-gray-600 text-sm lg:text-sm mb-4">
-                              Opens Friday at 10:00 AM, closes Tuesday at 12:00 PM
+                              Window closed – you can still complete this check-in; it will be reviewed by your coach.
                             </p>
                           ) : null}
-                          {isAvailable && (
-                            <Link
-                              href={`/client-portal/check-in/${currentCheckin.id}`}
-                              className="inline-block px-5 py-3 lg:px-4 lg:py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl lg:rounded-lg text-base lg:text-sm font-semibold transition-all duration-200 shadow-sm hover:shadow-md min-h-[48px] lg:min-h-[44px] flex items-center justify-center"
-                            >
-                              Check in now
-                            </Link>
-                          )}
+                          <Link
+                            href={`/client-portal/check-in/${getCheckInLinkId(currentCheckin)}`}
+                            className="inline-block px-5 py-3 lg:px-4 lg:py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl lg:rounded-lg text-base lg:text-sm font-semibold transition-all duration-200 shadow-sm hover:shadow-md min-h-[48px] lg:min-h-[44px] flex items-center justify-center"
+                          >
+                            Check in now
+                          </Link>
                         </div>
                       </div>
                     </div>
@@ -1013,19 +1005,21 @@ export default function ClientCheckInsPage() {
                           <p className="text-gray-600 text-sm mb-2 leading-relaxed">
                             Due: {new Date(nextScheduled.dueDate).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
                           </p>
-                          {isNextAvailable && (
+                          {isNextAvailable ? (
                             <p className="text-gray-600 text-sm mt-1 leading-relaxed">
                               ✓ Window is open now
                             </p>
+                          ) : (
+                            <p className="text-gray-600 text-sm mt-1 leading-relaxed">
+                              You can still open and complete this check-in; it will be reviewed by your coach.
+                            </p>
                           )}
-                          {isNextAvailable && (
-                            <Link
-                              href={`/client-portal/check-in/${nextScheduled.id}`}
-                              className="inline-block mt-4 px-5 py-3 lg:px-4 lg:py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl lg:rounded-lg text-base lg:text-sm font-semibold transition-all duration-200 shadow-sm hover:shadow-md min-h-[48px] lg:min-h-[44px] flex items-center justify-center"
-                            >
-                              Check in now
-                            </Link>
-                          )}
+                          <Link
+                            href={`/client-portal/check-in/${getCheckInLinkId(nextScheduled)}`}
+                            className="inline-block mt-4 px-5 py-3 lg:px-4 lg:py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl lg:rounded-lg text-base lg:text-sm font-semibold transition-all duration-200 shadow-sm hover:shadow-md min-h-[48px] lg:min-h-[44px] flex items-center justify-center"
+                          >
+                            Check in now
+                          </Link>
                         </div>
                       </div>
                     </div>
@@ -1606,7 +1600,7 @@ export default function ClientCheckInsPage() {
                                   {isOverdue && (
                                     <>
                                       <Link
-                                        href={`/client-portal/check-in/${checkin.id}`}
+                                        href={`/client-portal/check-in/${getCheckInLinkId(checkin)}`}
                                         className="w-full sm:w-auto inline-block px-5 py-3.5 lg:px-4 lg:py-2 text-white rounded-xl lg:rounded-lg text-base lg:text-sm font-semibold transition-all duration-200 shadow-sm hover:shadow-md text-center min-h-[48px] lg:min-h-[36px] flex items-center justify-center"
                                         style={{ backgroundColor: '#daa450' }}
                                       >
@@ -1628,7 +1622,7 @@ export default function ClientCheckInsPage() {
                                   )}
                                   {isAvailable && !isOverdue && (
                                     <Link
-                                      href={`/client-portal/check-in/${checkin.id}`}
+                                      href={`/client-portal/check-in/${getCheckInLinkId(checkin)}`}
                                       className="w-full sm:w-auto inline-block px-5 py-3.5 lg:px-4 lg:py-2 text-white rounded-xl lg:rounded-lg text-base lg:text-sm font-semibold transition-all duration-200 shadow-sm hover:shadow-md text-center min-h-[48px] lg:min-h-[36px] flex items-center justify-center"
                                       style={{ backgroundColor: '#daa450' }}
                                     >
@@ -1636,15 +1630,13 @@ export default function ClientCheckInsPage() {
                                     </Link>
                                   )}
                                   {!isAvailable && !isOverdue && !isCompleted && (
-                                    <button
-                                      disabled
-                                      className="w-full sm:w-auto px-5 py-3.5 lg:px-4 lg:py-2 bg-gray-300 text-gray-600 rounded-xl lg:rounded-lg text-base lg:text-sm font-semibold cursor-not-allowed min-h-[48px] lg:min-h-[36px]"
-                                      title={isAvailable 
-                                        ? 'Check-in is available now' 
-                                        : 'Opens Friday 10am, closes Tuesday 12pm'}
+                                    <Link
+                                      href={`/client-portal/check-in/${getCheckInLinkId(checkin)}`}
+                                      className="w-full sm:w-auto inline-block px-5 py-3.5 lg:px-4 lg:py-2 text-center rounded-xl lg:rounded-lg text-base lg:text-sm font-semibold min-h-[48px] lg:min-h-[36px] flex items-center justify-center border-2 border-amber-400 bg-amber-50 text-amber-800 hover:bg-amber-100 transition-colors"
+                                      title="You can complete this check-in anytime; it will be reviewed by your coach"
                                     >
-                                      {dueDateHasArrived ? 'Window Closed' : 'Not Available Yet'}
-                                    </button>
+                                      {dueDateHasArrived ? 'Check in anyway' : 'Open check-in'}
+                                    </Link>
                                   )}
                                   {isCompleted && (
                                     <div className="flex flex-col sm:flex-row sm:items-end gap-3 w-full sm:w-auto">

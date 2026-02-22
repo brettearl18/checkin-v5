@@ -22,6 +22,7 @@ import {
   type CheckInWindow
 } from '@/lib/checkin-window-utils';
 import QuickStatsBar from '@/components/client-portal/QuickStatsBar';
+import { getCheckInLinkId } from '@/lib/checkin-link-utils';
 
 interface ClientStats {
   overallProgress: number;
@@ -1696,21 +1697,12 @@ export default function ClientPortalPage() {
                                 <div className="px-2.5 py-1 lg:px-3 lg:py-1 rounded-full text-[10px] lg:text-xs font-medium bg-blue-100 text-blue-700">
                                   Scheduled
                                 </div>
-                                {isAvailable ? (
-                                  <Link
-                                    href={`/client-portal/check-in/${nextScheduledCheckIn.id}`}
-                                    className="px-3 py-1.5 lg:px-4 lg:py-2 rounded-lg text-xs lg:text-sm font-medium transition-all duration-200 text-white shadow-md hover:shadow-lg bg-green-600 hover:bg-green-700"
-                                  >
-                                    Start Check-in
-                                  </Link>
-                                ) : (
-                                  <button
-                                    disabled
-                                    className="px-3 py-1.5 lg:px-4 lg:py-2 bg-gray-300 text-gray-600 rounded-lg text-xs lg:text-sm font-medium cursor-not-allowed"
-                                  >
-                                    Not Available Yet
-                                  </button>
-                                )}
+                                <Link
+                                  href={`/client-portal/check-in/${getCheckInLinkId(nextScheduledCheckIn)}`}
+                                  className={`px-3 py-1.5 lg:px-4 lg:py-2 rounded-lg text-xs lg:text-sm font-medium transition-all duration-200 text-white shadow-md hover:shadow-lg ${isAvailable ? 'bg-green-600 hover:bg-green-700' : 'bg-amber-500 hover:bg-amber-600'}`}
+                                >
+                                  {isAvailable ? 'Start Check-in' : 'Open check-in'}
+                                </Link>
                               </div>
                             </div>
                           </div>
@@ -1820,7 +1812,7 @@ export default function ClientPortalPage() {
                                   {statusLabel}
                                 </div>
                                 <Link
-                                  href={`/client-portal/check-in/${checkIn.id}`}
+                                  href={`/client-portal/check-in/${getCheckInLinkId(checkIn)}`}
                                   className={`px-3 py-1.5 lg:px-4 lg:py-2 rounded-lg text-xs lg:text-sm font-medium transition-all duration-200 text-white shadow-md hover:shadow-lg ${buttonBg}`}
                                 >
                                   {buttonText}
@@ -2787,7 +2779,7 @@ export default function ClientPortalPage() {
                                     </p>
                                   </div>
                                   <Link
-                                    href={`/client-portal/check-in/${checkIn.id}`}
+                                    href={`/client-portal/check-in/${getCheckInLinkId(checkIn)}`}
                                     className={`w-full px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 text-white text-center ${buttonBg}`}
                                   >
                                     {buttonText}
