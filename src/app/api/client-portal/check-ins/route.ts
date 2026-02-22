@@ -46,24 +46,41 @@ export async function GET(request: NextRequest) {
     const accessResult = await verifyClientAccess(request, clientId);
     if (accessResult instanceof NextResponse) return accessResult;
 
+    // Resolve possible client IDs (doc id + authUid) so we fetch the SAME assignments the coach sees.
+    // Assignments may be stored with client doc id or authUid depending on how they were created.
+    let clientDoc = await db.collection('clients').doc(clientId).get();
+    let possibleClientIds: string[] = [clientId];
+    if (clientDoc.exists) {
+      const clientData = clientDoc.data();
+      if (clientData?.authUid && clientData.authUid !== clientId) {
+        possibleClientIds.push(clientData.authUid);
+      }
+    } else {
+      const byAuthUid = await db.collection('clients').where('authUid', '==', clientId).limit(1).get();
+      if (!byAuthUid.empty) {
+        const doc = byAuthUid.docs[0];
+        possibleClientIds = [doc.id, clientId];
+        const d = doc.data();
+        if (d?.authUid) possibleClientIds.push(d.authUid);
+      }
+    }
+    possibleClientIds = [...new Set(possibleClientIds)];
+
     // Check if client has completed onboarding
-    // If not, return empty check-ins list (coaches can still allocate, but clients won't see them)
     let onboardingCompleted = false;
     try {
-      const clientDoc = await db.collection('clients').doc(clientId).get();
-      if (clientDoc.exists) {
-        const clientData = clientDoc.data();
+      const checkDoc = clientDoc.exists ? clientDoc : await db.collection('clients').doc(possibleClientIds[0]).get();
+      if (checkDoc.exists) {
+        const clientData = checkDoc.data();
         const canStartCheckIns = clientData?.canStartCheckIns;
         const onboardingStatus = clientData?.onboardingStatus;
-        // Onboarding is completed if status is 'completed' or 'submitted', OR canStartCheckIns is true
-        onboardingCompleted = 
-          onboardingStatus === 'completed' || 
+        onboardingCompleted =
+          onboardingStatus === 'completed' ||
           onboardingStatus === 'submitted' ||
           canStartCheckIns === true;
       }
     } catch (error) {
       console.error('Error checking client onboarding status:', error);
-      // If we can't check, default to showing check-ins (fail open for better UX)
       onboardingCompleted = true;
     }
 
@@ -84,15 +101,44 @@ export async function GET(request: NextRequest) {
     }
 
     let allAssignments: any[] = [];
+    const seenDocIds = new Set<string>();
 
     try {
-      // Try with orderBy first
-      const assignmentsSnapshot = await db.collection('check_in_assignments')
-        .where('clientId', '==', clientId)
-        .orderBy('dueDate', 'asc')
-        .get();
+      // Fetch assignments using ALL possible client IDs (same as coach API) so client sees coach's schedule
+      let combinedDocs: { id: string; data: () => any }[] = [];
+      for (const idToTry of possibleClientIds) {
+        try {
+          const snap = await db.collection('check_in_assignments')
+            .where('clientId', '==', idToTry)
+            .orderBy('dueDate', 'asc')
+            .get();
+          snap.docs.forEach((d: { id: string; data: () => any }) => {
+            if (!seenDocIds.has(d.id)) {
+              seenDocIds.add(d.id);
+              combinedDocs.push(d);
+            }
+          });
+        } catch {
+          const snap = await db.collection('check_in_assignments')
+            .where('clientId', '==', idToTry)
+            .get();
+          snap.docs.forEach((d: { id: string; data: () => any }) => {
+            if (!seenDocIds.has(d.id)) {
+              seenDocIds.add(d.id);
+              combinedDocs.push(d);
+            }
+          });
+        }
+      }
+      combinedDocs.sort((a, b) => {
+        const aDue = a.data()?.dueDate;
+        const bDue = b.data()?.dueDate;
+        const aTime = aDue?.toDate ? aDue.toDate().getTime() : aDue?._seconds ? aDue._seconds * 1000 : new Date(aDue || 0).getTime();
+        const bTime = bDue?.toDate ? bDue.toDate().getTime() : bDue?._seconds ? bDue._seconds * 1000 : new Date(bDue || 0).getTime();
+        return aTime - bTime;
+      });
 
-      allAssignments = await Promise.all(assignmentsSnapshot.docs.map(async (doc) => {
+      allAssignments = await Promise.all(combinedDocs.map(async (doc) => {
         const data = doc.data();
         
         // Helper function to convert date fields
@@ -230,13 +276,22 @@ export async function GET(request: NextRequest) {
       }));
     } catch (indexError) {
       console.log('Index error, trying without orderBy:', indexError);
-      
-      // Fallback: query without orderBy
-      const assignmentsSnapshot = await db.collection('check_in_assignments')
-        .where('clientId', '==', clientId)
-        .get();
 
-      allAssignments = await Promise.all(assignmentsSnapshot.docs.map(async (doc) => {
+      const fallbackDocs: { id: string; data: () => any }[] = [];
+      const seen = new Set<string>();
+      for (const idToTry of possibleClientIds) {
+        const snap = await db.collection('check_in_assignments')
+          .where('clientId', '==', idToTry)
+          .get();
+        snap.docs.forEach((d: { id: string; data: () => any }) => {
+          if (!seen.has(d.id)) {
+            seen.add(d.id);
+            fallbackDocs.push(d);
+          }
+        });
+      }
+
+      allAssignments = await Promise.all(fallbackDocs.map(async (doc) => {
         const data = doc.data();
         
         // Helper function to convert date fields

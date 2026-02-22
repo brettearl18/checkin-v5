@@ -980,45 +980,46 @@ export default function ClientCheckInsPage() {
                     </div>
                   ) : nextScheduled ? (
                     <div className="bg-white border-2 rounded-2xl lg:rounded-3xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border-gray-100 p-5 lg:p-6 transition-all duration-200">
-                      <div className={`px-4 py-4 sm:px-6 sm:py-5 lg:px-8 lg:py-6 border-b-2 mb-4 rounded-t-2xl lg:rounded-t-3xl`} style={{ backgroundColor: '#fef9e7', borderColor: '#daa450' }}>
+                      <div className={`px-4 py-4 sm:px-6 sm:py-5 lg:px-8 lg:py-6 border-b-2 mb-4 rounded-t-2xl lg:rounded-t-3xl`} style={{ backgroundColor: '#f0f4f8', borderColor: '#94a3b8' }}>
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 lg:w-12 lg:h-12 rounded-xl lg:rounded-2xl flex items-center justify-center flex-shrink-0 bg-white bg-opacity-20">
-                            <svg className="w-5 h-5 lg:w-6 lg:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-5 h-5 lg:w-6 lg:h-6 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                             </svg>
                           </div>
-                          <h3 className="text-xl lg:text-lg font-bold text-gray-900">{isNextAvailable ? 'Available Now' : 'Next Check-in'}</h3>
+                          <h3 className="text-xl lg:text-lg font-bold text-gray-900">Next check-in (future week)</h3>
                         </div>
                       </div>
                       <div className="flex items-start gap-4">
-                        <div className="flex-shrink-0 w-14 h-14 lg:w-12 lg:h-12 rounded-xl lg:rounded-lg flex items-center justify-center" style={{ backgroundColor: '#daa450' }}>
-                          <svg className="w-7 h-7 lg:w-6 lg:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <div className="flex-shrink-0 w-14 h-14 lg:w-12 lg:h-12 rounded-xl lg:rounded-lg flex items-center justify-center bg-slate-200">
+                          <svg className="w-7 h-7 lg:w-6 lg:h-6 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                           </svg>
                         </div>
                         <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-slate-600 mb-1">No check-in due for your current week</p>
                           <p className="text-base lg:text-sm text-gray-700 font-semibold mb-2 break-words">
                             {nextScheduled.isRecurring && nextScheduled.recurringWeek 
                               ? `Week ${nextScheduled.recurringWeek}: ${nextScheduled.title}`
                               : nextScheduled.title}
                           </p>
                           <p className="text-gray-600 text-sm mb-2 leading-relaxed">
-                            Due: {new Date(nextScheduled.dueDate).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                            Due: {new Date(nextScheduled.dueDate).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
                           </p>
                           {isNextAvailable ? (
                             <p className="text-gray-600 text-sm mt-1 leading-relaxed">
-                              ✓ Window is open now
+                              ✓ Window opens then – you can open the form early if you want.
                             </p>
                           ) : (
                             <p className="text-gray-600 text-sm mt-1 leading-relaxed">
-                              You can still open and complete this check-in; it will be reviewed by your coach.
+                              This is a future week. Complete it when the date above arrives, or open it early below.
                             </p>
                           )}
                           <Link
                             href={`/client-portal/check-in/${getCheckInLinkId(nextScheduled)}`}
-                            className="inline-block mt-4 px-5 py-3 lg:px-4 lg:py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl lg:rounded-lg text-base lg:text-sm font-semibold transition-all duration-200 shadow-sm hover:shadow-md min-h-[48px] lg:min-h-[44px] flex items-center justify-center"
+                            className="inline-block mt-4 px-5 py-3 lg:px-4 lg:py-2 border-2 border-amber-400 bg-amber-50 text-amber-800 hover:bg-amber-100 rounded-xl lg:rounded-lg text-base lg:text-sm font-semibold transition-all duration-200 min-h-[48px] lg:min-h-[44px] flex items-center justify-center"
                           >
-                            Check in now
+                            Open future check-in
                           </Link>
                         </div>
                       </div>
