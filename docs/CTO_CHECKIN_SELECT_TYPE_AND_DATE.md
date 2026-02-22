@@ -60,7 +60,7 @@ Result: client never has to understand “Week 8”, “due date”, or “windo
 - **New UI:** e.g. on Check-ins page, a card: “Start a check-in” → modal or new page: (1) dropdown or list of assigned form titles, (2) week/date picker, (3) “Continue” → open existing form page with a **resolved** assignment id (or a “virtual” id we can resolve on submit).
 - **Resolve assignment:** From (clientId, formId, selectedWeekStart), either:
   - Find an existing `check_in_assignments` doc whose `dueDate` (or week) matches that week and use its id for the form + submit; or
-  - If we allow “any week” and no assignment exists, **create** an assignment for that (clientId, formId, week) on submit and link the new response to it (same as current “dynamic week” behaviour).
+  - **Dynamic create:** If no assignment exists for that week, **create** one on demand when the client clicks Continue (using any existing assignment for that client+form as template). The new assignment is then used for the form and submit. No need to pre-create all weeks; coach can assign the form once (e.g. one “base” or week 1), and other weeks are created when the client starts a check-in for that week.
 - **Submit:** Reuse current submit API. Payload includes `assignmentId` (or a temporary “formId + weekStart” token). Server either:
   - Updates the existing assignment and creates formResponse with `assignmentId` + `recurringWeek` (or equivalent week identifier), or
   - Creates a new assignment for that week and then creates formResponse linked to it.
@@ -92,8 +92,8 @@ Today we have:
 **Proposed resolution (server-side):**
 
 1. Normalise “selected date” to a **week key** (e.g. Monday of that week, or “week ending” date). Use the same convention everywhere (e.g. Monday 00:00 local or UTC, or store ISO week).
-2. **Find assignment:** Query `check_in_assignments` where `clientId == X`, `formId == Y`, and the assignment’s week (derived from `dueDate` or stored `recurringWeek`) equals the selected week. If exactly one → use it. If none → “create on submit” (create assignment for that week when the client submits, then link response).
-3. **If multiple assignments** (e.g. two series for same form+client): prefer the one with **earliest** first due date (coach’s “main” schedule), same as we did for the April/February fix.
+2. **Find assignment:** Query `check_in_assignments` where `clientId == X`, `formId == Y`, and the assignment’s week (derived from `dueDate`) equals the selected week. If found → use it. If **none** → **create on demand**: create a new assignment doc for that (clientId, formId, week) using the first existing assignment for that client+form as template (coachId, formTitle, etc.), then return the new doc id. Client opens the form; on submit the existing submit API records the response against that assignment. No preloaded list of weeks required.
+3. **If multiple assignments** (e.g. two series for same form+client): prefer the one with **earliest** first due date (coach’s “main” schedule).
 
 This keeps coach-allocated schedules intact and avoids duplicate “weeks” for the same form+client.
 
@@ -125,6 +125,11 @@ So: **no data loss**, and **progress continues** to be tracked the same way.
 3. **No big-bang migration:**  
    - No change to existing documents.  
    - New flow only adds a different way to **start** a check-in and to **resolve** the assignment; the rest of the pipeline (form, submit, history, progress) is unchanged.
+
+4. **One-time cleanup (optional):**  
+   - To remove pre-created future-week assignments and rely on dynamic create only: run **POST /api/admin/cleanup-precreated-checkins** (admin only).  
+   - It keeps all **completed** assignments and exactly **one template** per (clientId, formId) for incomplete ones; deletes the rest.  
+   - Clients remain allocated to their form(s); no form response data is touched. Use `{ "dryRun": true }` first to see what would be deleted.
 
 ---
 

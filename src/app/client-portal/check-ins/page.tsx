@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { RoleProtected } from '@/components/ProtectedRoute';
 import ClientNavigation from '@/components/ClientNavigation';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase-client';
 // Window system removed - using simple Friday 10am to Tuesday 12pm logic
@@ -77,6 +78,13 @@ export default function ClientCheckInsPage() {
   const [reassigningFor, setReassigningFor] = useState<string | null>(null);
   const [requestingReopenForId, setRequestingReopenForId] = useState<string | null>(null);
   const [reopenRequestedIds, setReopenRequestedIds] = useState<Set<string>>(new Set());
+  // Option A: Start a check-in by type + date
+  const [showStartCheckinModal, setShowStartCheckinModal] = useState(false);
+  const [startCheckinStep, setStartCheckinStep] = useState<1 | 2>(1);
+  const [startCheckinFormId, setStartCheckinFormId] = useState<string | null>(null);
+  const [startCheckinWeekStart, setStartCheckinWeekStart] = useState<string | null>(null);
+  const [startCheckinResolving, setStartCheckinResolving] = useState(false);
+  const router = useRouter();
 
   useEffect(() => {
     // Wait for auth to finish loading before fetching client ID
@@ -94,6 +102,45 @@ export default function ClientCheckInsPage() {
       }
     }
   }, [clientId, filter]);
+
+  // Option A: unique form types (check-in types) from assigned check-ins
+  const startCheckinFormTypes = useMemo(() => {
+    const seen = new Set<string>();
+    return checkins
+      .filter((c) => {
+        if (seen.has(c.formId)) return false;
+        seen.add(c.formId);
+        return true;
+      })
+      .map((c) => ({ formId: c.formId, title: c.title }));
+  }, [checkins]);
+
+  // Option A: week options (last 4 + this + next 2), Monday YYYY-MM-DD
+  const startCheckinWeekOptions = useMemo(() => {
+    const today = new Date();
+    const day = today.getDay();
+    const daysToMonday = day === 0 ? 6 : day - 1;
+    const thisMonday = new Date(today);
+    thisMonday.setDate(today.getDate() - daysToMonday);
+    thisMonday.setHours(0, 0, 0, 0);
+    const options: { weekStart: string; label: string }[] = [];
+    for (let i = -4; i <= 2; i++) {
+      const m = new Date(thisMonday);
+      m.setDate(thisMonday.getDate() + i * 7);
+      const y = m.getFullYear();
+      const mo = String(m.getMonth() + 1).padStart(2, '0');
+      const d = String(m.getDate()).padStart(2, '0');
+      const weekStart = `${y}-${mo}-${d}`;
+      const sun = new Date(m);
+      sun.setDate(m.getDate() + 6);
+      const label =
+        i === 0
+          ? `This week (${m.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${sun.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})`
+          : `${m.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${sun.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+      options.push({ weekStart, label });
+    }
+    return options;
+  }, []);
 
   // Refresh check-ins when page becomes visible or gains focus (e.g., returning from check-in submission)
   useEffect(() => {
@@ -862,6 +909,25 @@ export default function ClientCheckInsPage() {
               </p>
             </div>
 
+            {/* Start a check-in (Option A) */}
+            {startCheckinFormTypes.length > 0 && (
+              <div className="mb-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStartCheckinStep(1);
+                    setStartCheckinFormId(null);
+                    setStartCheckinWeekStart(null);
+                    setShowStartCheckinModal(true);
+                  }}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium text-white shadow-sm transition-colors"
+                  style={{ backgroundColor: '#daa450' }}
+                >
+                  Start a check-in
+                </button>
+              </div>
+            )}
+
             {/* Current Check-in Status Banner */}
             {(() => {
               // Current check-in should ONLY be from toDoCheckins (available or overdue)
@@ -1597,7 +1663,7 @@ export default function ClientCheckInsPage() {
                                 </div>
 
                                 {/* Right: Action Button */}
-                                <div className="flex-shrink-0 w-full sm:w-auto flex flex-col gap-2" onClick={(e) => completedLink && e.stopPropagation()}>
+                                <div className="flex-shrink-0 w-full sm:w-auto flex flex-col gap-2" onClick={(e) => isCompleted && e.stopPropagation()}>
                                   {isOverdue && (
                                     <>
                                       <Link
@@ -1828,6 +1894,136 @@ export default function ClientCheckInsPage() {
               >
                 {markingAsMissed ? 'Marking...' : 'Mark as Missed'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Start a check-in modal (Option A: type + week) */}
+      {showStartCheckinModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-xl">
+            <div className="p-6 pb-4 flex items-center justify-between border-b border-gray-100">
+              <h2 className="text-xl font-bold text-gray-900">
+                {startCheckinStep === 1 ? 'Choose check-in type' : 'Which week?'}
+              </h2>
+              <button
+                type="button"
+                onClick={() => setShowStartCheckinModal(false)}
+                className="p-2 rounded-lg text-gray-500 hover:bg-gray-100"
+                aria-label="Close"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="p-6 pt-4">
+              {startCheckinStep === 1 && (
+                <>
+                  <p className="text-gray-600 text-sm mb-4">Select the type of check-in you want to complete.</p>
+                  <div className="space-y-2 mb-6">
+                    {startCheckinFormTypes.map((ft) => (
+                      <button
+                        key={ft.formId}
+                        type="button"
+                        onClick={() => setStartCheckinFormId(ft.formId)}
+                        className={`w-full text-left px-4 py-3 rounded-xl border-2 transition-colors ${
+                          startCheckinFormId === ft.formId
+                            ? 'border-amber-400 bg-amber-50 text-amber-900'
+                            : 'border-gray-200 hover:border-gray-300 text-gray-900'
+                        }`}
+                      >
+                        {ft.title}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowStartCheckinModal(false)}
+                      className="flex-1 px-4 py-2.5 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!startCheckinFormId}
+                      onClick={() => setStartCheckinStep(2)}
+                      className="flex-1 px-4 py-2.5 text-white rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                      style={{ backgroundColor: '#daa450' }}
+                    >
+                      Continue
+                    </button>
+                  </div>
+                </>
+              )}
+              {startCheckinStep === 2 && (
+                <>
+                  <p className="text-gray-600 text-sm mb-4">Which week are you completing this for?</p>
+                  <div className="space-y-2 mb-6">
+                    {startCheckinWeekOptions.map((wo) => (
+                      <button
+                        key={wo.weekStart}
+                        type="button"
+                        onClick={() => setStartCheckinWeekStart(wo.weekStart)}
+                        className={`w-full text-left px-4 py-3 rounded-xl border-2 transition-colors ${
+                          startCheckinWeekStart === wo.weekStart
+                            ? 'border-amber-400 bg-amber-50 text-amber-900'
+                            : 'border-gray-200 hover:border-gray-300 text-gray-900'
+                        }`}
+                      >
+                        {wo.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setStartCheckinStep(1)}
+                      disabled={startCheckinResolving}
+                      className="flex-1 px-4 py-2.5 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium disabled:opacity-50"
+                    >
+                      Back
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!startCheckinWeekStart || startCheckinResolving || !clientId || !startCheckinFormId}
+                      onClick={async () => {
+                        if (!clientId || !startCheckinFormId || !startCheckinWeekStart) return;
+                        setStartCheckinResolving(true);
+                        try {
+                          const authHeaders = await import('@/lib/auth-headers').then(m => m.getAuthHeaders());
+                          const res = await fetch('/api/client-portal/check-in-resolve', {
+                            method: 'POST',
+                            headers: { ...authHeaders, 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              clientId,
+                              formId: startCheckinFormId,
+                              weekStart: startCheckinWeekStart,
+                            }),
+                          });
+                          const data = await res.json();
+                          if (!res.ok || !data?.success || !data?.assignmentId) {
+                            alert(data?.error || 'Could not start check-in. Please try again.');
+                            return;
+                          }
+                          setShowStartCheckinModal(false);
+                          router.push(`/client-portal/check-in/${data.assignmentId}`);
+                        } catch (e) {
+                          alert('Something went wrong. Please try again.');
+                        } finally {
+                          setStartCheckinResolving(false);
+                        }
+                      }}
+                      className="flex-1 px-4 py-2.5 text-white rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                      style={{ backgroundColor: '#daa450' }}
+                    >
+                      {startCheckinResolving ? 'Opening...' : 'Continue'}
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>

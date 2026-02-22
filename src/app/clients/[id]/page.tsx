@@ -2102,7 +2102,7 @@ export default function ClientProfilePage() {
       }
       
       const response = await fetch('/api/check-in-assignments/series', {
-        method: 'DELETE',
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
